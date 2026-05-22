@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.coverage
+.testmondata
+
+# Tests
+.pytest_cache/
+tests/__pycache__/
+
+# Build / Distribution
+build/
+dist/
+*.spec
+*.exe
+Installer_*/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log

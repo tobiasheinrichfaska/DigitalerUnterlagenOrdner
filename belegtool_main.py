@@ -1,4 +1,3 @@
-# gui_main.py
 import logging
 from tkinterdnd2 import TkinterDnD
 from view_tree import TreeViewFrame
@@ -10,9 +9,9 @@ from tkinter import ttk, messagebox
 from universal_importer import UniversalImporter
 from typing import Optional
 import os
-import extract_msg
 import status_display
 from version_info import get_full_title
+from log_config import LOGLEVEL, LOGFILE
 
 class DigitalerBelegGUI(TkinterDnD.Tk):
     def __init__(self, filepath: Optional[str] = None):
@@ -91,42 +90,6 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
             self.destroy()
 
     def set_busy(self, busy=True):
-        # Globaler Cursor für alle Widgets
-        cursor = "watch" if busy else ""
-        self.config(cursor=cursor)
-        self.tree_view.config(cursor=cursor)
-        self.tree_view.tree.config(cursor=cursor)
-        self.preview_frame.config(cursor=cursor)
-        self.preview_frame.canvas.config(cursor=cursor)
-
-        # Titel-Task setzen oder entfernen
-        if busy:
-            status_display.register_task("Busy")
-        else:
-            status_display.unregister_task("Busy")
-
-        # Anzeige sofort erzwingen
-        self.update_idletasks()
-
-        # Fokus hart setzen (damit Cursor greift)
-        try:
-            self.focus_force()
-        except Exception:
-            pass
-
-        # Rekursiv auf alle Child-Widgets anwenden
-        def apply_cursor_recursively(widget):
-            try:
-                widget.config(cursor=cursor)
-            except Exception:
-                pass
-            for child in widget.winfo_children():
-                apply_cursor_recursively(child)
-
-        apply_cursor_recursively(self)
-
-    def set_busy(self, busy=True):
-        # Globaler Cursor für alle Widgets
         cursor = "watch" if busy else ""
         self.config(cursor=cursor)
         self.tree_view.config(cursor=cursor)

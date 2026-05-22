@@ -46,15 +46,15 @@ def wait_for_real_preview(node, timeout=20):
     start = time.time()
     while time.time() - start < timeout:
         imgs = node.current_preview_images
-        # ❗ Sicherstellen, dass aktuelle Vorschau und Daten vollständig sind
-        if (
-            imgs
-            and all(img != PLACEHOLDER_PREVIEW for img in imgs)
-            and node.current_pdf_data is not None
-            and node.dpi_current is not None
-        ):
-            return imgs
-        time.sleep(0.1)
+        if not imgs or any(img == PLACEHOLDER_PREVIEW for img in imgs):
+            time.sleep(0.1)
+            continue
+        # For compressible leaf nodes also wait for compression to finish
+        if not node.is_folder and not node.no_compression:
+            if node.current_pdf_data is None or node.dpi_current is None:
+                time.sleep(0.1)
+                continue
+        return imgs
 
     raise TimeoutError("Vorschau oder Kompression nicht abgeschlossen")
 

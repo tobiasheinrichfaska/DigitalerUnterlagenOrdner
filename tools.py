@@ -1,6 +1,7 @@
 import io
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
+from log_config import logger
 
 def sanitize_pdf(data: bytes) -> bytes:
     """
@@ -14,10 +15,10 @@ def sanitize_pdf(data: bytes) -> bytes:
         return data  # 👍 Kein Problem, unverändert zurückgeben
 
     except PdfReadError as read_error:
-        print(f"[sanitize_pdf] PDF unlesbar – versuche Reparatur: {read_error}")
+        logger.warning("sanitize_pdf: PDF unlesbar – versuche Reparatur: %s", read_error)
 
     except Exception as e:
-        print(f"[sanitize_pdf] Allgemeiner Fehler – versuche Reparatur: {e}")
+        logger.warning("sanitize_pdf: Allgemeiner Fehler – versuche Reparatur: %s", e)
 
     # Reparaturversuch (nur wenn vorher Fehler auftrat)
     try:
@@ -28,10 +29,10 @@ def sanitize_pdf(data: bytes) -> bytes:
         buf = io.BytesIO()
         writer.write(buf)
         repaired = buf.getvalue()
-        print(f"[sanitize_pdf] PDF erfolgreich neu geschrieben nach Fehler")
+        logger.info("sanitize_pdf: PDF erfolgreich neu geschrieben.")
         return repaired
     except Exception as e:
-        print(f"[sanitize_pdf] Reparatur gescheitert – Original wird verwendet: {e}")
+        logger.warning("sanitize_pdf: Reparatur gescheitert – Original wird verwendet: %s", e)
         return data
 
 from PIL import Image, ImageDraw

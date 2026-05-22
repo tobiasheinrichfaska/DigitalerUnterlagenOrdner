@@ -1,15 +1,17 @@
 import io
+import time
+import threading
+import uuid
 from typing import Optional, List, Union, Dict, Any
-from compress_pdf_bytes import compress_pdf_bytes
+from compress_pdf_bytes import compress_pdf_bytes, compress_all_methods
 import fitz
 from PIL import Image
 from tools import sanitize_pdf
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-import uuid
-import threading
 from status_display import register_task, unregister_task
 from preview_page import PreviewPage
+from log_config import logger
 
 
 
@@ -24,11 +26,14 @@ class PDFNode:
         self._preview_task_running = False
         self._preview_task_lock = threading.Lock()
         self._preview_task_requested: bool = False
+        self._preview_done = threading.Event()
+        self._preview_done.set()
 
         self._compression_task_running: bool = False
         self._compression_task_lock = threading.Lock()
         self._compression_task_requested: bool = False
         self._compression_task_dpi: int = 120
+        self._compression_results: Dict[str, bytes] = {}  # method → bytes, populated by compress_multi_lazy
 
 
         self._cached_preview_images: Optional[List[Image.Image]] = None
@@ -63,7 +68,7 @@ class PDFNode:
                     no_compression=False
                 )
             except Exception as e:
-                print(f"[WARN] Fehlerhafte PDF beim Erstellen von {name}: {e}")
+                logger.warning("Fehlerhafte PDF beim Erstellen von '%s': %s", name, e)
                 self.original_pdf_data = pdf_data
                 self.current_pdf_data = pdf_data
                 self.pdf_length = self._get_pdf_length(pdf_data)
@@ -79,20 +84,7 @@ class PDFNode:
 
     @classmethod
     def from_pdf(cls, name: str, source: Union[str, bytes, io.BytesIO]) -> 'PDFNode':
-        """
-        Erzeugt einen PDFNode aus einer Quelldatei, Bytes oder BytesIO.
-
-        Args:
-            name: Name des neuen Knotens.
-            source: Pfad, Bytes oder BytesIO eines PDFs.
-
-        Returns:
-            Instanz eines PDFNode mit gestarteter Vorschauerzeugung.
-
-        Raises:
-            ValueError: Wenn die PDF-Daten nicht gelesen werden können.
-            TypeError: Wenn der Quelltyp nicht unterstützt wird.
-        """
+        """Erzeugt einen PDFNode aus Pfad, Bytes oder BytesIO. Raises ValueError/TypeError on failure."""
         if isinstance(source, str):
             with open(source, 'rb') as f:
                 data = f.read()
@@ -129,14 +121,6 @@ class PDFNode:
 
 
     def _get_pdf_length(self, data: Optional[bytes]) -> int:
-        """Ermittelt die Seitenanzahl eines PDFs.
-
-        Args:
-            data: PDF-Daten als Bytes.
-
-        Returns:
-            Seitenanzahl oder 0 bei Fehler oder ungültigem Input.
-        """
         if not data:
             return 0
         try:
@@ -147,7 +131,6 @@ class PDFNode:
 
 
     def _create_previews(self, data: Optional[bytes]) -> List[Image.Image]:
-        from log_config import logger
 
         if not data:
             logger.warning("Leere PDF-Daten – Vorschau abgebrochen.")
@@ -155,32 +138,28 @@ class PDFNode:
 
         try:
             raw = data.getvalue() if isinstance(data, io.BytesIO) else data
-
-            if not raw.strip().startswith(b"%PDF") or b"%%EOF" not in raw:
-                with open("debug_invalid_preview.pdf", "wb") as dbg:
-                    dbg.write(raw)
-                logger.warning("Ungültige PDF-Daten: fehlt %PDF oder %%EOF – Datei gespeichert als debug_invalid_preview.pdf")
+            if not raw:
                 return []
 
             try:
                 doc = fitz.open(stream=raw, filetype="pdf")
             except Exception as e:
-                logger.warning(f"PDF konnte nicht geöffnet werden (fitz): {e}")
+                logger.warning("PDF konnte nicht geöffnet werden (fitz): %s", e)
                 return []
 
             previews = []
             for page in doc:
                 try:
                     pix = page.get_pixmap(dpi=100)
-                    data = pix.tobytes("ppm")
-                    if not data.startswith(b"P6"):
-                        logger.warning(f"Ungültiger PPM-Header auf Seite {page.number} – Vorschau abgebrochen.")
+                    ppm_bytes = pix.tobytes("ppm")
+                    if not ppm_bytes.startswith(b"P6"):
+                        logger.warning("Ungültiger PPM-Header auf Seite %d – Vorschau abgebrochen.", page.number)
                         continue
-                    with Image.open(io.BytesIO(data)) as im:
+                    with Image.open(io.BytesIO(ppm_bytes)) as im:
                         img = im.convert("RGB").copy()
                     previews.append(img)
                 except Exception as e:
-                    logger.warning(f"Vorschaufehler auf Seite {page.number}: {e}")
+                    logger.warning("Vorschaufehler auf Seite %d: %s", page.number, e)
                     continue
 
             if not previews:
@@ -190,7 +169,7 @@ class PDFNode:
             return previews
 
         except Exception as e:
-            logger.error(f"FEHLER bei Vorschau-Erzeugung: {e}")
+            logger.error("FEHLER bei Vorschau-Erzeugung: %s", e)
             return []
 
 
@@ -199,7 +178,7 @@ class PDFNode:
         Erzeugt synchron eine zusammengesetzte Vorschau für alle Children dieses Folder-Knotens.
         Diese Methode wird sofort ausgeführt, ohne Lazy-Mechanismus oder Threads.
         """
-        print(f"[FolderPreview] Starte Vorschauaufbau für {self.name}")
+        logger.debug("FolderPreview: Starte Vorschauaufbau für '%s'", self.name)
         self._cached_preview_task_running = True
         self._cached_preview_images = []
 
@@ -212,7 +191,7 @@ class PDFNode:
             self._cached_preview_images.extend(child.current_preview_images)
 
         self._cached_preview_task_running = False
-        print(f"[FolderPreview] Fertig mit Vorschau für {self.name}")
+        logger.debug("FolderPreview: Fertig mit Vorschau für '%s'", self.name)
 
 
     def preview_lazy(self):
@@ -229,22 +208,18 @@ class PDFNode:
         if not self.current_pdf_data:
             return
 
-        from status_display import register_task, unregister_task
-        import threading
-        import time
-        from preview_page import PreviewPage
-
         with self._preview_task_lock:
             if self._preview_task_running:
                 if not self._preview_task_requested:
                     self._preview_task_requested = True
-                    print(f"[Preview] {self.name}: Vorschau läuft – Folge-Task vorgemerkt")
+                    logger.debug("Preview '%s': Vorschau läuft – Folge-Task vorgemerkt", self.name)
                 else:
-                    print(f"[Preview] {self.name}: Vorschau läuft – Folge-Task bereits vorgemerkt")
+                    logger.debug("Preview '%s': Vorschau läuft – Folge-Task bereits vorgemerkt", self.name)
                 return
             else:
                 self._preview_task_running = True
                 self._preview_task_requested = False
+                self._preview_done.clear()
 
         register_task(f"Vorschau: {self.name}")
 
@@ -269,14 +244,15 @@ class PDFNode:
                     self._current_preview_pages = self._original_preview_pages[:]
 
             except Exception as e:
-                print(f"[Preview] Fehler bei {self.name}: {e}")
+                logger.error("Preview-Fehler bei '%s': %s", self.name, e)
 
             finally:
                 unregister_task(f"Vorschau: {self.name}")
                 with self._preview_task_lock:
                     self._preview_task_running = False
+                    self._preview_done.set()
                     if self._preview_task_requested:
-                        print(f"[Preview] {self.name}: Starte vorgemerkten Folge-Task")
+                        logger.debug("Preview '%s': Starte vorgemerkten Folge-Task", self.name)
                         self._preview_task_requested = False
 
                         def delayed_restart():
@@ -295,14 +271,12 @@ class PDFNode:
         Wenn bereits eine Kompression läuft, wird kein weiterer Task gestartet.
         """
         if self.is_folder or not self.original_pdf_data:
-            print(f"[Kompression] {self.name}: Keine gültigen Daten oder Ordner – übersprungen")
+            logger.debug("Kompression '%s': übersprungen (Ordner oder keine Daten)", self.name)
             return
 
         if self._compression_task_running:
-            print(f"[Kompression] {self.name}: Übersprungen – bereits laufend")
+            logger.debug("Kompression '%s': übersprungen – bereits laufend", self.name)
             return
-
-        from status_display import register_task, unregister_task
 
         self._compression_task_running = True
         register_task(f"Kompression: {self.name}")
@@ -311,7 +285,7 @@ class PDFNode:
             try:
                 self.compress(dpi=dpi)
             except Exception as e:
-                print(f"[FEHLER] Kompression bei {self.name} fehlgeschlagen: {e}")
+                logger.error("Kompression bei '%s' fehlgeschlagen: %s", self.name, e)
             finally:
                 unregister_task(f"Kompression: {self.name}")
                 self._compression_task_running = False
@@ -319,6 +293,52 @@ class PDFNode:
         threading.Thread(target=run, daemon=True).start()
 
 
+
+    def compress_multi_lazy(self, dpi: int = 120):
+        """Runs all available compression methods in background.
+
+        On completion, _compression_results is populated with every method that
+        produced a file smaller than the original. current_pdf_data is set to the
+        smallest result. Callers can then offer the user a choice via
+        select_compression_method().
+        """
+        if self.is_folder or not self.original_pdf_data:
+            return
+        if self._compression_task_running:
+            return
+
+        self._compression_task_running = True
+        register_task(f"Kompression: {self.name}")
+
+        def run():
+            try:
+                results = compress_all_methods(self.original_pdf_data, dpi=dpi)
+                self._compression_results = results
+                if results:
+                    best_method = next(iter(results))
+                    best_bytes = results[best_method]
+                    self.current_pdf_data = best_bytes
+                    self.is_compressed = True
+                    self.pdf_length = self._get_pdf_length(best_bytes)
+                    self.current_preview_images = self._create_previews(best_bytes)
+                    self.dpi_current = dpi
+            except Exception as e:
+                logger.error("Multi-Kompression bei '%s' fehlgeschlagen: %s", self.name, e)
+            finally:
+                unregister_task(f"Kompression: {self.name}")
+                self._compression_task_running = False
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def select_compression_method(self, method: str):
+        """Switch current_pdf_data to a previously computed compression result."""
+        if method not in self._compression_results:
+            raise ValueError(f"Methode '{method}' nicht verfügbar.")
+        data = self._compression_results[method]
+        self.current_pdf_data = data
+        self.is_compressed = True
+        self.pdf_length = self._get_pdf_length(data)
+        self.current_preview_images = self._create_previews(data)
 
     def compress(self, dpi: int = 120) -> None:
         if self.is_folder:
@@ -338,10 +358,6 @@ class PDFNode:
             raise RuntimeError("Komprimierung fehlgeschlagen") from e
 
     def _rotate_pdf_data(self, data: bytes, angle: int) -> bytes:
-        """
-        Dreht alle Seiten eines PDFs um den gegebenen Winkel (in Grad).
-        """
-        from pypdf import PdfReader, PdfWriter
         reader = PdfReader(io.BytesIO(data))
         writer = PdfWriter()
         for page in reader.pages:
@@ -372,7 +388,7 @@ class PDFNode:
             return
 
         if not self.original_pdf_data:
-            print(f"[WARNUNG] Kein Original vorhanden bei {self.name} – Rotation übersprungen.")
+            logger.warning("Kein Original vorhanden bei '%s' – Rotation übersprungen.", self.name)
             return
 
         try:
@@ -441,6 +457,17 @@ class PDFNode:
 
 
 
+    @staticmethod
+    def _concat_two_pdfs(a: bytes, b: bytes) -> bytes:
+        writer = PdfWriter()
+        for page in PdfReader(io.BytesIO(a)).pages:
+            writer.add_page(page)
+        for page in PdfReader(io.BytesIO(b)).pages:
+            writer.add_page(page)
+        buf = io.BytesIO()
+        writer.write(buf)
+        return buf.getvalue()
+
     def _merge_folder(self, other: 'PDFNode') -> None:
         """
         Führt zwei Ordnerknoten zusammen, indem die Children von `other`
@@ -454,13 +481,6 @@ class PDFNode:
         self.preview_lazy()
 
     def _merge_pdf(self, other: 'PDFNode', nopreview: bool = False) -> None:
-        """
-        Führt zwei PDF-Knoten zusammen: Seiten, Vorschauen und Flags werden kombiniert.
-
-        Args:
-            other: Der zusammenzuführende PDFNode.
-            nopreview: Wenn True, wird keine Vorschau aktualisiert (z. B. bei Batch-Merge).
-        """
         try:
             PdfReader(io.BytesIO(self.current_pdf_data))
             PdfReader(io.BytesIO(other.current_pdf_data))
@@ -479,24 +499,10 @@ class PDFNode:
             self.no_compression = True
 
         if self.current_pdf_data and other.current_pdf_data:
-            writer = PdfWriter()
-            for page in PdfReader(io.BytesIO(self.current_pdf_data)).pages:
-                writer.add_page(page)
-            for page in PdfReader(io.BytesIO(other.current_pdf_data)).pages:
-                writer.add_page(page)
-            buf = io.BytesIO()
-            writer.write(buf)
-            self.current_pdf_data = buf.getvalue()
+            self.current_pdf_data = self._concat_two_pdfs(self.current_pdf_data, other.current_pdf_data)
 
         if self.original_pdf_data and other.original_pdf_data:
-            writer = PdfWriter()
-            for page in PdfReader(io.BytesIO(self.original_pdf_data)).pages:
-                writer.add_page(page)
-            for page in PdfReader(io.BytesIO(other.original_pdf_data)).pages:
-                writer.add_page(page)
-            buf = io.BytesIO()
-            writer.write(buf)
-            self.original_pdf_data = buf.getvalue()
+            self.original_pdf_data = self._concat_two_pdfs(self.original_pdf_data, other.original_pdf_data)
 
         if not nopreview:
             self.update_preview()
@@ -553,14 +559,6 @@ class PDFNode:
             self.parent = None
 
     def _is_descendant_of(self, node: 'PDFNode') -> bool:
-        """Prüft rekursiv, ob der aktuelle Knoten ein Nachfahre des gegebenen Knotens ist.
-
-        Args:
-            node: Der zu prüfende mögliche Vorfahr.
-
-        Returns:
-            True, wenn self ein Nachfahre von node ist.
-        """
         current = self.parent
         while current:
             if current is node:
@@ -569,14 +567,6 @@ class PDFNode:
         return False
 
     def move(self, new_parent: 'PDFNode') -> None:
-        """Verschiebt den Knoten zu einem neuen Elternknoten.
-
-        Args:
-            new_parent: Ziel-Elternknoten.
-
-        Raises:
-            ValueError: Wenn eine zyklische Struktur entstehen würde.
-        """
         if new_parent is self or new_parent._is_descendant_of(self):
             raise ValueError("Zyklische Einfügung nicht erlaubt.")
 
@@ -584,10 +574,10 @@ class PDFNode:
             self.parent.children = [c for c in self.parent.children if c != self]
         new_parent.add_child(self)
 
-    def copy(self) -> 'PDFNode':
+    def copy(self, keep_name: bool = False) -> 'PDFNode':
         """Erstellt eine Kopie des Knotens mit allen Kindknoten und eigenem Speicher."""
         copied = PDFNode(
-            name=f"{self.name}_copy",
+            name=self.name if keep_name else f"{self.name}_copy",
             is_folder=self.is_folder,
             pdf_data=None
         )
@@ -616,7 +606,7 @@ class PDFNode:
         copied.dpi_current = self.dpi_current
 
         for child in self.children:
-            copied.add_child(child.copy())
+            copied.add_child(child.copy(keep_name=keep_name))
 
         return copied
 
@@ -632,8 +622,6 @@ class PDFNode:
         Returns:
             Zusammengefügte PDF-Daten oder None
         """
-        from log_config import logger
-
         writer = PdfWriter()
         for child in self.children:
             data = getattr(child, attr, None)
@@ -644,7 +632,7 @@ class PDFNode:
                 for page in reader.pages:
                     writer.add_page(page)
             except Exception as e:
-                logger.warning(f"Fehler beim Zusammenfügen von {child.name}: {e}")
+                logger.warning("Fehler beim Zusammenfügen von %s: %s", child.name, e)
 
         if writer.pages:
             buf = io.BytesIO()
@@ -767,18 +755,7 @@ class PDFNode:
         dpi_current: Optional[int],
         no_compression: bool
     ) -> None:
-        """
-        Setzt Original- und Current-PDF-Daten samt zugehöriger DPI-Informationen und dem Kompressionsstopp-Flag.
-        Führt bei Bedarf eine automatische Lazy-Kompression im Hintergrund aus. Die Vorschau für das Original
-        wird immer sofort erzeugt, unabhängig vom Kompressionstyp.
-
-        Args:
-            original_data: Unkomprimierte Originaldaten (z. B. beim Import).
-            current_data: Aktuelle Daten (z. B. bereits komprimiert).
-            dpi_original: DPI-Wert der Originaldaten (falls bekannt).
-            dpi_current: DPI-Wert der aktuellen Daten (falls vorhanden).
-            no_compression: Wenn True, wird Kompression dauerhaft deaktiviert.
-        """
+        """Setzt Original- und Current-Daten, erzeugt Originalvorschau sofort, startet ggf. Lazy-Kompression."""
         if self.is_folder:
             return
 
@@ -810,8 +787,8 @@ class PDFNode:
         )
 
         if should_lazy_compress:
-            self._current_preview_pages = []  # explizit leer setzen
-            self.compress_lazy()
+            self._current_preview_pages = []
+            self.compress_multi_lazy()
         elif current_data:
             try:
                 current_preview = self._create_previews(current_data)
@@ -893,11 +870,7 @@ class PDFNode:
         except Exception:
             return []
 
-        if self._preview_task_running:
-            import time
-            timeout = time.time() + 30
-            while self._preview_task_running and time.time() < timeout:
-                time.sleep(0.1)
+        self._preview_done.wait(timeout=30)
 
         new_nodes = []
 

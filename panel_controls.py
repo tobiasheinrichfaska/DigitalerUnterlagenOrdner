@@ -1,4 +1,5 @@
 from tkinter import ttk, filedialog, messagebox, simpledialog
+from log_config import logger
 from universal_importer import UniversalImporter
 from pdf_storage import PDFStorage
 from pdf_node import PDFNode
@@ -12,14 +13,14 @@ class ControlPanel(ttk.Frame):
         self.import_button = ttk.Button(self, text="Importieren", command=self.import_pdf)
         self.import_button.pack(side="left", padx=5, pady=5)
 
-        # self.debug_button = ttk.Button(self, text="🪵 Debug", command=self.debug_output)
-        # self.debug_button.pack(side="left", padx=5, pady=5)
-
         self.save_button_auto = ttk.Button(self, text="Speichern", command=self.save_automatic)
         self.save_button_auto.pack(side="left", padx=5, pady=5)
 
         self.save_as_button = ttk.Button(self, text="Speichern als", command=self.save_as)
         self.save_as_button.pack(side="left", padx=5, pady=5)
+
+        self.export_button = ttk.Button(self, text="Exportieren", command=self.export_selected)
+        self.export_button.pack(side="left", padx=5, pady=5)
 
         self.split_button = ttk.Button(self, text="Splitten", command=self.split_selected)
         self.split_button.pack(side="left", padx=5, pady=5)
@@ -42,16 +43,6 @@ class ControlPanel(ttk.Frame):
         self.status_erfasst_button = ttk.Button(self, text="Erfasst",
                                                 command=lambda: self.set_status_for_selection("erfasst"))
         self.status_erfasst_button.pack(side="left", padx=5, pady=5)
-
-        # Original ersetzen
-        # self.commit_button = ttk.Button(self, text="Original zerstören",
-        #                                command=self.commit_changes_for_selection)
-        # self.commit_button.pack(side="left", padx=5, pady=5)
-
-        # Kompression zurücksetzen
-        #self.reset_compression_button = ttk.Button(self, text="Kompression zerstören",
-        #                                           command=self.reset_compression_for_selection)
-        #self.reset_compression_button.pack(side="left", padx=5, pady=5)
 
         # Neuer Ordner (innerhalb)
         self.new_folder_inside_button = ttk.Button(self, text="Ordner innerhalb", command=self.add_folder_inside)
@@ -125,9 +116,8 @@ class ControlPanel(ttk.Frame):
                     continue
                 parent_node = current_node.parent
                 new_node = self._create_folder_node("Neuer Ordner")
-                # parent_node.add_child(new_node)
 
-                # Ordnerlogik
+                # insert directly after current node in the sibling list
                 siblings = current_node.parent.children
                 index = siblings.index(current_node)
                 siblings.insert(index + 1, new_node)
@@ -192,7 +182,7 @@ class ControlPanel(ttk.Frame):
             # Direkt dem Treeview den Eingabefokus geben
             self.controller.tree_view.tree.focus_set()
 
-            # Alternativ (robust gegen Canvas-„Übergriff“):
+            # Alternativ (robust gegen Canvas-"Übergriff"):
             self.after_idle(lambda: self.controller.tree_view.tree.focus_force())
 
     def _create_folder_node(self, name: str):
@@ -225,7 +215,7 @@ class ControlPanel(ttk.Frame):
                     continue
                 if node.is_folder:
                     for subnode in self.controller.storage.get_all_nodes():
-                        if not subnode.is_folder and self._is_descendant_of(subnode, node):
+                        if not subnode.is_folder and subnode._is_descendant_of(node):
                             subnode.status = status_text
                 else:
                     node.status = status_text
@@ -253,8 +243,8 @@ class ControlPanel(ttk.Frame):
                     continue
 
                 messagebox.showinfo("Original ersetzen",
-                    f"Der ausgewählte Knoten („{root_node.name}“) wird auf den aktuellen Stand gesetzt.\n"
-                    f"Dies betrifft ggf. alle enthaltenen Unterknoten.")
+                    f'Der ausgewählte Knoten ("{root_node.name}") wird auf den aktuellen Stand gesetzt.\n'
+                    f'Dies betrifft ggf. alle enthaltenen Unterknoten.')
                 root_node.commit_changes()
 
             self.controller.update_preview(self.controller.selected_node)
@@ -264,97 +254,96 @@ class ControlPanel(ttk.Frame):
             self.controller.tree_view.refresh_colors()
             self.controller.set_busy(False)
 
+    def _group_as_folder(self, selected_ids) -> bool:
+        """Groups selected nodes into a new folder. Returns True if handled."""
+        if not messagebox.askyesno(
+            "Als Ordner gruppieren?",
+            "Sollen die markierten Knoten in einem gemeinsamen Ordner zusammengefasst werden?",
+            default="no", icon="question"
+        ):
+            return False
+
+        folder_name = simpledialog.askstring("Ordnername", "Name für den neuen Ordner:", initialvalue="Neuer Ordner") or "Neuer Ordner"
+        first_id = selected_ids[0]
+        first_node = self.controller.tree_view.nodes_by_id[first_id]
+        parent = first_node.parent
+
+        new_folder = self._create_folder_node(folder_name)
+        new_folder.parent = parent
+
+        if parent:
+            siblings = parent.children
+            insert_index = siblings.index(first_node)
+            siblings.insert(insert_index, new_folder)
+            new_folder.position = first_node.position
+        else:
+            self.controller.storage.root.children.insert(0, new_folder)
+
+        parent_id = self.controller.tree_view.tree.parent(first_id)
+        tree_index = self.controller.tree_view.tree.index(first_id)
+        folder_id = self.controller.tree_view.tree.insert(parent_id, tree_index, text=new_folder.name)
+        self.controller.tree_view.nodes_by_id[folder_id] = new_folder
+
+        for item_id in selected_ids:
+            node = self.controller.tree_view.nodes_by_id.get(item_id)
+            if node and node != new_folder:
+                node.move(new_folder)
+
+        self.controller.tree_view.rebuild_tree()
+        self.controller.storage.mark_dirty()
+        self.controller.update_preview(new_folder)
+        return True
+
+    def _check_merge_preconditions(self, selected_ids) -> bool:
+        """Returns True if merge can proceed, False if the user cancelled."""
+        if any(
+            getattr(self.controller.tree_view.nodes_by_id.get(iid), "no_compression", False)
+            for iid in selected_ids
+        ):
+            if not messagebox.askyesno(
+                "Merge verhindert künftige Kompression",
+                "Mindestens ein ausgewählter Knoten ist dauerhaft von Kompression ausgeschlossen.\n"
+                "Wird der Merge durchgeführt, betrifft dies alle zusammengeführten Inhalte.\n\n"
+                "Möchten Sie den Merge trotzdem durchführen?",
+                icon="warning", default="no"
+            ):
+                return False
+
+        try:
+            dpi_originals, dpi_currents = set(), set()
+            for iid in selected_ids:
+                node = self.controller.tree_view.nodes_by_id.get(iid)
+                if not node or node.is_folder:
+                    continue
+                if node.dpi_original is not None:
+                    dpi_originals.add(node.dpi_original)
+                if node.dpi_current is not None:
+                    dpi_currents.add(node.dpi_current)
+
+            if len(dpi_originals) > 1 or len(dpi_currents) > 1:
+                if not messagebox.askyesno(
+                    "Komprimierungen verwerfen?",
+                    "Die markierten Knoten haben unterschiedliche Komprimierungen oder Auflösungen.\n"
+                    "Soll der Merge trotzdem durchgeführt werden?\n\n"
+                    "Dabei werden alle aktuellen Komprimierungen gelöscht.",
+                    icon="warning", default="no"
+                ):
+                    return False
+        except Exception as e:
+            messagebox.showerror("Fehler bei DPI-Prüfung", str(e))
+            return False
+
+        return True
+
     def merge_selected(self):
         selected_ids = self.controller.tree_view.tree.selection()
         try:
             self.controller.set_busy(True)
-            self.controller.set_busy_text("Zusammenführen...")
 
-            make_folder = messagebox.askyesno(
-                "Als Ordner gruppieren?",
-                "Sollen die markierten Knoten in einem gemeinsamen Ordner zusammengefasst werden?",
-                default="no",
-                icon="question"
-            )
-
-            if make_folder:
-                folder_name = simpledialog.askstring("Ordnername", "Name für den neuen Ordner:", initialvalue="Neuer Ordner")
-                if not folder_name:
-                    folder_name = "Neuer Ordner"
-
-                first_id = selected_ids[0]
-                first_node = self.controller.tree_view.nodes_by_id[first_id]
-                parent = first_node.parent
-
-                new_folder = self._create_folder_node(folder_name)
-                new_folder.parent = parent
-
-                if parent:
-                    siblings = parent.children
-                    insert_index = siblings.index(first_node)
-                    siblings.insert(insert_index, new_folder)
-                    new_folder.position = first_node.position
-                else:
-                    self.controller.storage.root.children.insert(0, new_folder)
-
-                parent_id = self.controller.tree_view.tree.parent(first_id)
-                tree_index = self.controller.tree_view.tree.index(first_id)
-                folder_id = self.controller.tree_view.tree.insert(parent_id, tree_index, text=new_folder.name)
-                self.controller.tree_view.nodes_by_id[folder_id] = new_folder
-
-                for item_id in selected_ids:
-                    node = self.controller.tree_view.nodes_by_id.get(item_id)
-                    if node and node != new_folder:
-                        node.move(new_folder)
-
-                self.controller.tree_view.rebuild_tree()
-                self.controller.storage.mark_dirty()
-                self.controller.update_preview(new_folder)
+            if self._group_as_folder(selected_ids):
                 return
 
-            # Sicherheitsabfrage bei no_compression
-            if any(
-                getattr(self.controller.tree_view.nodes_by_id.get(item_id), "no_compression", False)
-                for item_id in selected_ids
-            ):
-                confirm_nc = messagebox.askyesno(
-                    "Merge verhindert künftige Kompression",
-                    "Mindestens ein ausgewählter Knoten ist dauerhaft von Kompression ausgeschlossen.\n"
-                    "Wird der Merge durchgeführt, betrifft dies alle zusammengeführten Inhalte.\n\n"
-                    "Möchten Sie den Merge trotzdem durchführen?",
-                    icon="warning", default="no"
-                )
-                if not confirm_nc:
-                    return
-
-            # Sicherheitsabfrage bei DPI-Konflikt
-            try:
-                dpi_originals = set()
-                dpi_currents = set()
-
-                for item_id in selected_ids:
-                    node = self.controller.tree_view.nodes_by_id.get(item_id)
-                    if not node or node.is_folder:
-                        continue
-                    if node.dpi_original is not None:
-                        dpi_originals.add(node.dpi_original)
-                    if node.dpi_current is not None:
-                        dpi_currents.add(node.dpi_current)
-
-                dpi_conflict = len(dpi_originals) > 1 or len(dpi_currents) > 1
-                if dpi_conflict:
-                    confirm = messagebox.askyesno(
-                        "Komprimierungen verwerfen?",
-                        "Die markierten Knoten haben unterschiedliche Komprimierungen oder Auflösungen.\n"
-                        "Soll der Merge trotzdem durchgeführt werden?\n\n"
-                        "Dabei werden alle aktuellen Komprimierungen gelöscht.",
-                        icon="warning", default="no"
-                    )
-                    if not confirm:
-                        return
-
-            except Exception as e:
-                messagebox.showerror("Fehler bei DPI-Prüfung", str(e))
+            if not self._check_merge_preconditions(selected_ids):
                 return
 
             base = self.controller.tree_view.nodes_by_id[selected_ids[0]]
@@ -365,12 +354,10 @@ class ControlPanel(ttk.Frame):
                 if base.is_folder != other.is_folder:
                     raise ValueError("Nur gleichartige Knoten (Ordner oder PDF) können zusammengeführt werden.")
                 base.merge(other, nopreview=True)
-
                 other.delete()
                 self.controller.tree_view.tree.delete(item_id)
                 del self.controller.tree_view.nodes_by_id[item_id]
 
-            # ✅ Jetzt Vorschau & ggf. Lazy-Kompression gezielt am Ende
             base.update_preview()
             if not base.no_compression and base.current_pdf_data is None:
                 base.compress_lazy()
@@ -381,7 +368,6 @@ class ControlPanel(ttk.Frame):
 
         except Exception as e:
             messagebox.showerror("Fehler beim Zusammenführen", str(e))
-
         finally:
             self.controller.set_busy(False)
 
@@ -401,8 +387,8 @@ class ControlPanel(ttk.Frame):
                     continue
 
                 messagebox.showinfo("Kompression zerstören",
-                    f"Die Kompression des Knotens „{root_node.name}“ wird zurückgesetzt.\n"
-                    f"Dies betrifft ggf. alle enthaltenen Unterknoten.")
+                    f'Die Kompression des Knotens "{root_node.name}" wird zurückgesetzt.\n'
+                    f'Dies betrifft ggf. alle enthaltenen Unterknoten.')
                 root_node.reset_compression()
 
             self.controller.update_preview(self.controller.selected_node)
@@ -475,27 +461,10 @@ class ControlPanel(ttk.Frame):
             except Exception as e:
                 messagebox.showerror("Fehler beim Import", f"{path}\n{e}")
 
-            finally:
-                pass
-
         if new_nodes_imported:
             self.controller.tree_view.refresh_colors()
         self.controller.set_busy(False)
 
-
-    def save_pdf(self):
-        if not self.controller.storage:
-            return
-        path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF-Dateien", "*.pdf")])
-        if path:
-            try:
-                self.controller.set_busy(True)
-                self.controller.storage.save(path)
-                messagebox.showinfo("Erfolg", "PDF gespeichert")
-            except Exception as e:
-                messagebox.showerror("Fehler beim Speichern", str(e))
-            finally:
-                self.controller.set_busy(False)
 
     def compress_selected(self):
         selected_ids = self.controller.tree_view.tree.selection()
@@ -514,7 +483,7 @@ class ControlPanel(ttk.Frame):
                     for subnode in self.controller.storage.get_all_nodes():
                         if subnode.is_folder:
                             continue
-                        if not subnode.is_compressed and self._is_descendant_of(subnode, node):
+                        if not subnode.is_compressed and subnode._is_descendant_of(node):
                             subnode.compress()
                             subnode.update_preview()
                             total += 1
@@ -532,14 +501,6 @@ class ControlPanel(ttk.Frame):
             messagebox.showerror("Fehler", str(e))
         finally:
             self.controller.set_busy(False)
-
-    def _is_descendant_of(self, node, possible_ancestor):
-        current = node.parent
-        while current:
-            if current == possible_ancestor:
-                return True
-            current = current.parent
-        return False
 
     def split_selected(self):
         selected_ids = self.controller.tree_view.tree.selection()
@@ -564,7 +525,6 @@ class ControlPanel(ttk.Frame):
                     if node.parent:
                         node.parent.add_child(new_node)
                     total_new += 1
-                # 🆕 Neu: verschiebe die neu eingefügten Knoten direkt unter das Original
                 move_plan = self.controller.storage.perform_move(new_nodes, node)
                 self.controller.tree_view._apply_gui_move_plan(move_plan)
 
@@ -580,37 +540,9 @@ class ControlPanel(ttk.Frame):
     def update_buttons(self, node):
         self.split_button.config(state="normal" if node and not node.is_folder else "disabled")
 
-    def save_automatic(self):
+    def _do_save(self, path: str = None):
         try:
             self.controller.set_busy(True)
-            if not self.controller.storage or not self.controller.storage.save_path:
-                # Kein Ziel → wie „Speichern als“
-                path = filedialog.asksaveasfilename(
-                    defaultextension=".belegtool",
-                    filetypes=[("BelegTool-Dateien", "*.belegtool"), ("Alle Dateien", "*.*")]
-                )
-                if not path:
-                    return
-                self.controller.storage.save(path)
-            else:
-                # Direkt speichern
-                self.controller.storage.save()
-            messagebox.showinfo("Erfolg", "Datei gespeichert.")
-        except Exception as e:
-            messagebox.showerror("Fehler beim Speichern", str(e))
-        finally:
-            self.controller.set_busy(False)
-
-
-    def save_as(self):
-        try:
-            self.controller.set_busy(True)
-            path = filedialog.asksaveasfilename(
-                defaultextension=".belegtool",
-                filetypes=[("BelegTool-Dateien", "*.belegtool"), ("Alle Dateien", "*.*")]
-            )
-            if not path:
-                return
             self.controller.storage.save(path)
             messagebox.showinfo("Erfolg", "Datei gespeichert.")
         except Exception as e:
@@ -618,27 +550,79 @@ class ControlPanel(ttk.Frame):
         finally:
             self.controller.set_busy(False)
 
+    def save_automatic(self):
+        if not self.controller.storage:
+            return
+        if not self.controller.storage.save_path:
+            self.save_as()
+            return
+        self._do_save()
+
+    def save_as(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".belegtool",
+            filetypes=[("BelegTool-Dateien", "*.belegtool"), ("Alle Dateien", "*.*")]
+        )
+        if path:
+            self._do_save(path)
+
+
+    def export_selected(self):
+        if not self.controller.storage:
+            return
+        selected_ids = self.controller.tree_view.tree.selection()
+        if not selected_ids:
+            messagebox.showinfo("Hinweis", "Bitte mindestens einen Knoten auswählen.")
+            return
+
+        nodes = [
+            self.controller.tree_view.nodes_by_id[iid]
+            for iid in selected_ids
+            if iid in self.controller.tree_view.nodes_by_id
+        ]
+        if not nodes:
+            return
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".belegtool",
+            filetypes=[
+                ("BelegTool-Dateien", "*.belegtool"),
+                ("PDF-Dateien", "*.pdf"),
+                ("Alle Dateien", "*.*"),
+            ]
+        )
+        if not path:
+            return
+
+        try:
+            self.controller.set_busy(True)
+            self.controller.storage.export_selection(nodes, path)
+            messagebox.showinfo("Exportiert", f"Auswahl exportiert nach:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Fehler beim Exportieren", str(e))
+        finally:
+            self.controller.set_busy(False)
 
     def debug_output(self):
         storage = self.controller.storage
         tree = self.controller.tree_view
 
-        print("\n=== [DEBUG] Sichtbare TreeView-Knoten ===")
+        logger.debug("=== Sichtbare TreeView-Knoten ===")
         for item_id in tree.tree.get_children(""):
             self._print_recursive_tree_nodes(item_id, tree, level=0)
 
-        print("\n=== [DEBUG] Alle PDF-Knoten (rekursiv aus Speicherbaum) ===")
+        logger.debug("=== Alle PDF-Knoten (rekursiv aus Speicherbaum) ===")
         for node in storage.get_all_nodes():
             if not node.is_folder:
                 uid = getattr(node, "uid", "–")
-                print(f"- {node.name} | UID: {uid} | Seiten: {node.pdf_length}")
+                logger.debug("- %s | UID: %s | Seiten: %d", node.name, uid, node.pdf_length)
 
     def _print_recursive_tree_nodes(self, item_id, tree, level):
         node = tree.nodes_by_id.get(item_id)
         indent = "  " * level
         uid = getattr(node, "uid", "–")
         num_images = len(node.current_preview_images) if node else 0
-        print(f"{indent}- {node.name} | UID: {uid} | Images: {num_images}")
+        logger.debug("%s- %s | UID: %s | Images: %d", indent, node.name, uid, num_images)
 
         for child_id in tree.tree.get_children(item_id):
             self._print_recursive_tree_nodes(child_id, tree, level + 1)

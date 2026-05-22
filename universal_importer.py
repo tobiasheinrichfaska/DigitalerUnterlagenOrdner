@@ -394,9 +394,11 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
     return result
 
 def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> List[Dict[str, Any]]:
-    def _build_base_name(subject: Optional[str], date: Optional[str]) -> str:
+    def _build_base_name(subject: Optional[str], date) -> str:
         subject = (subject or "E-Mail").strip()
-        date = (date or "").strip()
+        if hasattr(date, 'strftime'):
+            date = date.strftime("%Y-%m-%d")
+        date = str(date or "").strip()
         return f"{subject} {date}".strip().replace(":", "-").replace("/", "-")
 
     def _convert_mail_body(content: Union[str, bytes], filename: str) -> Dict[str, Any]:

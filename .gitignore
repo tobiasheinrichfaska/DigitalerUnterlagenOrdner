@@ -21,3 +21,9 @@ Installer_*/
 
 # Logs
 *.log
+
+# Debug- und Test-Artefakte
+debug_*.pdf
+build_log.txt
+tests/data/output/
+merge_dpi_conflict*.pdf

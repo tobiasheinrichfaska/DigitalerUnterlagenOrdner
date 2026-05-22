@@ -16,109 +16,79 @@ class PreviewFrame(ttk.Frame):
         self.current_node = None
         self._poll_after_id = None
 
+        # === Canvas (nimmt den gesamten verbleibenden Platz oben ein) ===
         self.canvas_frame = ttk.Frame(self)
-        self.canvas_frame.pack(side="top", fill="both", expand=True)
         self.canvas = tk.Canvas(self.canvas_frame, bg="white")
-
         self.v_scrollbar = ttk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.h_scrollbar = ttk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
-
         self.canvas.configure(yscrollcommand=self.v_scrollbar.set, xscrollcommand=self.h_scrollbar.set)
-
         self.v_scrollbar.pack(side="right", fill="y")
         self.h_scrollbar.pack(side="bottom", fill="x")
         self.canvas.pack(side="left", fill="both", expand=True)
 
+        # === Commit-Zeile (ganz unten) ===
+        self.commit_frame = ttk.Frame(self)
+        self.commit_button = ttk.Button(self.commit_frame, text="✓ Lesbarkeit geprüft",
+                                        command=self._on_destroy_original)
+        self.commit_button.pack(pady=2)
 
+        # === DPI / Kompression-Zeile ===
+        self.compression_frame = ttk.Frame(self)
+        ttk.Label(self.compression_frame, text="DPI:").pack(side="left", padx=(5, 2))
+        self.slider_label_min = ttk.Label(self.compression_frame, text="50")
+        self.slider_label_min.pack(side="left")
+        self.slider = ttk.Scale(self.compression_frame, from_=50, to=300, orient="horizontal")
+        self.slider.pack(side="left", fill="x", expand=True, padx=5)
+        self.slider_label_max = ttk.Label(self.compression_frame, text="∞")
+        self.slider_label_max.pack(side="left", padx=(0, 5))
+        self.slider.bind("<Motion>", self._on_slider_hover)
+        self.slider.bind("<Leave>", lambda e: self.slider_tooltip.place_forget())
+        self.slider.bind("<ButtonRelease-1>", self._on_slider_released)
+        self.reset_button = ttk.Button(self.compression_frame, text="Kompression wieder erlauben",
+                                       command=self._on_reset_compression)
+        self.reset_button.pack(side="left", padx=5)
+        self.reset_button.pack_forget()
 
-        self.commit_button = ttk.Button(self, text="Lesbarkeit geprüft", command=self._on_destroy_original)
-        self.commit_button.pack(side="bottom", pady=5)
+        self.slider_tooltip = tk.Label(self, text="", background="#ffffe0",
+                                       relief="solid", borderwidth=1, font=("Arial", 9))
+        self.slider_tooltip.place_forget()
 
+        # === Methoden-Auswahl (konditional, zwischen DPI und Commit) ===
+        self.method_frame = ttk.Frame(self)
+        ttk.Label(self.method_frame, text="Kompression:").pack(side="left", padx=5)
+        self.method_var = tk.StringVar()
+        self.method_combo = ttk.Combobox(self.method_frame, textvariable=self.method_var,
+                                         state="readonly", width=35)
+        self.method_combo.pack(side="left", padx=5)
+        self.method_combo.bind("<<ComboboxSelected>>", self._on_method_selected)
 
-        zoom_frame = ttk.Frame(self)
-        zoom_frame.pack(side="bottom", pady=5)
-
-        self.zoom_label = ttk.Label(zoom_frame, text="100%")
+        # === Ansicht / Zoom-Zeile (direkt unterhalb des Canvas) ===
+        self.view_frame = ttk.Frame(self)
+        ttk.Label(self.view_frame, text="Ansicht:").pack(side="left", padx=(5, 2))
+        self.zoom_label = ttk.Label(self.view_frame, text="100%")
         self.zoom_label.pack(side="left", padx=5)
-
-        self.zoom_slider = ttk.Scale(
-                zoom_frame,
-                from_=100,
-                to=400,
-                orient="horizontal",
-                command=self._on_zoom_changed
-        )
+        self.zoom_slider = ttk.Scale(self.view_frame, from_=100, to=400,
+                                     orient="horizontal", command=self._on_zoom_changed)
         self.zoom_slider.set(100)
         self.zoom_slider.pack(side="left", fill="x", expand=True, padx=5)
-
-
-        self.rotate_button = ttk.Menubutton(zoom_frame, text="⟳ Drehen")
+        self.rotate_button = ttk.Menubutton(self.view_frame, text="⟳ Drehen")
         self.rotate_menu = tk.Menu(self.rotate_button, tearoff=0)
-        self.rotate_menu.add_command(label="⟲ 90° links", command=lambda: self._rotate_selected("left"))
+        self.rotate_menu.add_command(label="⟲ 90° links",  command=lambda: self._rotate_selected("left"))
         self.rotate_menu.add_command(label="⟳ 90° rechts", command=lambda: self._rotate_selected("right"))
-        self.rotate_menu.add_command(label="⟲⟳ 180°", command=lambda: self._rotate_selected("180"))
+        self.rotate_menu.add_command(label="⟲⟳ 180°",      command=lambda: self._rotate_selected("180"))
         self.rotate_button["menu"] = self.rotate_menu
         self.rotate_button.pack(side="left", padx=5)
-
-
-
 
         self.canvas.bind("<Enter>", self._bind_mousewheel)
         self.canvas.bind("<Leave>", self._unbind_mousewheel)
         self.canvas.bind("<MouseWheel>", self._on_ctrl_mousewheel)
 
-
-        self.compression_frame = ttk.Frame(self)
-        self.compression_frame.pack(side="bottom", pady=5, fill="x")
-
-        self.slider_label_min = ttk.Label(self.compression_frame, text="50 DPI")
-        self.slider_label_min.pack(side="left", padx=5)
-
-        self.slider = ttk.Scale(
-                self.compression_frame,
-                from_=50, to=300,
-                orient="horizontal"
-        )
-        self.slider.pack(side="left", fill="x", expand=True, padx=5)
-
-        self.slider_label_max = ttk.Label(self.compression_frame, text="∞")
-        self.slider_label_max.pack(side="left", padx=5)
-        self.slider.bind("<Motion>", self._on_slider_hover)
-        self.slider.bind("<Leave>", lambda e: self.slider_tooltip.place_forget())
-        self.slider.bind("<ButtonRelease-1>", self._on_slider_released)
-
-        self.slider_tooltip = tk.Label(
-                self,
-                text="",
-                background="#ffffe0",
-                relief="solid",
-                borderwidth=1,
-                font=("Arial", 9)
-        )
-        self.slider_tooltip.place_forget()
-
-        self.reset_button = ttk.Button(
-                self.compression_frame,
-                text="Kompression wieder erlauben",
-                command=self._on_reset_compression
-        )
-        self.reset_button.pack(side="top", anchor="w", padx=5)
-        self.reset_button.pack_forget()
-
-        # Method selector — shown when multiple compression results are available
-        self.method_frame = ttk.Frame(self)
-        self.method_label = ttk.Label(self.method_frame, text="Methode:")
-        self.method_label.pack(side="left", padx=5)
-        self.method_var = tk.StringVar()
-        self.method_combo = ttk.Combobox(
-            self.method_frame,
-            textvariable=self.method_var,
-            state="readonly",
-            width=30,
-        )
-        self.method_combo.pack(side="left", padx=5)
-        self.method_combo.bind("<<ComboboxSelected>>", self._on_method_selected)
-        self.method_frame.pack_forget()
+        # === Pack-Reihenfolge: side="bottom" stapelt von unten nach oben ===
+        self.commit_frame.pack(side="bottom", pady=4)                    # → ganz unten
+        self.compression_frame.pack(side="bottom", pady=4, fill="x")    # → darüber
+        # method_frame: konditional mit after=commit_frame
+        self.view_frame.pack(side="bottom", pady=4, fill="x")            # → direkt unter Canvas
+        self.canvas_frame.pack(side="top", fill="both", expand=True)
 
     def _bind_mousewheel(self, event):
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel_windows)
@@ -260,6 +230,7 @@ class PreviewFrame(ttk.Frame):
         state = "normal" if enabled else "disabled"
         self.rotate_button.config(state=state)
         self.commit_button.config(state=state)
+        self.zoom_slider.config(state=state)
         try:
             self.slider.config(state=state)
         except Exception:
@@ -358,31 +329,29 @@ class PreviewFrame(ttk.Frame):
         node = self.current_node
         if not node or node.is_folder:
             self.slider.pack_forget()
-            self.slider_label_min.config(text="")
-            self.slider_label_max.config(text="")
+            self.slider_label_min.pack_forget()
+            self.slider_label_max.pack_forget()
             self.reset_button.pack_forget()
             return
 
-        # DPI-Bereich festlegen
         dpi_original = node.dpi_original
         dpi_max = dpi_original if dpi_original else 350
-
         self.slider.config(from_=50, to=dpi_max)
 
         if node.no_compression:
-            self.slider.set(dpi_max)
             self.slider.pack_forget()
-            self.slider_label_min.config(text="")
-            self.slider_label_max.config(text="")
-            self.reset_button.pack(side="top", anchor="w", padx=5)
+            self.slider_label_min.pack_forget()
+            self.slider_label_max.pack_forget()
+            self.reset_button.pack(side="left", padx=5)
             return
 
+        self.reset_button.pack_forget()
         self.slider.set(node.dpi_current or dpi_max)
         self.slider_label_min.config(text="50")
         self.slider_label_max.config(text="∞" if not dpi_original else str(dpi_original))
-
+        self.slider_label_min.pack(side="left")
         self.slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.reset_button.pack_forget()
+        self.slider_label_max.pack(side="left", padx=(0, 5))
 
     def _on_reset_compression(self):
         if not self.current_node:
@@ -397,13 +366,16 @@ class PreviewFrame(ttk.Frame):
             self.method_frame.pack_forget()
             return
 
+        best_method = min(results, key=lambda m: len(results[m]))
         labels = []
         for method, data in results.items():
-            kb = len(data) / 1024
-            labels.append(f"{method}  ({kb:.0f} KB)")
+            kb = round(len(data) / 1024)
+            if method == best_method:
+                labels.append(f"✓ {method} · {kb} KB · bestes Ergebnis")
+            else:
+                labels.append(f"{method} · {kb} KB")
 
         self.method_combo["values"] = labels
-        # highlight whichever method matches current_pdf_data
         for i, (method, data) in enumerate(results.items()):
             if data == node.current_pdf_data:
                 self.method_combo.current(i)
@@ -411,7 +383,7 @@ class PreviewFrame(ttk.Frame):
         else:
             self.method_combo.current(0)
 
-        self.method_frame.pack(side="bottom", pady=2, fill="x", before=self.compression_frame)
+        self.method_frame.pack(side="bottom", fill="x", pady=2, after=self.commit_frame)
 
     def _on_method_selected(self, event=None):
         node = self.current_node

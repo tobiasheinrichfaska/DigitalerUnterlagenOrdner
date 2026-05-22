@@ -59,19 +59,23 @@ class TreeViewFrame(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="Splitten", command=self._ctx_split)
-        self.context_menu.add_command(label="Zusammenführen", command=self._ctx_merge)
+        self.context_menu.add_command(label="Umbenennen",     accelerator="F2",   command=self._ctx_rename)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Vorjahreswert", command=lambda: self._ctx_set_status("vorjahreswert"))
-        self.context_menu.add_command(label="Zu erfassen", command=lambda: self._ctx_set_status("zu erfassen"))
-        self.context_menu.add_command(label="Erfasst", command=lambda: self._ctx_set_status("erfasst"))
+        self.context_menu.add_command(label="Exportieren…",                       command=self._ctx_export)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Ordner innerhalb", command=self._ctx_add_inside)
-        self.context_menu.add_command(label="Ordner unterhalb", command=self._ctx_add_below)
+        self.context_menu.add_command(label="Splitten",                           command=self._ctx_split)
+        self.context_menu.add_command(label="Zusammenführen",                     command=self._ctx_merge)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Löschen", command=self._ctx_delete)
+        _status_submenu = tk.Menu(self.context_menu, tearoff=0)
+        _status_submenu.add_command(label="Vorjahreswert", command=lambda: self._ctx_set_status("vorjahreswert"))
+        _status_submenu.add_command(label="Zu erfassen",   command=lambda: self._ctx_set_status("zu erfassen"))
+        _status_submenu.add_command(label="Erfasst",       command=lambda: self._ctx_set_status("erfasst"))
+        self.context_menu.add_cascade(label="Status", menu=_status_submenu)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Umbenennen", command=self._ctx_rename)
+        self.context_menu.add_command(label="Ordner innerhalb",                   command=self._ctx_add_inside)
+        self.context_menu.add_command(label="Ordner unterhalb",                   command=self._ctx_add_below)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Löschen",       accelerator="Entf",  command=self._ctx_delete)
 
 
         self.tree.tag_configure("status_erfasst_light", foreground="green")
@@ -163,6 +167,7 @@ class TreeViewFrame(ttk.Frame):
 
         self._drag_motion_triggered = False
         self.controller.storage.mark_dirty()
+        self.controller._update_menu_states()
         self._drag_in_progress = False
 
 
@@ -177,6 +182,9 @@ class TreeViewFrame(ttk.Frame):
     def _on_rename_key(self, event):
         self._ctx_rename()
 
+
+    def _ctx_export(self):
+        self.controller.control_panel.export_selected()
 
     def _ctx_compress(self):
         self.controller.control_panel.compress_selected()
@@ -216,7 +224,7 @@ class TreeViewFrame(ttk.Frame):
                 try:
                     ext = file_path.lower().split(".")[-1]
 
-                    if file_path.lower().endswith((".pdf", ".belegtool", ".zip", ".eml", ".msg")):
+                    if file_path.lower().endswith((".pdf", ".belegtool", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
                         temp_storage = PDFStorage(file_path)
 
                         if not self.controller.storage:
@@ -325,6 +333,7 @@ class TreeViewFrame(ttk.Frame):
         node = self.nodes_by_id.get(item_id)
         if node:
             self.controller.update_preview(node)
+        self.controller._update_menu_states()
 
 
     def import_pdf(self, source: Union[str, io.BytesIO], name: Optional[str] = None):

@@ -34,12 +34,12 @@ class UniversalImporter:
     CUSTOM_EXTENSIONS = [".dbeleg"]
     MODERN_IMAGE_EXTENSIONS = [".webp", ".heic"]
     # VECTOR_EXTENSIONS = [".svg"] 
-    ARCHIVE_AND_EMAIL_EXTENSIONS = [".zip", ".eml", ".msg"]
+    ARCHIVE_AND_EMAIL_EXTENSIONS = [".zip", ".tar", ".tgz", ".eml", ".msg"]
     TEXT_EXTENSIONS = [".txt", ".rtf"]
     HTML_EXTENSIONS = [".html"]
-    OFFICE_WORD_EXT = [".doc", ".docx"]
-    OFFICE_EXCEL_EXT = [".xls", ".xlsx"]
-    OFFICE_POWERPOINT_EXT = [".ppt", ".pptx"]
+    OFFICE_WORD_EXT = [".doc", ".docx", ".odt"]
+    OFFICE_EXCEL_EXT = [".xls", ".xlsx", ".ods"]
+    OFFICE_POWERPOINT_EXT = [".ppt", ".pptx", ".odp"]
     OFFICE_EXTENSIONS = OFFICE_WORD_EXT + OFFICE_EXCEL_EXT + OFFICE_POWERPOINT_EXT
     _is_initialized = False  # wird auf True gesetzt, wenn Office-Erkennung abgeschlossen ist
     _has_word = False
@@ -72,24 +72,28 @@ class UniversalImporter:
 
         filetypes = [
             ("Alle unterstützten Formate", pattern(cls.get_supported_extensions())),
-            ("PDF", pattern(cls.PDF_EXTENSIONS)),
-            ("Bilder", pattern(cls.IMAGE_EXTENSIONS + cls.MODERN_IMAGE_EXTENSIONS)),
-            ("Eigenes Format", pattern(cls.CUSTOM_EXTENSIONS))
+            ("PDF",                        "*.pdf"),
+            ("BelegTool-Dateien",          "*.belegtool"),
+            ("Archive",                    "*.zip *.tar *.tgz"),
+            ("E-Mails",                    "*.eml *.msg"),
+            ("Bilder",                     pattern(cls.IMAGE_EXTENSIONS + cls.MODERN_IMAGE_EXTENSIONS)),
         ]
 
         if cls._has_word:
-            filetypes.append(("Word-Dokumente", pattern(cls.OFFICE_WORD_EXT)))
+            filetypes.append(("Word / OpenDocument Text",   pattern(cls.OFFICE_WORD_EXT)))
         if cls._has_excel:
-            filetypes.append(("Excel-Dateien", pattern(cls.OFFICE_EXCEL_EXT)))
+            filetypes.append(("Excel / OpenDocument Tabelle", pattern(cls.OFFICE_EXCEL_EXT)))
         if cls._has_powerpoint:
-            filetypes.append(("PowerPoint-Dateien", pattern(cls.OFFICE_POWERPOINT_EXT)))
+            filetypes.append(("PowerPoint / OpenDocument Präsentation", pattern(cls.OFFICE_POWERPOINT_EXT)))
 
         return filetypes
 
     @classmethod
     def is_supported(cls, path: str) -> bool:
-        """Prüft, ob die gegebene Datei-Endung unterstützt wird."""
-        ext = os.path.splitext(path)[1].lower()
+        p = path.lower()
+        if p.endswith(".tar.gz") or p.endswith(".tgz"):
+            return True
+        ext = os.path.splitext(p)[1]
         return ext in cls.get_supported_extensions()
 
     @classmethod
@@ -392,6 +396,42 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
         raise ValueError("Ungültiges ZIP-Archiv") from e
 
     return result
+
+def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> List[Dict[str, Any]]:
+    import tarfile
+    result = []
+
+    if isinstance(path_or_bytes, str):
+        with open(path_or_bytes, "rb") as f:
+            data = f.read()
+    elif isinstance(path_or_bytes, io.BytesIO):
+        data = path_or_bytes.read()
+    else:
+        data = path_or_bytes
+
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data)) as tf:
+            for member in tf.getmembers():
+                if not member.isfile():
+                    continue
+                name = os.path.basename(member.name) or member.name
+                try:
+                    f = tf.extractfile(member)
+                    if f is None:
+                        result.append(_not_importable(name))
+                        continue
+                    content = f.read()
+                    converted = UniversalImporter.convert(content, name=name)
+                    if not converted.data.getvalue().strip().startswith(b"%PDF"):
+                        raise ValueError("PDF-Inhalt ungültig")
+                    result.append({"name": name, "content": converted.data})
+                except Exception:
+                    result.append(_not_importable(name))
+    except tarfile.TarError as e:
+        raise ValueError("Ungültiges TAR-Archiv") from e
+
+    return result
+
 
 def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> List[Dict[str, Any]]:
     def _build_base_name(subject: Optional[str], date) -> str:

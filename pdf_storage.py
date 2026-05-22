@@ -8,6 +8,7 @@ import os
 from universal_importer import extract_zip_to_structure, extract_email_to_structure
 from pikepdf import open as pike_open
 import pikepdf
+from log_config import logger
 
 def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     """
@@ -77,7 +78,7 @@ class PDFStorage:
                 self.root.add_child(node)
                 return
         except Exception as e:
-            print(f"[WARNUNG] Strukturierter Import fehlgeschlagen ({filename}): {e}")
+            logger.warning("Strukturierter Import fehlgeschlagen (%s): %s", filename, e)
             # → Fallback auf regulären PDF-Import
 
 
@@ -102,7 +103,7 @@ class PDFStorage:
                     self._parse_json_structure(structure, data)
                     return  # ✅ Struktur erfolgreich geladen
                 except Exception as e:
-                    print(f"⚠️ JSON-Struktur ungültig oder nicht lesbar: {e}")
+                    logger.warning("JSON-Struktur ungültig oder nicht lesbar: %s", e)
 
             # Kein oder ungültiges JSON → einfacher Import als ein Knoten
             self.root = PDFNode(name="root", is_folder=True)
@@ -130,13 +131,13 @@ class PDFStorage:
                 try:
                     node.compress()
                 except Exception as e:
-                    print(f"⚠️ Komprimierung fehlgeschlagen für {node.name}: {e}")
+                    logger.warning("Komprimierung fehlgeschlagen für '%s': %s", node.name, e)
 
 
     @staticmethod
     def extract_pages(data: bytes, start: int, end: int) -> bytes:
         if start is None or end is None:
-            print(f"⚠️ Kein gültiger Seitenbereich angegeben.")
+            logger.warning("Kein gültiger Seitenbereich angegeben.")
             return b""
 
         reader = PdfReader(io.BytesIO(data))
@@ -146,7 +147,7 @@ class PDFStorage:
             if 0 <= i < len(reader.pages):
                 writer.add_page(reader.pages[i])
             else:
-                print(f"⚠️ Seite {i} liegt außerhalb des gültigen Bereichs ({len(reader.pages)} Seiten)")
+                logger.warning("Seite %d liegt außerhalb des gültigen Bereichs (%d Seiten)", i, len(reader.pages))
 
         buffer = io.BytesIO()
         writer.write(buffer)
@@ -165,7 +166,7 @@ class PDFStorage:
             reader = PdfReader(io.BytesIO(data))
             total_pages = len(reader.pages)
         except Exception as e:
-            print(f"❌ PDF konnte nicht gelesen werden: {e}")
+            logger.error("PDF konnte nicht gelesen werden: %s", e)
             return
 
         for child_data in structure.get("children", []):
@@ -256,7 +257,7 @@ class PDFStorage:
                 if len(final_pdf) >= len(raw_pdf):
                     final_pdf = raw_pdf
         except Exception as e:
-            print(f"[save] pikepdf-Komprimierung fehlgeschlagen: {e}")
+            logger.warning("[save] pikepdf-Komprimierung fehlgeschlagen: %s", e)
             final_pdf = raw_pdf
 
         # 4. PDF speichern
@@ -274,6 +275,21 @@ class PDFStorage:
             self.save_path = path
 
 
+
+    def export_selection(self, nodes: List[PDFNode], path: str):
+        """Export only the selected nodes to a file.
+
+        If a parent and its child are both selected, the parent takes precedence
+        (the full subtree is exported). Saves as .belegtool (with embedded structure)
+        or .pdf (same content, no structure metadata); the format is chosen by path extension.
+        """
+        top_level = self.filter_keep_ancestors(nodes)
+        copies = [node.copy(keep_name=True) for node in top_level]
+
+        temp_storage = PDFStorage()
+        for c in copies:
+            temp_storage.root.add_child(c)
+        temp_storage.save(path)
 
     # def export_as_bytes(self) -> bytes:
     #     buffer = io.BytesIO()
@@ -321,7 +337,7 @@ class PDFStorage:
         end = start + length - 1
 
         if start >= total_pages:
-            print(f"⚠️ Knoten {name} beginnt bei Seite {start}, PDF hat nur {total_pages} Seiten. Übersprungen.")
+            logger.warning("Knoten '%s' beginnt bei Seite %d, PDF hat nur %d Seiten – übersprungen.", name, start, total_pages)
             return None
 
         if end >= total_pages:
@@ -379,19 +395,35 @@ class PDFStorage:
         return sorted(result, key=lambda e: (e["depth"], e["index"]))
 
 
-    def _get_clean_selection(self, nodes: List[PDFNode], target_parent: PDFNode) -> List[PDFNode]:
-        """
-        Entfernt Nachfahren UND bereits korrekt platzierte Knoten aus der Selektion.
-        """
-        def is_descendant_of_any(node):
-            return any(ancestor._is_descendant_of(node) for ancestor in nodes)
+    @staticmethod
+    def has_parent_child_conflict(nodes: List[PDFNode]) -> bool:
+        """Returns True if any node in the list is an ancestor of another node in the list."""
+        return any(
+            node._is_descendant_of(other)
+            for node in nodes
+            for other in nodes
+            if other is not node
+        )
 
-        result = []
-        for node in nodes:
-            if is_descendant_of_any(node):
-                continue
-            result.append(node)
-        return result
+    @staticmethod
+    def filter_keep_ancestors(nodes: List[PDFNode]) -> List[PDFNode]:
+        """Keep only root-level selections; remove nodes whose ancestor is also selected."""
+        return [
+            node for node in nodes
+            if not any(node._is_descendant_of(other) for other in nodes if other is not node)
+        ]
+
+    @staticmethod
+    def filter_keep_descendants(nodes: List[PDFNode]) -> List[PDFNode]:
+        """Keep only leaf-level selections; remove nodes whose descendant is also selected."""
+        return [
+            node for node in nodes
+            if not any(other._is_descendant_of(node) for other in nodes if other is not node)
+        ]
+
+    def _get_clean_selection(self, nodes: List[PDFNode], target_parent: PDFNode) -> List[PDFNode]:
+        """Entfernt Nachfahren aus der Selektion (behält Vorfahren)."""
+        return self.filter_keep_ancestors(nodes)
 
     def _move_nodes_to_parent(self, nodes: List[PDFNode], target_node: PDFNode):
         """
@@ -421,17 +453,13 @@ class PDFStorage:
                         insert_offset -= 1
                     node.parent.children.remove(node)
                 except ValueError:
-                    print(f"[WARNUNG] Knoten '{node.name}' war nicht in Parent '{node.parent.name}' enthalten.")
+                    logger.warning("Knoten '%s' war nicht in Parent '%s' enthalten.", node.name, node.parent.name)
 
             node.parent = new_parent
             new_index = insert_pos + i + insert_offset
             new_parent.children.insert(new_index, node)
-            for i, child in enumerate(new_parent.children):
-                child.position = i
-                print(f" - {child.name}: Position {i}")
 
-        for i, child in enumerate(new_parent.children):
-            child.position = i
-            print(f" - {child.name}: Position {i}")
+        for idx, child in enumerate(new_parent.children):
+            child.position = idx
 
 

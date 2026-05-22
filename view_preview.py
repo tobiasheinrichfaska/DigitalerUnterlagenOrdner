@@ -14,9 +14,7 @@ class PreviewFrame(ttk.Frame):
         self.zoom_auto = True
         self.show_original = False
         self.current_node = None
-
-        self.canvas = tk.Canvas(self, bg="white")
-
+        self._poll_after_id = None
 
         self.canvas_frame = ttk.Frame(self)
         self.canvas_frame.pack(side="top", fill="both", expand=True)
@@ -106,6 +104,21 @@ class PreviewFrame(ttk.Frame):
         )
         self.reset_button.pack(side="top", anchor="w", padx=5)
         self.reset_button.pack_forget()
+
+        # Method selector — shown when multiple compression results are available
+        self.method_frame = ttk.Frame(self)
+        self.method_label = ttk.Label(self.method_frame, text="Methode:")
+        self.method_label.pack(side="left", padx=5)
+        self.method_var = tk.StringVar()
+        self.method_combo = ttk.Combobox(
+            self.method_frame,
+            textvariable=self.method_var,
+            state="readonly",
+            width=30,
+        )
+        self.method_combo.pack(side="left", padx=5)
+        self.method_combo.bind("<<ComboboxSelected>>", self._on_method_selected)
+        self.method_frame.pack_forget()
 
     def _bind_mousewheel(self, event):
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel_windows)
@@ -243,8 +256,42 @@ class PreviewFrame(ttk.Frame):
 
         return y_offset
 
+    def _set_controls_enabled(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        self.rotate_button.config(state=state)
+        self.commit_button.config(state=state)
+        try:
+            self.slider.config(state=state)
+        except Exception:
+            pass
+
+    def _schedule_poll(self, node):
+        self._poll_after_id = self.after(150, lambda: self._poll_node_ready(node))
+
+    def _poll_node_ready(self, node):
+        self._poll_after_id = None
+        if node is not self.current_node:
+            return
+        if node._preview_task_running or node._compression_task_running:
+            self._schedule_poll(node)
+        else:
+            self.show_previews(node)
+
     def show_previews(self, node):
         self.current_node = node
+
+        if self._poll_after_id is not None:
+            self.after_cancel(self._poll_after_id)
+            self._poll_after_id = None
+
+        busy = node._preview_task_running or node._compression_task_running
+        self._set_controls_enabled(not busy)
+
+        # while a background task runs, show the stable original instead of a placeholder
+        was_show_original = self.show_original
+        if busy:
+            self.show_original = True
+
         self.canvas.delete("all")
         self.image_refs.clear()
         y_offset = 10
@@ -267,7 +314,13 @@ class PreviewFrame(ttk.Frame):
         if self.zoom_label:
             percent = int(self.zoom_level * 100)
             self.zoom_label.config(text=f"{percent}%")
+
+        self.show_original = was_show_original
         self._update_slider_visibility()
+        self._update_method_selector()
+
+        if busy:
+            self._schedule_poll(node)
 
 
 
@@ -336,6 +389,43 @@ class PreviewFrame(ttk.Frame):
             return
         self.current_node.no_compression = False
         self._update_slider_visibility()
+
+    def _update_method_selector(self):
+        node = self.current_node
+        results = getattr(node, "_compression_results", {}) if node else {}
+        if not node or node.is_folder or len(results) < 2:
+            self.method_frame.pack_forget()
+            return
+
+        labels = []
+        for method, data in results.items():
+            kb = len(data) / 1024
+            labels.append(f"{method}  ({kb:.0f} KB)")
+
+        self.method_combo["values"] = labels
+        # highlight whichever method matches current_pdf_data
+        for i, (method, data) in enumerate(results.items()):
+            if data == node.current_pdf_data:
+                self.method_combo.current(i)
+                break
+        else:
+            self.method_combo.current(0)
+
+        self.method_frame.pack(side="bottom", pady=2, fill="x", before=self.compression_frame)
+
+    def _on_method_selected(self, event=None):
+        node = self.current_node
+        if not node:
+            return
+        idx = self.method_combo.current()
+        results = getattr(node, "_compression_results", {})
+        method = list(results.keys())[idx]
+        try:
+            node.select_compression_method(method)
+            self.controller.update_preview(node)
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Fehler", str(e))
 
 
 

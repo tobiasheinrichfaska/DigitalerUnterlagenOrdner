@@ -3,36 +3,44 @@ from PIL import Image
 import io
 from pypdf import PdfReader, PdfWriter
 import pikepdf
-
+from log_config import logger
 
 
 def compress_pdf_bytes(input_bytes: bytes, dpi: int = 150, method: str = "jpg") -> bytes:
-    """
-    Führt eine zweistufige PDF-Komprimierung durch:
-    1. Bildbasierte Neurenderung (JPEG, PNG, ...)
-    2. Struktur-Reencode per PyPDF2
-    Gibt stets das beste Ergebnis der beiden zurück.
-    """
-    # Stufe 1: Bilderzeugung
+    """Render-based compression followed by structural re-encode. Returns the smaller result."""
     rendered = _render_pdf_as_images(input_bytes, dpi=dpi, method=method)
-    # print(f"[compress_pdf_bytes] Nach Bildkompression: {len(rendered)} Bytes")
-
-    # Stufe 2: Strukturelle Bereinigung
     reencoded = reencode_pdf_structure(rendered)
-    # print(f"[compress_pdf_bytes] Nach Struktur-Reencode: {len(reencoded)} Bytes")
-
     return reencoded
 
 
-def _render_pdf_as_images(input_bytes: bytes, dpi: int = 150, method: str = "jpg") -> bytes:
-    """
-    Rendert jede Seite eines PDFs als Bild (Graustufen) und erstellt daraus ein neues PDF.
-    Fehlerhafte Seiten werden übersprungen.
-    """
-    import fitz
-    from PIL import Image
-    import io
+def compress_all_methods(input_bytes: bytes, dpi: int = 150) -> dict:
+    """Run every available compression method and return {method_name: bytes}.
 
+    Only entries smaller than the input are included. The dict is sorted
+    smallest-first so callers can pick dict[next(iter(...))] for the best result.
+    """
+    candidates = {}
+
+    for method in ("jpg", "png"):
+        try:
+            result = compress_pdf_bytes(input_bytes, dpi=dpi, method=method)
+            if len(result) < len(input_bytes):
+                candidates[method] = result
+        except Exception as e:
+            logger.warning("Kompression '%s' fehlgeschlagen: %s", method, e)
+
+    try:
+        result = recompress_with_pikepdf(input_bytes)
+        if len(result) < len(input_bytes):
+            candidates["pikepdf"] = result
+    except Exception as e:
+        logger.warning("Kompression 'pikepdf' fehlgeschlagen: %s", e)
+
+    return dict(sorted(candidates.items(), key=lambda kv: len(kv[1])))
+
+
+def _render_pdf_as_images(input_bytes: bytes, dpi: int = 150, method: str = "jpg") -> bytes:
+    """Renders every page as a greyscale image. Broken pages are skipped."""
     A4_WIDTH_PT = 595.0
     input_pdf = fitz.open(stream=input_bytes, filetype="pdf")
     output_pdf = fitz.open()
@@ -68,7 +76,7 @@ def _render_pdf_as_images(input_bytes: bytes, dpi: int = 150, method: str = "jpg
             img_page.insert_image(rect, stream=buf.getvalue(), keep_proportion=True)
 
         except Exception as e:
-            print(f"[WARN] Fehler bei Seite {page_index}: {e}")
+            logger.warning("Fehler bei Seite %d: %s", page_index, e)
             continue
 
     out_buf = io.BytesIO()
@@ -86,24 +94,17 @@ def reencode_pdf_structure(pdf_bytes: bytes) -> bytes:
         writer.write(buf)
         return buf.getvalue()
     except Exception as e:
-        print(f"[Reencode] Fehler: {e}")
+        logger.warning("PDF-Reencode fehlgeschlagen: %s", e)
         return pdf_bytes
 
+
 def recompress_with_pikepdf(input_bytes: bytes) -> bytes:
-    """
-    Re-komprimiert ein PDF strukturell mithilfe von pikepdf.
-    Entfernt ungenutzte Objekte und nutzt effiziente Deflate-Kompression.
-    """
+    """Structurally recompresses a PDF using pikepdf (no image re-rendering)."""
     try:
-        input_stream = io.BytesIO(input_bytes)
-        with pikepdf.open(input_stream) as pdf:
+        with pikepdf.open(io.BytesIO(input_bytes)) as pdf:
             output = io.BytesIO()
-            pdf.save(
-                output,
-                compression=pikepdf.CompressionLevel.compression_level_fast,
-                optimize_version=True
-            )
+            pdf.save(output, compress_streams=True, recompress_flate=True)
             return output.getvalue()
     except Exception as e:
-        print(f"[pikepdf] Fehler bei der Re-Komprimierung: {e}")
+        logger.warning("pikepdf-Rekomprimierung fehlgeschlagen: %s", e)
         return input_bytes

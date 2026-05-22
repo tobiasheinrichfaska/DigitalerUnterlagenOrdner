@@ -1,6 +1,7 @@
 import io
 import os
 from dataclasses import dataclass
+from log_config import logger
 from PIL import Image
 import zipfile
 from typing import List, Optional, Callable, Dict, Any, Union
@@ -11,6 +12,7 @@ import tempfile
 import pythoncom
 import win32com.client
 from pillow_heif import register_heif_opener
+import pikepdf
 # import cairosvg
 import threading
 from tkinter import _default_root
@@ -134,9 +136,7 @@ class UniversalImporter:
                 pdf_bytes = result.data.getvalue()
                 result.data = io.BytesIO(pdf_bytes)
 
-                if not pdf_bytes.strip().startswith(b"%PDF") or b"%%EOF" not in pdf_bytes:
-                    with open("debug_invalid_ram.pdf", "wb") as dbg:
-                        dbg.write(pdf_bytes)
+                if not pdf_bytes.strip().startswith(b"%PDF"):
                     raise ValueError(f"Ungültige PDF-Daten erzeugt für: {name}")
                 return result
             finally:
@@ -169,9 +169,7 @@ class UniversalImporter:
         pdf_bytes = result.data.getvalue()
         result.data = io.BytesIO(pdf_bytes)
 
-        if not pdf_bytes.strip().startswith(b"%PDF") or b"%%EOF" not in pdf_bytes:
-            with open("debug_invalid_path.pdf", "wb") as dbg:
-                dbg.write(pdf_bytes)
+        if not pdf_bytes.strip().startswith(b"%PDF"):
             raise ValueError(f"Ungültige PDF-Daten erzeugt aus Datei: {path}")
 
         return result
@@ -255,7 +253,15 @@ class UniversalImporter:
             return ConvertedPDF(name=f"{name} – nicht konvertierbar", data=fallback)
 
         buffer.seek(0)
-        return ConvertedPDF(name=name, data=buffer)
+        raw = buffer.read()
+        try:
+            with pikepdf.open(io.BytesIO(raw)) as pdf:
+                normalized = io.BytesIO()
+                pdf.save(normalized, compress_streams=True)
+            normalized.seek(0)
+            return ConvertedPDF(name=name, data=normalized)
+        except Exception:
+            return ConvertedPDF(name=name, data=io.BytesIO(raw))
 
 
     @staticmethod
@@ -343,7 +349,7 @@ class UniversalImporter:
                     if _default_root:
                         _default_root.after(0, on_complete)
                 except Exception as e:
-                    print(f"⚠️ Callback-Fehler: {e}")
+                    logger.warning("Callback-Fehler: %s", e)
 
         thread = threading.Thread(target=task, daemon=True)
         thread.start()
@@ -424,19 +430,19 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
         try:
             msg = BytesParser(policy=policy.default).parsebytes(data)
 
-            print("📩 EML-Parsing abgeschlossen")
-            print(f"From: {msg['from']}")
-            print(f"Subject: {msg['subject']}")
+            logger.debug("EML-Parsing abgeschlossen")
+            logger.debug("From: %s", msg['from'])
+            logger.debug("Subject: %s", msg['subject'])
 
             base_name = _build_base_name(msg["subject"], msg["date"])
 
             # Body extrahieren
-            print("📩 Suche Mail-Body mit Priorität (html, plain, rtf)")
+            logger.debug("Suche Mail-Body mit Priorität (html, plain, rtf)")
             body_part = msg.get_body(preferencelist=("html", "plain", "rtf"))
             if body_part:
-                print(f"✅ Body gefunden: Content-Type = {body_part.get_content_type()}")
+                logger.debug("Body gefunden: Content-Type = %s", body_part.get_content_type())
             else:
-                print("⚠️ Kein Body gefunden")
+                logger.warning("Kein Body gefunden")
 
             content_type = body_part.get_content_type() if body_part else "text/plain"
             extension = {
@@ -446,35 +452,39 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
             }.get(content_type, ".txt")
             body_content = body_part.get_content() if body_part else ""
 
-            print(f"📄 Inhalt Start (repr): {repr(body_content[:200])}")
+            logger.debug("Inhalt Start (repr): %s", repr(body_content[:200]))
 
             file_name = f"{base_name}{extension}"
 
-            print(f"🔁 Aufruf _convert_mail_body mit Datei: {file_name}")
+            logger.debug("Aufruf _convert_mail_body mit Datei: %s", file_name)
 
             result.append(_convert_mail_body(body_content, file_name))
 
-            # Anhänge
-            for part in msg.iter_attachments():
-                fname = part.get_filename() or "Anhang"
-                content = part.get_payload(decode=True)
-                if content:
-                    result.append(_convert_attachment(content, fname))
-
-            # Eingebettete Bilder (inline)
+            # Anhänge + eingebettete Bilder — walk() durchläuft auch verschachtelte MIME-Strukturen
             for part in msg.walk():
-                if part.get_content_maintype() == "image":
-                    cid = part.get("Content-ID", "").strip("<>")
-                    disp = part.get("Content-Disposition", "")
-                    if "inline" in disp.lower() or cid:
-                        fname = part.get_filename() or f"Bild_{cid or 'inline'}.png"
+                if part.get_content_maintype() == "multipart":
+                    continue
+                if part is body_part:
+                    continue
+
+                disp = (part.get("Content-Disposition") or "").lower()
+                fname = part.get_filename()
+                maintype = part.get_content_maintype()
+
+                if "attachment" in disp or (fname and "inline" not in disp):
+                    fname = fname or "Anhang"
+                    content = part.get_payload(decode=True)
+                    if content:
+                        result.append(_convert_attachment(content, fname))
+                elif maintype == "image":
+                    cid = (part.get("Content-ID") or "").strip("<>")
+                    if "inline" in disp or cid:
+                        fname = fname or f"Bild_{cid or 'inline'}.png"
                         content = part.get_payload(decode=True)
                         if content:
                             result.append(_convert_attachment(content, fname))
         except Exception as e:
-            print("⚠️ [extract_email_to_structure] Ausnahme beim Parsen der EML:")
-            import traceback
-            traceback.print_exc()
+            logger.exception("[extract_email_to_structure] Ausnahme beim Parsen der EML:")
             result.append(_not_importable("Unbekannte E-Mail"))
 
     # .msg

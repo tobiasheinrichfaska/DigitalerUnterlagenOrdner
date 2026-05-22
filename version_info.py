@@ -1,5 +1,5 @@
 # version_info.py
-APP_NAME = "DigitalerBeleg"
+APP_NAME = "DigitalerUnterlagenOrdner"
 VERSION = "3.02"
 
 

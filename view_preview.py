@@ -460,7 +460,8 @@ class PreviewFrame(ttk.Frame):
 
         self.current_node.no_compression = False
         self.current_node.dpi_current = dpi
-        self.current_node.compress(dpi)
+        self.current_node._compression_results = {}
+        self.current_node.compress_multi_lazy(dpi=dpi)
         self.controller.update_preview(self.current_node)
 
 

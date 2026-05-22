@@ -154,11 +154,13 @@ class UniversalImporter:
         elif ext in cls.TEXT_EXTENSIONS:
             with open(path, "rb") as f:
                 content = f.read()
-            result = cls._convert_txt_to_pdf(content, name=os.path.splitext(name)[0] + ".pdf")
+            _n = name or os.path.basename(path)
+            result = cls._convert_txt_to_pdf(content, name=os.path.splitext(_n)[0] + ".pdf")
         elif ext in cls.HTML_EXTENSIONS:
             with open(path, "rb") as f:
                 content = f.read()
-            result = cls._convert_html_to_pdf(content, name=os.path.splitext(name)[0] + ".pdf")
+            _n = name or os.path.basename(path)
+            result = cls._convert_html_to_pdf(content, name=os.path.splitext(_n)[0] + ".pdf")
 
         elif ext in cls.OFFICE_EXTENSIONS:
             result = cls._convert_office_via_com(path, ext)
@@ -472,7 +474,15 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                 maintype = part.get_content_maintype()
 
                 if "attachment" in disp or (fname and "inline" not in disp):
-                    fname = fname or "Anhang"
+                    if not fname or "." not in fname:
+                        _ctype_ext = {
+                            "application/pdf": ".pdf", "image/jpeg": ".jpg",
+                            "image/png": ".png", "image/tiff": ".tif",
+                            "application/msword": ".doc",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+                            "text/plain": ".txt", "text/html": ".html",
+                        }.get(part.get_content_type(), "")
+                        fname = (fname or "Anhang") + _ctype_ext
                     content = part.get_payload(decode=True)
                     if content:
                         result.append(_convert_attachment(content, fname))
@@ -505,8 +515,16 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
 
             # Anhänge
             for att in msg.attachments:
-                fname = att.longFilename or att.shortFilename or "Anhang"
-                result.append(_convert_attachment(att.data, fname))
+                try:
+                    fname = att.longFilename or att.shortFilename or "Anhang"
+                    data_att = att.data
+                    if data_att:
+                        result.append(_convert_attachment(data_att, fname))
+                    else:
+                        result.append(_not_importable(fname))
+                except Exception as e:
+                    logger.warning("MSG-Anhang konnte nicht gelesen werden: %s", e)
+                    result.append(_not_importable(fname if fname else "Anhang"))
 
         except Exception:
             raise ValueError("Ungültige MSG-Datei")

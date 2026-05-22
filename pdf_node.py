@@ -299,20 +299,25 @@ class PDFNode:
 
         On completion, _compression_results is populated with every method that
         produced a file smaller than the original. current_pdf_data is set to the
-        smallest result. Callers can then offer the user a choice via
-        select_compression_method().
+        smallest result. If called while already running, the new DPI is queued
+        and a second run starts automatically when the first finishes.
         """
         if self.is_folder or not self.original_pdf_data:
             return
-        if self._compression_task_running:
-            return
+        with self._compression_task_lock:
+            if self._compression_task_running:
+                self._compression_task_requested = True
+                self._compression_task_dpi = dpi
+                return
+            self._compression_task_running = True
+            self._compression_task_dpi = dpi
 
-        self._compression_task_running = True
         register_task(f"Kompression: {self.name}")
 
         def run():
+            run_dpi = self._compression_task_dpi
             try:
-                results = compress_all_methods(self.original_pdf_data, dpi=dpi)
+                results = compress_all_methods(self.original_pdf_data, dpi=run_dpi)
                 self._compression_results = results
                 if results:
                     best_method = next(iter(results))
@@ -321,12 +326,20 @@ class PDFNode:
                     self.is_compressed = True
                     self.pdf_length = self._get_pdf_length(best_bytes)
                     self.current_preview_images = self._create_previews(best_bytes)
-                    self.dpi_current = dpi
+                    self.dpi_current = run_dpi
             except Exception as e:
                 logger.error("Multi-Kompression bei '%s' fehlgeschlagen: %s", self.name, e)
             finally:
                 unregister_task(f"Kompression: {self.name}")
-                self._compression_task_running = False
+                with self._compression_task_lock:
+                    self._compression_task_running = False
+                    if self._compression_task_requested:
+                        self._compression_task_requested = False
+                        next_dpi = self._compression_task_dpi
+                        threading.Thread(
+                            target=lambda: self.compress_multi_lazy(next_dpi),
+                            daemon=True
+                        ).start()
 
         threading.Thread(target=run, daemon=True).start()
 

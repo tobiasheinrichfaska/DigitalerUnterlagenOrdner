@@ -5,7 +5,7 @@ from typing import Optional, List, Union, Dict, Any
 from pypdf import PdfReader, PdfWriter
 from pdf_node import PDFNode
 import os
-from universal_importer import extract_zip_to_structure, extract_email_to_structure
+from universal_importer import extract_zip_to_structure, extract_tar_to_structure, extract_email_to_structure
 from pikepdf import open as pike_open
 import pikepdf
 from log_config import logger
@@ -66,6 +66,14 @@ class PDFStorage:
                 struktur = extract_zip_to_structure(data)
                 node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "ZIP-Datei erfolgreich geladen"
+                self.root = PDFNode(name="root", is_folder=True)
+                self.root.add_child(node)
+                return
+
+            if filename.endswith((".tar", ".tar.gz", ".tgz")):
+                struktur = extract_tar_to_structure(data)
+                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
+                node.konstruktor_ergebnis = "TAR-Archiv erfolgreich geladen"
                 self.root = PDFNode(name="root", is_folder=True)
                 self.root.add_child(node)
                 return

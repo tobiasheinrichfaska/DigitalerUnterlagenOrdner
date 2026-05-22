@@ -19,51 +19,6 @@ class ControlPanel(ttk.Frame):
         self.save_as_button = ttk.Button(self, text="Speichern als", command=self.save_as)
         self.save_as_button.pack(side="left", padx=5, pady=5)
 
-        self.export_button = ttk.Button(self, text="Exportieren", command=self.export_selected)
-        self.export_button.pack(side="left", padx=5, pady=5)
-
-        self.split_button = ttk.Button(self, text="Splitten", command=self.split_selected)
-        self.split_button.pack(side="left", padx=5, pady=5)
-
-        self.merge_button = ttk.Button(self, text="Zusammenführen", command=self.merge_selected)
-        self.merge_button.pack(side="left", padx=5, pady=5)
-
-        self.close_button = ttk.Button(self, text="Schließen", command=self.close_storage)
-        self.close_button.pack(side="left", padx=5, pady=5)
-
-        # Status-Buttons
-        self.status_vorjahr_button = ttk.Button(self, text="Vorjahreswert",
-                                                command=lambda: self.set_status_for_selection("vorjahreswert"))
-        self.status_vorjahr_button.pack(side="left", padx=5, pady=5)
-
-        self.status_zu_erfassen_button = ttk.Button(self, text="Zu erfassen",
-                                                    command=lambda: self.set_status_for_selection("zu erfassen"))
-        self.status_zu_erfassen_button.pack(side="left", padx=5, pady=5)
-
-        self.status_erfasst_button = ttk.Button(self, text="Erfasst",
-                                                command=lambda: self.set_status_for_selection("erfasst"))
-        self.status_erfasst_button.pack(side="left", padx=5, pady=5)
-
-        # Neuer Ordner (innerhalb)
-        self.new_folder_inside_button = ttk.Button(self, text="Ordner innerhalb", command=self.add_folder_inside)
-        self.new_folder_inside_button.pack(side="left", padx=5, pady=5)
-
-        # Neuer Ordner (unterhalb)
-        self.new_folder_below_button = ttk.Button(self, text="Ordner unterhalb", command=self.add_folder_below)
-        self.new_folder_below_button.pack(side="left", padx=5, pady=5)
-
-        # Löschen
-        self.delete_button = ttk.Button(self, text="Löschen", command=self.delete_selected)
-        self.delete_button.pack(side="left", padx=5, pady=5)
-
-        # Umbenennen
-        self.rename_button = ttk.Button(self, text="Umbenennen", command=self.rename_selected)
-        self.rename_button.pack(side="left", padx=5, pady=5)
-
-        # Anwendung beenden
-        self.quit_button = ttk.Button(self, text="Beenden", command=self.controller._exit_app)
-        self.quit_button.pack(side="left", padx=5, pady=5)
-
 
     def rename_selected(self):
         selected_ids = self.controller.tree_view.tree.selection()
@@ -427,7 +382,7 @@ class ControlPanel(ttk.Frame):
                     continue
 
 
-                if path.lower().endswith((".pdf", ".belegtool", ".zip", ".eml", ".msg")):
+                if path.lower().endswith((".pdf", ".belegtool", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
                     temp_storage = PDFStorage(path)
                     wrapper_node = create_wrapper_node(temp_storage, path)
 
@@ -536,9 +491,6 @@ class ControlPanel(ttk.Frame):
             messagebox.showerror("Fehler beim Splitten", str(e))
         finally:
             self.controller.set_busy(False)
-
-    def update_buttons(self, node):
-        self.split_button.config(state="normal" if node and not node.is_folder else "disabled")
 
     def _do_save(self, path: str = None):
         try:

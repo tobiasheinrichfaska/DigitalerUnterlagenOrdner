@@ -181,9 +181,13 @@ class PreviewFrame(ttk.Frame):
             if canvas_width <= 1:
                 self.update_idletasks()
                 canvas_width = self.canvas.winfo_width()
-            page_width = images[0].width
+            page_width  = images[0].width
+            page_height = images[0].height
             if page_width > 0:
-                self.zoom_level = canvas_width / page_width * 0.95
+                A4_HEIGHT_PX = 842
+                zoom_w = canvas_width / page_width * 0.95
+                zoom_h = A4_HEIGHT_PX / page_height if page_height > 0 else zoom_w
+                self.zoom_level = min(zoom_w, zoom_h)
 
         # ✅ Eindeutige zentrale Logik
         is_true_original = (
@@ -281,6 +285,8 @@ class PreviewFrame(ttk.Frame):
             y_offset = self._render_node_images(node, y_offset, show_title=False)
 
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        A4_HEIGHT_PX = 842
+        self.canvas.config(height=min(A4_HEIGHT_PX, max(100, y_offset)))
 
         if self.zoom_label:
             percent = int(self.zoom_level * 100)
@@ -356,8 +362,14 @@ class PreviewFrame(ttk.Frame):
     def _on_reset_compression(self):
         if not self.current_node:
             return
-        self.current_node.no_compression = False
+        node = self.current_node
+        node.no_compression = False
+        dpi = int(float(self.slider.get()))
+        node.dpi_current = dpi
+        node._compression_results = {}
+        node.compress_multi_lazy(dpi=dpi)
         self._update_slider_visibility()
+        self.controller.update_preview(node)
 
     def _update_method_selector(self):
         node = self.current_node

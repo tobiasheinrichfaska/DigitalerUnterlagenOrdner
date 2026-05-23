@@ -196,7 +196,13 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
             self.preview_frame.show_previews(self.preview_frame.current_node)
 
     def _show_info(self):
-        messagebox.showinfo("BelegTool", self.base_title)
+        from version_info import get_full_title
+        msg = (
+            f"{get_full_title()}\n\n"
+            f"Autor: Tobias Heinrich\n"
+            f"Co-Autor: Claude (Anthropic)"
+        )
+        messagebox.showinfo("Info", msg)
 
     def set_busy(self, busy=True):
         cursor = "watch" if busy else ""

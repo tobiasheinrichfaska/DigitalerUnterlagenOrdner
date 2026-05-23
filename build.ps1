@@ -21,4 +21,4 @@ Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
     --workpath "$Root\build" `
     --noconfirm
 
-Write-Host "=== Fertig: dist\BelegTool\BelegTool.exe ===" -ForegroundColor Green
+Write-Host "=== Fertig: dist\PDF-Storage\PDF-Storage.exe ===" -ForegroundColor Green

@@ -1,0 +1,11 @@
+pyinstaller
+tkinterdnd2
+PyMuPDF
+Pillow
+pillow-heif
+pikepdf
+pypdf
+reportlab
+xhtml2pdf
+extract-msg
+pywin32

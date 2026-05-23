@@ -24,15 +24,13 @@ def compress_all_methods(input_bytes: bytes, dpi: int = 150) -> dict:
     for method in ("jpg", "png"):
         try:
             result = compress_pdf_bytes(input_bytes, dpi=dpi, method=method)
-            if len(result) < len(input_bytes):
-                candidates[method] = result
+            candidates[method] = result
         except Exception as e:
             logger.warning("Kompression '%s' fehlgeschlagen: %s", method, e)
 
     try:
         result = recompress_with_pikepdf(input_bytes)
-        if len(result) < len(input_bytes):
-            candidates["pikepdf"] = result
+        candidates["pikepdf"] = result
     except Exception as e:
         logger.warning("Kompression 'pikepdf' fehlgeschlagen: %s", e)
 

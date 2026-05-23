@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.02**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.05**.
 
 Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 
@@ -43,7 +43,7 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 | File | Role |
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.02) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.05) |
 | `log_config.py` | Logging setup |
 | `status_display.py` | Title bar status loop |
 | `preview_page.py` | Helper class for preview pages |
@@ -129,19 +129,20 @@ pytest
 
 ## Versioning
 
-Tags follow `vMAJOR.MINOR` (e.g. `v3.02`, `v3.03`). `VERSION` in `version_info.py` always matches the latest tag.
+Tags follow **semantic versioning** `vMAJOR.MINOR.PATCH` — see workspace CLAUDE.md for the full convention.
+`VERSION` in `version_info.py` always matches the latest tag. Legacy tags `v3.02`–`v3.05` predate this convention.
 
 Workflow for each stable milestone:
 ```powershell
-# 1. bump version_info.py: VERSION = "X.XX"
-# 2. git commit -m "chore: bump version to X.XX"
-# 3. git tag vX.XX
+# 1. bump version_info.py: VERSION = "X.Y.Z"
+# 2. git commit -m "chore: bump version to X.Y.Z"
+# 3. git tag vX.Y.Z
 ```
 
-Fall back to a previous version: `git checkout v3.02`
+Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.02**
+Current stable tag: **v3.05**
 
 ---
 

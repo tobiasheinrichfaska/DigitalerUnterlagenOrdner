@@ -1,8 +1,10 @@
 from tkinter import ttk, filedialog, messagebox, simpledialog
+import tkinter as tk
 from log_config import logger
 from universal_importer import UniversalImporter
 from pdf_storage import PDFStorage
 from pdf_node import PDFNode
+from typing import Optional
 import os
 
 class ControlPanel(ttk.Frame):
@@ -548,12 +550,92 @@ class ControlPanel(ttk.Frame):
 
         try:
             self.controller.set_busy(True)
-            self.controller.storage.export_selection(nodes, path)
-            messagebox.showinfo("Exportiert", f"Auswahl exportiert nach:\n{path}")
+
+            if path.lower().endswith(".pdf"):
+                from toc_export import export_pdf_with_toc, export_pdf_split_with_toc, count_total_pages
+                total = count_total_pages(nodes)
+
+                if total > 100:
+                    max_per_file = self._ask_split_options(total)
+                    if max_per_file is None:
+                        return  # abgebrochen
+                    if max_per_file == 0:
+                        export_pdf_with_toc(nodes, path)
+                        messagebox.showinfo("Exportiert", f"Exportiert nach:\n{path}")
+                    else:
+                        created = export_pdf_split_with_toc(nodes, path, max_per_file)
+                        files_str = "\n".join(os.path.basename(p) for p in created)
+                        messagebox.showinfo("Exportiert",
+                                            f"{len(created)} Datei(en) erstellt:\n{files_str}")
+                else:
+                    export_pdf_with_toc(nodes, path)
+                    messagebox.showinfo("Exportiert", f"Exportiert nach:\n{path}")
+            else:
+                self.controller.storage.export_selection(nodes, path)
+                messagebox.showinfo("Exportiert", f"Auswahl exportiert nach:\n{path}")
+
         except Exception as e:
             messagebox.showerror("Fehler beim Exportieren", str(e))
         finally:
             self.controller.set_busy(False)
+
+    def _ask_split_options(self, total_pages: int) -> Optional[int]:
+        """
+        Zeigt Dialog zur Aufteilungsoption.
+        Gibt None bei Abbruch zurück, 0 für keine Aufteilung, sonst max Seiten pro Datei.
+        """
+        result = [None]
+
+        dialog = tk.Toplevel(self.controller)
+        dialog.title("Exportoptionen")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.focus_set()
+
+        tk.Label(
+            dialog,
+            text=f"Die Auswahl umfasst {total_pages} Seiten.\n"
+                 "In mehrere Dateien aufteilen?",
+            justify="left", padx=15, pady=10
+        ).pack()
+
+        split_var = tk.BooleanVar(value=True)
+        pages_var = tk.IntVar(value=100)
+
+        opt_frame = tk.Frame(dialog)
+        opt_frame.pack(padx=15, pady=5)
+
+        tk.Radiobutton(
+            opt_frame, text="Nein — als eine Datei exportieren",
+            variable=split_var, value=False
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=2)
+
+        tk.Radiobutton(
+            opt_frame, text="Ja — maximal",
+            variable=split_var, value=True
+        ).grid(row=1, column=0, sticky="w")
+
+        ttk.Spinbox(opt_frame, from_=10, to=2000, textvariable=pages_var, width=7)\
+            .grid(row=1, column=1, padx=5)
+
+        tk.Label(opt_frame, text="Seiten pro Datei")\
+            .grid(row=1, column=2, sticky="w")
+
+        def on_ok():
+            result[0] = pages_var.get() if split_var.get() else 0
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=(5, 15))
+        tk.Button(btn_frame, text="Exportieren", width=14, command=on_ok).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Abbrechen",   width=14, command=on_cancel).pack(side="left", padx=5)
+
+        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        dialog.wait_window()
+        return result[0]
 
     def debug_output(self):
         storage = self.controller.storage

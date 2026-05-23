@@ -12,7 +12,7 @@ tests/__pycache__/
 # Build / Distribution
 build/
 dist/
-*.spec
+.build_venv/
 *.exe
 Installer_*/
 

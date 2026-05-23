@@ -1,5 +1,7 @@
 # CLAUDE.md — DigitalerUnterlagenOrdner (BelegTool)
 
+> Übergeordnete Workspace-Konventionen (Arbeitsweise, Git, Build, Kommunikation): [`c:\skripte\CLAUDE.md`](../CLAUDE.md)
+
 ## Projektübersicht
 Desktop-Anwendung zur hierarchischen Verwaltung, Vorschau und dem Export von PDF-Dokumenten und Belegen. Zielplattform: Windows. UI: Python/Tkinter (ttk). Version: **3.02**.
 

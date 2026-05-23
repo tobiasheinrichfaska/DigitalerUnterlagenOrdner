@@ -3,15 +3,14 @@ import logging
 import os
 import sys
 
-# Anchor log file to the EXE directory (frozen) or source directory (dev),
-# so it never tries to write to CWD which may be C:\Windows\System32 when
-# launched from Explorer.
-if getattr(sys, 'frozen', False):
-    _app_dir = os.path.dirname(sys.executable)
-else:
-    _app_dir = os.path.dirname(os.path.abspath(__file__))
-
-LOGFILE = os.path.join(_app_dir, "pdf_tool.log")
+# Write log to %LOCALAPPDATA%\PDF-Storage\ (always user-writable, even when
+# installed in Program Files). Fall back to home dir if LOCALAPPDATA is unset.
+_log_dir = os.path.join(
+    os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+    "PDF-Storage"
+)
+os.makedirs(_log_dir, exist_ok=True)
+LOGFILE = os.path.join(_log_dir, "pdf_tool.log")
 LOGLEVEL = 99  # Standardmäßig: keine Ausgaben
 
 logger = logging.getLogger("pdf_tool")

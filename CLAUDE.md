@@ -127,6 +127,24 @@ pytest
 
 ---
 
+## Versioning
+
+Tags follow `vMAJOR.MINOR` (e.g. `v3.02`, `v3.03`). `VERSION` in `version_info.py` always matches the latest tag.
+
+Workflow for each stable milestone:
+```powershell
+# 1. bump version_info.py: VERSION = "X.XX"
+# 2. git commit -m "chore: bump version to X.XX"
+# 3. git tag vX.XX
+```
+
+Fall back to a previous version: `git checkout v3.02`
+List all versions: `git tag`
+
+Current stable tag: **v3.02**
+
+---
+
 ## Open / deferred items
 - **Zammad integration** — deferred, not started yet
 

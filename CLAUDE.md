@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.05**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.5.1**.
 
 Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 
@@ -43,7 +43,7 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 | File | Role |
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.05) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.5.1) |
 | `log_config.py` | Logging setup |
 | `status_display.py` | Title bar status loop |
 | `preview_page.py` | Helper class for preview pages |
@@ -142,7 +142,7 @@ Workflow for each stable milestone:
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.05**
+Current stable tag: **v3.5.1**
 
 ---
 

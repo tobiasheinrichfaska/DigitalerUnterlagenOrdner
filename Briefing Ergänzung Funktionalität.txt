@@ -1,4 +1,0 @@
-Ergänze den Import von E-Mails eml und nsg.
-Das Exportieren einer Auswahl von Knoten (ist hier ein parent markiert, und nicht alle Children, werden nur die ausgewählten Children mitgenommen. gespeichert wird als ".belegtool" oder .pdf" Auswahl für User!
-Beim Komprimieren sollen, sofern verfügbar, auch andere PDF-Bibliotheken geprüft werden.  so dass der User in der ANziege die Auswahl hat, falls eine andere Kompression besser ist.
-Währen der nicht linerarne Prozesse sollen die Anzeigefenster den Original-Inhalt zeigen, Steuererlemente zum Drehen oder komprimieren sollen deaktiviert sein.

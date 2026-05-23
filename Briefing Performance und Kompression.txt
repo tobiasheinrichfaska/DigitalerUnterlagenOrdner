@@ -1,3 +1,0 @@
-Derzeit erfolgt die Kompression durch die Verringerung der Auflösung. Es sollen weitere Möglöichkeiten geschaffen werdden, so dass der Nutzer aus verschiedenen Wegen der Kompression auswählen kann. hierzu muss dann der PDF teil in anderen Bibliotheen (nur aktuelle!) verkleinert werden.
-
-Weiter soll die PErformance gesteigert werden.

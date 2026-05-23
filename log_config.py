@@ -1,8 +1,17 @@
 # log_config.py
 import logging
 import os
+import sys
 
-LOGFILE = "pdf_tool.log"
+# Anchor log file to the EXE directory (frozen) or source directory (dev),
+# so it never tries to write to CWD which may be C:\Windows\System32 when
+# launched from Explorer.
+if getattr(sys, 'frozen', False):
+    _app_dir = os.path.dirname(sys.executable)
+else:
+    _app_dir = os.path.dirname(os.path.abspath(__file__))
+
+LOGFILE = os.path.join(_app_dir, "pdf_tool.log")
 LOGLEVEL = 99  # Standardmäßig: keine Ausgaben
 
 logger = logging.getLogger("pdf_tool")

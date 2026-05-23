@@ -501,8 +501,10 @@ class TreeViewFrame(ttk.Frame):
 
         elif direction == "left" and node.parent.parent:
             grandparent = node.parent.parent
-            new_index = grandparent.children.index(node.parent) + 1
-            node.change_parent(grandparent)
+            old_parent = node.parent
+            new_index = grandparent.children.index(old_parent) + 1
+            node.change_parent(grandparent, index=new_index)
+            self._reorder_children(old_parent)
             self._reorder_children(grandparent)
             parent_id = self._get_iid_for_node(grandparent)
 

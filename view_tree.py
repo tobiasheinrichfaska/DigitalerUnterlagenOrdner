@@ -1,4 +1,4 @@
-import tkinter as tk
+﻿import tkinter as tk
 from tkinterdnd2 import DND_FILES
 from pdf_storage import PDFStorage, create_wrapper_node
 from tkinter import simpledialog
@@ -19,7 +19,7 @@ class TreeViewFrame(ttk.Frame):
         self.tree_frame = ttk.Frame(self)
         self.tree_frame.pack(side="top", fill="both", expand=True)
 
-        self.tree = ttk.Treeview(self.tree_frame, show="tree")
+        self.tree = ttk.Treeview(self.tree_frame, show="tree", selectmode="extended")
         self.v_scrollbar = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.tree.yview)
         self.h_scrollbar = ttk.Scrollbar(self.tree_frame, orient="horizontal", command=self.tree.xview)
 
@@ -39,11 +39,20 @@ class TreeViewFrame(ttk.Frame):
         # Kontextmenü mit rechter Maustaste
         self.tree.bind("<Button-3>", self._on_right_click)
 
-        # Drag
-        self.tree.bind("<ButtonPress-3>", self._on_mouse_down_context)
-        self.tree.bind("<B3-Motion>", self._on_mouse_drag_context)
-        self.tree.bind("<ButtonRelease-3>", self._on_mouse_up_context)
-        self._drag_in_progress = False
+        # Left-button drag-and-drop (move = plain drag, copy = Ctrl+drag)
+        # Binding WITHOUT add=True runs BEFORE the class binding → returning "break"
+        # prevents the class-level range-selection only when we are in drag mode.
+        self.tree.bind("<ButtonPress-1>",   self._on_left_press)
+        self.tree.bind("<B1-Motion>",       self._on_left_motion)
+        self.tree.bind("<ButtonRelease-1>", self._on_left_release, add=True)
+
+        self._drag_in_progress  = False
+        self._left_press_item   = None
+        self._left_press_pos    = None
+        self._left_drag_active  = False
+        self._left_sel_at_press = []
+        self._defer_single_sel  = False
+        self._drag_highlight    = None
 
 
         # F2 = Umbenennen
@@ -87,6 +96,7 @@ class TreeViewFrame(ttk.Frame):
         self.tree.tag_configure("status_vorjahreswert_light", foreground="red", background="#ffdada")
         self.tree.tag_configure("status_vorjahreswert_dark", foreground="red", background="#dd8888")
 
+        self.tree.tag_configure("drag_target", background="#cce8ff")
 
         self.nodes_by_id = {}
 
@@ -94,82 +104,114 @@ class TreeViewFrame(ttk.Frame):
         self.controller.control_panel.delete_selected()
 
 
-    def _on_mouse_down_context(self, event):
-        self._drag_start_items = self.tree.selection()
-        self._drag_motion_triggered = False
+    def _on_left_press(self, event):
+        item = self.tree.identify_row(event.y)
+        is_shift = bool(event.state & 0x1)
+        is_ctrl  = bool(event.state & 0x4)
 
-    def _on_mouse_drag_context(self, event):
-        self._drag_motion_triggered = True
+        self._left_press_item   = item
+        self._left_press_pos    = (event.x, event.y)
+        self._left_drag_active  = False
+        self._defer_single_sel  = False
+        self._left_sel_at_press = list(self.tree.selection())
 
-    def _on_mouse_up_context(self, event):
+        # Clicking an already-selected item without modifiers: hold the multi-
+        # selection so the user can start a drag. Defer single-select to release.
+        if item and item in self.tree.selection() and not is_shift and not is_ctrl:
+            self.tree.focus(item)
+            self.tree.focus_set()
+            self._defer_single_sel = True
+            return "break"   # prevent class binding from clearing multi-selection
+
+    def _on_left_motion(self, event):
+        if not self._left_press_item:
+            return   # no "break" -> class binding handles range selection
+
+        dx = abs(event.x - self._left_press_pos[0])
+        dy = abs(event.y - self._left_press_pos[1])
+        if dx <= 5 and dy <= 5:
+            return   # below threshold -> class binding handles range selection
+
+        # Threshold crossed: commit to drag mode
+        if not self._left_drag_active:
+            self._left_drag_active = True
+            self._defer_single_sel = False
+            sel = self._left_sel_at_press or ([self._left_press_item] if self._left_press_item else [])
+            self.tree.selection_set(sel)   # restore selection (undo any partial range-select)
+
+        # Highlight the row under the cursor (but not one of the dragged items)
+        target = self.tree.identify_row(event.y)
+        if target != self._drag_highlight:
+            if self._drag_highlight:
+                self.tree.tag_remove("drag_target", self._drag_highlight)
+            if target and target not in self._left_sel_at_press:
+                self.tree.tag_add("drag_target", target)
+                self._drag_highlight = target
+            else:
+                self._drag_highlight = None
+
+        return "break"   # prevent class binding from doing range selection
+
+    def _on_left_release(self, event):
+        if self._drag_highlight:
+            self.tree.tag_remove("drag_target", self._drag_highlight)
+            self._drag_highlight = None
+
+        if self._left_drag_active:
+            self._execute_left_drop(event)
+        elif self._defer_single_sel and self._left_press_item:
+            # No drag happened -- apply the deferred single-select
+            self.tree.selection_set(self._left_press_item)
+            self.tree.focus(self._left_press_item)
+
+        self._left_drag_active = False
+        self._defer_single_sel = False
+        self._left_press_item  = None
+
+    def _execute_left_drop(self, event):
         if self._drag_in_progress:
-            logger.warning("Dragloop erkannt – wird abgebrochen")
             return
         self._drag_in_progress = True
+        try:
+            target_iid  = self.tree.identify_row(event.y)
+            target_node = self.nodes_by_id.get(target_iid) if target_iid else None
+            selected_nodes = [
+                self.nodes_by_id[iid]
+                for iid in self._left_sel_at_press
+                if iid in self.nodes_by_id
+            ]
 
-        target_iid = self.tree.identify_row(event.y)
-
-        # Wenn kein Drag oder keine Startselektion → evtl. Kontextmenü
-        if not self._drag_motion_triggered or not self._drag_start_items:
-            if target_iid and target_iid in self.tree.selection():
-                self.tree.focus(target_iid)
-                self.tree.focus_set()
-                self.context_menu.tk_popup(event.x_root, event.y_root)
-                self.context_menu.grab_release()
-                self._drag_in_progress = False
-            return
-
-        target_node = self.nodes_by_id.get(target_iid) if target_iid else None
-
-        selected_nodes = [
-            self.nodes_by_id[iid]
-            for iid in self._drag_start_items
-            if iid in self.nodes_by_id
-        ]
-
-        if not target_node:
-            logger.warning("Kein gültiges Ziel zum Kopieren.")
-            self._drag_in_progress = False
-            return
-
-
-        if event.state & 0x4:  # STRG gedrückt
-            # STRG gedrückt → Kopieren
-            filtered_source = self._resolve_conflict(selected_nodes)
-            if filtered_source is None:
-                self._drag_in_progress = False
+            if not selected_nodes or not target_node:
                 return
-            copies = [n.copy() for n in filtered_source]
-            for copy in copies:
-                self.controller.storage.root.add_child(copy)
-            for copy in copies:
-                self._populate(copy, parent="")
-            move_plan = self.controller.storage.perform_move(copies, target_node)
-            self._apply_gui_move_plan(move_plan)
-        else:
-            if target_node:
 
-                # Zyklische Verschiebung verhindern (z. B. Ordner in sich selbst oder Kind)
+            is_ctrl = bool(event.state & 0x4)
+
+            if is_ctrl:
+                filtered = self._resolve_conflict(selected_nodes)
+                if filtered is None:
+                    return
+                copies = [n.copy() for n in filtered]
+                for c in copies:
+                    self.controller.storage.root.add_child(c)
+                    self._populate(c, parent="")
+                move_plan = self.controller.storage.perform_move(copies, target_node)
+            else:
                 if any(target_node._is_descendant_of(n) or target_node == n for n in selected_nodes):
                     messagebox.showwarning(
-                        "Ungültiges Ziel",
-                        "Ein Knoten darf nicht in sich selbst oder seine Nachfahren verschoben werden."
+                        "Invalid target",
+                        "A node cannot be moved into itself or its descendants."
                     )
-                    self._drag_in_progress = False
                     return
-
-                filtered_nodes = self._resolve_conflict(selected_nodes)
-                if filtered_nodes is None:
-                    self._drag_in_progress = False
+                filtered = self._resolve_conflict(selected_nodes)
+                if filtered is None:
                     return
-                move_plan = self.controller.storage.perform_move(filtered_nodes, target_node)
-                self._apply_gui_move_plan(move_plan)
+                move_plan = self.controller.storage.perform_move(filtered, target_node)
 
-        self._drag_motion_triggered = False
-        self.controller.storage.mark_dirty()
-        self.controller._update_menu_states()
-        self._drag_in_progress = False
-
+            self._apply_gui_move_plan(move_plan)
+            self.controller.storage.mark_dirty()
+            self.controller._update_menu_states()
+        finally:
+            self._drag_in_progress = False
 
     def _on_right_click(self, event):
         item = self.tree.identify_row(event.y)

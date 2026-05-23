@@ -1,113 +1,116 @@
 # CLAUDE.md — DigitalerUnterlagenOrdner (BelegTool)
 
-> Übergeordnete Workspace-Konventionen (Arbeitsweise, Git, Build, Kommunikation): [`c:\skripte\CLAUDE.md`](../CLAUDE.md)
-
-## Projektübersicht
-Desktop-Anwendung zur hierarchischen Verwaltung, Vorschau und dem Export von PDF-Dokumenten und Belegen. Zielplattform: Windows. UI: Python/Tkinter (ttk). Version: **3.02**.
-
-Einstiegspunkt: `belegtool_main.py` — starten mit `python belegtool_main.py`.
+> Workspace-wide conventions (language, git, build, collaboration): [`c:\skripte\general stuff\CLAUDE.md`](../general%20stuff/CLAUDE.md)
 
 ---
 
-## Architektur
+## Project overview
 
-### GUI-Schicht
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.02**.
 
-| Datei | Funktion |
+Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
+
+---
+
+## Architecture
+
+### GUI layer
+
+| File | Role |
 |---|---|
-| `belegtool_main.py` | Hauptfenster (TkinterDnD), Menüleiste, `_update_menu_states()`, Update-Check |
-| `panel_controls.py` | Toolbar (3 Buttons), alle Action-Handler (Import, Export, Split, Merge, …) |
-| `view_tree.py` | TreeView-Frame, Kontextmenü, Drag-Drop, Tastenbelegung |
-| `view_preview.py` | Preview-Canvas, Zoom, DPI-Schieber, Kompression-Commit/Reset, Rotation |
+| `belegtool_main.py` | Main window (TkinterDnD), menu bar, `_update_menu_states()`, update check |
+| `panel_controls.py` | Toolbar (3 buttons), all action handlers (import, export, split, merge, …) |
+| `view_tree.py` | TreeView frame, context menu, drag-and-drop, keyboard bindings |
+| `view_preview.py` | Preview canvas, zoom, DPI slider, compression commit/reset, rotation |
 
-### Datenmodell
+### Data model
 
-| Datei | Funktion |
+| File | Role |
 |---|---|
-| `pdf_node.py` | `PDFNode`: Knoten (Datei/Ordner), Kompression, Vorschau-Generierung, Split/Merge/Copy/Delete |
-| `pdf_storage.py` | `PDFStorage`: JSON-Serialisierung, Export mit TOC, .belegtool-Format |
+| `pdf_node.py` | `PDFNode`: tree node (file/folder), compression, preview generation, split/merge/copy/delete |
+| `pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
 
 ### Import & Export
 
-| Datei | Funktion |
+| File | Role |
 |---|---|
-| `universal_importer.py` | Multi-Format Import: PDF, Bilder (jpg/png/webp/heic), Office (Word/Excel/PPT via COM), Archive (ZIP/TAR), E-Mail (eml/msg) |
-| `toc_export.py` | PDF-Export mit gedrucktem TOC, anklickbaren Annotationen (pikepdf), Sidebar-Lesezeichen, Auto-Split >100 Seiten |
-| `compress_pdf_bytes.py` | Render-basierte Kompression (JPG/PNG), pikepdf-Strukturkompression, Methoden-Vergleich |
+| `universal_importer.py` | Multi-format import: PDF, images (jpg/png/webp/heic), Office (Word/Excel/PPT via COM), archives (ZIP/TAR), email (eml/msg) |
+| `toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
+| `compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
 
 ### Utilities
 
-| Datei | Funktion |
+| File | Role |
 |---|---|
-| `tools.py` | PDF-Sanitierung (Reparatur defekter Objekte) |
-| `version_info.py` | `APP_NAME`, `VERSION` (aktuell 3.02) |
-| `log_config.py` | Logging-Setup |
-| `status_display.py` | Titelzeilen-Status-Loop |
-| `preview_page.py` | Hilfsklasse für Vorschau-Seiten |
+| `tools.py` | PDF sanitization (repair broken objects) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.02) |
+| `log_config.py` | Logging setup |
+| `status_display.py` | Title bar status loop |
+| `preview_page.py` | Helper class for preview pages |
 
 ---
 
-## Abhängigkeiten (keine requirements.txt im Repo — `requirements.txt` gepflegt)
+## Dependencies (`requirements.txt` maintained in repo)
 
-| Package | Zweck |
+| Package | Purpose |
 |---|---|
-| `tkinterdnd2` | Drag-Drop im TreeView |
-| `PyMuPDF` (`fitz`) | PDF-Rendering zu Bildern |
-| `Pillow` | Image-Verarbeitung, HEIC-Support via `pillow-heif` |
-| `pikepdf` | Erweiterte PDF-Manipulation (Annotationen, Outline/Bookmarks) |
-| `pypdf` | PDF lesen/schreiben (Basis) |
-| `reportlab` | TOC-Seiten rendern (Canvas) |
-| `xhtml2pdf` | HTML-zu-PDF |
-| `extract-msg` | Outlook-MSG-Dateien parsen |
-| `pywin32` | Word/Excel/PPT-Konversion über COM |
-| `pyinstaller` | Build-Tool |
+| `tkinterdnd2` | Drag-and-drop in TreeView |
+| `PyMuPDF` (`fitz`) | PDF rendering to images |
+| `Pillow` | Image processing; HEIC support via `pillow-heif` |
+| `pikepdf` | Advanced PDF manipulation (annotations, outline/bookmarks) |
+| `pypdf` | PDF read/write (base) |
+| `reportlab` | Render TOC pages (Canvas) |
+| `xhtml2pdf` | HTML-to-PDF |
+| `extract-msg` | Parse Outlook MSG files |
+| `pywin32` | Word/Excel/PPT conversion via COM |
+| `pyinstaller` | Build tool |
 
 ---
 
 ## Features
 
-### Import-Pipeline
-- **PDF / .belegtool** → direkt als Knoten
-- **Bilder** (jpg, png, webp, heic) → zu PDF konvertiert
-- **Office** (Word, Excel, PPT) → Win32-COM oder GhostScript → PDF
-- **Archive** (ZIP, TAR) → Struktur beibehalten, rekursiv geladen
-- **E-Mail** (eml, msg) → Inhalte + Anhänge als Struktur extrahiert
+### Import pipeline
+- **PDF / .belegtool** → loaded directly as nodes
+- **Images** (jpg, png, webp, heic) → converted to PDF
+- **Office** (Word, Excel, PPT) → Win32-COM or GhostScript → PDF
+- **Archives** (ZIP, TAR) → structure preserved, loaded recursively
+- **Email** (eml, msg) → body + attachments extracted as tree structure
 
-### Baum-Operationen
-Split, Merge (mit DPI-Konflikt-Check), Ordner anlegen, Löschen, Umbenennen, Copy (Deep), Drag-Drop (STRG = Copy), Tastatur-Move (Ctrl+Pfeile)
+### Tree operations
+Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop (Ctrl = copy), keyboard move (Ctrl+arrows)
 
-### Vorschau & Kompression
-- Lazy-generiert, gecacht; DPI-Schieber 50–300 DPI
-- Multi-Methode: JPG, PNG, pikepdf parallel testen → beste auswählen
-- Commit-Button (Original ersetzen), Reset-Button
+### Preview & compression
+- Lazy-generated, cached; DPI slider 50–300 DPI
+- Multi-method: test JPG, PNG, pikepdf in parallel → pick best
+- Commit button (replace original), reset button
 
-### Status-System (pro Knoten)
-- `erfasst` (grün)
-- `zu erfassen` (blau, hervorgehoben)
-- `vorjahreswert` (rot, hervorgehoben)
+### Status system (per node)
+- `erfasst` — green
+- `zu erfassen` — blue, highlighted
+- `vorjahreswert` — red, highlighted
 
 ### Export
-- Einzel-PDF mit Inhaltsverzeichnis (TOC), anklickbaren Links, Sidebar-Lesezeichen
-- Auto-Split bei >100 Seiten mit Querverweisen
-- .belegtool-Format (Metadaten + ZIP)
+- Single PDF with table of contents (TOC), clickable links, sidebar bookmarks
+- Auto-split at >100 pages with cross-references
+- .belegtool format (metadata + ZIP)
 
 ---
 
 ## Build
 
-### Voraussetzungen
-- Python 3.12 im PATH
-- `tkinterdnd2/tkdnd`-Verzeichnis am in `belegtool.spec` hinterlegten Pfad
+### Prerequisites
+- Python 3.12 in PATH
+- `tkinterdnd2/tkdnd` directory at the path specified in `belegtool.spec`
 
-### Build ausführen (clean venv, onedir)
+### Build (clean venv, onedir)
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
-Ergebnis: `dist\BelegTool\BelegTool.exe` + alle DLLs/Daten im selben Verzeichnis.
+Output: `dist\BelegTool\BelegTool.exe` + all DLLs/data in the same directory.
 
-**Kein onefile-Build** — onedir startet schneller (kein Entpacken in tmp).
+onedir is intentional — faster startup, no temp extraction.
 
-### Manuell starten (Entwicklung)
+### Run for development
 ```powershell
 python belegtool_main.py
 ```
@@ -115,21 +118,22 @@ python belegtool_main.py
 ---
 
 ## Tests
-Framework: `pytest`. Abgedeckte Module: `pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`. Tests liegen im Projektverzeichnis (32 Test-Dateien). Ausführen:
+
+Framework: `pytest`. Covered modules: `pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`. 32 test files in the project directory.
+
 ```powershell
 pytest
 ```
 
 ---
 
-## Offene Punkte / Bekannte TODOs
-- **Zammad-Integration** — zurückgestellt, noch nicht begonnen
-- CLAUDE.md laufend aktualisieren bei größeren Änderungen
+## Open / deferred items
+- **Zammad integration** — deferred, not started yet
 
 ---
 
-## Wichtige Konventionen
-- UI-Style: Windows-native ttk ("faithful ttk"), keine custom Farben außer Status-Highlights
-- Toolbar: 3 Buttons — [Importieren] [Speichern] [Speichern als]
-- Kontextmenü-Reihenfolge: optimiert nach Häufigkeit (siehe `view_tree.py`)
-- `_update_menu_states()` in `belegtool_main.py` steuert kontextsensitive Aktivierung aller Menüeinträge
+## UI conventions
+- Style: Windows-native ttk ("faithful ttk"), no custom colors except status highlights
+- Toolbar: 3 buttons — [Import] [Save] [Save as]
+- Context menu order: optimized by frequency of use (see `view_tree.py`)
+- `_update_menu_states()` in `belegtool_main.py` controls context-sensitive activation of all menu items

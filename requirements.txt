@@ -8,4 +8,7 @@ pypdf
 reportlab
 xhtml2pdf
 extract-msg
+RTFDE
+oletools
+python-bidi
 pywin32

@@ -296,7 +296,18 @@ class PreviewFrame(ttk.Frame):
         self._update_slider_visibility()
         self._update_method_selector()
 
-        if busy:
+        # For nodes that have never been compressed (e.g. loaded from old files),
+        # kick off compression automatically so the dropdown appears without the
+        # user having to drag the slider first.
+        if (not node.is_folder
+                and not node.no_compression
+                and not node._compression_results
+                and not node._compression_task_running
+                and node.original_pdf_data
+                and not busy):
+            node.compress_multi_lazy(dpi=node.dpi_current or 150)
+            self._schedule_poll(node)
+        elif busy:
             self._schedule_poll(node)
 
 
@@ -364,7 +375,10 @@ class PreviewFrame(ttk.Frame):
             return
         node = self.current_node
         node.no_compression = False
-        dpi = int(float(self.slider.get()))
+        # Use last-used DPI or a sensible default — never the slider's max position,
+        # which is what the slider holds when the reset button is visible.
+        dpi = node.dpi_current or 150
+        self.slider.set(dpi)
         node.dpi_current = dpi
         node._compression_results = {}
         node.compress_multi_lazy(dpi=dpi)
@@ -374,18 +388,23 @@ class PreviewFrame(ttk.Frame):
     def _update_method_selector(self):
         node = self.current_node
         results = getattr(node, "_compression_results", {}) if node else {}
-        if not node or node.is_folder or len(results) < 2:
+        if not node or node.is_folder or not results:
             self.method_frame.pack_forget()
             return
 
+        def _fmt(n_bytes):
+            return f"{round(n_bytes / 1024):,}".replace(",", ".")
+
+        orig_str = _fmt(len(node.original_pdf_data)) if node.original_pdf_data else "?"
         best_method = min(results, key=lambda m: len(results[m]))
         labels = []
         for method, data in results.items():
-            kb = round(len(data) / 1024)
+            size_str = _fmt(len(data))
+            arrow = f"{orig_str} KB → {size_str} KB"
             if method == best_method:
-                labels.append(f"✓ {method} · {kb} KB · bestes Ergebnis")
+                labels.append(f"✓ {method} · {arrow} · bestes Ergebnis")
             else:
-                labels.append(f"{method} · {kb} KB")
+                labels.append(f"{method} · {arrow}")
 
         self.method_combo["values"] = labels
         for i, (method, data) in enumerate(results.items()):

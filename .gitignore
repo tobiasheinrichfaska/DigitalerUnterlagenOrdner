@@ -19,6 +19,9 @@ Installer_*/
 # VS Code
 .vscode/
 
+# Claude Code
+.claude/
+
 # Logs
 *.log
 

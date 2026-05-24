@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.5.1**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.5.3**.
 
 Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 
@@ -81,7 +81,8 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 
 ### Preview & compression
 - Lazy-generated, cached; DPI slider 50–300 DPI
-- Multi-method: test JPG, PNG, pikepdf in parallel → pick best
+- Multi-method: test JPG, PNG, pikepdf in parallel → pick best; methods larger than original are hidden from the dropdown
+- Original file size shown in labels for comparison
 - Commit button (replace original), reset button
 
 ### Status system (per node)
@@ -106,7 +107,7 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
-Output: `dist\BelegTool\BelegTool.exe` + all DLLs/data in the same directory.
+Output: `dist\PDF-Storage\PDF-Storage.exe` + all DLLs/data in the same directory.
 
 onedir is intentional — faster startup, no temp extraction.
 
@@ -137,12 +138,15 @@ Workflow for each stable milestone:
 # 1. bump version_info.py: VERSION = "X.Y.Z"
 # 2. git commit -m "chore: bump version to X.Y.Z"
 # 3. git tag vX.Y.Z
+# 4. git push origin master --tags
 ```
+
+Push to GitHub regularly — at the end of every meaningful session, not just on version bumps. Remote: `https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner.git`
 
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.5.1**
+Current stable tag: **v3.5.3**
 
 ---
 

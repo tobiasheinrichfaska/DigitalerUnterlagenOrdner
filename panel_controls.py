@@ -22,6 +22,17 @@ class ControlPanel(ttk.Frame):
         self.save_as_button.pack(side="left", padx=5, pady=5)
 
 
+    def update_buttons(self, node):
+        """
+        Aktualisiert die Toolbar-/Aktionszustände basierend auf dem aktuell
+        ausgewählten Knoten. Delegiert an die Menü-Statuslogik im Hauptfenster,
+        damit Toolbar und Menüs konsistent bleiben.
+        """
+        update_menu_states = getattr(self.controller, "_update_menu_states", None)
+        if callable(update_menu_states):
+            update_menu_states()
+
+
     def rename_selected(self):
         selected_ids = self.controller.tree_view.tree.selection()
         if not selected_ids:

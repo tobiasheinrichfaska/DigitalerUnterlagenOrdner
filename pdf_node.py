@@ -538,8 +538,23 @@ class PDFNode:
                 child.commit_changes()
             return
 
+        # Guard: ein leerer Knoten hat ggf. kein current_pdf_data — dann gibt es
+        # nichts zu commiten (slicing None würde TypeError werfen).
+        if self.current_pdf_data is None:
+            return
+
         self.original_pdf_data = self.current_pdf_data[:]
-        self.original_preview_images = [img.copy() for img in self.current_preview_images]
+
+        # Platzhalter-Vorschau nicht als Original übernehmen — sonst geht das
+        # echte Original-Preview verloren, wenn gerade ein Preview-Task läuft.
+        current_imgs = self.current_preview_images
+        is_placeholder = (
+            len(current_imgs) == 1
+            and getattr(current_imgs[0], "_is_placeholder", False)
+        )
+        if not is_placeholder:
+            self.original_preview_images = [img.copy() for img in current_imgs]
+
         self.pdf_length = self._get_pdf_length(self.original_pdf_data)
 
         self.current_pdf_data = None

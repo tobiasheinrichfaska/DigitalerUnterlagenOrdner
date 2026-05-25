@@ -18,7 +18,7 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 
 | File | Role |
 |---|---|
-| `belegtool_main.py` | Main window (TkinterDnD), menu bar, `_update_menu_states()`, update check |
+| `belegtool_main.py` | Main window (TkinterDnD), menu bar, `_update_menu_states()` |
 | `panel_controls.py` | Toolbar (3 buttons), all action handlers (import, export, split, merge, …) |
 | `view_tree.py` | TreeView frame, context menu, drag-and-drop, keyboard bindings |
 | `view_preview.py` | Preview canvas, zoom, DPI slider, compression commit/reset, rotation |
@@ -43,7 +43,7 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 | File | Role |
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.5.1) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.5.3) |
 | `log_config.py` | Logging setup |
 | `status_display.py` | Title bar status loop |
 | `preview_page.py` | Helper class for preview pages |
@@ -120,7 +120,7 @@ python belegtool_main.py
 
 ## Tests
 
-Framework: `pytest`. Covered modules: `pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`. 32 test files in the project directory.
+Framework: `pytest`. Covered modules: `pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`. 31 test files in `tests/`.
 
 ```powershell
 pytest

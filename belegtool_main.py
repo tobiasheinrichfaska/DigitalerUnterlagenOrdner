@@ -11,7 +11,7 @@ from typing import Optional
 import os
 import status_display
 from version_info import get_full_title
-from log_config import LOGLEVEL, LOGFILE
+from log_config import LOGLEVEL, LOGFILE, LOGGING_ENABLED
 
 class DigitalerBelegGUI(TkinterDnD.Tk):
     def __init__(self, filepath: Optional[str] = None):
@@ -60,8 +60,8 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
     def update_preview(self, node):
         self.selected_node = node
         self.preview_frame.show_previews(node)
+        self.control_panel.update_buttons(node)
         self.tree_view.refresh_colors()
-        self._update_menu_states()
 
 
 
@@ -265,7 +265,9 @@ def start_gui():
     app = DigitalerBelegGUI(filepath=filepath)
     UniversalImporter.initialize_async()
     app.mainloop()
-    if LOGLEVEL < logging.CRITICAL and os.path.exists(LOGFILE) and os.path.getsize(LOGFILE) > 0:
+    # Nur öffnen, wenn der Nutzer Logging via PDF_TOOL_LOG_LEVEL aktiviert hat
+    # UND tatsächlich etwas in die Datei geschrieben wurde.
+    if LOGGING_ENABLED and os.path.exists(LOGFILE) and os.path.getsize(LOGFILE) > 0:
         os.startfile(LOGFILE)
 
 

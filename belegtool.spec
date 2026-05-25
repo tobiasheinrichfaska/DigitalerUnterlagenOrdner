@@ -3,7 +3,7 @@ import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 tkdnd_src = 'AppData/Local/Programs/Python/Python312/Lib/site-packages/tkinterdnd2/tkdnd'
-PROJECT_DIR = os.path.abspath('c:/skripte/DigitalerUnterlagenOrdner')
+PROJECT_DIR = os.path.abspath('c:/skripte/private/DigitalerUnterlagenOrdner')
 
 reportlab_imports = collect_submodules('reportlab')
 xhtml2pdf_imports = collect_submodules('xhtml2pdf')

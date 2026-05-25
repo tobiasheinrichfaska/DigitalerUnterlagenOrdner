@@ -1,6 +1,6 @@
 # CLAUDE.md — DigitalerUnterlagenOrdner (BelegTool)
 
-> Workspace-wide conventions (language, git, build, collaboration): [`c:\skripte\general stuff\CLAUDE.md`](../general%20stuff/CLAUDE.md)
+> Workspace-wide conventions (language, git, build, collaboration): [`c:\skripte\private\general stuff\CLAUDE.md`](../general%20stuff/CLAUDE.md)
 
 ---
 

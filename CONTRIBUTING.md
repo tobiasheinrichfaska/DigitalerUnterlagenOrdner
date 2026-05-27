@@ -1,27 +1,33 @@
-# Contributing
+﻿# Contributing to DigitalerUnterlagenOrdner
 
-Thank you for your interest in contributing!
+Thank you for your interest in contributing! This project is dual-licensed under AGPLv3 (open source) and a commercial license.
 
 ## Contributor License Agreement
 
-By submitting a Pull Request or other contribution to this repository, you agree to the
-following terms:
+By submitting a pull request or contribution to this project, you agree that:
 
-> You irrevocably grant Tobias Heinrich a perpetual, worldwide, non-exclusive, royalty-free
-> copyright license to reproduce, prepare derivative works of, publicly display, publicly
-> perform, sublicense, and distribute your Contributions under any license Tobias Heinrich
-> chooses, including proprietary commercial licenses. You confirm that you have the right
-> to grant this license and that your Contributions do not infringe third-party rights.
+1. **Grant of Rights:** You grant the project maintainer (Tobias Heinrich) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable right to use, reproduce, modify, and redistribute your contributions under any license (including commercial licenses) without restriction.
 
-By submitting code you confirm that you have read and accepted these terms.
+2. **Original Work:** You represent that your contributions are original works or properly licensed/attributed third-party work.
+
+3. **No Warranty:** Your contributions are provided "as-is" without warranty of any kind.
+
+By contributing, you accept these terms.
 
 ## How to Contribute
 
-- Open an Issue before starting significant work so we can align on scope.
-- Fork the repository, make your changes on a feature branch, then open a Pull Request.
-- Follow the existing code style and conventions documented in CLAUDE.md.
-- Keep Pull Requests focused — one logical change per PR.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make your changes
+4. Add tests if applicable
+5. Commit with clear messages
+6. Push to your fork and open a pull request
 
-## Code of Conduct
+## Code Standards
 
-Be respectful and constructive. Issues and PRs that are abusive or off-topic will be closed.
+- Follow PEP 8 for Python code
+- Add docstrings for public functions
+- Write tests for new features
+- Update CLAUDE.md if you change architecture
+
+Thank you!

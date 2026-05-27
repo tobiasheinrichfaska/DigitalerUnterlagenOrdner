@@ -1,9 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+import tkinterdnd2
 
-tkdnd_src = 'AppData/Local/Programs/Python/Python312/Lib/site-packages/tkinterdnd2/tkdnd'
-PROJECT_DIR = os.path.abspath('c:/skripte/private/DigitalerUnterlagenOrdner')
+tkdnd_src = os.path.join(os.path.dirname(tkinterdnd2.__file__), 'tkdnd')
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 reportlab_imports = collect_submodules('reportlab')
 xhtml2pdf_imports = collect_submodules('xhtml2pdf')

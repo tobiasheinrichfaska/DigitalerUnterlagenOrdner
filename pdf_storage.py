@@ -133,9 +133,12 @@ class PDFStorage:
             raise ValueError(f"Fehler beim Laden des PDFs: {e}")
 
     def compress(self):
-        """Komprimiert alle nicht-komprimierten Blatt-Nodes im Speicher."""
+        """Komprimiert alle nicht-komprimierten Blatt-Nodes im Speicher.
+
+        Nodes mit gesetztem no_compression-Flag werden übersprungen.
+        """
         for node in self.get_all_nodes():
-            if not node.is_folder and not node.is_compressed:
+            if not node.is_folder and not node.is_compressed and not node.no_compression:
                 try:
                     node.compress()
                 except Exception as e:
@@ -366,7 +369,11 @@ class PDFStorage:
             dpi_current=node_data.get("dpi_current"),
             no_compression=node_data.get("no_compression", False)
         )
-        node.is_compressed = False
+        # Restore the persisted is_compressed flag instead of unconditionally resetting it.
+        # set_original_and_current_data only sets is_compressed=True when current_data is
+        # provided; loading from disk always passes current_data=None, so we must read the
+        # flag back from the serialised structure explicitly.
+        node.is_compressed = bool(node_data.get("is_compressed", False))
         node.pdf_length = length
 
         node.update_preview()

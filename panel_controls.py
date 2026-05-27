@@ -451,11 +451,11 @@ class ControlPanel(ttk.Frame):
                     for subnode in self.controller.storage.get_all_nodes():
                         if subnode.is_folder:
                             continue
-                        if not subnode.is_compressed and subnode._is_descendant_of(node):
+                        if not subnode.is_compressed and not subnode.no_compression and subnode._is_descendant_of(node):
                             subnode.compress()
                             subnode.update_preview()
                             total += 1
-                elif not node.is_compressed:
+                elif not node.is_compressed and not node.no_compression:
                     node.compress()
                     node.update_preview()
                     total += 1

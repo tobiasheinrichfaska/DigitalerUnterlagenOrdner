@@ -150,6 +150,11 @@ Current stable tag: **v3.5.3**
 
 ---
 
+## DSGVO Compliance
+
+- ✅ Removed hardcoded personal name from About dialog (`belegtool_main.py:202-203`)
+- ✅ Hardcoded paths removed from build spec (commit 96008b2)
+
 ## Open / deferred items
 - **Zammad integration** — deferred, not started yet
 

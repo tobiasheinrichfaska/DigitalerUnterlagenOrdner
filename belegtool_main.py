@@ -199,7 +199,8 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         from version_info import get_full_title
         msg = (
             f"{get_full_title()}\n\n"
-            f"Developed with Claude (Anthropic)"
+            f"Autor: Tobias Heinrich\n"
+            f"Co-Autor: Claude (Anthropic)"
         )
         messagebox.showinfo("Info", msg)
 

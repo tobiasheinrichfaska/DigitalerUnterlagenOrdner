@@ -237,12 +237,28 @@ class UniversalImporter:
         return ConvertedPDF(name=name, data=buffer)
 
     @staticmethod
+    def _block_remote_link(uri: str, rel: str):
+        """link_callback für xhtml2pdf: blockiert alle Remote-URLs.
+
+        Verhindert, dass HTML-Mails mit eingebetteten <img src="http://...">
+        beim Import eine Netzwerkverbindung aufbauen und die IP-Adresse des
+        Nutzers an den Absender weiterleiten (Tracking-Pixel).
+        """
+        if uri.startswith(("http://", "https://", "//")):
+            return None  # Remote-Ressource verweigern
+        return uri
+
+    @staticmethod
     def _convert_html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:
         if isinstance(html, bytes):
             html = html.decode("utf-8", errors="replace")
 
         buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(src=html, dest=buffer)
+        pisa_status = pisa.CreatePDF(
+            src=html,
+            dest=buffer,
+            link_callback=UniversalImporter._block_remote_link,
+        )
 
         if pisa_status.err:
             # Fallback als leeres Dummy-PDF mit Hinweis
@@ -283,36 +299,54 @@ class UniversalImporter:
             pass  # COM war bereits initialisiert – kein Problem
 
         ext = ext.lower()
-        path = os.path.normpath(os.path.abspath(path))  # ✅ korrigiert
+        path = os.path.normpath(os.path.abspath(path))
         base_name = os.path.splitext(os.path.basename(path))[0]
-        out_path = os.path.normpath(os.path.abspath(os.path.join(tempfile.gettempdir(), base_name + ".pdf")))
 
-        if ext in [".doc", ".docx"]:
-            word = win32com.client.Dispatch("Word.Application")
-            doc = word.Documents.Open(path)
-            doc.SaveAs(out_path, FileFormat=17)  # 17 = PDF
-            doc.Close()
-            word.Quit()
+        # Sicheres temporäres Verzeichnis mit garantiertem Cleanup verwenden,
+        # statt eines vorhersagbaren Pfads in %TEMP%.
+        tmp_dir = tempfile.mkdtemp(prefix="belegtool_office_")
+        out_path = os.path.join(tmp_dir, base_name + ".pdf")
 
-        elif ext in [".xls", ".xlsx"]:
-            excel = win32com.client.Dispatch("Excel.Application")
-            wb = excel.Workbooks.Open(path)
-            wb.ExportAsFixedFormat(0, out_path)  # 0 = PDF
-            wb.Close(False)
-            excel.Quit()
+        try:
+            if ext in [".doc", ".docx"]:
+                word = win32com.client.Dispatch("Word.Application")
+                # Makros/DDE-Ausführung deaktivieren (msoAutomationSecurityForceDisable = 3)
+                word.AutomationSecurity = 3
+                doc = word.Documents.Open(path)
+                doc.SaveAs(out_path, FileFormat=17)  # 17 = PDF
+                doc.Close()
+                word.Quit()
 
-        elif ext in [".ppt", ".pptx"]:
-            powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-            ppt = powerpoint.Presentations.Open(path, WithWindow=False)
-            ppt.SaveAs(out_path, 32)  # 32 = PDF
-            ppt.Close()
-            powerpoint.Quit()
+            elif ext in [".xls", ".xlsx"]:
+                excel = win32com.client.Dispatch("Excel.Application")
+                excel.AutomationSecurity = 3
+                wb = excel.Workbooks.Open(path)
+                wb.ExportAsFixedFormat(0, out_path)  # 0 = PDF
+                wb.Close(False)
+                excel.Quit()
 
-        else:
-            raise ValueError(f"Nicht unterstützter Office-Typ: {ext}")
+            elif ext in [".ppt", ".pptx"]:
+                powerpoint = win32com.client.Dispatch("PowerPoint.Application")
+                powerpoint.AutomationSecurity = 3
+                ppt = powerpoint.Presentations.Open(path, WithWindow=False)
+                ppt.SaveAs(out_path, 32)  # 32 = PDF
+                ppt.Close()
+                powerpoint.Quit()
 
-        with open(out_path, "rb") as f:
-            buffer = io.BytesIO(f.read())
+            else:
+                raise ValueError(f"Nicht unterstützter Office-Typ: {ext}")
+
+            with open(out_path, "rb") as f:
+                buffer = io.BytesIO(f.read())
+
+        finally:
+            # Temp-Datei und Verzeichnis immer bereinigen
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+                os.rmdir(tmp_dir)
+            except Exception as cleanup_err:
+                logger.warning("Office-Temp-Datei konnte nicht gelöscht werden: %s", cleanup_err)
 
         if not buffer.getvalue().startswith(b"%PDF"):
             raise ValueError(f"Konvertiertes Dokument scheint kein gültiges PDF zu sein: {path}")
@@ -367,6 +401,11 @@ def _not_importable(name: str) -> Dict[str, Any]:
         "children": []  # ⬅ macht daraus einen Ordner!
     }
 
+# Schutz vor ZIP-Bomben / riesigen Archiven
+_ARCHIVE_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
+_ARCHIVE_MAX_MEMBERS = 500
+
+
 def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> List[Dict[str, Any]]:
     result = []
 
@@ -380,9 +419,22 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
 
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            for name in zf.namelist():
-                if name.endswith("/"):
-                    continue  # Verzeichnisse ignorieren
+            members = [info for info in zf.infolist() if not info.filename.endswith("/")]
+
+            # Sicherheits-Checks gegen ZIP-Bomben
+            if len(members) > _ARCHIVE_MAX_MEMBERS:
+                raise ValueError(
+                    f"ZIP-Archiv enthält zu viele Einträge ({len(members)} > {_ARCHIVE_MAX_MEMBERS})."
+                )
+            total_uncompressed = sum(info.file_size for info in members)
+            if total_uncompressed > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    f"ZIP-Archiv würde unkomprimiert {total_uncompressed // (1024*1024)} MB belegen "
+                    f"(Limit: {_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024*1024)} MB)."
+                )
+
+            for info in members:
+                name = info.filename
                 with zf.open(name) as f:
                     content = f.read()
                     try:
@@ -411,9 +463,21 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
 
     try:
         with tarfile.open(fileobj=io.BytesIO(data)) as tf:
-            for member in tf.getmembers():
-                if not member.isfile():
-                    continue
+            file_members = [m for m in tf.getmembers() if m.isfile()]
+
+            # Sicherheits-Checks gegen TAR-Bomben
+            if len(file_members) > _ARCHIVE_MAX_MEMBERS:
+                raise ValueError(
+                    f"TAR-Archiv enthält zu viele Einträge ({len(file_members)} > {_ARCHIVE_MAX_MEMBERS})."
+                )
+            total_uncompressed = sum(m.size for m in file_members)
+            if total_uncompressed > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    f"TAR-Archiv würde unkomprimiert {total_uncompressed // (1024*1024)} MB belegen "
+                    f"(Limit: {_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024*1024)} MB)."
+                )
+
+            for member in file_members:
                 name = os.path.basename(member.name) or member.name
                 try:
                     f = tf.extractfile(member)

@@ -1,47 +1,105 @@
 import fitz
 from PIL import Image
 import io
+from dataclasses import dataclass
+from typing import Tuple
 from pypdf import PdfReader, PdfWriter
 import pikepdf
 from log_config import logger
 
 
+@dataclass(frozen=True)
+class CompressionConfig:
+    """Central configuration for all PDF compression parameters.
+
+    All hard-coded constants that previously lived scattered across
+    compress_pdf_bytes.py are collected here.  The defaults reproduce
+    the historical behaviour exactly so that existing callers are
+    unaffected.
+
+    Attributes:
+        dpi: Default render DPI for image-based methods (jpg / png).
+        jpeg_quality: JPEG quality (0–95).  Higher = better quality, larger file.
+        png_compress_level: PNG deflate level (0–9).
+        colorspace: Fitz colorspace string.  "gray" = grayscale (smaller),
+            "rgb" = colour (larger but faithful).
+        max_width_pt: Pages wider than this are scaled down to this width
+            before rendering.  Set to None to disable downscaling.
+        methods: Tuple of method keys tried by compress_all_methods.
+    """
+    dpi: int = 150
+    jpeg_quality: int = 60
+    png_compress_level: int = 6
+    colorspace: str = "gray"
+    max_width_pt: float = 595.0   # A4 width in points
+    methods: Tuple[str, ...] = ("jpg", "png", "pikepdf")
+
+
+# Module-level default used by all public entry points.
+DEFAULT_CONFIG = CompressionConfig()
+
+
 def compress_pdf_bytes(input_bytes: bytes, dpi: int = 150, method: str = "jpg") -> bytes:
-    """Render-based compression followed by structural re-encode. Returns the smaller result."""
+    """Render-based compression followed by structural re-encode.
+
+    Renders every page at the given DPI using ``method`` ("jpg" or "png"),
+    then re-encodes the PDF structure with pypdf.  Returns the smaller of
+    the compressed result and the original input so that callers always get
+    at most the same size back.
+
+    Valid method values: "jpg" (lossy JPEG, grayscale), "png" (PNG, grayscale).
+    """
     rendered = _render_pdf_as_images(input_bytes, dpi=dpi, method=method)
     reencoded = reencode_pdf_structure(rendered)
-    return reencoded
+    # Always return whichever is smaller: the re-encoded result or the original.
+    return reencoded if len(reencoded) < len(input_bytes) else input_bytes
 
 
-def compress_all_methods(input_bytes: bytes, dpi: int = 150) -> dict:
+def compress_all_methods(
+    input_bytes: bytes,
+    dpi: int = DEFAULT_CONFIG.dpi,
+    config: CompressionConfig = DEFAULT_CONFIG,
+) -> dict:
     """Run every available compression method and return {method_name: bytes}.
 
     Only entries smaller than the input are included. The dict is sorted
     smallest-first so callers can pick dict[next(iter(...))] for the best result.
+
+    The set of methods tried is taken from ``config.methods``; defaults are
+    ("jpg", "png", "pikepdf").
     """
     candidates = {}
 
-    for method in ("jpg", "png"):
+    for method in config.methods:
         try:
-            result = compress_pdf_bytes(input_bytes, dpi=dpi, method=method)
+            if method == "pikepdf":
+                result = recompress_with_pikepdf(input_bytes)
+            else:
+                result = _render_pdf_as_images(input_bytes, dpi=dpi, method=method, config=config)
+                result = reencode_pdf_structure(result)
             if len(result) < len(input_bytes):
                 candidates[method] = result
         except Exception as e:
             logger.warning("Kompression '%s' fehlgeschlagen: %s", method, e)
 
-    try:
-        result = recompress_with_pikepdf(input_bytes)
-        if len(result) < len(input_bytes):
-            candidates["pikepdf"] = result
-    except Exception as e:
-        logger.warning("Kompression 'pikepdf' fehlgeschlagen: %s", e)
-
     return dict(sorted(candidates.items(), key=lambda kv: len(kv[1])))
 
 
-def _render_pdf_as_images(input_bytes: bytes, dpi: int = 150, method: str = "jpg") -> bytes:
-    """Renders every page as a greyscale image. Broken pages are skipped."""
-    A4_WIDTH_PT = 595.0
+def _render_pdf_as_images(
+    input_bytes: bytes,
+    dpi: int = DEFAULT_CONFIG.dpi,
+    method: str = "jpg",
+    config: CompressionConfig = DEFAULT_CONFIG,
+) -> bytes:
+    """Renders every page as a greyscale image.  Broken pages are skipped.
+
+    Pages wider than config.max_width_pt are scaled down to that width.
+    The colorspace, JPEG quality, and PNG compression level are taken from
+    ``config`` so that all magic numbers are centralised in CompressionConfig.
+    """
+    cs = fitz.csGRAY if config.colorspace == "gray" else fitz.csRGB
+    pil_mode = "L" if config.colorspace == "gray" else "RGB"
+
     input_pdf = fitz.open(stream=input_bytes, filetype="pdf")
     output_pdf = fitz.open()
 
@@ -49,24 +107,24 @@ def _render_pdf_as_images(input_bytes: bytes, dpi: int = 150, method: str = "jpg
         try:
             page = input_pdf.load_page(page_index)
 
-            if page.rect.width >= A4_WIDTH_PT:
-                dpi_rel = int(dpi * (A4_WIDTH_PT / page.rect.width))
-                target_width = A4_WIDTH_PT
-                scale_factor = A4_WIDTH_PT / page.rect.width
+            if config.max_width_pt is not None and page.rect.width >= config.max_width_pt:
+                scale_factor = config.max_width_pt / page.rect.width
+                dpi_rel = int(dpi * scale_factor)
+                target_width = config.max_width_pt
                 target_height = page.rect.height * scale_factor
             else:
                 dpi_rel = dpi
                 target_width = page.rect.width
                 target_height = page.rect.height
 
-            pix = page.get_pixmap(dpi=dpi_rel, colorspace=fitz.csGRAY)
-            image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert("L")
+            pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
+            image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
 
             buf = io.BytesIO()
             if method == "jpg":
-                image.save(buf, format="JPEG", quality=60)
+                image.save(buf, format="JPEG", quality=config.jpeg_quality)
             elif method == "png":
-                image.save(buf, format="PNG", compress_level=6)
+                image.save(buf, format="PNG", compress_level=config.png_compress_level)
             else:
                 raise ValueError(f"Unbekannte Komprimierungsmethode: {method}")
             buf.seek(0)

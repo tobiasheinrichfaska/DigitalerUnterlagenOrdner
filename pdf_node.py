@@ -269,16 +269,20 @@ class PDFNode:
         """
         Startet eine Hintergrund-Kompression mit dem gegebenen DPI-Wert.
         Wenn bereits eine Kompression läuft, wird kein weiterer Task gestartet.
+
+        Der Zugriff auf _compression_task_running ist durch _compression_task_lock
+        geschützt, damit zwei gleichzeitige Aufrufe nicht beide einen Task starten.
         """
         if self.is_folder or not self.original_pdf_data:
             logger.debug("Kompression '%s': übersprungen (Ordner oder keine Daten)", self.name)
             return
 
-        if self._compression_task_running:
-            logger.debug("Kompression '%s': übersprungen – bereits laufend", self.name)
-            return
+        with self._compression_task_lock:
+            if self._compression_task_running:
+                logger.debug("Kompression '%s': übersprungen – bereits laufend", self.name)
+                return
+            self._compression_task_running = True
 
-        self._compression_task_running = True
         register_task(f"Kompression: {self.name}")
 
         def run():
@@ -354,6 +358,12 @@ class PDFNode:
         self.current_preview_images = self._create_previews(data)
 
     def compress(self, dpi: int = 120) -> None:
+        """Komprimiert synchron mit allen verfügbaren Methoden und wählt das beste Ergebnis.
+
+        Probiert JPG, PNG und pikepdf; übernimmt das kleinste Ergebnis, das kleiner als
+        das Original ist. Wenn keine Methode eine Verkleinerung liefert, bleiben
+        current_pdf_data und is_compressed unverändert.
+        """
         if self.is_folder:
             raise ValueError("Ordner können nicht komprimiert werden.")
 
@@ -361,12 +371,17 @@ class PDFNode:
             raise ValueError("Knoten enthält keine gültigen PDF-Daten zur Komprimierung.")
 
         try:
-            compressed = compress_pdf_bytes(self.original_pdf_data, dpi=dpi)
-            self.current_pdf_data = compressed
-            self.is_compressed = True
-            self.pdf_length = self._get_pdf_length(compressed)
-            self.current_preview_images = self._create_previews(compressed)
-            self.dpi_current = dpi
+            results = compress_all_methods(self.original_pdf_data, dpi=dpi)
+            if results:
+                best_method = next(iter(results))
+                compressed = results[best_method]
+                self._compression_results = results
+                self.current_pdf_data = compressed
+                self.is_compressed = True
+                self.pdf_length = self._get_pdf_length(compressed)
+                self.current_preview_images = self._create_previews(compressed)
+                self.dpi_current = dpi
+            # If no method produced a smaller result, leave the node as-is.
         except Exception as e:
             raise RuntimeError("Komprimierung fehlgeschlagen") from e
 
@@ -507,6 +522,8 @@ class PDFNode:
         dpi_conflict = len(dpi_orig_set) > 1 or len(dpi_curr_set) > 1
 
         if dpi_conflict:
+            # DPI-Konflikt: komprimierte Daten verwerfen, keine erneute Kompression.
+            # dpi_current bleibt None — wird weiter unten NICHT überschrieben.
             self.current_pdf_data = None
             self.dpi_current = None
             self.no_compression = True
@@ -523,7 +540,11 @@ class PDFNode:
         self.is_compressed = self.is_compressed and other.is_compressed
         self.no_compression = self.no_compression or other.no_compression
         self.dpi_original = max(filter(None, [self.dpi_original, other.dpi_original]), default=None)
-        self.dpi_current = max(filter(None, [self.dpi_current, other.dpi_current]), default=None)
+        # Only update dpi_current when there was no conflict.  In the conflict path
+        # dpi_current was already set to None above and must stay None so that the
+        # semantics remain consistent (no_compression=True AND dpi_current=None).
+        if not dpi_conflict:
+            self.dpi_current = max(filter(None, [self.dpi_current, other.dpi_current]), default=None)
 
         self.pdf_length = self._get_pdf_length(self.current_pdf_data)
 
@@ -888,6 +909,14 @@ class PDFNode:
         """
         Zerteilt einen PDF-Knoten in Einzelknoten pro Seite.
         Der aktuelle Knoten wird auf die erste Seite reduziert.
+
+        Nebeneffekte (bewusst so gestaltet):
+        - Jeder erzeugte Knoten (inkl. self nach der Rückwandlung) erhält
+          ``no_compression=True``, weil die Scheiben bereits aus einem
+          (ggf. komprimierten) Elternknoten stammen und nicht erneut
+          gerendert werden sollen.
+        - ``self`` wird in-place durch set_original_and_current_data mit den
+          Daten der ersten Seite überschrieben.
         """
         if not self.original_pdf_data:
             return []

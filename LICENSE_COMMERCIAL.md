@@ -1,25 +1,45 @@
-# Commercial License
+﻿# Commercial License for DigitalerUnterlagenOrdner
 
-This software is available under a commercial license for organizations that cannot
-comply with the AGPLv3 open-source requirements.
+## License Grant
 
-## When you need a commercial license
+This Commercial License Agreement ("Agreement") grants you a non-exclusive, non-transferable license to use DigitalerUnterlagenOrdner ("Software") subject to the terms and conditions below.
 
-You need a commercial license if you:
-- Use this software as part of a closed-source or proprietary product
-- Provide this software as a SaaS or hosted service without publishing your modifications
-- Distribute this software as part of a commercial offering without releasing your source code
+### Grant of Rights
 
-## How to obtain a commercial license
+You are permitted to:
+- Use the Software for your business purposes
+- Modify the Software for internal use
+- Deploy the Software in commercial production environments
+- Integrate the Software into proprietary applications
 
-Contact: tobias.a.w.heinrich@gmail.com
+### Restrictions
 
-Please include:
-- Your company name and use case
-- Estimated number of users or deployments
+You may not:
+- Distribute the Software or derivatives to third parties without a separate license
+- Sublicense the Software without written permission
+- Remove copyright notices or license information
+- Use the Software in violation of applicable laws
 
-## AGPLv3 (free)
+### Proprietary Rights
 
-If your use case is compatible with AGPLv3 — personal use, open-source projects, or
-internal use that does not involve network distribution — no commercial license is required.
-See [LICENSE](LICENSE) for full terms.
+All intellectual property rights in the Software remain with Tobias Heinrich. This Agreement grants a license only, not ownership.
+
+### Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS-IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+### Limitation of Liability
+
+In no event shall the author be liable for indirect, incidental, special, or consequential damages.
+
+### Term
+
+This license is perpetual unless terminated for breach of terms.
+
+### Governing Law
+
+This Agreement is governed by German law.
+
+---
+
+For commercial licensing inquiries, contact: tobias.a.w.heinrich@gmail.com

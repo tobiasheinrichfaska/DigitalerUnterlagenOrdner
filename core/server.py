@@ -93,6 +93,10 @@ class CoreServer:
             return self.api.undo(req.get("session"))
         if op == "redo":
             return self.api.redo(req.get("session"))
+        if op == "render":
+            return self.api.render(req.get("session"), req.get("node"), req.get("dpi", 100))
+        if op == "save":
+            return self.api.save(req.get("session"), req.get("path"))
         return {"ok": False, "error": f"unknown op: {op!r}"}
 
 

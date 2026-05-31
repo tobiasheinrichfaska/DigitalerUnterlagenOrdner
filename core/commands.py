@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 from core.model import Document, Node, STATUSES
 
@@ -90,12 +90,28 @@ class Rotate:
     direction: str = "right"  # "right" | "left" | "180"
 
 
+# --- engine-backed multi-node commands (D3b) -------------------------------
+
+@dataclass(frozen=True)
+class Split:
+    node_id: str  # a leaf -> one page-leaf per page
+
+
+@dataclass(frozen=True)
+class Merge:
+    node_ids: Tuple[str, ...]  # >= 2 sibling leaves -> one leaf
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
 Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
-                Compress, Commit, Reset, Rotate]
+                Compress, Commit, Reset, Rotate, Split, Merge]
 
 _COMMAND_TYPES = {c.__name__: c for c in (
     AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
-    Compress, Commit, Reset, Rotate,
+    Compress, Commit, Reset, Rotate, Split, Merge,
 )}
 
 _ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
@@ -269,6 +285,82 @@ def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
     # Rotating invalidates any compressed variant.
     return doc.update_node(cmd.node_id, original_data=rotated,
                            current_data=None, is_compressed=False, dpi_current=None)
+
+
+@_handler(Split)
+def _split(doc: Document, cmd: Split, engine=None) -> Document:
+    node = _require_leaf(doc, cmd.node_id)
+    _require_engine(engine)
+    if not node.original_data:
+        raise CommandError("node has no data to split")
+    parent = doc.parent_of(cmd.node_id)
+    if parent is None:
+        raise CommandError("cannot split the root node")
+    parts = engine.split(node.original_data)
+    if len(parts) < 2:
+        return doc  # single page → nothing to split
+    # Split parts come from an already-processed document → not re-compressed.
+    new_leaves = [
+        Node(name=f"{node.name}_{i + 1}", pdf_length=1, no_compression=True,
+             original_data=part)
+        for i, part in enumerate(parts)
+    ]
+    index = [c.id for c in parent.children].index(cmd.node_id)
+    doc = doc.remove_node(cmd.node_id)
+    for offset, leaf in enumerate(new_leaves):
+        doc = doc.insert_child(parent.id, leaf, index + offset)
+    return doc
+
+
+@_handler(Merge)
+def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
+    _require_engine(engine)
+    ids = list(cmd.node_ids)
+    if len(ids) < 2:
+        raise CommandError("merge needs at least two nodes")
+    nodes = [_require_leaf(doc, nid) for nid in ids]
+
+    parents = {(doc.parent_of(nid).id if doc.parent_of(nid) else None) for nid in ids}
+    if len(parents) != 1 or None in parents:
+        raise CommandError("merge nodes must share one parent")
+    parent_id = parents.pop()
+    parent = doc.find(parent_id)
+
+    merged_original = engine.merge([n.original_data or b"" for n in nodes])
+
+    # DPI-conflict invariant (see DATA_CONTRACT): differing compressed DPIs ->
+    # drop compression and mark no_compression.
+    dpi_set = {n.dpi_current for n in nodes if n.is_compressed and n.dpi_current is not None}
+    dpi_conflict = len(dpi_set) > 1
+    all_compressed = all(n.is_compressed for n in nodes)
+    no_compression = any(n.no_compression for n in nodes) or dpi_conflict
+
+    if not no_compression and all_compressed and len(dpi_set) == 1:
+        current_data = engine.merge([n.current_data for n in nodes])
+        is_compressed = True
+        dpi_current = next(iter(dpi_set))
+    else:
+        current_data = None
+        is_compressed = False
+        dpi_current = None
+
+    merged = Node(
+        name=nodes[0].name,
+        pdf_length=sum(n.pdf_length for n in nodes),
+        original_data=merged_original,
+        current_data=current_data,
+        is_compressed=is_compressed,
+        dpi_original=max((n.dpi_original for n in nodes if n.dpi_original is not None), default=None),
+        dpi_current=dpi_current,
+        no_compression=no_compression,
+    )
+
+    id_set = set(ids)
+    first_pos = [c.id for c in parent.children].index(ids[0])
+    insert_at = sum(1 for c in parent.children[:first_pos] if c.id not in id_set)
+    for nid in ids:
+        doc = doc.remove_node(nid)
+    return doc.insert_child(parent_id, merged, insert_at)
 
 
 # --------------------------------------------------------------------------- #

@@ -1,6 +1,6 @@
 // Recursive document-tree view. Each node action dispatches a real core command.
 
-function TreeNode({ node, dispatch, isRoot }) {
+function TreeNode({ node, dispatch }) {
   const rename = () => {
     const name = window.prompt('Neuer Name', node.name)
     if (name) dispatch({ type: 'Rename', node_id: node.id, name })
@@ -17,8 +17,8 @@ function TreeNode({ node, dispatch, isRoot }) {
         </span>
         <span className="actions">
           {node.is_folder && <button title="Ordner anlegen" onClick={addFolder}>＋</button>}
-          {!isRoot && <button title="Umbenennen" onClick={rename}>✎</button>}
-          {!isRoot && <button title="Löschen" onClick={del}>🗑</button>}
+          <button title="Umbenennen" onClick={rename}>✎</button>
+          <button title="Löschen" onClick={del}>🗑</button>
         </span>
       </div>
       {node.children?.length > 0 && (
@@ -33,9 +33,12 @@ function TreeNode({ node, dispatch, isRoot }) {
 }
 
 export function Tree({ node, dispatch }) {
+  // `node` is the implicit root container — don't render it; show its children.
   return (
     <ul className="tree">
-      <TreeNode node={node} dispatch={dispatch} isRoot />
+      {(node.children ?? []).map((c) => (
+        <TreeNode key={c.id} node={c} dispatch={dispatch} />
+      ))}
     </ul>
   )
 }

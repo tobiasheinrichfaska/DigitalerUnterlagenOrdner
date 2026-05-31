@@ -26,10 +26,23 @@ export default function App() {
 
   const session = state?.session
 
+  // Re-render the currently selected node's preview (after edits / undo / redo).
+  const renderSelected = useCallback(() => {
+    if (!selected) return
+    setBusy(true)
+    core.render(session, selected.id).then((resp) => {
+      setBusy(false)
+      setPages(resp?.ok ? resp.pages : [])
+    })
+  }, [session, selected])
+
   const dispatch = useCallback(
-    (command) => core.dispatch(session, command).then(apply),
-    [session],
+    (command) => core.dispatch(session, command).then((r) => { apply(r); renderSelected() }),
+    [session, renderSelected],
   )
+
+  const undo = () => core.undo(session).then((r) => { apply(r); renderSelected() })
+  const redo = () => core.redo(session).then((r) => { apply(r); renderSelected() })
 
   const select = useCallback(
     (node) => {
@@ -69,8 +82,8 @@ export default function App() {
           >
             ＋ Ordner
           </button>
-          <button onClick={() => core.undo(session).then(apply)} disabled={!state?.can_undo} title="Rückgängig">↶</button>
-          <button onClick={() => core.redo(session).then(apply)} disabled={!state?.can_redo} title="Wiederholen">↷</button>
+          <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
+          <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
         </div>
       </header>
 

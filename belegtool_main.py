@@ -219,10 +219,15 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
 
         self.update_idletasks()
 
-        try:
-            self.focus_force()
-        except Exception:
-            pass
+        # Only grab focus when entering the busy state (an operation is starting,
+        # typically right after a user action / dialog). Forcing focus on release
+        # would yank it back when a background task finishes while the user has
+        # moved to another window. (Audit finding 11.)
+        if busy:
+            try:
+                self.focus_force()
+            except Exception:
+                pass
 
         def apply_cursor_recursively(widget):
             try:

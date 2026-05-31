@@ -945,7 +945,10 @@ class PDFNode:
         except Exception:
             return []
 
-        self._preview_done.wait(timeout=30)
+        if not self._preview_done.wait(timeout=30):
+            logger.warning(
+                "Split '%s': Vorschau-Event nicht innerhalb von 30 s abgeschlossen – "
+                "fahre mit möglicherweise veralteter Vorschau fort.", self.name)
 
         new_nodes = []
 

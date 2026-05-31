@@ -1,10 +1,13 @@
 """The core server: accepts multiple pipe clients and dispatches requests.
 
-Step 0a scope — plumbing only:
-  - ``hello``                  -> new session id
-  - ``open`` {path?}           -> session id + tree JSON (or null tree if no path)
-Each connection is independent and gets its own session; the server handles many
-connections at once (one per UI window / CLI client) on one process.
+Each connection gets its own editing session (an immutable Document + undo/redo).
+The server handles many connections at once (one per UI window / CLI client).
+
+Ops:
+  - ``hello``                       -> new session id
+  - ``open`` {path?}                -> document JSON (empty doc if no path)
+  - ``dispatch`` {session, command} -> new document JSON (+ undo/redo flags)
+  - ``undo`` / ``redo`` {session}   -> document JSON
 
 Request/response are JSON objects framed by core.protocol. Every response carries
 ``ok: bool``; on failure also ``error: str``.
@@ -17,38 +20,47 @@ import win32file
 import pywintypes
 
 from core import CORE_VERSION
+from core.bridge import load_belegtool
+from core.commands import CommandError, command_from_dict
+from core.engine import RealEngine
+from core.model import Document
 from core.pipe import PipeConnection, connect, create_server_instance, default_pipe_name
-from pdf_storage import PDFStorage
+from core.session import DocumentSession
 from log_config import logger
 
 
 class SessionManager:
-    """Tracks per-connection sessions (one open document each, for now)."""
+    """Tracks per-connection editing sessions (one DocumentSession each)."""
 
     def __init__(self):
         self._sessions = {}
         self._lock = threading.Lock()
+        self._engine = RealEngine()
 
     def create(self) -> str:
         sid = uuid.uuid4().hex
         with self._lock:
-            self._sessions[sid] = {"storage": None}
+            self._sessions[sid] = DocumentSession(Document.empty(), engine=self._engine)
         return sid
 
-    def ensure(self, sid):
-        if sid and sid in self._sessions:
-            return sid
+    def ensure(self, sid: str) -> str:
+        with self._lock:
+            if sid and sid in self._sessions:
+                return sid
         return self.create()
 
-    def open(self, sid: str, path):
-        """Open a .belegtool/PDF into the session; return its tree dict (or None)."""
-        sid = self.ensure(sid)
-        if not path:
-            return sid, None
-        storage = PDFStorage(path)
+    def get(self, sid: str):
         with self._lock:
-            self._sessions[sid]["storage"] = storage
-        return sid, storage.root.to_dict()
+            return self._sessions.get(sid)
+
+    def open(self, sid: str, path):
+        """Load a .belegtool/PDF (or an empty doc) into the session."""
+        sid = self.ensure(sid)
+        document = load_belegtool(path) if path else Document.empty()
+        session = DocumentSession(document, engine=self._engine)
+        with self._lock:
+            self._sessions[sid] = session
+        return sid, session
 
     def count(self) -> int:
         with self._lock:
@@ -118,12 +130,38 @@ class CoreServer:
                 return {"ok": True, "session": self.sessions.create(),
                         "core_version": CORE_VERSION}
             if op == "open":
-                sid, tree = self.sessions.open(req.get("session"), req.get("path"))
-                return {"ok": True, "session": sid, "tree": tree}
+                sid, session = self.sessions.open(req.get("session"), req.get("path"))
+                return self._doc_response(sid, session)
+
+            if op in ("dispatch", "undo", "redo"):
+                sid = req.get("session")
+                session = self.sessions.get(sid)
+                if session is None:
+                    return {"ok": False, "error": "unknown session"}
+                if op == "dispatch":
+                    session.dispatch(command_from_dict(req["command"]))
+                elif op == "undo":
+                    session.undo()
+                else:
+                    session.redo()
+                return self._doc_response(sid, session)
+
             return {"ok": False, "error": f"unknown op: {op!r}"}
+        except CommandError as e:
+            return {"ok": False, "error": str(e)}
         except Exception as e:
             logger.exception("Dispatch-Fehler bei op=%r", op)
             return {"ok": False, "error": str(e)}
+
+    @staticmethod
+    def _doc_response(sid: str, session) -> dict:
+        return {
+            "ok": True,
+            "session": sid,
+            "tree": session.document.to_dict(),
+            "can_undo": session.can_undo(),
+            "can_redo": session.can_redo(),
+        }
 
 
 def win32pipe_connect(handle):

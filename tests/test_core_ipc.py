@@ -48,13 +48,14 @@ def test_hello_returns_session(server):
     assert "core_version" in resp
 
 
-def test_open_without_file_gives_empty_session(server):
+def test_open_without_file_gives_empty_document(server):
     _srv, name = server
     with CoreClient(name) as c:
         h = c.hello()
         resp = c.open(path=None, session=h["session"])
     assert resp["ok"] is True
-    assert resp["tree"] is None
+    assert resp["tree"]["name"] == "root" and resp["tree"]["children"] == []
+    assert resp["can_undo"] is False and resp["can_redo"] is False
 
 
 def test_open_belegtool_returns_tree(server, tmp_path):
@@ -92,3 +93,45 @@ def test_unknown_op_returns_error(server):
         resp = c.request({"op": "does-not-exist"})
     assert resp["ok"] is False
     assert "unknown op" in resp["error"]
+
+
+def test_dispatch_command_updates_document(server):
+    _srv, name = server
+    with CoreClient(name) as c:
+        opened = c.open(path=None)
+        sid, root_id = opened["session"], opened["tree"]["id"]
+        resp = c.dispatch(
+            {"type": "AddFolder", "parent_id": root_id, "name": "Neu",
+             "index": None, "new_id": "f1"},
+            session=sid)
+    assert resp["ok"] is True
+    assert [ch["name"] for ch in resp["tree"]["children"]] == ["Neu"]
+    assert resp["can_undo"] is True and resp["can_redo"] is False
+
+
+def test_undo_redo_over_pipe(server):
+    _srv, name = server
+    with CoreClient(name) as c:
+        opened = c.open(path=None)
+        sid, root_id = opened["session"], opened["tree"]["id"]
+        c.dispatch({"type": "AddFolder", "parent_id": root_id, "name": "Neu",
+                    "index": None, "new_id": "f1"}, session=sid)
+        undone = c.undo(sid)
+        assert undone["tree"]["children"] == [] and undone["can_redo"] is True
+        redone = c.redo(sid)
+        assert [ch["name"] for ch in redone["tree"]["children"]] == ["Neu"]
+
+
+def test_dispatch_invalid_command_returns_error(server):
+    _srv, name = server
+    with CoreClient(name) as c:
+        sid = c.open(path=None)["session"]
+        resp = c.dispatch({"type": "Rename", "node_id": "missing", "name": "x"}, session=sid)
+    assert resp["ok"] is False and "not found" in resp["error"]
+
+
+def test_dispatch_unknown_session_returns_error(server):
+    _srv, name = server
+    with CoreClient(name) as c:
+        resp = c.dispatch({"type": "Reset", "node_id": "x"}, session="nope")
+    assert resp["ok"] is False and "unknown session" in resp["error"]

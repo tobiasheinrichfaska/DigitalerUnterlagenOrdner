@@ -11,6 +11,7 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from status_display import register_task, unregister_task
 from preview_page import PreviewPage
+from services.render import render_pdf_to_images
 from log_config import logger
 
 
@@ -131,46 +132,10 @@ class PDFNode:
 
 
     def _create_previews(self, data: Optional[bytes]) -> List[Image.Image]:
-
-        if not data:
-            logger.warning("Leere PDF-Daten – Vorschau abgebrochen.")
-            return []
-
-        try:
-            raw = data.getvalue() if isinstance(data, io.BytesIO) else data
-            if not raw:
-                return []
-
-            try:
-                doc = fitz.open(stream=raw, filetype="pdf")
-            except Exception as e:
-                logger.warning("PDF konnte nicht geöffnet werden (fitz): %s", e)
-                return []
-
-            previews = []
-            for page in doc:
-                try:
-                    pix = page.get_pixmap(dpi=100)
-                    ppm_bytes = pix.tobytes("ppm")
-                    if not ppm_bytes.startswith(b"P6"):
-                        logger.warning("Ungültiger PPM-Header auf Seite %d – Vorschau abgebrochen.", page.number)
-                        continue
-                    with Image.open(io.BytesIO(ppm_bytes)) as im:
-                        img = im.convert("RGB").copy()
-                    previews.append(img)
-                except Exception as e:
-                    logger.warning("Vorschaufehler auf Seite %d: %s", page.number, e)
-                    continue
-
-            if not previews:
-                logger.warning("Keine Seitenvorschau möglich – alle Seiten fehlerhaft?")
-                raise ValueError("Ungültige PDF-Daten: keine gültige Vorschau erzeugt.")
-
-            return previews
-
-        except Exception as e:
-            logger.error("FEHLER bei Vorschau-Erzeugung: %s", e)
-            return []
+        # Rendering now lives in the headless services.render module (Phase 1
+        # decoupling): the model no longer renders previews itself. Thin adapter
+        # kept so existing callers are unchanged.
+        return render_pdf_to_images(data)
 
 
     def preview_folder(self):

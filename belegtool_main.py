@@ -27,6 +27,7 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         # Zentrale Speicherobjekte
         self.storage = None
         self.selected_node = None
+        self._test_view = None  # Testmodus-Vergleichsansicht (lazy)
 
         # GUI-Komponenten aufbauen
         self.control_panel = ControlPanel(self)
@@ -135,6 +136,10 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         self._show_original_var = tk.BooleanVar(value=False)
         ansicht_menu.add_checkbutton(label="Original anzeigen", variable=self._show_original_var,
                                      command=self._toggle_show_original)
+        ansicht_menu.add_separator()
+        self._test_mode_var = tk.BooleanVar(value=False)
+        ansicht_menu.add_checkbutton(label="Testmodus", variable=self._test_mode_var,
+                                     command=self._toggle_test_mode)
         menubar.add_cascade(label="Ansicht", menu=ansicht_menu)
 
         # ── ? ──────────────────────────────────────────────────────────────────
@@ -194,6 +199,31 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         self.preview_frame.show_original = self._show_original_var.get()
         if self.preview_frame.current_node:
             self.preview_frame.show_previews(self.preview_frame.current_node)
+
+    def _toggle_test_mode(self):
+        """Swap the editor pane for the input/live/expected comparison view.
+
+        Test mode runs the golden-master operations (compression, split, merge)
+        on the committed test fixtures and shows each input next to its live
+        result and its expected reference. It expects tests/data/input/ to be
+        present (see test_mode.fixtures_available).
+        """
+        if self._test_mode_var.get():
+            from test_mode import TestModeView
+            self.pane.pack_forget()
+            if getattr(self, "_test_view", None) is None:
+                self._test_view = TestModeView(self)
+            self._test_view.frame.pack(fill=tk.BOTH, expand=True)
+            # Building the datasets runs live compression/split/merge synchronously.
+            self.set_busy(True)
+            try:
+                self._test_view.refresh()
+            finally:
+                self.set_busy(False)
+        else:
+            if getattr(self, "_test_view", None) is not None:
+                self._test_view.frame.pack_forget()
+            self.pane.pack(fill=tk.BOTH, expand=True)
 
     def _show_info(self):
         from version_info import get_full_title

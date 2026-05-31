@@ -1,14 +1,30 @@
 import { useEffect, useState, useCallback } from 'react'
 import { core } from './core'
 import { Tree } from './Tree'
+import { NodeActions } from './NodeActions'
 import './App.css'
+
+function findNode(node, id) {
+  if (node.id === id) return node
+  for (const c of node.children ?? []) {
+    const r = findNode(c, id)
+    if (r) return r
+  }
+  return null
+}
 
 export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(0) // active async core calls (counter)
+
+  // run any core call with the global busy indicator on
+  const run = useCallback((promise) => {
+    setBusy((n) => n + 1)
+    return promise.finally(() => setBusy((n) => Math.max(0, n - 1)))
+  }, [])
 
   const apply = (resp) => {
     if (!resp) return
@@ -20,55 +36,66 @@ export default function App() {
     setState(resp)
   }
 
-  useEffect(() => {
-    core.open().then(apply).catch((e) => setError(String(e.message || e)))
-  }, [])
-
   const session = state?.session
 
-  // Re-render the currently selected node's preview (after edits / undo / redo).
-  const renderSelected = useCallback(() => {
-    if (!selected) return
-    setBusy(true)
-    core.render(session, selected.id).then((resp) => {
-      setBusy(false)
-      setPages(resp?.ok ? resp.pages : [])
-    })
-  }, [session, selected])
-
-  const dispatch = useCallback(
-    (command) => core.dispatch(session, command).then((r) => { apply(r); renderSelected() }),
-    [session, renderSelected],
+  const renderNode = useCallback(
+    (node) => {
+      if (!node) { setPages(null); return }
+      run(core.render(session, node.id)).then((resp) => setPages(resp?.ok ? resp.pages : []))
+    },
+    [session, run],
   )
 
-  const undo = () => core.undo(session).then((r) => { apply(r); renderSelected() })
-  const redo = () => core.redo(session).then((r) => { apply(r); renderSelected() })
+  useEffect(() => {
+    run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // after any edit/undo/redo: apply, keep `selected` fresh from the new tree, re-render preview
+  const afterChange = useCallback(
+    (resp) => {
+      apply(resp)
+      if (resp?.ok && selected) {
+        const fresh = findNode(resp.tree, selected.id)
+        setSelected(fresh)
+        renderNode(fresh)
+      }
+    },
+    [selected, renderNode],
+  )
+
+  const dispatch = useCallback(
+    (command) => run(core.dispatch(session, command)).then(afterChange),
+    [session, afterChange, run],
+  )
+  const undo = () => run(core.undo(session)).then(afterChange)
+  const redo = () => run(core.redo(session)).then(afterChange)
 
   const select = useCallback(
     (node) => {
       setSelected(node)
       setPages(null)
-      setBusy(true)
-      core.render(session, node.id).then((resp) => {
-        setBusy(false)
-        setPages(resp?.ok ? resp.pages : [])
-      })
+      renderNode(node)
     },
-    [session],
+    [renderNode],
   )
 
   const openFile = () =>
-    core.openFile(session).then((resp) => {
+    run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) { setSelected(null); setPages(null) }
     })
 
   if (!state && !error) {
-    return <div className="app"><p className="status">Verbinde mit Core…</p></div>
+    return (
+      <div className="app loading">
+        <div className="spinner big" />
+        <p className="status">Verbinde mit Core…</p>
+      </div>
+    )
   }
 
   return (
-    <div className="app">
+    <div className={busy ? 'app busy' : 'app'}>
       <header>
         <h1>DigitalerBelegeOrdner</h1>
         <div className="toolbar">
@@ -84,6 +111,7 @@ export default function App() {
           </button>
           <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
+          {busy ? <span className="spinner" title="Arbeite…" /> : null}
         </div>
       </header>
 
@@ -94,9 +122,10 @@ export default function App() {
           {state && <Tree node={state.tree} dispatch={dispatch} selectedId={selected?.id} onSelect={select} />}
         </div>
         <div className="pane preview-pane">
+          {selected && <NodeActions node={selected} dispatch={dispatch} />}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
-          {selected && busy && <p className="status">Rendere…</p>}
-          {selected && !busy && pages?.length === 0 && (
+          {selected && busy > 0 && pages === null && <div className="spinner big" />}
+          {selected && busy === 0 && pages?.length === 0 && (
             <p className="status">Keine Vorschau (Ordner oder leer)</p>
           )}
           {selected && pages?.map((src, i) => (

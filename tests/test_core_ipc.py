@@ -78,7 +78,7 @@ def test_handles_multiple_simultaneous_connections(server):
         s2 = c2.hello()["session"]
         # Both connections are live at once with distinct sessions.
         assert s1 and s2 and s1 != s2
-        assert srv.sessions.count() >= 2
+        assert srv.api.session_count() >= 2
         # Each connection still works independently after the other.
         assert c1.open(session=s1)["ok"] is True
         assert c2.open(session=s2)["ok"] is True

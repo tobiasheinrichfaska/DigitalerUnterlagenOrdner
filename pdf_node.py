@@ -10,6 +10,7 @@ from tools import sanitize_pdf
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from progress import task_started, task_finished
+from tasks import submit as submit_task
 from preview_page import PreviewPage
 from services.render import render_pdf_to_images
 from log_config import logger
@@ -224,11 +225,11 @@ class PDFNode:
                             time.sleep(0.01)
                             with self._preview_task_lock:
                                 if not self._preview_task_running:
-                                    threading.Thread(target=self.preview_lazy, daemon=True).start()
+                                    submit_task(self.preview_lazy)
 
-                        threading.Thread(target=delayed_restart, daemon=True).start()
+                        submit_task(delayed_restart)
 
-        threading.Thread(target=run, daemon=True).start()
+        submit_task(run)
 
     def compress_lazy(self, dpi: int = 120):
         """
@@ -259,7 +260,7 @@ class PDFNode:
                 task_finished(f"Kompression: {self.name}")
                 self._compression_task_running = False
 
-        threading.Thread(target=run, daemon=True).start()
+        submit_task(run)
 
 
 
@@ -305,12 +306,9 @@ class PDFNode:
                     if self._compression_task_requested:
                         self._compression_task_requested = False
                         next_dpi = self._compression_task_dpi
-                        threading.Thread(
-                            target=lambda: self.compress_multi_lazy(next_dpi),
-                            daemon=True
-                        ).start()
+                        submit_task(lambda: self.compress_multi_lazy(next_dpi))
 
-        threading.Thread(target=run, daemon=True).start()
+        submit_task(run)
 
     def select_compression_method(self, method: str):
         """Switch current_pdf_data to a previously computed compression result."""

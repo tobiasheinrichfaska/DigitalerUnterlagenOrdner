@@ -66,9 +66,39 @@ class Move:
     index: Optional[int] = None
 
 
-Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move]
+# --- engine-backed commands (single-node; D3a) -----------------------------
 
-_COMMAND_TYPES = {c.__name__: c for c in (AddFolder, Rename, SetStatus, SetPeriod, Delete, Move)}
+@dataclass(frozen=True)
+class Compress:
+    node_id: str
+    dpi: int = 150
+
+
+@dataclass(frozen=True)
+class Commit:
+    node_id: str
+
+
+@dataclass(frozen=True)
+class Reset:
+    node_id: str
+
+
+@dataclass(frozen=True)
+class Rotate:
+    node_id: str
+    direction: str = "right"  # "right" | "left" | "180"
+
+
+Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
+                Compress, Commit, Reset, Rotate]
+
+_COMMAND_TYPES = {c.__name__: c for c in (
+    AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
+    Compress, Commit, Reset, Rotate,
+)}
+
+_ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
 
 
 # --------------------------------------------------------------------------- #
@@ -85,18 +115,22 @@ def _handler(cmd_type):
     return deco
 
 
-def apply(doc: Document, cmd: Command) -> Document:
-    """Apply a command, returning a new Document. Pure; raises CommandError."""
+def apply(doc: Document, cmd: Command, engine=None) -> Document:
+    """Apply a command, returning a new Document. Pure given the engine.
+
+    Structural commands ignore ``engine``; engine-backed commands
+    (Compress/Rotate/…) require it and raise CommandError if it is missing.
+    """
     handler = _HANDLERS.get(type(cmd))
     if handler is None:
         raise CommandError(f"unknown command: {type(cmd).__name__}")
-    return handler(doc, cmd)
+    return handler(doc, cmd, engine)
 
 
-def apply_all(doc: Document, cmds) -> Document:
+def apply_all(doc: Document, cmds, engine=None) -> Document:
     """Fold a sequence of commands over a document."""
     for cmd in cmds:
-        doc = apply(doc, cmd)
+        doc = apply(doc, cmd, engine)
     return doc
 
 
@@ -121,10 +155,23 @@ def _reject_root(doc: Document, node_id: str, what: str) -> None:
         raise CommandError(f"cannot {what} the root node")
 
 
+def _require_leaf(doc: Document, node_id: str) -> Node:
+    node = _require(doc, node_id)
+    if node.is_folder:
+        raise CommandError(f"not a leaf document: {node_id}")
+    return node
+
+
+def _require_engine(engine):
+    if engine is None:
+        raise CommandError("this command requires a PDF engine")
+    return engine
+
+
 # --- handlers --------------------------------------------------------------
 
 @_handler(AddFolder)
-def _add_folder(doc: Document, cmd: AddFolder) -> Document:
+def _add_folder(doc: Document, cmd: AddFolder, engine=None) -> Document:
     _require_folder(doc, cmd.parent_id)
     folder = Node(name=cmd.name, is_folder=True,
                   **({"id": cmd.new_id} if cmd.new_id else {}))
@@ -132,7 +179,7 @@ def _add_folder(doc: Document, cmd: AddFolder) -> Document:
 
 
 @_handler(Rename)
-def _rename(doc: Document, cmd: Rename) -> Document:
+def _rename(doc: Document, cmd: Rename, engine=None) -> Document:
     _require(doc, cmd.node_id)
     if not cmd.name:
         raise CommandError("name must not be empty")
@@ -140,7 +187,7 @@ def _rename(doc: Document, cmd: Rename) -> Document:
 
 
 @_handler(SetStatus)
-def _set_status(doc: Document, cmd: SetStatus) -> Document:
+def _set_status(doc: Document, cmd: SetStatus, engine=None) -> Document:
     _require(doc, cmd.node_id)
     if cmd.status not in STATUSES:
         raise CommandError(f"invalid status: {cmd.status!r}")
@@ -148,26 +195,80 @@ def _set_status(doc: Document, cmd: SetStatus) -> Document:
 
 
 @_handler(SetPeriod)
-def _set_period(doc: Document, cmd: SetPeriod) -> Document:
+def _set_period(doc: Document, cmd: SetPeriod, engine=None) -> Document:
     _require(doc, cmd.node_id)
     return doc.update_node(cmd.node_id, vz_start=cmd.vz_start, vz_end=cmd.vz_end)
 
 
 @_handler(Delete)
-def _delete(doc: Document, cmd: Delete) -> Document:
+def _delete(doc: Document, cmd: Delete, engine=None) -> Document:
     _require(doc, cmd.node_id)
     _reject_root(doc, cmd.node_id, "delete")
     return doc.remove_node(cmd.node_id)
 
 
 @_handler(Move)
-def _move(doc: Document, cmd: Move) -> Document:
+def _move(doc: Document, cmd: Move, engine=None) -> Document:
     node = _require(doc, cmd.node_id)
     _require_folder(doc, cmd.new_parent_id)
     _reject_root(doc, cmd.node_id, "move")
     if node.find(cmd.new_parent_id) is not None:
         raise CommandError("cannot move a node into itself or its own subtree")
     return doc.move_node(cmd.node_id, cmd.new_parent_id, cmd.index)
+
+
+# --- engine-backed handlers ------------------------------------------------
+
+@_handler(Compress)
+def _compress(doc: Document, cmd: Compress, engine=None) -> Document:
+    node = _require_leaf(doc, cmd.node_id)
+    _require_engine(engine)
+    if node.no_compression:
+        raise CommandError("node is marked no_compression")
+    if not node.original_data:
+        raise CommandError("node has no data to compress")
+    result = engine.compress(node.original_data, cmd.dpi)
+    if result is None:
+        return doc  # no method beat the original → unchanged
+    return doc.update_node(cmd.node_id, current_data=result,
+                           is_compressed=True, dpi_current=cmd.dpi)
+
+
+@_handler(Commit)
+def _commit(doc: Document, cmd: Commit, engine=None) -> Document:
+    node = _require_leaf(doc, cmd.node_id)
+    if node.current_data is None:
+        raise CommandError("nothing to commit (no current/compressed data)")
+    new_dpi_original = node.dpi_current if node.dpi_current is not None else node.dpi_original
+    return doc.update_node(
+        cmd.node_id,
+        original_data=node.current_data,
+        current_data=None,
+        dpi_original=new_dpi_original,
+        dpi_current=None,
+        is_compressed=False,
+    )
+
+
+@_handler(Reset)
+def _reset(doc: Document, cmd: Reset, engine=None) -> Document:
+    _require(doc, cmd.node_id)
+    return doc.update_node(cmd.node_id, current_data=None,
+                           is_compressed=False, dpi_current=None)
+
+
+@_handler(Rotate)
+def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
+    node = _require_leaf(doc, cmd.node_id)
+    _require_engine(engine)
+    if cmd.direction not in _ROTATE_ANGLES:
+        raise CommandError(f"invalid direction: {cmd.direction!r}")
+    if not node.original_data:
+        raise CommandError("node has no data to rotate")
+    rotated = engine.rotate(node.original_data, _ROTATE_ANGLES[cmd.direction])
+    # Rotating invalidates any compressed variant.
+    return doc.update_node(cmd.node_id, original_data=rotated,
+                           current_data=None, is_compressed=False, dpi_current=None)
 
 
 # --------------------------------------------------------------------------- #

@@ -1,12 +1,14 @@
-from PIL import Image, ImageTk
+from PIL import Image
+
 
 class PreviewPage:
+    """A rendered preview page: a PIL image + its page index.
+
+    Headless (no Tk). The Tk view builds its own ``ImageTk.PhotoImage`` from
+    ``pil_image`` when drawing on the canvas; a web/React UI uses the PNG form
+    from services.render instead.
+    """
+
     def __init__(self, pil_image: Image.Image, page_index: int):
         self.pil_image = pil_image
-        self.tk_image = None
         self.page_index = page_index
-
-    def get_tk_image(self) -> ImageTk.PhotoImage:
-        if self.tk_image is None:
-            self.tk_image = ImageTk.PhotoImage(self.pil_image)
-        return self.tk_image

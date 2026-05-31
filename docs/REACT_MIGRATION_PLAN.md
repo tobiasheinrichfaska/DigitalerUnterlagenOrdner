@@ -140,12 +140,66 @@ The existing `manual_tests/` double as the **acceptance suite** for the React ap
 
 ## 6. Risks & open decisions
 
-| Topic | Decision needed |
+| Topic | Status |
 |---|---|
-| **Office import** | COM is Windows-only and needs the Python backend. Keep it (backend), drop it on web, or bundle a headless LibreOffice converter? |
-| **Webview shell** | pywebview (lightest, Python-native) vs Tauri (small, Rust+sidecar) vs Electron (heaviest, most batteries-included)? |
-| **Distribution size** | bundling Python + native PDF libs (+ optional Chromium) is large — acceptable for a desktop tool, but confirm. |
+| **Office import** | **DECIDED:** keep via the Python backend (Windows COM). A cross-platform headless converter (LibreOffice) is parked in *Future ideas*. |
+| **Webview shell / file-association** | See *Distribution & file-opening* below. Leaning: WebView2 + tiny native host (no Chromium bundle). |
+| **Distribution size** | bundling Python + native PDF libs is large — acceptable for a desktop tool, but confirm. |
 | **Scope of Phase 1 first** | Recommended: do the decoupling now and merge to master even if React is deferred — it pays off immediately (testability, clarity). |
+
+### Phase 1 is valuable even if React is abandoned ("branch back")
+
+Phase 1 (decoupling) is **not** disposable migration scaffolding. It lands on
+`master` and improves the **current Tkinter app**: a pure `core`/`services` that is
+testable without a display, fewer model-level races (the threading/preview coupling
+behind bugs already fixed), and a clear data contract. If the React effort is later
+dropped, the decoupling stays and keeps paying off. Only **Phases 2–5** (FastAPI
+backend, React SPA, packaging) are React-specific and can be discarded with no loss
+to the shipped Tkinter app.
+
+### Distribution & file-opening (double-click a `.belegtool`)
+
+Key facts:
+
+- **Pure `file://` HTML cannot open a file by path.** The browser sandbox only allows
+  manual `<input type="file">` / drag-drop (you get *bytes*, not a path) and cannot
+  auto-open on double-click. (Single-file bundles still *run* under `file://` — that's
+  a separate concern.)
+- **File System Access API** (`showOpenFilePicker`/`showSaveFilePicker`, real
+  read/write handles) needs a **secure context — `https` or `http://localhost`, not
+  `file://` — and is Chromium-only.** Works for a *localhost-served* app, not a bare file.
+- **OS file association launches an EXE** with the path as `argv` — a browser can't be
+  the target of a path handoff. So a tiny **native entry point** is required to bridge
+  the path into the page.
+
+**The "ultra-fast mini exe hands the file to local HTML" pattern (recommended):**
+a small compiled host (Rust / C# / Go — single-digit MB, starts in ms) using
+**WebView2**, the Edge runtime **pre-installed on Windows 10/11 (no Chromium to
+bundle)**. On double-click it gets the path as `argv` and hands it to the page one of
+two ways:
+
+| Variant | How the file reaches the page | When |
+|---|---|---|
+| **Serverless** | host reads the bytes and `PostWebMessage`s them into WebView2; JS processes in-page (pdf.js / pdf-lib / WASM) | **pure-JS** apps — no server, no Electron, tiny |
+| **Loopback** | host starts the local Python backend, opens the app at `http://127.0.0.1:PORT/?open=<path>`; the page calls the backend to load it | **this app** — native Python engine must process the file |
+
+➡️ **BelegTool → loopback:** mini exe = file-association entry + launches the Python
+backend (sidecar) + opens a WebView2 window → React app → `POST /open {path}`.
+Serverless is impossible here because the PDF engine is native.
+
+➡️ **A pure-JS project → serverless:** double-click → mini exe → bytes posted into the
+page, zero server. Reach for **Electron only** if you need cross-platform + deep
+Node/OS integration; for Windows-only, WebView2 + a tiny host is far smaller/faster.
+
+---
+
+## 7. Future ideas
+
+- **Headless Office conversion (LibreOffice).** Replace the Windows-only COM path with
+  a bundled/headless LibreOffice (`soffice --headless --convert-to pdf`) so Word/Excel/
+  PPT import works **cross-platform** and without Office installed. Trade-offs: large
+  bundle, slightly different rendering fidelity, process management. Parked until the
+  backend exists and cross-platform is actually needed.
 
 ### Recommendation
 

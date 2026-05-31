@@ -98,7 +98,24 @@ class TreeViewFrame(ttk.Frame):
 
         self.tree.tag_configure("drag_target", background="#cce8ff")
 
-        self.nodes_by_id = {}
+        self.nodes_by_id = {}          # iid -> PDFNode
+        self._iid_by_uid = {}          # PDFNode.uid -> iid (reverse index, O(1) lookups)
+
+    def clear_node_index(self):
+        """Clear both the iid->node map and the uid->iid reverse index together."""
+        self.nodes_by_id.clear()
+        self._iid_by_uid.clear()
+
+    def register_node(self, iid: str, node) -> None:
+        """Record an iid<->node mapping in both the forward and reverse index."""
+        self.nodes_by_id[iid] = node
+        self._iid_by_uid[node.uid] = iid
+
+    def unregister_node(self, iid: str) -> None:
+        """Remove an iid from both indices (keeps the reverse index consistent)."""
+        node = self.nodes_by_id.pop(iid, None)
+        if node is not None and self._iid_by_uid.get(node.uid) == iid:
+            del self._iid_by_uid[node.uid]
 
     def _on_delete_key(self, event):
         self.controller.control_panel.delete_selected()
@@ -296,7 +313,7 @@ class TreeViewFrame(ttk.Frame):
             tag = self._get_node_tag(node)
             item_id = self.tree.insert(parent, "end", text=node.name, open=True, tags=(tag,))
 
-            self.nodes_by_id[item_id] = node
+            self.register_node(item_id, node)
             self._apply_colors_recursive(node, item_id)
             self.tree.update_idletasks()
 
@@ -352,17 +369,11 @@ class TreeViewFrame(ttk.Frame):
         Verschiebt Knoten im TreeView gemäß übergebenem Move-Plan.
         """
         for entry in move_plan:
-            node = next(
-                (n for n in self.nodes_by_id.values() if n.uid == entry["uid"]),
-                None
-            )
-            parent = next(
-                (n for n in self.nodes_by_id.values() if n.uid == entry["parent_uid"]),
-                None
-            )
+            node_iid = self._iid_by_uid.get(entry["uid"])
+            parent_iid = self._iid_by_uid.get(entry["parent_uid"], "")
 
-            node_iid = self._get_iid_for_node(node)
-            parent_iid = self._get_iid_for_node(parent) if parent else ""
+            if node_iid is None:
+                continue
 
             self.tree.move(node_iid, parent_iid, entry["index"])
             self.tree.update_idletasks()
@@ -405,17 +416,13 @@ class TreeViewFrame(ttk.Frame):
 
     def rebuild_tree(self):
         self.tree.delete(*self.tree.get_children())
-        self.nodes_by_id.clear()
+        self.clear_node_index()
         self._populate(self.controller.storage.root, parent="")
         self.tree.update_idletasks()  # GUI-Sicherheit
         self.refresh_colors()   
 
     def _reselect_node_by_uid(self, uid: str):
-        new_id = next(
-            (iid for iid, n in self.nodes_by_id.items()
-             if getattr(n, "uid", None) == uid),
-            None
-        )
+        new_id = self._iid_by_uid.get(uid)
 
         if not new_id:
             return
@@ -426,10 +433,9 @@ class TreeViewFrame(ttk.Frame):
         self.controller.update_preview(self.nodes_by_id[new_id])
 
     def _get_iid_for_node(self, node):
-        for iid, n in self.nodes_by_id.items():
-            if n == node:
-                return iid
-        return None
+        if node is None:
+            return None
+        return self._iid_by_uid.get(node.uid)
 
 
 

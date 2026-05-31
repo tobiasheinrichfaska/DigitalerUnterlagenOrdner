@@ -51,3 +51,23 @@ def test_load_plain_pdf_yields_single_leaf():
     storage = PDFStorage(create_valid_pdf(pages=2))
     assert len(storage.root.children) == 1
     assert storage.root.children[0].is_folder is False
+
+
+def test_empty_app_import_single_pdf_no_error(tmp_path):
+    # Mirrors the import flow when the app starts EMPTY and one PDF is imported:
+    #   storage is None -> create empty PDFStorage(); load the file; wrap; add.
+    pdf_path = tmp_path / "rechnung.pdf"
+    pdf_path.write_bytes(create_valid_pdf(pages=1))
+
+    app_storage = PDFStorage()                 # fresh empty app (no source)
+    assert app_storage.root.children == []
+
+    temp_storage = PDFStorage(str(pdf_path))   # load the chosen PDF
+    wrapper = create_wrapper_node(temp_storage, str(pdf_path))
+    app_storage.root.add_child(wrapper)        # what import_pdf / drop does
+
+    # Result: exactly one node, a leaf — no folder wrapper, no error.
+    assert len(app_storage.root.children) == 1
+    assert app_storage.root.children[0] is wrapper
+    assert wrapper.is_folder is False
+    assert wrapper.parent is app_storage.root

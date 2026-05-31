@@ -22,6 +22,15 @@ class CoreClient:
             req["session"] = session
         return self.request(req)
 
+    def dispatch(self, command: dict, session: str) -> dict:
+        return self.request({"op": "dispatch", "session": session, "command": command})
+
+    def undo(self, session: str) -> dict:
+        return self.request({"op": "undo", "session": session})
+
+    def redo(self, session: str) -> dict:
+        return self.request({"op": "redo", "session": session})
+
     def close(self):
         self._conn.close()
 

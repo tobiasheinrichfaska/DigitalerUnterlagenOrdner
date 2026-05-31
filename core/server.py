@@ -14,63 +14,21 @@ Request/response are JSON objects framed by core.protocol. Every response carrie
 """
 
 import threading
-import uuid
 
 import win32file
 import pywintypes
 
-from core import CORE_VERSION
-from core.bridge import load_belegtool
-from core.commands import CommandError, command_from_dict
-from core.engine import RealEngine
-from core.model import Document
+from core.api import CoreApi
 from core.pipe import PipeConnection, connect, create_server_instance, default_pipe_name
-from core.session import DocumentSession
 from log_config import logger
 
 
-class SessionManager:
-    """Tracks per-connection editing sessions (one DocumentSession each)."""
-
-    def __init__(self):
-        self._sessions = {}
-        self._lock = threading.Lock()
-        self._engine = RealEngine()
-
-    def create(self) -> str:
-        sid = uuid.uuid4().hex
-        with self._lock:
-            self._sessions[sid] = DocumentSession(Document.empty(), engine=self._engine)
-        return sid
-
-    def ensure(self, sid: str) -> str:
-        with self._lock:
-            if sid and sid in self._sessions:
-                return sid
-        return self.create()
-
-    def get(self, sid: str):
-        with self._lock:
-            return self._sessions.get(sid)
-
-    def open(self, sid: str, path):
-        """Load a .belegtool/PDF (or an empty doc) into the session."""
-        sid = self.ensure(sid)
-        document = load_belegtool(path) if path else Document.empty()
-        session = DocumentSession(document, engine=self._engine)
-        with self._lock:
-            self._sessions[sid] = session
-        return sid, session
-
-    def count(self) -> int:
-        with self._lock:
-            return len(self._sessions)
-
-
 class CoreServer:
+    """Named-pipe transport over a shared :class:`core.api.CoreApi`."""
+
     def __init__(self, pipe_name: str = None):
         self.pipe_name = pipe_name or default_pipe_name()
-        self.sessions = SessionManager()
+        self.api = CoreApi()
         self._running = False
         self._accept_thread = None
 
@@ -122,46 +80,20 @@ class CoreServer:
         finally:
             conn.close()
 
-    # --- dispatch ----------------------------------------------------------
+    # --- dispatch (maps pipe ops onto the shared CoreApi) ------------------
     def _dispatch(self, req: dict) -> dict:
         op = req.get("op")
-        try:
-            if op == "hello":
-                return {"ok": True, "session": self.sessions.create(),
-                        "core_version": CORE_VERSION}
-            if op == "open":
-                sid, session = self.sessions.open(req.get("session"), req.get("path"))
-                return self._doc_response(sid, session)
-
-            if op in ("dispatch", "undo", "redo"):
-                sid = req.get("session")
-                session = self.sessions.get(sid)
-                if session is None:
-                    return {"ok": False, "error": "unknown session"}
-                if op == "dispatch":
-                    session.dispatch(command_from_dict(req["command"]))
-                elif op == "undo":
-                    session.undo()
-                else:
-                    session.redo()
-                return self._doc_response(sid, session)
-
-            return {"ok": False, "error": f"unknown op: {op!r}"}
-        except CommandError as e:
-            return {"ok": False, "error": str(e)}
-        except Exception as e:
-            logger.exception("Dispatch-Fehler bei op=%r", op)
-            return {"ok": False, "error": str(e)}
-
-    @staticmethod
-    def _doc_response(sid: str, session) -> dict:
-        return {
-            "ok": True,
-            "session": sid,
-            "tree": session.document.to_dict(),
-            "can_undo": session.can_undo(),
-            "can_redo": session.can_redo(),
-        }
+        if op == "hello":
+            return self.api.hello()
+        if op == "open":
+            return self.api.open(req.get("session"), req.get("path"))
+        if op == "dispatch":
+            return self.api.dispatch(req.get("session"), req.get("command"))
+        if op == "undo":
+            return self.api.undo(req.get("session"))
+        if op == "redo":
+            return self.api.redo(req.get("session"))
+        return {"ok": False, "error": f"unknown op: {op!r}"}
 
 
 def win32pipe_connect(handle):

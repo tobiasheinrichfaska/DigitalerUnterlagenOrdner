@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { core } from './core'
 import { Tree } from './Tree'
-import { NodeActions } from './NodeActions'
+import { PreviewControls } from './PreviewControls'
+import { ContextMenu } from './ContextMenu'
 import './App.css'
 
 function findNode(node, id) {
@@ -19,6 +20,7 @@ export default function App() {
   const [selected, setSelected] = useState(null)
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
+  const [menu, setMenu] = useState(null) // context menu { x, y, node }
 
   // run any core call with the global busy indicator on
   const run = useCallback((promise) => {
@@ -119,10 +121,17 @@ export default function App() {
 
       <div className="body">
         <div className="pane tree-pane">
-          {state && <Tree node={state.tree} dispatch={dispatch} selectedId={selected?.id} onSelect={select} />}
+          {state && (
+            <Tree
+              node={state.tree}
+              selectedId={selected?.id}
+              onSelect={select}
+              onContext={(x, y, node) => setMenu({ x, y, node })}
+            />
+          )}
         </div>
         <div className="pane preview-pane">
-          {selected && <NodeActions node={selected} dispatch={dispatch} />}
+          {selected && <PreviewControls node={selected} dispatch={dispatch} />}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
           {selected && busy > 0 && pages === null && <div className="spinner big" />}
           {selected && busy === 0 && pages?.length === 0 && (
@@ -133,6 +142,8 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} />
     </div>
   )
 }

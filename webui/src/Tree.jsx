@@ -1,33 +1,22 @@
-// Recursive document-tree view. Each node action dispatches a real core command.
+// Recursive document-tree view. Click a node to select it (preview); right-click
+// for operations (rename, split, status, folders, delete) via the context menu.
 
-function TreeNode({ node, dispatch, selectedId, onSelect }) {
-  const rename = () => {
-    const name = window.prompt('Neuer Name', node.name)
-    if (name) dispatch({ type: 'Rename', node_id: node.id, name })
-  }
-  const del = () => dispatch({ type: 'Delete', node_id: node.id })
-  const addFolder = () =>
-    dispatch({ type: 'AddFolder', parent_id: node.id, name: 'Neuer Ordner', index: null, new_id: null })
-
+function TreeNode({ node, selectedId, onSelect, onContext }) {
   return (
     <li>
-      <div className={node.id === selectedId ? 'row selected' : 'row'}>
-        <span
-          className={node.is_folder ? 'name folder' : 'name leaf'}
-          onClick={() => onSelect(node)}
-        >
+      <div
+        className={node.id === selectedId ? 'row selected' : 'row'}
+        onClick={() => onSelect(node)}
+        onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
+      >
+        <span className={node.is_folder ? 'name folder' : 'name leaf'}>
           {node.is_folder ? '📁' : '📄'} {node.name}
-        </span>
-        <span className="actions">
-          {node.is_folder && <button title="Ordner anlegen" onClick={addFolder}>＋</button>}
-          <button title="Umbenennen" onClick={rename}>✎</button>
-          <button title="Löschen" onClick={del}>🗑</button>
         </span>
       </div>
       {node.children?.length > 0 && (
         <ul>
           {node.children.map((c) => (
-            <TreeNode key={c.id} node={c} dispatch={dispatch} selectedId={selectedId} onSelect={onSelect} />
+            <TreeNode key={c.id} node={c} selectedId={selectedId} onSelect={onSelect} onContext={onContext} />
           ))}
         </ul>
       )}
@@ -35,12 +24,12 @@ function TreeNode({ node, dispatch, selectedId, onSelect }) {
   )
 }
 
-export function Tree({ node, dispatch, selectedId, onSelect }) {
+export function Tree({ node, selectedId, onSelect, onContext }) {
   // `node` is the implicit root container — don't render it; show its children.
   return (
     <ul className="tree">
       {(node.children ?? []).map((c) => (
-        <TreeNode key={c.id} node={c} dispatch={dispatch} selectedId={selectedId} onSelect={onSelect} />
+        <TreeNode key={c.id} node={c} selectedId={selectedId} onSelect={onSelect} onContext={onContext} />
       ))}
     </ul>
   )

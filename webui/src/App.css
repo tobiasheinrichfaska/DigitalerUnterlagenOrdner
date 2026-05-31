@@ -69,3 +69,33 @@ ul.tree { padding-left: 0; }
 .actions { display: flex; gap: 4px; opacity: 0; }
 .row:hover .actions { opacity: 1; }
 .actions button { padding: 1px 7px; font-size: 13px; }
+
+/* loading indicator (Windows-style spinning circle) + busy cursor */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.spinner.big { width: 36px; height: 36px; border-width: 3px; }
+.app.loading { align-items: center; justify-content: center; gap: 12px; }
+.app.busy, .app.busy button { cursor: progress; }
+
+/* selected-node action bar */
+.node-actions {
+  width: 100%;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px; margin-bottom: 10px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+}
+.na-name { font-weight: 600; margin-right: auto; }
+.na-group { display: flex; gap: 4px; align-items: center; }
+.na-group button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.na-group.period span { color: var(--muted); font-size: 13px; }
+.na-group.period input {
+  width: 66px; padding: 3px 6px;
+  border: 1px solid var(--line); border-radius: 5px;
+}

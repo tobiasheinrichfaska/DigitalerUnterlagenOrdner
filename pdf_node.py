@@ -537,7 +537,14 @@ class PDFNode:
         if not nopreview:
             self.update_preview()
 
-        self.is_compressed = self.is_compressed and other.is_compressed
+        if dpi_conflict:
+            # Finding 8: on a DPI conflict the compressed data was discarded and
+            # no_compression set above. is_compressed must follow suit, otherwise
+            # the node reports the contradictory combination
+            # no_compression=True AND is_compressed=True.
+            self.is_compressed = False
+        else:
+            self.is_compressed = self.is_compressed and other.is_compressed
         self.no_compression = self.no_compression or other.no_compression
         self.dpi_original = max(filter(None, [self.dpi_original, other.dpi_original]), default=None)
         # Only update dpi_current when there was no conflict.  In the conflict path
@@ -666,7 +673,11 @@ class PDFNode:
         Hängt die PDF-Daten aller Child-Knoten zusammen (z. B. für Vorschau bei Ordnern).
 
         Args:
-            attr: Name des Attributs („_current_pdf_data“ oder „_original_pdf_data“)
+            attr: Name der Property ("current_pdf_data" oder "original_pdf_data").
+                Bewusst die Property, nicht das private Attribut: so liefert jedes
+                Kind seine effektiven Daten (current → original Fallback bei
+                Blättern, rekursiv bei Unterordnern). Sonst entfielen noch nicht
+                komprimierte Blätter, no_compression-Knoten und Unterordner.
 
         Returns:
             Zusammengefügte PDF-Daten oder None
@@ -694,7 +705,12 @@ class PDFNode:
     @property
     def current_pdf_data(self) -> Optional[bytes]:
         if self.is_folder:
-            return self._concat_children_data("_current_pdf_data")
+            # Read each child's *property* (effective data), not the private
+            # attribute: a leaf falls back current → original, a sub-folder
+            # recurses. Reading "_current_pdf_data" directly would silently drop
+            # not-yet-compressed leaves, no_compression nodes (e.g. split nodes)
+            # and sub-folders, leaving the folder "invalid" / missing pages.
+            return self._concat_children_data("current_pdf_data")
         return self._current_pdf_data or self._original_pdf_data
 
     @current_pdf_data.setter
@@ -710,7 +726,9 @@ class PDFNode:
     @property
     def original_pdf_data(self) -> Optional[bytes]:
         if self.is_folder:
-            return self._concat_children_data("_original_pdf_data")
+            # Read the child property (recurses into sub-folders) rather than the
+            # private attribute, which is never set on folder children.
+            return self._concat_children_data("original_pdf_data")
         return self._original_pdf_data
 
     @original_pdf_data.setter

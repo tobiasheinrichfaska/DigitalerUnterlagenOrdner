@@ -72,6 +72,7 @@ class Move:
 class Compress:
     node_id: str
     dpi: int = 150
+    method: Optional[str] = None  # jpg/png/pikepdf; None = best
 
 
 @dataclass(frozen=True)
@@ -243,9 +244,9 @@ def _compress(doc: Document, cmd: Compress, engine=None) -> Document:
         raise CommandError("node is marked no_compression")
     if not node.original_data:
         raise CommandError("node has no data to compress")
-    result = engine.compress(node.original_data, cmd.dpi)
+    result = engine.compress(node.original_data, cmd.dpi, cmd.method)
     if result is None:
-        return doc  # no method beat the original → unchanged
+        return doc  # this method / the best didn't beat the original → unchanged
     return doc.update_node(cmd.node_id, current_data=result,
                            is_compressed=True, dpi_current=cmd.dpi)
 

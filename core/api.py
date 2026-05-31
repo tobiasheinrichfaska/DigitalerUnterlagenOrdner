@@ -86,6 +86,27 @@ class CoreApi:
             return {"ok": False, "error": str(e)}
         return {"ok": True, "session": session, "path": path}
 
+    def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
+        """Available compression methods for a leaf at ``dpi`` (smallest first)."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            data = node.original_data
+        if not data:
+            return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
+                    "original_size": 0, "options": []}
+        sizes = self._engine.compress_methods(data, dpi)
+        options = sorted(
+            ({"method": m, "size": sz} for m, sz in sizes.items()),
+            key=lambda o: o["size"],
+        )
+        return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
+                "original_size": len(data), "options": options}
+
     def session_count(self) -> int:
         with self._lock:
             return len(self._sessions)

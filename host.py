@@ -49,6 +49,9 @@ class HostApi:
     def render(self, session, node_id, dpi=100):
         return self._core.render(session, node_id, dpi)
 
+    def compress_options(self, session, node_id, dpi=150):
+        return self._core.compress_options(session, node_id, dpi)
+
     # host-only ops (native dialogs)
     def open_file(self, session=None):
         result = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)

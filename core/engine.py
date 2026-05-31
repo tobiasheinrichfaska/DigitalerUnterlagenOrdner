@@ -17,8 +17,12 @@ from pypdf import PdfReader, PdfWriter
 class Engine(Protocol):
     def page_count(self, pdf_bytes: bytes) -> int: ...
 
-    def compress(self, pdf_bytes: bytes, dpi: int) -> Optional[bytes]:
-        """Smaller re-encoded PDF, or None if no method beat the original."""
+    def compress(self, pdf_bytes: bytes, dpi: int, method=None) -> Optional[bytes]:
+        """Smaller re-encoded PDF. ``method`` picks one (jpg/png/pikepdf); None = best.
+        Returns None if that method didn't beat the original."""
+
+    def compress_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
+        """Map of method -> result size, only for methods smaller than the original."""
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
         """All pages rotated by ``angle`` degrees (multiple of 90)."""
@@ -36,13 +40,18 @@ class RealEngine:
     def page_count(self, pdf_bytes: bytes) -> int:
         return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
 
-    def compress(self, pdf_bytes: bytes, dpi: int) -> Optional[bytes]:
+    def compress(self, pdf_bytes: bytes, dpi: int, method=None) -> Optional[bytes]:
         from compress_pdf_bytes import compress_all_methods
-        results = compress_all_methods(pdf_bytes, dpi=dpi)
+        results = compress_all_methods(pdf_bytes, dpi=dpi)  # only smaller-than-original
         if not results:
             return None
-        best = min(results.values(), key=len)
-        return best if len(best) < len(pdf_bytes) else None
+        if method is not None:
+            return results.get(method)  # None if that method wasn't smaller
+        return min(results.values(), key=len)  # best (smallest)
+
+    def compress_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
+        from compress_pdf_bytes import compress_all_methods
+        return {m: len(b) for m, b in compress_all_methods(pdf_bytes, dpi=dpi).items()}
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
         reader = PdfReader(io.BytesIO(pdf_bytes))

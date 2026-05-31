@@ -21,7 +21,7 @@ class FakeEngine:
     def page_count(self, b: bytes) -> int:
         return b.count(b"\n") + 1
 
-    def compress(self, b: bytes, dpi: int):
+    def compress(self, b: bytes, dpi: int, method=None):
         if len(b) <= 4:
             return None  # "no method beat the original"
         out = (b"c%d:" % dpi) + b[:2]

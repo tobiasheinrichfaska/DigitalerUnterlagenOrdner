@@ -21,6 +21,7 @@ export default function App() {
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
+  const [zoom, setZoom] = useState(1) // preview zoom factor
 
   // run any core call with the global busy indicator on
   const run = useCallback((promise) => {
@@ -131,14 +132,22 @@ export default function App() {
           )}
         </div>
         <div className="pane preview-pane">
-          {selected && <PreviewControls node={selected} dispatch={dispatch} />}
+          {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} />}
+          {selected && pages?.length > 0 && (
+            <div className="zoom-bar">
+              <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title="größer">＋</button>
+              <button onClick={() => setZoom(1)} title="zurücksetzen">100%</button>
+            </div>
+          )}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
           {selected && busy > 0 && pages === null && <div className="spinner big" />}
           {selected && busy === 0 && pages?.length === 0 && (
             <p className="status">Keine Vorschau (Ordner oder leer)</p>
           )}
           {selected && pages?.map((src, i) => (
-            <img key={i} src={src} alt={`Seite ${i + 1}`} className="preview-page" />
+            <img key={i} src={src} alt={`Seite ${i + 1}`} className="preview-page" style={{ width: `${zoom * 100}%` }} />
           ))}
         </div>
       </div>

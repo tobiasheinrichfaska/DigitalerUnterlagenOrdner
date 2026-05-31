@@ -45,6 +45,16 @@ def test_compress_command_with_real_engine():
     assert a.current_data is not None and len(a.current_data) < len(a.original_data)
 
 
+def test_compress_methods_and_explicit_method():
+    data = create_valid_pdf(pages=1)
+    sizes = ENGINE.compress_methods(data, 150)
+    assert sizes and all(s < len(data) for s in sizes.values())
+    method = min(sizes, key=sizes.get)  # smallest = best
+    d1 = apply(leaf_doc(data), Compress("a", dpi=150, method=method), ENGINE)
+    a = d1.find("a")
+    assert a.is_compressed is True and a.dpi_current == 150 and a.current_data is not None
+
+
 def test_rotate_command_with_real_engine():
     d1 = apply(leaf_doc(create_valid_pdf(pages=1)), Rotate("a", "right"), ENGINE)
     a = d1.find("a")

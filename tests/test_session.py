@@ -12,7 +12,7 @@ from core.session import DocumentSession
 
 
 class _NoGainEngine:
-    def compress(self, b, dpi):
+    def compress(self, b, dpi, method=None):
         return None  # never beats the original
 
 

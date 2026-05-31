@@ -18,7 +18,12 @@
 .pane { overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .tree-pane { flex: 0 0 340px; }
 .preview-pane { flex: 1; background: #f7f9fb; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.preview-page { max-width: 100%; border: 1px solid var(--line); background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.preview-page { max-width: none; flex-shrink: 0; border: 1px solid var(--line); background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+.dpi { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dpi input[type="range"] { width: 120px; }
+.zoom-bar { display: flex; align-items: center; gap: 6px; align-self: flex-end; font-size: 13px; color: var(--muted); }
+.zoom-bar span { min-width: 42px; text-align: center; }
 
 .name { cursor: pointer; }
 .row.selected { background: #e6f0fb; }

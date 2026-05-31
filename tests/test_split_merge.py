@@ -25,7 +25,7 @@ class FakeEngine:
     def merge(self, parts):
         return b"|".join(parts)
 
-    def compress(self, b, dpi):
+    def compress(self, b, dpi, method=None):
         return None
 
     def rotate(self, b, angle):

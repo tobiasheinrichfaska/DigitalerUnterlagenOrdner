@@ -112,3 +112,17 @@ def test_save_roundtrip(tmp_path):
 
 def test_save_unknown_session(tmp_path):
     assert CoreApi().save("nope", str(tmp_path / "x.belegtool"))["ok"] is False
+
+
+def test_compress_options_lists_methods_smallest_first(tmp_path):
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    leaf_id = opened["tree"]["children"][0]["id"]
+    resp = api.compress_options(opened["session"], leaf_id, dpi=150)
+    assert resp["ok"] is True and resp["original_size"] > 0
+    sizes = [o["size"] for o in resp["options"]]
+    assert len(sizes) >= 1 and sizes == sorted(sizes)            # best = options[0]
+    assert all(s < resp["original_size"] for s in sizes)        # all beat the original
+    assert resp["options"][0]["method"]                          # method name present

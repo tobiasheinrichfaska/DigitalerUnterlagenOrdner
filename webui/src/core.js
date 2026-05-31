@@ -30,4 +30,5 @@ export const core = {
   undo: (session) => call('undo', session),
   redo: (session) => call('redo', session),
   render: (session, nodeId) => call('render', session, nodeId),
+  compressOptions: (session, nodeId, dpi) => call('compress_options', session, nodeId, dpi),
 }

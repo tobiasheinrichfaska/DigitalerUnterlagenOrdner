@@ -95,6 +95,8 @@ class CoreServer:
             return self.api.redo(req.get("session"))
         if op == "render":
             return self.api.render(req.get("session"), req.get("node"), req.get("dpi", 100))
+        if op == "compress_options":
+            return self.api.compress_options(req.get("session"), req.get("node"), req.get("dpi", 150))
         if op == "save":
             return self.api.save(req.get("session"), req.get("path"))
         return {"ok": False, "error": f"unknown op: {op!r}"}

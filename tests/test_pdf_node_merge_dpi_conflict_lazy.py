@@ -1,62 +1,51 @@
-import time
-from pathlib import Path
+"""Merge behaviour when the two nodes were compressed at different DPI.
+
+Was previously a module-level script that ran at *collection* time, slept,
+asserted nothing and wrote two PDFs into the current working directory. Now a
+proper test: it asserts the DPI-conflict semantics and touches no files.
+
+DPI-conflict contract (see PDFNode._merge_pdf):
+  - the previously compressed data is discarded (current falls back to original),
+  - dpi_current is cleared to None,
+  - no_compression becomes True,
+  - is_compressed becomes False (no contradictory "compressed but no_compression").
+"""
+
+from pypdf import PdfReader
+import io
+
 from pdf_node import PDFNode
+from helpers import create_valid_pdf, wait_for_ready
 
-def valid_minimal_pdf():
-    return b"""%PDF-1.4
-1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
-2 0 obj << /Type /Pages /Count 1 /Kids [3 0 R] >> endobj
-3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R >> endobj
-4 0 obj << /Length 44 >> stream
-BT /F1 12 Tf 72 720 Td (Hello World) Tj ET
-endstream endobj
-xref
-0 5
-0000000000 65535 f
-0000000010 00000 n
-0000000061 00000 n
-0000000120 00000 n
-0000000201 00000 n
-trailer << /Size 5 /Root 1 0 R >>
-startxref
-269
-%%EOF"""
 
-# PDFNodes erstellen
-a = PDFNode("a", pdf_data=valid_minimal_pdf())
-b = PDFNode("b", pdf_data=valid_minimal_pdf())
+def _page_count(data: bytes) -> int:
+    return len(PdfReader(io.BytesIO(data)).pages)
 
-# Vorab-Kompression mit unterschiedlichen DPI
-a.compress(dpi=100)
-b.compress(dpi=200)
 
-# Dateigröße vor Merge
-size_a = len(a.current_pdf_data or b"")
-size_b = len(b.current_pdf_data or b"")
+def test_merge_with_dpi_conflict_discards_compression():
+    a = PDFNode("a", pdf_data=create_valid_pdf(pages=1))
+    b = PDFNode("b", pdf_data=create_valid_pdf(pages=1))
 
-# Merge mit Preview-Optimierung
-a.merge(b, nopreview=True)
+    # The constructor kicks off a background compress_multi_lazy(120). Let it
+    # settle FIRST, otherwise it can finish after the synchronous compress()
+    # below and overwrite dpi_current back to 120 (flaky).
+    wait_for_ready(a)
+    wait_for_ready(b)
 
-# 🔁 Vorschau und ggf. Lazy-Kompression auslösen
-a.update_preview()
-if not a.current_pdf_data and not a.no_compression:
-    a.compress_lazy()
+    # Now compress synchronously at deliberately different DPI to force a conflict.
+    a.compress(dpi=100)
+    b.compress(dpi=200)
 
-# Hintergrund-Kompression abwarten (max. 2 Sekunden)
-for _ in range(20):
-    if a.is_compressed and a.current_pdf_data:
-        break
-    time.sleep(0.1)
+    assert a.is_compressed and a.dpi_current == 100
+    assert b.is_compressed and b.dpi_current == 200
 
-# Ergebnisse anzeigen
-print("dpi_original:", a.dpi_original)
-print("dpi_current:", a.dpi_current)
-print("is_compressed:", a.is_compressed)
-print("no_compression:", a.no_compression)
-print("input_size_a:", size_a)
-print("input_size_b:", size_b)
-print("merged_current_size:", len(a.current_pdf_data) if a.current_pdf_data else None)
+    a.merge(b, nopreview=True)
 
-# PDF-Dateien speichern zur Kontrolle
-Path("merge_dpi_conflict_a.pdf").write_bytes(a.original_pdf_data or b"")
-Path("merge_dpi_conflict_a_compressed.pdf").write_bytes(a._current_pdf_data or b"")
+    # Conflict resolution: compression discarded, flags consistent.
+    assert a.no_compression is True
+    assert a.dpi_current is None
+    assert a.is_compressed is False, "no_compression and is_compressed must not both be True"
+
+    # Both original pages survive the merge.
+    assert a.original_pdf_data is not None
+    assert _page_count(a.original_pdf_data) == 2

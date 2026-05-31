@@ -967,7 +967,9 @@ class PDFNode:
                     buf_curr = io.BytesIO()
                     writer_curr.write(buf_curr)
                     data_curr = buf_curr.getvalue()
-                except Exception:
+                except Exception as e:
+                    logger.debug("Split '%s' Seite %d: current-Daten nicht extrahierbar: %s",
+                                 self.name, i + 1, e)
                     data_curr = None
 
             new_node = PDFNode(name=f"{self.name}_page_{i+1}")
@@ -986,7 +988,9 @@ class PDFNode:
                 if data_curr and i < len(self._current_preview_pages):
                     curr_page = self._current_preview_pages[i]
                     new_node._current_preview_pages = [PreviewPage(curr_page.pil_image.copy(), 0)]
-            except Exception:
+            except Exception as e:
+                logger.debug("Split '%s' Seite %d: Vorschau-Übernahme fehlgeschlagen, "
+                             "erzeuge neu: %s", self.name, i + 1, e)
                 new_node.update_preview()
 
             new_nodes.append(new_node)

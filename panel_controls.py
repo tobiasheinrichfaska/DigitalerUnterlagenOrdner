@@ -66,7 +66,7 @@ class ControlPanel(ttk.Frame):
                 new_node = self._create_folder_node("Neuer Ordner")
                 parent_node.add_child(new_node)
                 new_id = self.controller.tree_view.tree.insert(item_id, "end", text=new_node.name)
-                self.controller.tree_view.nodes_by_id[new_id] = new_node
+                self.controller.tree_view.register_node(new_id, new_node)
         finally:
             self.controller.set_busy(False)
 
@@ -95,7 +95,7 @@ class ControlPanel(ttk.Frame):
                 parent_id = self.controller.tree_view.tree.parent(item_id)
                 tree_index = self.controller.tree_view.tree.index(item_id)
                 new_id = self.controller.tree_view.tree.insert(parent_id, tree_index + 1, text=new_node.name)
-                self.controller.tree_view.nodes_by_id[new_id] = new_node
+                self.controller.tree_view.register_node(new_id, new_node)
         finally:
             self.controller.set_busy(False)
 
@@ -134,7 +134,7 @@ class ControlPanel(ttk.Frame):
                 if node:
                     node.delete()
                     self.controller.tree_view.tree.delete(item_id)
-                    del self.controller.tree_view.nodes_by_id[item_id]
+                    self.controller.tree_view.unregister_node(item_id)
 
                 fallback_id = self.controller.tree_view._get_iid_for_node(fallback_node)
                 if fallback_id:
@@ -250,7 +250,7 @@ class ControlPanel(ttk.Frame):
         parent_id = self.controller.tree_view.tree.parent(first_id)
         tree_index = self.controller.tree_view.tree.index(first_id)
         folder_id = self.controller.tree_view.tree.insert(parent_id, tree_index, text=new_folder.name)
-        self.controller.tree_view.nodes_by_id[folder_id] = new_folder
+        self.controller.tree_view.register_node(folder_id, new_folder)
 
         for item_id in selected_ids:
             node = self.controller.tree_view.nodes_by_id.get(item_id)
@@ -324,7 +324,7 @@ class ControlPanel(ttk.Frame):
                 base.merge(other, nopreview=True)
                 other.delete()
                 self.controller.tree_view.tree.delete(item_id)
-                del self.controller.tree_view.nodes_by_id[item_id]
+                self.controller.tree_view.unregister_node(item_id)
 
             base.update_preview()
             if not base.no_compression and base.current_pdf_data is None:
@@ -489,7 +489,7 @@ class ControlPanel(ttk.Frame):
                 parent_id = self.controller.tree_view.tree.parent(item_id)
                 for new_node in new_nodes:
                     new_id = self.controller.tree_view.tree.insert(parent_id, "end", text=new_node.name)
-                    self.controller.tree_view.nodes_by_id[new_id] = new_node
+                    self.controller.tree_view.register_node(new_id, new_node)
                     if node.parent:
                         node.parent.add_child(new_node)
                     total_new += 1

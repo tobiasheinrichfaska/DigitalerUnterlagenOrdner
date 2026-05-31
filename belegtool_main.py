@@ -83,7 +83,7 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         self.storage = None
         self.selected_node = None
         self.tree_view.tree.delete(*self.tree_view.tree.get_children())
-        self.tree_view.nodes_by_id.clear()
+        self.tree_view.clear_node_index()
         self.preview_frame.canvas.delete("all")
         self.preview_frame.image_refs.clear()
         return True

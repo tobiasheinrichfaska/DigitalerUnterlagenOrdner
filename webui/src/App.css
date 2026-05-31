@@ -84,18 +84,28 @@ ul.tree { padding-left: 0; }
 .app.loading { align-items: center; justify-content: center; gap: 12px; }
 .app.busy, .app.busy button { cursor: progress; }
 
-/* selected-node action bar */
-.node-actions {
+/* preview compression controls */
+.preview-controls {
   width: 100%;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   padding: 8px; margin-bottom: 10px;
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
 }
-.na-name { font-weight: 600; margin-right: auto; }
-.na-group { display: flex; gap: 4px; align-items: center; }
-.na-group button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.na-group.period span { color: var(--muted); font-size: 13px; }
-.na-group.period input {
-  width: 66px; padding: 3px 6px;
-  border: 1px solid var(--line); border-radius: 5px;
+.compress-select { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+
+/* right-click context menu */
+.cm-backdrop { position: fixed; inset: 0; z-index: 20; }
+.context-menu {
+  position: fixed; z-index: 21; min-width: 170px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); padding: 4px;
+  display: flex; flex-direction: column;
 }
+.context-menu button {
+  text-align: left; border: none; background: none; padding: 6px 10px; border-radius: 5px;
+}
+.context-menu button:hover { background: #eef3f8; }
+.context-menu button.active { color: var(--accent); font-weight: 600; }
+.context-menu button.danger { color: #b4232c; }
+.cm-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+.cm-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); padding: 4px 10px 2px; }

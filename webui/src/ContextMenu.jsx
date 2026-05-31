@@ -1,0 +1,52 @@
+// Right-click context menu for a tree node — operations live here (like the old
+// app's tree context menu), not as buttons.
+
+const STATUSES = [
+  ['erfasst', 'Erfasst'],
+  ['zu erfassen', 'Zu erfassen'],
+  ['vorjahreswert', 'Vorjahr'],
+]
+
+export function ContextMenu({ menu, dispatch, onClose }) {
+  if (!menu) return null
+  const { x, y, node } = menu
+  const isLeaf = !node.is_folder
+  const run = (extra) => {
+    dispatch({ ...extra, node_id: node.id })
+    onClose()
+  }
+
+  const rename = () => {
+    const name = window.prompt('Neuer Name', node.name)
+    if (name) run({ type: 'Rename', name })
+    else onClose()
+  }
+  const addFolder = () => {
+    dispatch({ type: 'AddFolder', parent_id: node.id, name: 'Neuer Ordner', index: null, new_id: null })
+    onClose()
+  }
+
+  return (
+    <>
+      <div
+        className="cm-backdrop"
+        onClick={onClose}
+        onContextMenu={(e) => { e.preventDefault(); onClose() }}
+      />
+      <div className="context-menu" style={{ left: x, top: y }}>
+        <button onClick={rename}>Umbenennen</button>
+        {isLeaf && node.pdf_length > 1 && <button onClick={() => run({ type: 'Split' })}>Splitten</button>}
+        {node.is_folder && <button onClick={addFolder}>Ordner anlegen</button>}
+        <div className="cm-sep" />
+        <div className="cm-label">Status</div>
+        {STATUSES.map(([key, label]) => (
+          <button key={key} className={node.status === key ? 'active' : ''} onClick={() => run({ type: 'SetStatus', status: key })}>
+            {label}
+          </button>
+        ))}
+        <div className="cm-sep" />
+        <button className="danger" onClick={() => run({ type: 'Delete' })}>Löschen</button>
+      </div>
+    </>
+  )
+}

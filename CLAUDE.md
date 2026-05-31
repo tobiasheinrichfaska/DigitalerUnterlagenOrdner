@@ -152,6 +152,15 @@ Current stable tag: **v3.5.3**
 
 ## Open / deferred items
 - **Zammad integration** — deferred, not started yet
+- **GUI test harness — Tk root churn (deferred)**: `tests/test_ui_lockout.py`
+  creates a fresh `tk.Tk()` per test (see the `preview` fixture). Running *that
+  file alone in a tight loop* intermittently fails Tk init
+  (`couldn't read … panedwindow.tcl`). A shared module/session root was tried and
+  **regressed the full suite** — leaked `after`-poll timers from one test fire
+  against the next test's destroyed frame (`TclError`). Per-test root is reliable
+  in normal/full runs (119 passed, 0 failed). A proper fix needs one
+  session-wide root for *all* GUI tests **plus** strict per-test `after`-timer
+  cancellation — a real refactor, not a quick win. Low priority (isolation-only).
 
 ---
 

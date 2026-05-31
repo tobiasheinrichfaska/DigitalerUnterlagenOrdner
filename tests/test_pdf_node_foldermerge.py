@@ -19,6 +19,11 @@ def build_folder_node_from_input(prefix: str) -> PDFNode:
     folder = PDFNode(name=f"folder_{prefix}", is_folder=True)
     for f in files:
         node = PDFNode.from_pdf(f.name, f.read_bytes())
+        # from_pdf kicks off background compression. Wait for it to settle so the
+        # folder's aggregated current_pdf_data (and the is_compressed/dpi flags in
+        # to_dict) are deterministic — otherwise the byte-exact golden master is
+        # racy depending on whether compression finished before the merge.
+        wait_for_real_preview(node)
         folder.add_child(node)
     return folder
 

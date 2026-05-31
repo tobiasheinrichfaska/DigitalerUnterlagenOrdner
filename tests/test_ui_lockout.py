@@ -100,6 +100,12 @@ def test_show_previews_busy_schedules_poll(preview):
 
 def test_show_previews_idle_does_not_schedule_poll(preview):
     node = idle_node()
+    # A genuinely settled node: already compressed, so show_previews must NOT
+    # auto-start compression (and therefore must not schedule a poll). A node
+    # with empty _compression_results would legitimately trigger the
+    # auto-compress-on-show feature instead.
+    node.is_compressed = True
+    node._compression_results = {"jpg": node.current_pdf_data}
     preview.show_previews(node)
     assert preview._poll_after_id is None
 

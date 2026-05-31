@@ -487,6 +487,14 @@ class PDFNode:
 
     @staticmethod
     def _concat_two_pdfs(a: bytes, b: bytes) -> bytes:
+        """Concatenate two PDFs page by page.
+
+        Limitation (audit finding 7): ``PdfWriter.add_page`` copies page content
+        only — named destinations, inter-page link annotations and document
+        outlines from the sources are dropped. This is fine for the image-only
+        receipts this tool targets, but lossy for text PDFs from upstream tools.
+        Use a pikepdf page copy if such structures must be preserved.
+        """
         writer = PdfWriter()
         for page in PdfReader(io.BytesIO(a)).pages:
             writer.add_page(page)

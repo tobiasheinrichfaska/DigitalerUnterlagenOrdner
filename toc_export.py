@@ -87,7 +87,12 @@ def _get_pdf_page_count(data: bytes) -> int:
 
 
 def _export_nodes_to_bytes(nodes: List[PDFNode]) -> bytes:
-    """Rendert alle Knoten als flaches PDF ohne Metadaten."""
+    """Rendert alle Knoten als flaches PDF ohne Metadaten.
+
+    Limitation (audit finding 7): pages are copied via ``PdfWriter.add_page``,
+    which drops source named destinations, link annotations and outlines. Fine
+    for image-only receipts; lossy for structured text PDFs.
+    """
     writer = PdfWriter()
 
     def _append(node: PDFNode):

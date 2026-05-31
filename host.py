@@ -51,14 +51,14 @@ class HostApi:
 
     # host-only ops (native dialogs)
     def open_file(self, session=None):
-        result = webview.windows[0].create_file_dialog(webview.OPEN_DIALOG, file_types=FILE_TYPES)
+        result = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.open(session, result[0])
 
     def save_file(self, session):
         path = webview.windows[0].create_file_dialog(
-            webview.SAVE_DIALOG, save_filename="unbenannt.belegtool",
+            webview.FileDialog.SAVE, save_filename="unbenannt.belegtool",
             file_types=("BelegTool (*.belegtool)",))
         if not path:
             return {"ok": False, "error": "cancelled"}

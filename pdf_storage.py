@@ -15,18 +15,28 @@ def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     Erzeugt bei Bedarf einen Wrapper-Ordner für die übergebenen root.children,
     z. B. beim Import einer Einzeldatei oder wenn keine passende Ordnerstruktur vorhanden ist.
     """
+    children = storage.root.children
+
+    # A single document (e.g. a plain PDF) is imported as exactly that one node —
+    # no superfluous folder wrapper around it.
+    if len(children) == 1 and not children[0].is_folder:
+        return children[0]
+
+    # An archive/e-mail whose single top folder already matches the file name:
+    # don't double-wrap it.
     if (
-        len(storage.root.children) == 1 and
-        storage.root.children[0].is_folder and
-        storage.root.children[0].name.lower() in os.path.basename(filename).lower()
+        len(children) == 1 and
+        children[0].is_folder and
+        children[0].name.lower() in os.path.basename(filename).lower()
     ):
-        return storage.root.children[0]
-    else:
-        wrapper = PDFNode(name=os.path.splitext(os.path.basename(filename))[0], is_folder=True)
-        wrapper.children = storage.root.children
-        for child in wrapper.children:
-            child.parent = wrapper
-        return wrapper
+        return children[0]
+
+    # Otherwise group the imported structure under a folder named after the file.
+    wrapper = PDFNode(name=os.path.splitext(os.path.basename(filename))[0], is_folder=True)
+    wrapper.children = children
+    for child in wrapper.children:
+        child.parent = wrapper
+    return wrapper
 
 class PDFStorage:
     def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):

@@ -27,7 +27,7 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 
 | File | Role |
 |---|---|
-| `pdf_node.py` | `PDFNode`: tree node (file/folder), compression, preview generation, split/merge/copy/delete |
+| `pdf_node.py` | `PDFNode`: tree node (file/folder), compression, preview (rendering delegated to `services/render`), split/merge/copy/delete. **No Tk** — uses the `progress`/`tasks` ports |
 | `pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
 
 ### Import & Export
@@ -45,8 +45,25 @@ Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
 | `tools.py` | PDF sanitization (repair broken objects) |
 | `version_info.py` | `APP_NAME`, `VERSION` (currently 3.5.3) |
 | `log_config.py` | Logging setup |
-| `status_display.py` | Title bar status loop |
-| `preview_page.py` | Helper class for preview pages |
+| `status_display.py` | Title bar status loop (Tk; **app layer only**) |
+| `preview_page.py` | Preview page holder (PIL only — no Tk) |
+
+### Headless core layer & ports (GUI-decoupled)
+
+The domain model and processing modules import **no `tkinter`** — the GUI toolkit
+lives only in the app layer (`belegtool_main`, `view_*`, `panel_controls`,
+`status_display`, `test_mode`). This is Phase 1 of the React migration; see
+[`docs/REACT_MIGRATION_PLAN.md`](docs/REACT_MIGRATION_PLAN.md) (on the
+`react-migration` branch).
+
+| File | Role |
+|---|---|
+| `services/render.py` | **Headless** PDF→preview rendering: `render_pdf_to_images` (PIL, for the Tk canvas) and `render_pdf_to_pngs` (PNG bytes, for a web UI). `PDFNode._create_previews` delegates here. |
+| `progress.py` | Progress **port**: the core signals background-task start/finish (`task_started`/`task_finished`); the app installs a reporter forwarding to `status_display`. No-op by default. |
+| `tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). |
+
+Ports are installed by the GUI in `belegtool_main` (`progress.set_reporter`,
+`tasks.set_ui_dispatcher`); a future backend installs its own implementations.
 
 ---
 

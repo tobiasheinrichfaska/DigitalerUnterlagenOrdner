@@ -188,6 +188,9 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         ctx = self.tree_view.context_menu
         ctx.entryconfig("Splitten",         state=s(one_leaf))
         ctx.entryconfig("Zusammenführen",   state=s(same_level))
+        ctx.entryconfig("Komprimieren",                state=s(n >= 1))
+        ctx.entryconfig("Lesbarkeit geprüft",          state=s(n >= 1))
+        ctx.entryconfig("Kompression zurücksetzen",    state=s(n >= 1))
         ctx.entryconfig("Ordner innerhalb", state=s(one_folder))
         ctx.entryconfig("Ordner unterhalb", state=s(one))
         ctx.entryconfig("Umbenennen",       state=s(one))

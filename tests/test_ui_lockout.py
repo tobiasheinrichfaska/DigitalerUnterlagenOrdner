@@ -26,6 +26,11 @@ class DummyController:
 
 @pytest.fixture
 def preview():
+    # A fresh root per test (destroyed in teardown) is deliberate: it cancels any
+    # leaked `after`-poll timers with the interpreter. A shared module/session
+    # root instead lets a poll scheduled in one test fire against the next test's
+    # destroyed frame (TclError). The occasional tk.tcl init flakiness when this
+    # file is run alone in a tight loop is the lesser evil.
     root = tk.Tk()
     ctrl = DummyController()
     frame = PreviewFrame(root, controller=ctrl)

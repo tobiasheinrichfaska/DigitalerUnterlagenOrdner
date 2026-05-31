@@ -402,19 +402,12 @@ class ControlPanel(ttk.Frame):
                     if not self.controller.storage:
                         self.controller.storage = PDFStorage()
 
-                    root_id = None
-                    for item_id, node in self.controller.tree_view.nodes_by_id.items():
-                        if node == self.controller.storage.root:
-                            root_id = item_id
-                            break
-
-                    if root_id is None:
-                        root_id = self.controller.tree_view._populate(self.controller.storage.root, parent="")
-                        self.controller.tree_view.tree.update_idletasks()
-
+                    # Add to the data model and rebuild the tree from it (same as the
+                    # drag-and-drop path). Avoids the brittle incremental render that
+                    # relied on _populate's (absent) return value and mis-placed the
+                    # node on the first import into an empty app.
                     self.controller.storage.root.add_child(wrapper_node)
-                    self.controller.tree_view._populate(wrapper_node, parent=root_id)
-                    self.controller.tree_view.tree.update_idletasks()
+                    self.controller.tree_view.rebuild_tree()
 
                     self.controller.storage.mark_dirty()
                     new_nodes_imported = True

@@ -10,8 +10,20 @@ from universal_importer import UniversalImporter
 from typing import Optional
 import os
 import status_display
+import progress
 from version_info import get_full_title
 from log_config import LOGLEVEL, LOGFILE, LOGGING_ENABLED, logger
+
+
+class _StatusDisplayReporter:
+    """Forwards core progress signals to the Tk title-bar status display."""
+
+    def task_started(self, name: str) -> None:
+        status_display.register_task(name)
+
+    def task_finished(self, name: str) -> None:
+        status_display.unregister_task(name)
+
 
 class DigitalerBelegGUI(TkinterDnD.Tk):
     def __init__(self, filepath: Optional[str] = None):
@@ -52,6 +64,10 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         # Titel-Loop aktivieren
         status_display.set_base_title(self.base_title)
         self.after_idle(lambda: status_display.start_title_loop(self))
+
+        # Vom Core (progress port) gemeldete Hintergrund-Tasks an die Titelanzeige
+        # weiterleiten. Der Core kennt status_display/tkinter nicht mehr selbst.
+        progress.set_reporter(_StatusDisplayReporter())
 
         # Falls Datei mitgegeben wurde → direkt laden
         if filepath:

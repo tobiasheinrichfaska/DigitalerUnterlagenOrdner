@@ -9,7 +9,7 @@ from PIL import Image
 from tools import sanitize_pdf
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from status_display import register_task, unregister_task
+from progress import task_started, task_finished
 from preview_page import PreviewPage
 from services.render import render_pdf_to_images
 from log_config import logger
@@ -186,7 +186,7 @@ class PDFNode:
                 self._preview_task_requested = False
                 self._preview_done.clear()
 
-        register_task(f"Vorschau: {self.name}")
+        task_started(f"Vorschau: {self.name}")
 
         def run():
             try:
@@ -212,7 +212,7 @@ class PDFNode:
                 logger.error("Preview-Fehler bei '%s': %s", self.name, e)
 
             finally:
-                unregister_task(f"Vorschau: {self.name}")
+                task_finished(f"Vorschau: {self.name}")
                 with self._preview_task_lock:
                     self._preview_task_running = False
                     self._preview_done.set()
@@ -248,7 +248,7 @@ class PDFNode:
                 return
             self._compression_task_running = True
 
-        register_task(f"Kompression: {self.name}")
+        task_started(f"Kompression: {self.name}")
 
         def run():
             try:
@@ -256,7 +256,7 @@ class PDFNode:
             except Exception as e:
                 logger.error("Kompression bei '%s' fehlgeschlagen: %s", self.name, e)
             finally:
-                unregister_task(f"Kompression: {self.name}")
+                task_finished(f"Kompression: {self.name}")
                 self._compression_task_running = False
 
         threading.Thread(target=run, daemon=True).start()
@@ -281,7 +281,7 @@ class PDFNode:
             self._compression_task_running = True
             self._compression_task_dpi = dpi
 
-        register_task(f"Kompression: {self.name}")
+        task_started(f"Kompression: {self.name}")
 
         def run():
             run_dpi = self._compression_task_dpi
@@ -299,7 +299,7 @@ class PDFNode:
             except Exception as e:
                 logger.error("Multi-Kompression bei '%s' fehlgeschlagen: %s", self.name, e)
             finally:
-                unregister_task(f"Kompression: {self.name}")
+                task_finished(f"Kompression: {self.name}")
                 with self._compression_task_lock:
                     self._compression_task_running = False
                     if self._compression_task_requested:

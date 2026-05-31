@@ -66,3 +66,49 @@ def test_independent_sessions():
                      "name": "X", "index": None, "new_id": "x"})
     # session a changed; session b is independent and still empty
     assert api.undo(b)["tree"]["children"] == []
+
+
+def _doc_with_leaf(pages=1):
+    return Document(Node(name="root", is_folder=True, children=(
+        Node(name="doc1", pdf_length=pages, no_compression=True,
+             original_data=create_valid_pdf(pages=pages)),
+    )))
+
+
+def test_render_leaf_returns_png_pages(tmp_path):
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=2), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    leaf_id = opened["tree"]["children"][0]["id"]
+    resp = api.render(opened["session"], leaf_id)
+    assert resp["ok"] is True and len(resp["pages"]) == 2
+    assert resp["pages"][0].startswith("data:image/png;base64,")
+
+
+def test_render_folder_is_empty_and_errors():
+    api = CoreApi()
+    opened = api.open()
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    assert api.render(sid, root_id)["pages"] == []        # folder: no bytes
+    assert api.render(sid, "missing")["ok"] is False
+    assert api.render("nope", "x")["ok"] is False
+
+
+def test_save_roundtrip(tmp_path):
+    src = tmp_path / "src.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), src)
+    api = CoreApi()
+    opened = api.open(path=str(src))
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id,
+                       "name": "G", "index": None, "new_id": "g"})
+    out = tmp_path / "out.belegtool"
+    assert api.save(sid, str(out))["ok"] is True and out.exists()
+
+    reopened = CoreApi().open(path=str(out))
+    assert {"doc1", "G"}.issubset({c["name"] for c in reopened["tree"]["children"]})
+
+
+def test_save_unknown_session(tmp_path):
+    assert CoreApi().save("nope", str(tmp_path / "x.belegtool"))["ok"] is False

@@ -53,6 +53,39 @@ class CoreApi:
     def redo(self, session: str) -> dict:
         return self._mutate(session, lambda s: s.redo())
 
+    def render(self, session: str, node_id: str, dpi: int = 100) -> dict:
+        """Render a leaf node's effective pages to base64 PNG data-URLs."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            data = node.current_data or node.original_data
+        # render outside the lock (CPU-bound); folders carry no bytes -> []
+        from base64 import b64encode
+        from services.render import render_pdf_to_pngs
+        pages = [
+            "data:image/png;base64," + b64encode(p).decode("ascii")
+            for p in render_pdf_to_pngs(data, dpi=dpi)
+        ]
+        return {"ok": True, "session": session, "node": node_id, "pages": pages}
+
+    def save(self, session: str, path: str) -> dict:
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            document = s.document
+        from core.bridge import save_belegtool
+        try:
+            save_belegtool(document, path)
+        except Exception as e:
+            logger.exception("save failed")
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "session": session, "path": path}
+
     def session_count(self) -> int:
         with self._lock:
             return len(self._sessions)

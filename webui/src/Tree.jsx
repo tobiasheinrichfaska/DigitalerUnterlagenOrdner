@@ -1,6 +1,6 @@
 // Recursive document-tree view. Each node action dispatches a real core command.
 
-function TreeNode({ node, dispatch }) {
+function TreeNode({ node, dispatch, selectedId, onSelect }) {
   const rename = () => {
     const name = window.prompt('Neuer Name', node.name)
     if (name) dispatch({ type: 'Rename', node_id: node.id, name })
@@ -11,8 +11,11 @@ function TreeNode({ node, dispatch }) {
 
   return (
     <li>
-      <div className="row">
-        <span className={node.is_folder ? 'name folder' : 'name leaf'}>
+      <div className={node.id === selectedId ? 'row selected' : 'row'}>
+        <span
+          className={node.is_folder ? 'name folder' : 'name leaf'}
+          onClick={() => onSelect(node)}
+        >
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
         <span className="actions">
@@ -24,7 +27,7 @@ function TreeNode({ node, dispatch }) {
       {node.children?.length > 0 && (
         <ul>
           {node.children.map((c) => (
-            <TreeNode key={c.id} node={c} dispatch={dispatch} />
+            <TreeNode key={c.id} node={c} dispatch={dispatch} selectedId={selectedId} onSelect={onSelect} />
           ))}
         </ul>
       )}
@@ -32,12 +35,12 @@ function TreeNode({ node, dispatch }) {
   )
 }
 
-export function Tree({ node, dispatch }) {
+export function Tree({ node, dispatch, selectedId, onSelect }) {
   // `node` is the implicit root container — don't render it; show its children.
   return (
     <ul className="tree">
       {(node.children ?? []).map((c) => (
-        <TreeNode key={c.id} node={c} dispatch={dispatch} />
+        <TreeNode key={c.id} node={c} dispatch={dispatch} selectedId={selectedId} onSelect={onSelect} />
       ))}
     </ul>
   )

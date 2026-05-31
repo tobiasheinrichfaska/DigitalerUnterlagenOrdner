@@ -41,4 +41,4 @@ def test_split_preserves_previews():
     # 🔍 Flags prüfen
     assert split_node.no_compression is True
     assert split_node.is_compressed is True
-    assert split_node.dpi_current is 120
+    assert split_node.dpi_current == 120

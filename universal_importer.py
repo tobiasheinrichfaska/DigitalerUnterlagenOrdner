@@ -46,6 +46,47 @@ class UniversalImporter:
     _has_excel = False
     _has_powerpoint = False
 
+    # Executable / script signatures we refuse to import whatever the extension
+    # claims — guards against an EXE/script masquerading as a benign attachment.
+    _DANGEROUS_SIGNATURES = [
+        (b"MZ", "Windows-Programm (EXE/DLL)"),
+        (b"\x7fELF", "ELF-Binärdatei"),
+        (b"\xca\xfe\xba\xbe", "Mach-O-/Java-Binärdatei"),
+        (b"#!", "Skript (Shebang)"),
+    ]
+
+    # Extensions whose real content has an unambiguous leading magic number we
+    # can verify up front (so a mismatch fails clearly instead of degrading
+    # later to an opaque "%PDF"-check failure).
+    _EXPECTED_MAGIC = {
+        ".pdf":  [b"%PDF"],
+        ".png":  [b"\x89PNG\r\n\x1a\n"],
+        ".jpg":  [b"\xff\xd8\xff"],
+        ".jpeg": [b"\xff\xd8\xff"],
+        ".bmp":  [b"BM"],
+        ".tif":  [b"II*\x00", b"MM\x00*"],
+        ".tiff": [b"II*\x00", b"MM\x00*"],
+    }
+
+    @classmethod
+    def verify_content_matches_extension(cls, data: bytes, ext: str, name: str) -> None:
+        """Reject dangerous content and obvious magic-byte/extension mismatches.
+
+        Raises ValueError with a user-readable reason; routes by real content
+        rather than trusting the extension alone (audit finding 4). Types
+        without a reliable leading signature (office/zip/text/email/heic/webp)
+        are left to their converters, which fail gracefully.
+        """
+        head = data[:16] if data else b""
+        for sig, label in cls._DANGEROUS_SIGNATURES:
+            if head.startswith(sig):
+                raise ValueError(f"'{name}' sieht aus wie {label}, nicht wie {ext} – abgelehnt.")
+
+        expected = cls._EXPECTED_MAGIC.get(ext)
+        if expected and not any(head.startswith(sig) for sig in expected):
+            raise ValueError(
+                f"Unerwarteter Inhalt für '{name}': die Datei beginnt nicht wie ein {ext}.")
+
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
         exts = (
@@ -127,6 +168,10 @@ class UniversalImporter:
             ext = os.path.splitext(name)[1].lower()
             if ext not in cls.get_supported_extensions():
                 raise ValueError(f"Nicht unterstützter Dateityp: {ext}")
+
+            # Content-based safety/type check before we trust the extension and
+            # hand the bytes to a converter (covers e-mail attachments).
+            cls.verify_content_matches_extension(data, ext, name)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
                 tmp.write(data)
@@ -395,9 +440,12 @@ class UniversalImporter:
         thread.start()
 
 
-def _not_importable(name: str) -> Dict[str, Any]:
+def _not_importable(name: str, reason: str = "") -> Dict[str, Any]:
+    label = f"{name} – nicht importierbar"
+    if reason:
+        label += f" ({reason})"
     return {
-        "name": f"{name} – nicht importierbar",
+        "name": label,
         "children": []  # ⬅ macht daraus einen Ordner!
     }
 
@@ -520,8 +568,9 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
         try:
             converted = UniversalImporter.convert(content, name=name)
             return {"name": name, "content": converted.data}
-        except Exception:
-            return _not_importable(name)
+        except Exception as e:
+            logger.warning("Anhang '%s' nicht importierbar: %s", name, e)
+            return _not_importable(name, reason=str(e))
 
     result = []
 

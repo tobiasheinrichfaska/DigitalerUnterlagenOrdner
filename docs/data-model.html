@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BelegTool — Data Model Reference</title>
+<style>
+  :root { --bg:#fff; --ink:#1c2530; --muted:#5b6b7b; --line:#d8dee6; --accent:#2b6cb0;
+          --folder:#9a6700; --leaf:#1a7f37; --cmd:#cf3a6b; --sess:#5a3fc0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 22px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 38px 0 10px; border-bottom: 2px solid var(--line); padding-bottom:6px; }
+  h3 { font-size: 15px; margin: 22px 0 8px; }
+  p.lead { color:#52606d; margin: 4px 0 18px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 92%; }
+  code { background:#f3f5f8; padding:1px 5px; border-radius:4px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 4px; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background:#f5f7fa; font-weight:600; }
+  td.req { color:#b4232c; font-weight:600; }
+  td.opt { color:#67707a; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; color:#fff; }
+  .pill.folder{background:var(--folder)} .pill.leaf{background:var(--leaf)}
+  .pill.cmd{background:var(--cmd)} .pill.sess{background:var(--sess)} .pill.fn{background:var(--accent)}
+  .note { background:#fff8e6; border:1px solid #f0e0a8; border-radius:8px; padding:10px 14px; margin:12px 0; font-size:14px; }
+  figure { margin: 14px 0; }
+  figcaption { color:#67707a; font-size:13px; margin-top:6px; }
+  .src { color:#67707a; font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>BelegTool — Data Model Reference</h1>
+<p class="lead">The immutable, UI-agnostic data-driven core (<span class="mono">core/</span>).
+Generated from <span class="mono">core/model.py</span>, <span class="mono">core/commands.py</span>,
+<span class="mono">core/engine.py</span>, <span class="mono">core/session.py</span>. Self-contained — open offline.</p>
+
+<div class="note"><b>Architecture.</b> Everything here is pure data + pure functions: an immutable
+document, commands as data, an injected PDF engine for the impure byte work, and an editing
+session with undo/redo. No Tk, no rendering, no threads — fully unit-testable
+(<span class="mono">tests/test_model.py</span>, <span class="mono">test_commands.py</span>,
+<span class="mono">test_engine_commands.py</span>, <span class="mono">test_split_merge.py</span>,
+<span class="mono">test_session.py</span>, <span class="mono">test_bridge.py</span>).</div>
+
+<!-- ============================ ENTITIES ============================ -->
+<h2>1 · Entities</h2>
+
+<h3><span class="pill leaf">entity</span> Node <span class="src">— core/model.py</span></h3>
+<p class="lead">A tree node: a <b>folder</b> or a <b>leaf</b> document. Frozen (immutable);
+transforms return new nodes with structural sharing.</p>
+<table>
+<tr><th>Field</th><th>Type</th><th>Req.</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>name</code></td><td>str</td><td class="req">required</td><td>—</td><td>Display name.</td></tr>
+<tr><td><code>is_folder</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder vs. leaf document.</td></tr>
+<tr><td><code>id</code></td><td>str</td><td class="opt">opt</td><td>uuid4 hex</td><td>Stable identity; commands target nodes by this.</td></tr>
+<tr><td><code>status</code></td><td>str</td><td class="opt">opt</td><td>"zu erfassen"</td><td>One of <code>erfasst</code> · <code>zu erfassen</code> · <code>vorjahreswert</code>.</td></tr>
+<tr><td><code>vz_start</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>Accounting period start.</td></tr>
+<tr><td><code>vz_end</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>Accounting period end.</td></tr>
+<tr><td><code>pdf_length</code></td><td>int</td><td class="opt">opt</td><td>0</td><td>Page count of this node's own pages (0 for folders).</td></tr>
+<tr><td><code>is_compressed</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>A smaller compressed variant is the current data.</td></tr>
+<tr><td><code>dpi_original</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI the original was captured at.</td></tr>
+<tr><td><code>dpi_current</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI of the current/compressed data.</td></tr>
+<tr><td><code>no_compression</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Node must not be (re-)compressed (e.g. split parts).</td></tr>
+<tr><td><code>children</code></td><td>tuple[Node, …]</td><td class="opt">opt</td><td>()</td><td>Ordered child nodes (order = position).</td></tr>
+<tr><td><code>original_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Canonical page bytes. <b>Not serialised</b> to JSON.</td></tr>
+<tr><td><code>current_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Compressed variant bytes, if any. <b>Not serialised</b>.</td></tr>
+</table>
+
+<h3><span class="pill folder">entity</span> Document <span class="src">— core/model.py</span></h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Req.</th><th>Meaning</th></tr>
+<tr><td><code>root</code></td><td>Node (folder)</td><td class="req">required</td><td>The root folder; the whole tree hangs off it.</td></tr>
+</table>
+
+<h3>Persisted shape (the data contract)</h3>
+<p class="lead"><code>Document.to_dict()</code> serialises <b>structure only</b> (no bytes). Per node:
+<code>id, name, is_folder, status, position</code> (= sibling index), <code>vz_start, vz_end,
+pdf_length, is_compressed, dpi_original, dpi_current, no_compression, children[]</code>.
+On disk a <code>.belegtool</code> is a single PDF carrying the pages plus this JSON under the PDF
+metadata key <code>/JSONStructure</code> (see <span class="mono">docs/DATA_CONTRACT.md</span>;
+bridge in <span class="mono">core/bridge.py</span>).</p>
+
+<!-- ============================ ER MAP ============================ -->
+<h2>2 · Entity-relationship map</h2>
+<figure>
+<svg viewBox="0 0 900 360" width="100%" role="img" aria-label="Entity relationship diagram">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b6b7b"/>
+    </marker>
+    <marker id="arrowSelf" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#1a7f37"/>
+    </marker>
+  </defs>
+  <!-- Document -->
+  <rect x="40" y="150" width="150" height="60" rx="8" fill="#fff7ea" stroke="#9a6700"/>
+  <text x="115" y="178" text-anchor="middle" font-weight="700" fill="#9a6700">Document</text>
+  <text x="115" y="196" text-anchor="middle" font-size="12" fill="#67707a">root: Node</text>
+  <!-- Node -->
+  <rect x="360" y="140" width="170" height="80" rx="8" fill="#eefaf0" stroke="#1a7f37"/>
+  <text x="445" y="166" text-anchor="middle" font-weight="700" fill="#1a7f37">Node</text>
+  <text x="445" y="184" text-anchor="middle" font-size="12" fill="#67707a">id · name · is_folder</text>
+  <text x="445" y="200" text-anchor="middle" font-size="12" fill="#67707a">status · flags · bytes</text>
+  <!-- Command -->
+  <rect x="700" y="40" width="160" height="70" rx="8" fill="#fdeef4" stroke="#cf3a6b"/>
+  <text x="780" y="66" text-anchor="middle" font-weight="700" fill="#cf3a6b">Command</text>
+  <text x="780" y="84" text-anchor="middle" font-size="12" fill="#67707a">12 variants (data)</text>
+  <text x="780" y="100" text-anchor="middle" font-size="12" fill="#67707a">target node(s) by id</text>
+  <!-- DocumentSession -->
+  <rect x="700" y="250" width="160" height="80" rx="8" fill="#f1edff" stroke="#5a3fc0"/>
+  <text x="780" y="276" text-anchor="middle" font-weight="700" fill="#5a3fc0">DocumentSession</text>
+  <text x="780" y="294" text-anchor="middle" font-size="12" fill="#67707a">document: Document</text>
+  <text x="780" y="310" text-anchor="middle" font-size="12" fill="#67707a">log: Command[]</text>
+  <!-- edges -->
+  <line x1="190" y1="180" x2="356" y2="180" stroke="#5b6b7b" marker-end="url(#arrow)"/>
+  <text x="270" y="172" text-anchor="middle" font-size="12" fill="#5b6b7b">root (1)</text>
+  <!-- self ref children -->
+  <path d="M515,150 C560,110 530,120 470,140" fill="none" stroke="#1a7f37" marker-end="url(#arrowSelf)"/>
+  <text x="560" y="120" font-size="12" fill="#1a7f37">children (0..*)</text>
+  <!-- command -> node -->
+  <line x1="700" y1="95" x2="520" y2="155" stroke="#5b6b7b" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text x="600" y="112" text-anchor="middle" font-size="12" fill="#5b6b7b">targets by id</text>
+  <!-- session -> document -->
+  <path d="M700,300 C420,330 180,260 150,212" fill="none" stroke="#5a3fc0" marker-end="url(#arrow)"/>
+  <text x="430" y="332" text-anchor="middle" font-size="12" fill="#5a3fc0">holds current (1)</text>
+  <!-- session -> command -->
+  <line x1="780" y1="250" x2="780" y2="112" stroke="#5a3fc0" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text x="800" y="185" font-size="12" fill="#5a3fc0">log of</text>
+</svg>
+<figcaption>Solid = composition / containment · dashed = reference by id.</figcaption>
+</figure>
+
+<table>
+<tr><th>From</th><th>Field</th><th>To</th><th>Cardinality</th><th>Kind</th></tr>
+<tr><td>Document</td><td><code>root</code></td><td>Node</td><td>1 → 1</td><td>composition</td></tr>
+<tr><td>Node</td><td><code>children</code></td><td>Node</td><td>1 → 0..*</td><td>composition (self)</td></tr>
+<tr><td>Command</td><td><code>node_id / parent_id / new_parent_id / node_ids</code></td><td>Node</td><td>1 → 1..*</td><td>reference by id</td></tr>
+<tr><td>DocumentSession</td><td><code>document</code></td><td>Document</td><td>1 → 1</td><td>holds current state</td></tr>
+<tr><td>DocumentSession</td><td><code>log</code></td><td>Command</td><td>1 → 0..*</td><td>reference (event log)</td></tr>
+</table>
+
+<!-- ============================ COMMANDS ============================ -->
+<h2>3 · Commands (the methods of data manipulation)</h2>
+<p class="lead">Commands are frozen data objects; the pure reducer
+<code>apply(doc, cmd, engine=None) → Document</code> interprets them. Invalid targets raise
+<code>CommandError</code>. <span class="src">core/commands.py</span></p>
+
+<h3><span class="pill cmd">structural</span> — no engine needed</h3>
+<table>
+<tr><th>Command</th><th>Fields</th><th>Effect / cascade</th></tr>
+<tr><td><code>AddFolder</code></td><td>parent_id, name, index?, new_id?</td><td>Insert a new folder under a folder parent.</td></tr>
+<tr><td><code>Rename</code></td><td>node_id, name</td><td>Set <code>name</code> (non-empty).</td></tr>
+<tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status).</td></tr>
+<tr><td><code>SetPeriod</code></td><td>node_id, vz_start, vz_end</td><td>Set the accounting period.</td></tr>
+<tr><td><code>Delete</code></td><td>node_id</td><td>Remove the node + its whole subtree (not the root).</td></tr>
+<tr><td><code>Move</code></td><td>node_id, new_parent_id, index?</td><td>Relocate a node + subtree under a folder; not into its own subtree, not the root.</td></tr>
+</table>
+
+<h3><span class="pill fn">engine-backed</span> — require an injected Engine</h3>
+<table>
+<tr><th>Command</th><th>Fields</th><th>Effect / cascade</th></tr>
+<tr><td><code>Compress</code></td><td>node_id, dpi=150</td><td>leaf → set <code>current_data</code>, <code>is_compressed</code>, <code>dpi_current</code>; no-op if no gain; rejects <code>no_compression</code>.</td></tr>
+<tr><td><code>Commit</code></td><td>node_id</td><td>Promote <code>current_data</code> → <code>original_data</code>; clear compression flags.</td></tr>
+<tr><td><code>Reset</code></td><td>node_id</td><td>Drop the compressed variant (clear <code>current_data</code> + flags).</td></tr>
+<tr><td><code>Rotate</code></td><td>node_id, direction</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
+<tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one <code>no_compression</code> page-leaf per page, in place (single page = no-op).</td></tr>
+<tr><td><code>Merge</code></td><td>node_ids</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>.</td></tr>
+</table>
+
+<h3>Pure tree transforms <span class="src">— core/model.py (commands build on these)</span></h3>
+<table>
+<tr><th>Function</th><th>Signature</th><th>Purpose</th></tr>
+<tr><td><code>find</code></td><td>(root, id) → Node?</td><td>Locate a node.</td></tr>
+<tr><td><code>parent_of</code></td><td>(root, id) → Node?</td><td>Parent of a node.</td></tr>
+<tr><td><code>path_to</code></td><td>(root, id) → [Node]?</td><td>Ancestors-then-self path.</td></tr>
+<tr><td><code>update_node</code></td><td>(root, id, **changes) → Node</td><td>Update scalar fields (structural sharing).</td></tr>
+<tr><td><code>replace_node</code></td><td>(root, id, new) → Node</td><td>Replace a subtree.</td></tr>
+<tr><td><code>remove_node</code></td><td>(root, id) → Node</td><td>Remove a node.</td></tr>
+<tr><td><code>insert_child</code></td><td>(root, parent_id, child, index?) → Node</td><td>Insert a child.</td></tr>
+<tr><td><code>move_node</code></td><td>(root, id, new_parent_id, index?) → Node</td><td>Move a subtree.</td></tr>
+</table>
+
+<!-- ============================ ENGINE + SESSION ============================ -->
+<h2>4 · Engine port &amp; editing session</h2>
+
+<h3><span class="pill fn">port</span> Engine <span class="src">— core/engine.py</span></h3>
+<p class="lead">The impure boundary the engine-backed commands call. <code>RealEngine</code> wraps
+<code>compress_pdf_bytes</code> + pypdf; tests inject a fake.</p>
+<table>
+<tr><th>Method</th><th>Signature</th><th>Purpose</th></tr>
+<tr><td><code>page_count</code></td><td>(bytes) → int</td><td>Number of pages.</td></tr>
+<tr><td><code>compress</code></td><td>(bytes, dpi) → bytes | None</td><td>Smaller re-encode, or None if no gain.</td></tr>
+<tr><td><code>rotate</code></td><td>(bytes, angle) → bytes</td><td>All pages rotated.</td></tr>
+<tr><td><code>split</code></td><td>(bytes) → [bytes]</td><td>One single-page PDF per page.</td></tr>
+<tr><td><code>merge</code></td><td>([bytes]) → bytes</td><td>Concatenate page-by-page.</td></tr>
+</table>
+
+<h3><span class="pill sess">state</span> DocumentSession <span class="src">— core/session.py</span></h3>
+<table>
+<tr><th>Member</th><th>Purpose</th></tr>
+<tr><td><code>document</code> / <code>initial</code></td><td>Current and starting document.</td></tr>
+<tr><td><code>dispatch(cmd)</code></td><td>Apply a command; record for undo (skips value-equal no-ops).</td></tr>
+<tr><td><code>undo()</code> / <code>redo()</code> / <code>can_undo()</code> / <code>can_redo()</code></td><td>History over immutable snapshots.</td></tr>
+<tr><td><code>log</code></td><td>Commands on the current path.</td></tr>
+</table>
+<div class="note"><b>Replay invariant (tested):</b>
+<code>apply_all(session.initial, session.log, engine) == session.document</code> — holds through
+undo/redo/divergence, so a session is fully reconstructable / persistable from its command log.</div>
+
+<p class="src">Keep this file in sync with the source — update it in the same session the model changes (workspace convention).</p>
+</div>
+</body>
+</html>

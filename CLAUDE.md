@@ -65,6 +65,24 @@ lives only in the app layer (`belegtool_main`, `view_*`, `panel_controls`,
 Ports are installed by the GUI in `belegtool_main` (`progress.set_reporter`,
 `tasks.set_ui_dispatcher`); a future backend installs its own implementations.
 
+### Data-driven core (`core/`)
+
+A separate, immutable, fully data-driven model (no Tk, no threads) — the basis
+for the core service + React UI. **Reference: [`docs/data-model.html`](docs/data-model.html)**
+(entities, commands, ER map) and [`docs/DATA_CONTRACT.md`](docs/DATA_CONTRACT.md).
+
+| File | Role |
+|---|---|
+| `core/model.py` | Immutable `Node`/`Document` value types + pure tree transforms (structural sharing) + serialization |
+| `core/commands.py` | Frozen command data + pure reducer `apply(doc, cmd, engine=None)` (structural + engine-backed) |
+| `core/engine.py` | `Engine` port (compress/rotate/split/merge/page_count) + `RealEngine` |
+| `core/session.py` | `DocumentSession`: undo/redo + event log (replay invariant) |
+| `core/bridge.py` | Convert ↔ `PDFStorage`/`.belegtool` (load/save real files into the model) |
+| `core/server.py`, `pipe.py`, `protocol.py`, `client.py`, `cli.py` | Per-user named-pipe **core service** (Step 0a): multi-client handshake/open |
+
+Covered by `tests/test_model.py`, `test_commands.py`, `test_engine_commands.py`,
+`test_split_merge.py`, `test_session.py`, `test_bridge.py`, `test_core_*.py`.
+
 ---
 
 ## Dependencies (`requirements.txt` maintained in repo)

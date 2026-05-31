@@ -41,3 +41,25 @@ def set_executor(executor: Optional[Executor]) -> None:
 def submit(fn: Callable[[], None]) -> None:
     """Schedule ``fn`` to run as a background unit of work."""
     _executor.submit(fn)
+
+
+# --- UI-thread dispatch ----------------------------------------------------
+# Some callbacks (e.g. an import-finished handler) must run on the GUI's main
+# thread. A headless backend has no such thread, so the default runs ``fn``
+# inline. The Tk app registers a dispatcher that marshals onto the Tk loop.
+
+_ui_dispatcher: Optional[Callable[[Callable[[], None]], None]] = None
+
+
+def set_ui_dispatcher(dispatcher: Optional[Callable[[Callable[[], None]], None]]) -> None:
+    """Install the callback that runs a function on the UI/main thread."""
+    global _ui_dispatcher
+    _ui_dispatcher = dispatcher
+
+
+def run_on_ui_thread(fn: Callable[[], None]) -> None:
+    """Run ``fn`` on the UI/main thread if one is registered, else inline."""
+    if _ui_dispatcher is not None:
+        _ui_dispatcher(fn)
+    else:
+        fn()

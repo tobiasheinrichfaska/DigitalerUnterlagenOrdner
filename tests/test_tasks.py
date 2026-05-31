@@ -30,3 +30,22 @@ def test_set_executor_none_resets_to_default():
     done = threading.Event()
     tasks.submit(done.set)
     assert done.wait(timeout=5)
+
+
+def test_run_on_ui_thread_runs_inline_by_default():
+    tasks.set_ui_dispatcher(None)
+    calls = []
+    tasks.run_on_ui_thread(lambda: calls.append(1))
+    assert calls == [1]  # headless: runs immediately
+
+
+def test_run_on_ui_thread_uses_registered_dispatcher():
+    seen = []
+    tasks.set_ui_dispatcher(lambda fn: seen.append(fn) or fn())
+    try:
+        ran = []
+        tasks.run_on_ui_thread(lambda: ran.append(1))
+        assert ran == [1]
+        assert len(seen) == 1  # went through the dispatcher
+    finally:
+        tasks.set_ui_dispatcher(None)

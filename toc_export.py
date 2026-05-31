@@ -7,6 +7,7 @@ PDF-Export mit gedrucktem Inhaltsverzeichnis und optionaler Aufteilung.
 """
 import io
 import os
+from log_config import logger
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -99,8 +100,9 @@ def _export_nodes_to_bytes(nodes: List[PDFNode]) -> bytes:
                 try:
                     for page in PdfReader(io.BytesIO(data)).pages:
                         writer.add_page(page)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Export: Seiten von '%s' konnten nicht angehängt werden: %s",
+                                   node.name, e)
 
     for n in nodes:
         _append(n)

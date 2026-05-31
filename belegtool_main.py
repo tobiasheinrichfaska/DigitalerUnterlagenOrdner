@@ -11,7 +11,7 @@ from typing import Optional
 import os
 import status_display
 from version_info import get_full_title
-from log_config import LOGLEVEL, LOGFILE, LOGGING_ENABLED
+from log_config import LOGLEVEL, LOGFILE, LOGGING_ENABLED, logger
 
 class DigitalerBelegGUI(TkinterDnD.Tk):
     def __init__(self, filepath: Optional[str] = None):
@@ -256,14 +256,14 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         if busy:
             try:
                 self.focus_force()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("focus_force fehlgeschlagen: %s", e)
 
         def apply_cursor_recursively(widget):
             try:
                 widget.config(cursor=cursor)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Cursor konnte für %r nicht gesetzt werden: %s", widget, e)
             for child in widget.winfo_children():
                 apply_cursor_recursively(child)
 

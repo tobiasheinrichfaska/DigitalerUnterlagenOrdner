@@ -3,6 +3,7 @@ from tkinter import ttk
 from PIL import ImageTk, ImageDraw, ImageFont, Image
 from typing import Optional
 from tkinter import messagebox
+from log_config import logger
 
 class PreviewFrame(ttk.Frame):
     def __init__(self, master, controller):
@@ -237,8 +238,8 @@ class PreviewFrame(ttk.Frame):
         self.zoom_slider.config(state=state)
         try:
             self.slider.config(state=state)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Slider-Status konnte nicht gesetzt werden: %s", e)
 
     def _schedule_poll(self, node):
         self._poll_after_id = self.after(150, lambda: self._poll_node_ready(node))

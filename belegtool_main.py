@@ -11,6 +11,7 @@ from typing import Optional
 import os
 import status_display
 import progress
+import tasks
 from version_info import get_full_title
 from log_config import LOGLEVEL, LOGFILE, LOGGING_ENABLED, logger
 
@@ -68,6 +69,10 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         # Vom Core (progress port) gemeldete Hintergrund-Tasks an die Titelanzeige
         # weiterleiten. Der Core kennt status_display/tkinter nicht mehr selbst.
         progress.set_reporter(_StatusDisplayReporter())
+
+        # Callbacks aus Worker-Threads (z. B. Import-Abschluss) auf den Tk-Mainloop
+        # marshallen — der Core nutzt dafür den tasks.run_on_ui_thread-Port.
+        tasks.set_ui_dispatcher(lambda fn: self.after(0, fn))
 
         # Falls Datei mitgegeben wurde → direkt laden
         if filepath:

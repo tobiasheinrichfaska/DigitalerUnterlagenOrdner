@@ -15,7 +15,7 @@ from pillow_heif import register_heif_opener
 import pikepdf
 # import cairosvg
 import threading
-from tkinter import _default_root
+import tasks
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 # Kein weasyprint mehr nötig
@@ -429,15 +429,13 @@ class UniversalImporter:
             # print("✅ Office-Erkennung abgeschlossen.")
 
             if on_complete:
-                # Aufruf im Hauptthread mit tkinter.after()
+                # Run the callback on the UI/main thread (headless: inline).
                 try:
-                    if _default_root:
-                        _default_root.after(0, on_complete)
+                    tasks.run_on_ui_thread(on_complete)
                 except Exception as e:
                     logger.warning("Callback-Fehler: %s", e)
 
-        thread = threading.Thread(target=task, daemon=True)
-        thread.start()
+        tasks.submit(task)
 
 
 def _not_importable(name: str, reason: str = "") -> Dict[str, Any]:

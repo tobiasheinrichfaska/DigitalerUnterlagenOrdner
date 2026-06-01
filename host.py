@@ -10,11 +10,34 @@ Run:
   - prod: cd webui && npm run build ; then  python host.py
 """
 
+import io
 import os
+import threading
 
 import webview
 
 from core.api import CoreApi
+
+
+def _prewarm():
+    """Import + initialise the heavy PDF libraries in the background so the first
+    real open/render doesn't pay the cold-start cost (the 2-4 s "first load is
+    slow, the rest fast" symptom). Runs on a daemon thread at startup, concurrent
+    with the user looking at the window / picking a file. Best-effort."""
+    try:
+        from pypdf import PdfWriter
+        from services.render import render_pdf_to_pngs   # pulls in PyMuPDF/fitz
+        from compress_pdf_bytes import compress_all_methods  # pulls in PIL/pikepdf
+
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        buf = io.BytesIO()
+        writer.write(buf)
+        tiny = buf.getvalue()
+        render_pdf_to_pngs(tiny)            # warm the fitz render path
+        compress_all_methods(tiny, dpi=72)  # warm the PIL/pikepdf compress path
+    except Exception:
+        pass  # warming is a best-effort optimisation; never block startup
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEV_URL = "http://localhost:5173"
@@ -78,6 +101,7 @@ class HostApi:
 
 def main():
     api = HostApi()
+    threading.Thread(target=_prewarm, daemon=True).start()
     entry = DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
     webview.create_window(
         "DigitalerBelegeOrdner", entry, js_api=api,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { core } from './core'
 import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
@@ -22,6 +22,21 @@ export default function App() {
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [zoom, setZoom] = useState(1) // preview zoom factor
+  const previewRef = useRef(null)
+
+  // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
+  // preventDefault the webview's page zoom).
+  useEffect(() => {
+    const el = previewRef.current
+    if (!el) return
+    const onWheel = (e) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      setZoom((z) => Math.min(4, Math.max(0.25, z + (e.deltaY < 0 ? 0.15 : -0.15))))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  })
 
   // run any core call with the global busy indicator on
   const run = useCallback((promise) => {
@@ -131,7 +146,7 @@ export default function App() {
             />
           )}
         </div>
-        <div className="pane preview-pane">
+        <div className="pane preview-pane" ref={previewRef}>
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} />}
           {selected && pages?.length > 0 && (
             <div className="zoom-bar">

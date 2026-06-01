@@ -7,12 +7,16 @@ const STATUSES = [
   ['vorjahreswert', 'Vorjahr'],
 ]
 
-export function ContextMenu({ menu, dispatch, onClose }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds }) {
   if (!menu) return null
   const { x, y, node } = menu
   const isLeaf = !node.is_folder
   const run = (extra) => {
     dispatch({ ...extra, node_id: node.id })
+    onClose()
+  }
+  const merge = () => {
+    dispatch({ type: 'Merge', node_ids: mergeIds })
     onClose()
   }
 
@@ -34,6 +38,12 @@ export function ContextMenu({ menu, dispatch, onClose }) {
         onContextMenu={(e) => { e.preventDefault(); onClose() }}
       />
       <div className="context-menu" style={{ left: x, top: y }}>
+        {mergeIds && (
+          <>
+            <button onClick={merge}>Zusammenführen ({mergeIds.length})</button>
+            <div className="cm-sep" />
+          </>
+        )}
         <button onClick={rename}>Umbenennen</button>
         {isLeaf && node.pdf_length > 1 && <button onClick={() => run({ type: 'Split' })}>Splitten</button>}
         {node.is_folder && <button onClick={addFolder}>Ordner anlegen</button>}

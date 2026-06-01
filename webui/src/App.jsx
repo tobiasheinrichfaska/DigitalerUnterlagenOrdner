@@ -14,10 +14,20 @@ function findNode(node, id) {
   return null
 }
 
+function findParent(node, id, parent = null) {
+  if (node.id === id) return parent
+  for (const c of node.children ?? []) {
+    const r = findParent(c, id, node)
+    if (r) return r
+  }
+  return null
+}
+
 export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null) // primary node (drives the preview)
+  const [selectedIds, setSelectedIds] = useState([]) // multi-selection (for Merge)
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
@@ -87,7 +97,10 @@ export default function App() {
   const afterChange = useCallback(
     (resp) => {
       apply(resp)
-      if (resp?.ok && selected) setSelected(findNode(resp.tree, selected.id))
+      if (resp?.ok) {
+        setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
+        if (selected) setSelected(findNode(resp.tree, selected.id))
+      }
     },
     [selected],
   )
@@ -123,16 +136,35 @@ export default function App() {
     dispatch({ type: 'Move', node_id: nodeId, new_parent_id: newParentId, index: idx })
   }, [state, dispatch])
 
-  const select = useCallback((node) => {
-    setSelected(node)
+  // plain click → single-select; Ctrl/Cmd-click → toggle in the multi-selection.
+  // The primary (preview) node is the clicked one, or the last remaining on deselect.
+  const select = useCallback((node, additive = false) => {
+    if (additive && selectedIds.includes(node.id)) {
+      const next = selectedIds.filter((i) => i !== node.id)
+      setSelectedIds(next)
+      setSelected(next.length ? findNode(state.tree, next[next.length - 1]) : null)
+    } else {
+      setSelectedIds(additive ? [...selectedIds, node.id] : [node.id])
+      setSelected(node)
+    }
     setPages(null)
     setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
-  }, [])
+  }, [selectedIds, state])
+
+  // 2+ selected sibling leaves → the ids that can be merged (else null)
+  const mergeable = (() => {
+    if (selectedIds.length < 2 || !state?.tree) return null
+    const nodes = selectedIds.map((id) => findNode(state.tree, id))
+    if (nodes.some((n) => !n || n.is_folder)) return null
+    const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
+    if (new Set(parents).size !== 1 || parents.some((p) => p == null)) return null
+    return selectedIds
+  })()
 
   const openFile = () =>
     run(core.openFile(session)).then((resp) => {
       apply(resp)
-      if (resp?.ok) { setSelected(null); setPages(null); setPreviewReq(null) }
+      if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null) }
     })
 
   if (!state && !error) {
@@ -172,7 +204,8 @@ export default function App() {
           {state && (
             <Tree
               node={state.tree}
-              selectedId={selected?.id}
+              selectedIds={selectedIds}
+              primaryId={selected?.id}
               onSelect={select}
               onContext={(x, y, node) => setMenu({ x, y, node })}
               onMove={onMove}
@@ -200,7 +233,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} />
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} />
     </div>
   )
 }

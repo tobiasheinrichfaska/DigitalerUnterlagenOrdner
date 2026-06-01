@@ -182,8 +182,9 @@ class HostApi:
         return self._core.open(session, result[0])
 
     def save_file(self, session):
+        name = self._core.document_name(session) or "unbenannt"
         path = self._win().create_file_dialog(
-            webview.FileDialog.SAVE, save_filename="unbenannt.belegtool",
+            webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
             file_types=("BelegTool (*.belegtool)",))
         if not path:
             return {"ok": False, "error": "cancelled"}

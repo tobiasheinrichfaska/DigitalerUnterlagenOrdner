@@ -16,7 +16,7 @@ def test_open_empty_document():
     api = CoreApi()
     resp = api.open()
     assert resp["ok"] is True
-    assert resp["tree"]["name"] == "root" and resp["tree"]["children"] == []
+    assert resp["tree"]["name"].startswith("Dokument") and resp["tree"]["children"] == []
     assert resp["can_undo"] is False and resp["can_redo"] is False
 
 
@@ -196,6 +196,30 @@ def test_import_at_index_inserts_between(tmp_path):
     api.import_paths(sid, [str(b)], None)
     r = api.import_paths(sid, [str(mid)], None, 1)
     assert [c["name"] for c in r["tree"]["children"]] == ["a", "mid", "b"]
+
+
+def test_untitled_documents_get_numbered_names():
+    api = CoreApi()
+    assert api.open()["tree"]["name"] == "Dokument 1"
+    assert api.open()["tree"]["name"] == "Dokument 2"  # process-wide counter
+
+
+def test_opened_file_is_named_after_the_file(tmp_path):
+    p = tmp_path / "Rechnungen 2024.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), p)
+    api = CoreApi()
+    r = api.open(path=str(p))
+    assert r["tree"]["name"] == "Rechnungen 2024"
+    assert api.document_name(r["session"]) == "Rechnungen 2024"
+
+
+def test_friendly_import_error_for_unsupported_type(tmp_path):
+    f = tmp_path / "daten.xyz"
+    f.write_bytes(b"not a known format")
+    api = CoreApi()
+    sid = api.open()["session"]
+    r = api.import_paths(sid, [str(f)], None)
+    assert r["ok"] is False and "daten.xyz" in r["error"]
 
 
 def test_import_sets_pdf_length_for_converted_files(tmp_path):

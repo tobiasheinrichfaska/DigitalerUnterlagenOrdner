@@ -54,7 +54,7 @@ def test_open_without_file_gives_empty_document(server):
         h = c.hello()
         resp = c.open(path=None, session=h["session"])
     assert resp["ok"] is True
-    assert resp["tree"]["name"] == "root" and resp["tree"]["children"] == []
+    assert resp["tree"]["name"].startswith("Dokument") and resp["tree"]["children"] == []
     assert resp["can_undo"] is False and resp["can_redo"] is False
 
 
@@ -65,7 +65,7 @@ def test_open_belegtool_returns_tree(server, tmp_path):
         resp = c.open(path=path)
     assert resp["ok"] is True
     tree = resp["tree"]
-    assert tree["name"] == "root" and tree["is_folder"] is True
+    assert tree["is_folder"] is True  # name is now the file's basename, not "root"
     assert {child["name"] for child in tree["children"]} == {"doc1", "OrdnerA"}
 
 

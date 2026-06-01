@@ -27,11 +27,34 @@ from core.session import DocumentSession
 from log_config import logger
 
 
+def _friendly_import_error(path: str, exc: Exception) -> str:
+    """Map a raw import exception to a clear, per-file German message."""
+    name = os.path.basename(path)
+    ext = os.path.splitext(path)[1].lower() or "?"
+    msg = str(exc)
+    low = msg.lower()
+    if type(exc).__name__ == "com_error" or "dispatch" in low or "klasse" in low or "class not registered" in low:
+        return f"{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)"
+    if "nicht unterstützt" in low or "unsupported" in low:
+        return f"{name}: Dateityp {ext} wird nicht unterstützt"
+    if "passwort" in low or "password" in low or "encrypted" in low:
+        return f"{name}: Datei ist passwortgeschützt"
+    if "kein gültiges pdf" in low or "not a pdf" in low or "eof marker" in low or "startxref" in low:
+        return f"{name}: beschädigte oder ungültige Datei"
+    return f"{name}: {msg}"
+
+
 class CoreApi:
     def __init__(self, engine=None):
         self._engine = engine or RealEngine()
         self._sessions = {}
         self._lock = threading.Lock()
+        self._untitled = 0  # counter for "Dokument N" names (process-wide)
+
+    def _next_untitled_name(self) -> str:
+        with self._lock:
+            self._untitled += 1
+            return f"Dokument {self._untitled}"
 
     # --- ops ---------------------------------------------------------------
     def config(self) -> dict:
@@ -44,7 +67,13 @@ class CoreApi:
         return {"ok": True, "session": sid, "core_version": CORE_VERSION}
 
     def open(self, session: str = None, path: str = None) -> dict:
-        document = load_belegtool(path) if path else Document.empty()
+        import dataclasses
+        if path:
+            document = load_belegtool(path)
+            name = os.path.splitext(os.path.basename(path))[0] or "Dokument"
+            document = Document(dataclasses.replace(document.root, name=name))
+        else:
+            document = Document.empty(self._next_untitled_name())  # "Dokument N"
         with self._lock:
             if session and session in self._sessions:
                 sid = session
@@ -52,6 +81,11 @@ class CoreApi:
             else:
                 sid = self._new_locked(document)
             return self._doc_response_locked(sid)
+
+    def document_name(self, session: str) -> str:
+        with self._lock:
+            s = self._sessions.get(session)
+            return s.document.root.name if s else None
 
     def dispatch(self, session: str, command: dict) -> dict:
         return self._mutate(session, lambda s: s.dispatch(command_from_dict(command)))
@@ -227,7 +261,7 @@ class CoreApi:
                 nodes.extend(self._import_path(path))
             except Exception as e:
                 logger.exception("import failed: %s", path)
-                errors.append(f"{os.path.basename(path)}: {e}")
+                errors.append(_friendly_import_error(path, e))
         with self._lock:
             s = self._sessions.get(session)
             if s is None:

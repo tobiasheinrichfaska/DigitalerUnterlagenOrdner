@@ -345,7 +345,7 @@ export default function App() {
           <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
-          <button onClick={() => exportPdf(selectedIds.length >= 2 ? selectedIds : null)} title="Als PDF mit Inhaltsverzeichnis exportieren (bei 2+ ausgewählten nur die Auswahl, sonst das ganze Dokument)">⬇ Export PDF{selectedIds.length >= 2 ? ` (Auswahl ${selectedIds.length})` : ''}</button>
+          <button onClick={() => exportPdf(selectedIds.length ? selectedIds : null)} title="Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)">⬇ Export PDF{selectedIds.length ? ` (Auswahl ${selectedIds.length})` : ''}</button>
           <span className="sep" />
           <button
             onClick={() =>

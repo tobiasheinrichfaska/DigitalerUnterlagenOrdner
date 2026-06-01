@@ -81,6 +81,37 @@ class CoreApi:
         ]
         return {"ok": True, "session": session, "node": node_id, "pages": pages}
 
+    def render_compressed(self, session: str, node_id: str,
+                          dpi: int = DEFAULT_COMPRESSION_DPI, method: str = None) -> dict:
+        """Render a *transient* compressed preview of a leaf — compress its
+        original bytes with ``method`` at ``dpi`` and rasterise the result, WITHOUT
+        mutating the document. Powers the working-preview UI: browse methods/DPI
+        with no undo entry; the document only changes on an explicit Compress.
+        Falls back to the original bytes if the method yields no gain / no_compression.
+        """
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            data = node.original_data
+            no_comp = node.no_compression
+        if not data:
+            return {"ok": True, "session": session, "node": node_id, "pages": [], "compressed": False}
+        # compress + render outside the lock (CPU-bound); never stored back
+        compressed = None if no_comp else self._engine.compress(data, dpi, method)
+        effective = compressed if compressed is not None else data
+        from base64 import b64encode
+        from services.render import render_pdf_to_pngs
+        pages = [
+            "data:image/png;base64," + b64encode(p).decode("ascii")
+            for p in render_pdf_to_pngs(effective)
+        ]
+        return {"ok": True, "session": session, "node": node_id,
+                "pages": pages, "compressed": compressed is not None}
+
     def save(self, session: str, path: str) -> dict:
         with self._lock:
             s = self._sessions.get(session)

@@ -125,6 +125,23 @@ def test_config_reports_default_dpi():
     assert resp["ok"] is True and resp["default_dpi"] == 150
 
 
+def test_render_compressed_is_read_only(tmp_path):
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    sid = opened["session"]
+    leaf_id = opened["tree"]["children"][0]["id"]
+
+    resp = api.render_compressed(sid, leaf_id, dpi=150)
+    assert resp["ok"] is True and len(resp["pages"]) == 1
+    assert resp["pages"][0].startswith("data:image/png;base64,")
+    # crucially: the document was NOT mutated and no undo entry was created
+    state = api.undo(sid)  # nothing to undo
+    assert state["tree"]["children"][0]["is_compressed"] is False
+    assert state["can_undo"] is False and state["can_redo"] is False
+
+
 def test_dispatch_blocks_pending_clash_then_force(tmp_path):
     path = tmp_path / "s.belegtool"
     save_belegtool(_doc_with_compressible_leaf(), path)

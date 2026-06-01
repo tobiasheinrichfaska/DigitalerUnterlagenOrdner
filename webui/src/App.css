@@ -75,9 +75,21 @@ ul.tree { padding-left: 0; }
 .row[draggable="true"] { cursor: grab; }
 .row.drop-into { background: #d7ebff; outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
-/* level-aware "after" guide: a line indented to the chosen nesting level */
-.drop-guide { height: 0; border-top: 2px solid var(--accent); margin: 1px 0; pointer-events: none; }
-.drop-guide::before { content: "▸"; color: var(--accent); font-size: 11px; margin-left: -10px; vertical-align: -2px; }
+/* level-aware "after" guide: a bold line indented to the chosen nesting level,
+   with a pill naming where it will land */
+.drop-guide {
+  position: relative; height: 0; border-top: 3px solid var(--accent);
+  margin: 3px 0; pointer-events: none;
+}
+.drop-guide::before {
+  content: ""; position: absolute; left: -4px; top: -4px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+.drop-guide-label {
+  position: absolute; top: -10px; left: 8px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 600;
+  padding: 1px 7px; border-radius: 9px; white-space: nowrap;
+}
 
 .name.folder { font-weight: 600; color: #9a6700; }
 .name.leaf { color: var(--ink); }

@@ -814,6 +814,9 @@ class PDFNode:
         if not generate_preview:
             self._original_preview_pages = []
             self._current_preview_pages = []
+            # pdf_length is still needed (export/TOC, page counts) — set it from the
+            # bytes; it's a cheap count of this node's own pages, not a re-render.
+            self.pdf_length = self._get_pdf_length(original_data)
             return
 
         # Vorschau für Original **immer** erzeugen

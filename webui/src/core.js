@@ -24,6 +24,7 @@ async function call(method, ...args) {
 
 export const core = {
   config: () => call('config'),
+  newWindow: () => call('new_window'),
   open: (session = null, path = null) => call('open', session, path),
   openFile: (session = null) => call('open_file', session),
   saveFile: (session) => call('save_file', session),

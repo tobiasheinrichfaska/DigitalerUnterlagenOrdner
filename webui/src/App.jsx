@@ -114,19 +114,8 @@ export default function App() {
     [selected],
   )
 
-  // dispatch a command; if the core blocks it as a pending-change clash, ask the
-  // user and re-dispatch with force (the "block unless forced" policy).
   const dispatch = useCallback(
-    (command) =>
-      run(core.dispatch(session, command)).then((resp) => {
-        if (resp?.risk === 'pending_compression') {
-          if (window.confirm(`${resp.error}\n\nTrotzdem fortfahren?`)) {
-            return run(core.dispatch(session, { ...command, force: true })).then(afterChange)
-          }
-          return // cancelled — leave state untouched
-        }
-        afterChange(resp)
-      }),
+    (command) => run(core.dispatch(session, command)).then(afterChange),
     [session, afterChange, run],
   )
   const undo = () => run(core.undo(session)).then(afterChange)
@@ -145,9 +134,10 @@ export default function App() {
     dispatch({ type: 'Move', node_id: nodeId, new_parent_id: newParentId, index: idx })
   }, [state, dispatch])
 
-  // drag a multi-selection → move all of them into the target folder (appended)
-  const onMoveMany = useCallback((ids, newParentId) => {
-    dispatch({ type: 'MoveMany', node_ids: ids, new_parent_id: newParentId, index: null })
+  // drag a multi-selection → move all of them at the drop position (the core
+  // discounts the moved-out siblings before the slot). index null = append/into.
+  const onMoveMany = useCallback((ids, newParentId, index = null) => {
+    dispatch({ type: 'MoveMany', node_ids: ids, new_parent_id: newParentId, index })
   }, [dispatch])
 
   // plain click → single-select; Ctrl/Cmd-click → toggle; Shift-click → range

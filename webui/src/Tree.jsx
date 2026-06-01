@@ -30,10 +30,11 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
     if (!drag || drag === node.id) { setOver(null); return }
     e.preventDefault()
     e.stopPropagation()
-    // dragging a member of the multi-selection moves the whole set (appended)
+    // dragging a member of the multi-selection moves the whole set (at the drop spot)
     const many = selectedIds.includes(drag) && selectedIds.length > 1
     if (many) {
-      onMoveMany(selectedIds, over === 'into' ? node.id : parentId)
+      if (over === 'into') onMoveMany(selectedIds, node.id, null)
+      else onMoveMany(selectedIds, parentId, over === 'before' ? index : index + 1)
     } else if (over === 'into') onMove(drag, node.id, null)
     else if (over === 'before') onMove(drag, parentId, index)
     else if (over === 'after') onMove(drag, parentId, index + 1)

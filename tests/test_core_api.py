@@ -110,6 +110,21 @@ def test_save_roundtrip(tmp_path):
     assert {"doc1", "G"}.issubset({c["name"] for c in reopened["tree"]["children"]})
 
 
+def test_export_pdf_with_toc(tmp_path):
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", pdf_length=1, original_data=create_valid_pdf(1)),
+        Node(name="B", pdf_length=1, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    out = tmp_path / "Export.pdf"
+    r = api.export(sid, str(out))
+    assert r["ok"] and r["count"] == 2
+    assert out.exists() and out.read_bytes().startswith(b"%PDF")
+
+
 def test_dirty_tracking_cleared_on_save(tmp_path):
     api = CoreApi()
     opened = api.open()

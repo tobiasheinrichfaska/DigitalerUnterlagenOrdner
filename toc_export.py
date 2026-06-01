@@ -264,11 +264,12 @@ def _assemble_pdf(toc_bytes: bytes, content_bytes: bytes,
             toc_page = pdf.pages[rec.toc_page_idx]
             dest_page_obj = pdf.pages[dest_page_abs].obj
 
+            # pikepdf >= 8 dropped pikepdf.Real — plain Python floats are coerced.
             rect = pikepdf.Array([
-                pikepdf.Real(_ML - 2),
-                pikepdf.Real(rec.y_baseline - 3),
-                pikepdf.Real(_A4_W - _MR + 2),
-                pikepdf.Real(rec.y_baseline + 11),
+                float(_ML - 2),
+                float(rec.y_baseline - 3),
+                float(_A4_W - _MR + 2),
+                float(rec.y_baseline + 11),
             ])
 
             annot = pdf.make_indirect(pikepdf.Dictionary(

@@ -75,6 +75,7 @@ function afterLevels(root, id) {
 export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null) // transient success message (e.g. export)
   const [selected, setSelected] = useState(null) // primary node (drives the preview)
   const [selectedIds, setSelectedIds] = useState([]) // multi-selection (Merge / group / multi-move)
   const [anchorId, setAnchorId] = useState(null) // anchor for shift-range select
@@ -115,6 +116,7 @@ export default function App() {
       return
     }
     setError(null)
+    setNotice(null)
     setState(resp)
   }
 
@@ -290,7 +292,14 @@ export default function App() {
   }
 
   const saveFile = () =>
-    run(core.saveFile(session)).then((resp) => { if (resp?.ok) setDirty(false) })
+    run(core.saveFile(session)).then((resp) => { if (resp?.ok) { setDirty(false); setNotice('Gespeichert') } })
+
+  // export the whole document (or the current selection) to a TOC PDF
+  const exportPdf = () =>
+    run(core.exportPdf(session, selectedIds.length ? selectedIds : null)).then((resp) => {
+      if (resp?.ok) { setError(null); setNotice(`PDF exportiert (${resp.count} ${resp.count === 1 ? 'Eintrag' : 'Einträge'})`) }
+      else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
+    })
 
   if (!state && !error) {
     return (
@@ -309,6 +318,7 @@ export default function App() {
           <button onClick={openFile}>📂 Öffnen</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
+          <button onClick={exportPdf} title="Als PDF mit Inhaltsverzeichnis exportieren">⬇ Export PDF{selectedIds.length ? ' (Auswahl)' : ''}</button>
           <span className="sep" />
           <button
             onClick={() =>
@@ -324,6 +334,7 @@ export default function App() {
       </header>
 
       {error && <p className="error">⚠ {error}</p>}
+      {notice && !error && <p className="notice">✓ {notice}</p>}
 
       <div className="body">
         <div className="pane tree-pane">

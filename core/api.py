@@ -134,6 +134,42 @@ class CoreApi:
                 s.mark_saved()
         return {"ok": True, "session": session, "path": path}
 
+    def export(self, session: str, path: str, node_ids=None) -> dict:
+        """Export to a single PDF with a table of contents, clickable links and
+        bookmarks (toc_export). ``node_ids`` exports only those subtrees; otherwise
+        the whole document."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            doc = s.document
+        from core.bridge import document_to_storage
+        storage = document_to_storage(doc)  # immutable → PDFNode tree (bytes, no preview)
+        if node_ids:
+            wanted = set(node_ids)
+            nodes = []
+
+            def walk(pn):
+                if getattr(pn, "uid", None) in wanted:
+                    nodes.append(pn)  # whole subtree (export dedupes ancestors)
+                    return
+                for c in pn.children:
+                    walk(c)
+
+            for child in storage.root.children:
+                walk(child)
+        else:
+            nodes = list(storage.root.children)
+        if not nodes:
+            return {"ok": False, "error": "nichts zu exportieren"}
+        from toc_export import export_pdf_with_toc
+        try:
+            export_pdf_with_toc(nodes, path)
+        except Exception as e:
+            logger.exception("export failed")
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "session": session, "path": path, "count": len(nodes)}
+
     def any_dirty(self) -> bool:
         """True if any open session has unsaved changes (for the close prompt)."""
         with self._lock:

@@ -62,6 +62,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")
+IMPORT_FILE_TYPES = (
+    "Unterstützte Dateien (*.pdf;*.belegtool;*.jpg;*.jpeg;*.png;*.webp;*.heic;"
+    "*.docx;*.xlsx;*.pptx;*.zip;*.tar;*.eml;*.msg)",
+    "Alle Dateien (*.*)",
+)
 
 
 class HostApi:
@@ -99,6 +104,17 @@ class HostApi:
 
     def compress_options(self, session, node_id, dpi=150):
         return self._core.compress_options(session, node_id, dpi)
+
+    # import (drop path uses bytes; the button uses the native dialog → real paths)
+    def import_bytes(self, session, name, data, parent_id=None):
+        return self._core.import_bytes(session, name, data, parent_id)
+
+    def import_dialog(self, session, parent_id=None):
+        result = webview.windows[0].create_file_dialog(
+            webview.FileDialog.OPEN, allow_multiple=True, file_types=IMPORT_FILE_TYPES)
+        if not result:
+            return {"ok": False, "error": "cancelled"}
+        return self._core.import_paths(session, list(result), parent_id)
 
     # host-only ops (native dialogs)
     def open_file(self, session=None):

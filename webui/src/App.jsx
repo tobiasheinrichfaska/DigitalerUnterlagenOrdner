@@ -5,6 +5,15 @@ import { PreviewControls } from './PreviewControls'
 import { ContextMenu } from './ContextMenu'
 import './App.css'
 
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+}
+
 function findNode(node, id) {
   if (node.id === id) return node
   for (const c of node.children ?? []) {
@@ -75,6 +84,7 @@ export default function App() {
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
+  const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -152,6 +162,46 @@ export default function App() {
   )
   const undo = () => run(core.undo(session)).then(afterChange)
   const redo = () => run(core.redo(session)).then(afterChange)
+
+  // imports land in the selected folder (or root if a leaf/nothing is selected)
+  const importTarget = () => (selected?.is_folder ? selected.id : null)
+  const handleImport = (promise) =>
+    run(promise).then((resp) => {
+      afterChange(resp)
+      if (resp?.warning) setError(`Teilweise importiert — ${resp.warning}`)
+    })
+
+  // OS file drag-and-drop onto the window → read each file's content and import it.
+  // (Internal tree drags carry no "Files" type, so they're ignored here.)
+  useEffect(() => {
+    if (!session) return undefined
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
+    const onOver = (e) => { if (hasFiles(e)) { e.preventDefault(); setDropActive(true) } }
+    const onLeave = (e) => { if (!e.relatedTarget) setDropActive(false) }
+    const onDrop = async (e) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      setDropActive(false)
+      const files = Array.from(e.dataTransfer.files || [])
+      const parentId = importTarget()
+      for (const file of files) {
+        try {
+          const data = await readAsDataURL(file)
+          await handleImport(core.importBytes(session, file.name, data, parentId))
+        } catch (err) {
+          setError(String(err?.message || err))
+        }
+      }
+    }
+    window.addEventListener('dragover', onOver)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragover', onOver)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDrop)
+    }
+  }) // re-binds each render so it closes over the current session/selected
 
   // drag-drop move: dispatch a Move command (the core is the source of truth).
   // Adjust the index for the core's remove-then-insert when reordering within the
@@ -245,6 +295,7 @@ export default function App() {
         <h1>DigitalerBelegeOrdner</h1>
         <div className="toolbar">
           <button onClick={openFile}>📂 Öffnen</button>
+          <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={() => core.saveFile(session)}>💾 Speichern</button>
           <span className="sep" />
           <button
@@ -299,6 +350,15 @@ export default function App() {
       </div>
 
       <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} />
+
+      {dropActive && (
+        <div className="drop-overlay">
+          <div className="drop-overlay-box">
+            📥 Dateien hier ablegen
+            <span>Import in {selected?.is_folder ? selected.name : 'oberste Ebene'}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

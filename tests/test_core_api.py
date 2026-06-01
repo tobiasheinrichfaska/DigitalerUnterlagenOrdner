@@ -142,6 +142,46 @@ def test_render_compressed_is_read_only(tmp_path):
     assert state["can_undo"] is False and state["can_redo"] is False
 
 
+def test_import_paths_pdf_and_belegtool_with_undo(tmp_path):
+    pdf = tmp_path / "rechnung.pdf"
+    pdf.write_bytes(create_valid_pdf(pages=2))
+    bt = tmp_path / "sammlung.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), bt)
+
+    api = CoreApi()
+    sid = api.open()["session"]
+    r = api.import_paths(sid, [str(pdf)], None)
+    assert r["ok"] and [c["name"] for c in r["tree"]["children"]] == ["rechnung"]
+
+    r2 = api.import_paths(sid, [str(bt)], None)
+    assert "doc1" in [c["name"] for c in r2["tree"]["children"]]  # belegtool's child imported
+
+    # one undoable step per import
+    assert [c["name"] for c in api.undo(sid)["tree"]["children"]] == ["rechnung"]
+
+
+def test_import_bytes_pdf(tmp_path):
+    import base64
+    api = CoreApi()
+    sid = api.open()["session"]
+    b64 = "data:application/pdf;base64," + base64.b64encode(create_valid_pdf(pages=1)).decode()
+    r = api.import_bytes(sid, "scan.pdf", b64, None)
+    assert r["ok"] and [c["name"] for c in r["tree"]["children"]] == ["scan"]
+
+
+def test_import_into_selected_folder(tmp_path):
+    pdf = tmp_path / "beleg.pdf"
+    pdf.write_bytes(create_valid_pdf(pages=1))
+    api = CoreApi()
+    opened = api.open()
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    folder = api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id, "name": "Ordner", "index": None, "new_id": "f1"})
+    assert folder["ok"]
+    r = api.import_paths(sid, [str(pdf)], "f1")
+    f = next(c for c in r["tree"]["children"] if c["id"] == "f1")
+    assert [c["name"] for c in f["children"]] == ["beleg"]
+
+
 def test_compress_options_lists_methods_smallest_first(tmp_path):
     path = tmp_path / "s.belegtool"
     save_belegtool(_doc_with_leaf(pages=1), path)

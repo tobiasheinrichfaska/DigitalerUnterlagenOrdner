@@ -71,7 +71,7 @@ The IPC API the React UI calls — each maps to existing, UI-agnostic logic:
 |---|---|
 | `open(path)` → tree JSON | `PDFStorage(path)` |
 | `save(path)` / `save()` | `PDFStorage.save` |
-| `import_file(bytes, name)` → node(s) | `UniversalImporter.convert` + `create_wrapper_node` |
+| `import_paths(paths)` / `import_bytes(name, b64)` → tree | `_import_path` (PDFStorage / `UniversalImporter.convert`) + `InsertNodes` |
 | `split` / `merge` / `add_folder` / `rename` / `delete` / `move` | `PDFNode` tree ops |
 | `compress(node, dpi)` / `commit` / `reset` | `PDFNode.compress*` / `compress_pdf_bytes` |
 | `export(nodes, path)` | `toc_export` / `PDFStorage.export_selection` |

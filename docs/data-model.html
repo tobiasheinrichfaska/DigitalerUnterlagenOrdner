@@ -161,6 +161,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>Move</code></td><td>node_id, new_parent_id, index?</td><td>Relocate a node + subtree under a folder; not into its own subtree, not the root.</td></tr>
 <tr><td><code>MoveMany</code></td><td>node_ids, new_parent_id, index?</td><td>Move several nodes (any depth) under one folder, order-preserving; nested members de-duplicated.</td></tr>
 <tr><td><code>GroupIntoFolder</code></td><td>node_ids, parent_id, name, index?</td><td>Create a folder and move all selected nodes into it (the non-concatenating counterpart to Merge).</td></tr>
+<tr><td><code>InsertNodes</code></td><td>parent_id, nodes, index?</td><td>Insert already-built nodes (freshly imported files) under a folder. In-process only (carries bytes); not part of the wire/JSON command set.</td></tr>
 </table>
 
 <h3><span class="pill fn">engine-backed</span> — require an injected Engine</h3>

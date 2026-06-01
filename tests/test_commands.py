@@ -8,6 +8,7 @@ from core.commands import (
     CommandError,
     Delete,
     GroupIntoFolder,
+    InsertNodes,
     Move,
     MoveMany,
     Rename,
@@ -172,6 +173,20 @@ def test_group_into_non_folder_or_empty_raises():
         apply(doc(), GroupIntoFolder(node_ids=["a"], parent_id="a"))   # 'a' is a leaf
     with pytest.raises(CommandError):
         apply(doc(), GroupIntoFolder(node_ids=[], parent_id="root"))   # nothing to group
+
+
+# --- InsertNodes -----------------------------------------------------------
+
+def test_insert_nodes_under_folder_and_at_index():
+    d = apply(doc(), InsertNodes(parent_id="f", nodes=(Node(name="n1", id="n1"), Node(name="n2", id="n2"))))
+    assert [c.id for c in d.find("f").children] == ["b", "n1", "n2"]
+    d2 = apply(doc(), InsertNodes(parent_id="root", nodes=(Node(name="x", id="x"),), index=0))
+    assert [c.id for c in d2.root.children][0] == "x"
+
+
+def test_insert_nodes_into_non_folder_raises():
+    with pytest.raises(CommandError):
+        apply(doc(), InsertNodes(parent_id="a", nodes=(Node(name="y"),)))  # 'a' is a leaf
 
 
 # --- reducer plumbing ------------------------------------------------------

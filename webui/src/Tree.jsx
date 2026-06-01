@@ -79,9 +79,14 @@ function TreeNode({ node, parentId, index, depth, selectedIds, primaryId, onSele
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
       </div>
-      {/* level-aware drop guide for the "after" gap (indented to the chosen level) */}
+      {/* level-aware drop guide for the "after" gap (indented to the chosen level,
+          with a pill naming the destination folder so the level is obvious) */}
       {over?.zone === 'after' && (
-        <div className="drop-guide" style={{ marginLeft: `${(over.depth - depth) * INDENT}px` }} />
+        <div className="drop-guide" style={{ marginLeft: `${(over.depth - depth) * INDENT}px` }}>
+          <span className="drop-guide-label">
+            {over.target.parentName ? `→ ${over.target.parentName}` : '→ oberste Ebene'}
+          </span>
+        </div>
       )}
       {node.children?.length > 0 && (
         <ul>

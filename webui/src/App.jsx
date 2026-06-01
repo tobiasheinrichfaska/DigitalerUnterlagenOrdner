@@ -54,7 +54,7 @@ function afterLevels(root, id) {
     if (!parent) break
     const idx = (parent.children ?? []).findIndex((c) => c.id === curId)
     if (idx === -1) break
-    levels.push({ parentId: parent.id, index: idx + 1, depth })
+    levels.push({ parentId: parent.id, index: idx + 1, depth, parentName: parent.id === root.id ? null : parent.name })
     const isLast = idx === parent.children.length - 1
     if (!isLast || parent.id === root.id) break
     curId = parent.id

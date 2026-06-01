@@ -23,6 +23,7 @@ export default function App() {
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
+  const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -57,30 +58,38 @@ export default function App() {
 
   const session = state?.session
 
-  const renderNode = useCallback(
-    (node) => {
-      if (!node) { setPages(null); return }
-      run(core.render(session, node.id)).then((resp) => setPages(resp?.ok ? resp.pages : []))
-    },
-    [session, run],
-  )
+  // Unified preview rendering for the selected node. Folders → []. For a leaf,
+  // PreviewControls sets a request (previewReq = {dpi, method}) → a *transient*
+  // compressed preview (render_compressed, no document mutation); null → the plain
+  // stored bytes. Re-fires when `selected` identity changes (every edit replaces
+  // it) or the request changes, so edits and method/DPI browsing both refresh.
+  useEffect(() => {
+    if (!session || !selected) { setPages(null); return }
+    if (selected.is_folder) {
+      run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
+      return
+    }
+    const p = previewReq
+      ? core.renderCompressed(session, selected.id, previewReq.dpi, previewReq.method)
+      : core.render(session, selected.id)
+    run(p).then((r) => setPages(r?.ok ? r.pages : []))
+  }, [selected, previewReq, session]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onPreview = useCallback((req) => setPreviewReq(req), [])
 
   useEffect(() => {
     run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
     core.config().then((r) => { if (r?.ok) setConfig(r) }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // after any edit/undo/redo: apply, keep `selected` fresh from the new tree, re-render preview
+  // after any edit/undo/redo: apply, keep `selected` fresh from the new tree
+  // (the preview effect re-renders because `selected`'s identity changed).
   const afterChange = useCallback(
     (resp) => {
       apply(resp)
-      if (resp?.ok && selected) {
-        const fresh = findNode(resp.tree, selected.id)
-        setSelected(fresh)
-        renderNode(fresh)
-      }
+      if (resp?.ok && selected) setSelected(findNode(resp.tree, selected.id))
     },
-    [selected, renderNode],
+    [selected],
   )
 
   // dispatch a command; if the core blocks it as a pending-change clash, ask the
@@ -101,19 +110,16 @@ export default function App() {
   const undo = () => run(core.undo(session)).then(afterChange)
   const redo = () => run(core.redo(session)).then(afterChange)
 
-  const select = useCallback(
-    (node) => {
-      setSelected(node)
-      setPages(null)
-      renderNode(node)
-    },
-    [renderNode],
-  )
+  const select = useCallback((node) => {
+    setSelected(node)
+    setPages(null)
+    setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
+  }, [])
 
   const openFile = () =>
     run(core.openFile(session)).then((resp) => {
       apply(resp)
-      if (resp?.ok) { setSelected(null); setPages(null) }
+      if (resp?.ok) { setSelected(null); setPages(null); setPreviewReq(null) }
     })
 
   if (!state && !error) {
@@ -160,7 +166,7 @@ export default function App() {
           )}
         </div>
         <div className="pane preview-pane" ref={previewRef}>
-          {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} defaultDpi={config?.default_dpi ?? 150} />}
+          {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && pages?.length > 0 && (
             <div className="zoom-bar">
               <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>

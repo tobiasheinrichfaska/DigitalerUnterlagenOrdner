@@ -52,6 +52,9 @@ class HostApi:
     def render(self, session, node_id, dpi=100):
         return self._core.render(session, node_id, dpi)
 
+    def render_compressed(self, session, node_id, dpi=150, method=None):
+        return self._core.render_compressed(session, node_id, dpi, method)
+
     def compress_options(self, session, node_id, dpi=150):
         return self._core.compress_options(session, node_id, dpi)
 

@@ -76,6 +76,7 @@ The IPC API the React UI calls — each maps to existing, UI-agnostic logic:
 | `compress(node, dpi)` / `commit` / `reset` | `PDFNode.compress*` / `compress_pdf_bytes` |
 | `export(nodes, path)` | `toc_export` / `PDFStorage.export_selection` |
 | `render_preview(node|pageRef, dpi)` → **PNG bytes** | `services/render.render_pdf_to_pngs` |
+| `render_compressed(node, dpi, method)` → **PNG bytes** | `engine.compress` + `render_pdf_to_pngs`, **read-only** |
 | progress / busy signals | `progress` port |
 
 Long-running ops (compress/render/export) run on the executor (`tasks`) and the
@@ -89,6 +90,14 @@ A node is **pending** when it holds an uncommitted `current_data` (between
 `PendingChangeError`; `CoreApi.dispatch` returns `{ok:false, risk:"pending_compression"}`
 so the UI can confirm and re-dispatch with `force:true`. A compression-preserving
 merge is not blocked.
+
+**Working preview (compression).** Selecting a leaf does **not** compress the
+document. The UI browses methods/DPI through `render_compressed` (read-only — it
+compresses the original bytes and rasterises the result without storing anything),
+so there is no undo entry and the node never becomes pending while browsing. The
+document changes only on a deliberate apply: `Compress` (“❓ Lesbarkeit geprüft”)
+or `Reset` (“Original”). This keeps undo meaningful and the preflight quiet until
+a real compression exists.
 
 **Defaults.** The default compression DPI is a fixed core constant
 (`DEFAULT_COMPRESSION_DPI = 150`, surfaced via `CoreApi.config()` → `default_dpi`),

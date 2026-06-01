@@ -100,7 +100,7 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 .drop-ghost-where { font-size: 10px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 
 /* import placeholder: a node shown immediately with a sliding progress shimmer */
-.row.pending { position: relative; overflow: hidden; color: var(--muted); background: #eef3f8; cursor: default; }
+.row.pending { position: relative; overflow: hidden; color: var(--muted); background: #eef3f8; cursor: not-allowed; }
 .row.pending::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent, rgba(36, 110, 210, 0.22), transparent);

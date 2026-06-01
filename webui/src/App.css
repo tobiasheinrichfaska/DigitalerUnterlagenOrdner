@@ -111,14 +111,6 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
-/* a folder highlighted as the target of an OS file drop */
-.row.file-target { background: #d7f3df; outline: 2px solid #2e9c54; outline-offset: -2px; }
-.row .file-target-badge {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  background: #2e9c54; color: #fff; font-size: 10px; font-weight: 600;
-  padding: 1px 7px; border-radius: 9px; white-space: nowrap;
-}
-
 /* loading indicator (Windows-style spinning circle) + busy cursor */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner {

@@ -110,6 +110,17 @@ def test_save_roundtrip(tmp_path):
     assert {"doc1", "G"}.issubset({c["name"] for c in reopened["tree"]["children"]})
 
 
+def test_dirty_tracking_cleared_on_save(tmp_path):
+    api = CoreApi()
+    opened = api.open()
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    assert api.any_dirty() is False
+    api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id, "name": "X", "index": None, "new_id": "x"})
+    assert api.any_dirty() is True            # an edit makes it dirty (close should warn)
+    api.save(sid, str(tmp_path / "d.belegtool"))
+    assert api.any_dirty() is False           # saving clears it
+
+
 def test_save_unknown_session(tmp_path):
     assert CoreApi().save("nope", str(tmp_path / "x.belegtool"))["ok"] is False
 
@@ -158,6 +169,18 @@ def test_import_paths_pdf_and_belegtool_with_undo(tmp_path):
 
     # one undoable step per import
     assert [c["name"] for c in api.undo(sid)["tree"]["children"]] == ["rechnung"]
+
+
+def test_import_at_index_inserts_between(tmp_path):
+    a = tmp_path / "a.pdf"; a.write_bytes(create_valid_pdf(1))
+    b = tmp_path / "b.pdf"; b.write_bytes(create_valid_pdf(1))
+    mid = tmp_path / "mid.pdf"; mid.write_bytes(create_valid_pdf(1))
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(a)], None)
+    api.import_paths(sid, [str(b)], None)
+    r = api.import_paths(sid, [str(mid)], None, 1)
+    assert [c["name"] for c in r["tree"]["children"]] == ["a", "mid", "b"]
 
 
 def test_import_bytes_pdf(tmp_path):

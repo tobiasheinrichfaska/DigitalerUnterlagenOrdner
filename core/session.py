@@ -26,6 +26,14 @@ class DocumentSession:
         self._engine = engine
         self._undo: List[tuple] = []  # (previous_doc, command)
         self._redo: List[tuple] = []  # (next_doc, command)
+        self._dirty = False  # unsaved changes since open/save
+
+    @property
+    def dirty(self) -> bool:
+        return self._dirty
+
+    def mark_saved(self) -> None:
+        self._dirty = False
 
     # --- state -------------------------------------------------------------
     @property
@@ -56,6 +64,7 @@ class DocumentSession:
         self._undo.append((self._doc, cmd))
         self._doc = new
         self._redo.clear()
+        self._dirty = True
         return new
 
     def undo(self) -> Document:
@@ -64,6 +73,7 @@ class DocumentSession:
         prev, cmd = self._undo.pop()
         self._redo.append((self._doc, cmd))
         self._doc = prev
+        self._dirty = True
         return self._doc
 
     def redo(self) -> Document:
@@ -72,4 +82,5 @@ class DocumentSession:
         nxt, cmd = self._redo.pop()
         self._undo.append((self._doc, cmd))
         self._doc = nxt
+        self._dirty = True
         return self._doc

@@ -128,7 +128,16 @@ class CoreApi:
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is not None:
+                s.mark_saved()
         return {"ok": True, "session": session, "path": path}
+
+    def any_dirty(self) -> bool:
+        """True if any open session has unsaved changes (for the close prompt)."""
+        with self._lock:
+            return any(s.dirty for s in self._sessions.values())
 
     def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
         """Available compression methods for a leaf at ``dpi`` (smallest first)."""
@@ -172,8 +181,9 @@ class CoreApi:
         pn.set_original_and_current_data(data, None, None, None, False, generate_preview=False)
         return [node_from_pdfnode(pn)]
 
-    def import_paths(self, session: str, paths, parent_id: str = None) -> dict:
-        """Import real file paths (from the native dialog) under a folder (or root)."""
+    def import_paths(self, session: str, paths, parent_id: str = None, index: int = None) -> dict:
+        """Import real file paths (from the native dialog) under a folder (or root),
+        optionally at a position (index) within that folder."""
         from core.commands import InsertNodes
         nodes, errors = [], []
         for path in paths:
@@ -191,7 +201,7 @@ class CoreApi:
             node = s.document.find(parent_id) if parent_id else None
             target = parent_id if (node is not None and node.is_folder) else s.document.root.id
             try:
-                s.dispatch(InsertNodes(parent_id=target, nodes=tuple(nodes)))
+                s.dispatch(InsertNodes(parent_id=target, nodes=tuple(nodes), index=index))
             except CommandError as e:
                 return {"ok": False, "error": str(e)}
             resp = self._doc_response_locked(session)
@@ -199,7 +209,7 @@ class CoreApi:
             resp["warning"] = "; ".join(errors)
         return resp
 
-    def import_bytes(self, session: str, name: str, data_b64: str, parent_id: str = None) -> dict:
+    def import_bytes(self, session: str, name: str, data_b64: str, parent_id: str = None, index: int = None) -> dict:
         """Import a single dropped file given as base64 / data-URL — written to a
         temp file (keeping its name) so the path pipeline (and COM) handle it."""
         import base64
@@ -214,7 +224,7 @@ class CoreApi:
         try:
             with open(path, "wb") as f:
                 f.write(data)
-            return self.import_paths(session, [path], parent_id)
+            return self.import_paths(session, [path], parent_id, index)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

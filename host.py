@@ -106,8 +106,8 @@ class HostApi:
         return self._core.compress_options(session, node_id, dpi)
 
     # import (drop path uses bytes; the button uses the native dialog → real paths)
-    def import_bytes(self, session, name, data, parent_id=None):
-        return self._core.import_bytes(session, name, data, parent_id)
+    def import_bytes(self, session, name, data, parent_id=None, index=None):
+        return self._core.import_bytes(session, name, data, parent_id, index)
 
     def import_dialog(self, session, parent_id=None):
         result = webview.windows[0].create_file_dialog(
@@ -137,9 +137,23 @@ class HostApi:
 def main():
     api = HostApi()
     entry = DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
-    webview.create_window(
+    window = webview.create_window(
         "DigitalerBelegeOrdner", entry, js_api=api,
         width=1280, height=820, min_size=(900, 600))
+
+    def _on_closing():
+        # Warn before discarding unsaved changes. Return False to cancel the close.
+        try:
+            if api._core.any_dirty():
+                proceed = webview.windows[0].create_confirmation_dialog(
+                    "Ungespeicherte Änderungen",
+                    "Es gibt ungespeicherte Änderungen. Trotzdem schließen und verwerfen?")
+                return bool(proceed)
+        except Exception:
+            pass
+        return True
+
+    window.events.closing += _on_closing
     # Run the warm-up only AFTER the window is up (start's func runs on its own
     # thread once the GUI loop is live), so the heavy warming doesn't compete with
     # window creation and the window paints as soon as possible.

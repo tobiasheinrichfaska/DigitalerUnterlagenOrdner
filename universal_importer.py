@@ -35,7 +35,7 @@ class UniversalImporter:
     MODERN_IMAGE_EXTENSIONS = [".webp", ".heic"]
     # VECTOR_EXTENSIONS = [".svg"] 
     ARCHIVE_AND_EMAIL_EXTENSIONS = [".zip", ".tar", ".tgz", ".eml", ".msg"]
-    TEXT_EXTENSIONS = [".txt", ".rtf"]
+    TEXT_EXTENSIONS = [".txt", ".rtf", ".md"]
     HTML_EXTENSIONS = [".html"]
     OFFICE_WORD_EXT = [".doc", ".docx", ".odt"]
     OFFICE_EXCEL_EXT = [".xls", ".xlsx", ".ods"]

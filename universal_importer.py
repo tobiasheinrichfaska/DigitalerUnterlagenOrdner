@@ -333,11 +333,10 @@ class UniversalImporter:
 
     @staticmethod
     def _convert_office_via_com(path: str, ext: str) -> ConvertedPDF:
-        # Sicherheitsprüfung: Office-Konvertierung nur im Hauptthread
-        if threading.current_thread() != threading.main_thread():
-            raise RuntimeError("Office-Konvertierung darf nur im Hauptthread erfolgen.")
-
-        # COM initialisieren, wenn nicht bereits erfolgt
+        # COM nur pro Thread (STA) initialisieren — das genügt. Im headless Core /
+        # pywebview läuft die Konvertierung auf einem Worker-Thread (die js_api-Aufrufe
+        # sind nicht im Hauptthread); mit CoInitialize ist das zulässig, daher keine
+        # harte Hauptthread-Beschränkung mehr.
         try:
             pythoncom.CoInitialize()
         except pythoncom.com_error:
@@ -392,6 +391,12 @@ class UniversalImporter:
                 os.rmdir(tmp_dir)
             except Exception as cleanup_err:
                 logger.warning("Office-Temp-Datei konnte nicht gelöscht werden: %s", cleanup_err)
+            # COM auf diesem (Worker-)Thread wieder freigeben, um die CoInitialize
+            # oben auszugleichen.
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
 
         if not buffer.getvalue().startswith(b"%PDF"):
             raise ValueError(f"Konvertiertes Dokument scheint kein gültiges PDF zu sein: {path}")

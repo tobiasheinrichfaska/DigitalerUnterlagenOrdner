@@ -76,22 +76,20 @@ ul.tree { padding-left: 0; }
 .row[draggable="true"] { cursor: grab; }
 .row.drop-into { background: #d7ebff; outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
-/* level-aware "after" guide: an absolute overlay at the row's bottom edge (no
-   layout shift), indented to the chosen level, with a pill naming where it lands */
-.drop-guide {
-  position: absolute; bottom: -2px; right: 6px;
-  height: 0; border-top: 3px solid var(--accent);
-  pointer-events: none; z-index: 5;
+.row.drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
+
+/* ghost preview of the dragged item at the bottom drop spot, indented to the
+   chosen nesting level. Absolute overlay just below the row → no layout shift. */
+.drop-ghost {
+  position: absolute; bottom: -20px; z-index: 6;
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
 }
-.drop-guide::before {
-  content: ""; position: absolute; left: -3px; top: -4px;
-  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+.drop-ghost-row {
+  background: #eaf3ff; border: 1px dashed var(--accent); color: var(--ink);
+  border-radius: 6px; padding: 2px 9px; font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); white-space: nowrap;
 }
-.drop-guide-label {
-  position: absolute; bottom: 2px; left: 8px;
-  background: var(--accent); color: #fff; font-size: 10px; font-weight: 600;
-  padding: 1px 7px; border-radius: 9px; white-space: nowrap;
-}
+.drop-ghost-where { font-size: 10px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 
 .name.folder { font-weight: 600; color: #9a6700; }
 .name.leaf { color: var(--ink); }

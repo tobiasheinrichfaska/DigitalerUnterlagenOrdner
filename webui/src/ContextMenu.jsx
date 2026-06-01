@@ -7,9 +7,11 @@ const STATUSES = [
   ['vorjahreswert', 'Vorjahr'],
 ]
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds }) {
   if (!menu) return null
   const { x, y, node } = menu
+  // export the multi-selection if this node is part of one (2+), else just this node
+  const exportIds = (selectedIds?.includes(node.id) && selectedIds.length >= 2) ? selectedIds : [node.id]
   const isLeaf = !node.is_folder
   const run = (extra) => {
     dispatch({ ...extra, node_id: node.id })
@@ -61,7 +63,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           </button>
         ))}
         <div className="cm-sep" />
-        <button onClick={() => { onExport([node.id]); onClose() }}>Als PDF exportieren</button>
+        <button onClick={() => { onExport(exportIds); onClose() }}>
+          {exportIds.length > 1 ? `Auswahl als PDF exportieren (${exportIds.length})` : 'Als PDF exportieren'}
+        </button>
         <div className="cm-sep" />
         <button className="danger" onClick={() => run({ type: 'Delete' })}>Löschen</button>
       </div>

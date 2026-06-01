@@ -195,8 +195,10 @@ class PDFStorage:
             logger.error("PDF konnte nicht gelesen werden: %s", e)
             return
 
+        # Parse the source PDF ONCE and reuse the reader for every node — slicing
+        # used to re-parse the whole file per node (O(nodes) full parses = slow load).
         for child_data in structure.get("children", []):
-            node = self._parse_node(child_data, data, current_start, total_pages)
+            node = self._parse_node(child_data, reader, current_start, total_pages)
             if node:
                 self.root.add_child(node)
 
@@ -346,14 +348,25 @@ class PDFStorage:
         return collect_nodes(self.root)
 
 
-    def _parse_node(self, node_data: dict, data: bytes, current_start: List[int], total_pages: int) -> Optional['PDFNode']:
+    @staticmethod
+    def _slice_pages(reader: PdfReader, start: int, end: int) -> bytes:
+        """Slice pages [start, end] from an already-parsed reader (no re-parse)."""
+        writer = PdfWriter()
+        for i in range(start, end + 1):
+            if 0 <= i < len(reader.pages):
+                writer.add_page(reader.pages[i])
+        buf = io.BytesIO()
+        writer.write(buf)
+        return buf.getvalue()
+
+    def _parse_node(self, node_data: dict, reader: PdfReader, current_start: List[int], total_pages: int) -> Optional['PDFNode']:
         name = node_data.get("name", "unnamed")
         is_folder = node_data.get("is_folder", False)
 
         if is_folder:
             node = PDFNode(name=name, is_folder=True)
             for child_data in node_data.get("children", []):
-                child_node = self._parse_node(child_data, data, current_start, total_pages)
+                child_node = self._parse_node(child_data, reader, current_start, total_pages)
                 if child_node:
                     node.add_child(child_node)
             return node
@@ -370,7 +383,7 @@ class PDFStorage:
             end = total_pages - 1
             length = end - start + 1
 
-        pages = self.extract_pages(data, start, end)
+        pages = self._slice_pages(reader, start, end)
 
 
 

@@ -22,11 +22,16 @@ function findNode(n, id) {
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
 
 // optimistic placeholder shown while a dropped file is being imported (a sliding
-// progress shimmer on the node itself, replaced by the real node when done)
+// progress shimmer on the node itself, replaced by the real node when done). It is
+// NOT a valid drop target — dragging over it shows the no-drop cursor (not calling
+// preventDefault on dragover) so nothing can be inserted relative to an in-flight
+// import; stopPropagation keeps the parent list from accepting it instead.
 function PendingRow({ name, depth }) {
   return (
     <li>
-      <div className="row pending" style={{ paddingLeft: `${depth * INDENT + 6}px` }}>
+      <div className="row pending" style={{ paddingLeft: `${depth * INDENT + 6}px` }}
+        onDragOver={(e) => e.stopPropagation()}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation() }}>
         <span className="name leaf">📄 {name}</span>
       </div>
     </li>

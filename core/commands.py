@@ -294,19 +294,32 @@ def _move(doc: Document, cmd: Move, engine=None) -> Document:
     return doc.move_node(cmd.node_id, cmd.new_parent_id, cmd.index)
 
 
+def _parent_id_map(root: Node) -> dict:
+    """One-pass child-id → parent-id map (avoids repeated O(n) parent_of scans)."""
+    out = {}
+    stack = [root]
+    while stack:
+        n = stack.pop()
+        for c in n.children:
+            out[c.id] = n.id
+            stack.append(c)
+    return out
+
+
 def _top_level_ids(doc: Document, ids):
     """Drop ids that already sit inside another selected id (so a folder + one of
-    its descendants only moves the folder)."""
+    its descendants only moves the folder). O(n) via a single parent map."""
     id_set = set(ids)
+    pmap = _parent_id_map(doc.root)
     out = []
     for nid in ids:
-        p = doc.parent_of(nid)
+        pid = pmap.get(nid)
         nested = False
-        while p is not None:
-            if p.id in id_set:
+        while pid is not None:
+            if pid in id_set:
                 nested = True
                 break
-            p = doc.parent_of(p.id)
+            pid = pmap.get(pid)
         if not nested:
             out.append(nid)
     return out

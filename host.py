@@ -69,16 +69,58 @@ IMPORT_FILE_TYPES = (
 )
 
 
+def _entry():
+    return DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
+
+
+def _bind_close(win):
+    """Per-window close guard: if that window's React app flagged unsaved changes
+    (window.__belegDirty), confirm before closing. Return False cancels the close."""
+    def _on_closing():
+        try:
+            if win.evaluate_js("window.__belegDirty === true"):
+                return bool(win.create_confirmation_dialog(
+                    "Ungespeicherte Änderungen",
+                    "Es gibt ungespeicherte Änderungen. Trotzdem schließen und verwerfen?"))
+        except Exception:
+            pass
+        return True
+    win.events.closing += _on_closing
+
+
+def _open_window(core):
+    """Open a document window with its own HostApi (sharing one CoreApi — sessions
+    are independent per window). Used for the first window and every 'new window'."""
+    api = HostApi(core)
+    win = webview.create_window(
+        "DigitalerBelegeOrdner", _entry(), js_api=api,
+        width=1280, height=820, min_size=(900, 600))
+    api._uid = win.uid  # bind after creation (storing the window object recurses)
+    _bind_close(win)
+    return {"ok": True}
+
+
 class HostApi:
-    """JS-facing API: CoreApi ops + native file dialogs.
+    """JS-facing API for one window: shared CoreApi ops + native dialogs on *this*
+    window. One HostApi per window; it stores only the window's uid (storing the
+    window object makes pywebview recurse when it serialises js_api)."""
 
-    Note: do NOT store the pywebview window as an attribute here — pywebview
-    serialises the js_api object and recurses infinitely into the .NET window.
-    Fetch it on demand via ``webview.windows[0]`` instead.
-    """
+    def __init__(self, core, uid=None):
+        self._core = core
+        self._uid = uid
 
-    def __init__(self):
-        self._core = CoreApi()
+    def _win(self):
+        for w in webview.windows:
+            if w.uid == self._uid:
+                return w
+        return webview.windows[0] if webview.windows else None
+
+    # window management
+    def new_window(self):
+        try:
+            return _open_window(self._core)
+        except Exception as e:  # never crash the caller
+            return {"ok": False, "error": str(e)}
 
     # core ops (delegate)
     def config(self):
@@ -110,7 +152,7 @@ class HostApi:
         return self._core.import_bytes(session, name, data, parent_id, index)
 
     def export_dialog(self, session, node_ids=None):
-        path = webview.windows[0].create_file_dialog(
+        path = self._win().create_file_dialog(
             webview.FileDialog.SAVE, save_filename="Export.pdf", file_types=("PDF (*.pdf)",))
         if not path:
             return {"ok": False, "error": "cancelled"}
@@ -119,7 +161,7 @@ class HostApi:
         return self._core.export(session, path, node_ids)
 
     def import_dialog(self, session, parent_id=None):
-        result = webview.windows[0].create_file_dialog(
+        result = self._win().create_file_dialog(
             webview.FileDialog.OPEN, allow_multiple=True, file_types=IMPORT_FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
@@ -127,13 +169,13 @@ class HostApi:
 
     # host-only ops (native dialogs)
     def open_file(self, session=None):
-        result = webview.windows[0].create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        result = self._win().create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.open(session, result[0])
 
     def save_file(self, session):
-        path = webview.windows[0].create_file_dialog(
+        path = self._win().create_file_dialog(
             webview.FileDialog.SAVE, save_filename="unbenannt.belegtool",
             file_types=("BelegTool (*.belegtool)",))
         if not path:
@@ -144,28 +186,10 @@ class HostApi:
 
 
 def main():
-    api = HostApi()
-    entry = DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
-    window = webview.create_window(
-        "DigitalerBelegeOrdner", entry, js_api=api,
-        width=1280, height=820, min_size=(900, 600))
-
-    def _on_closing():
-        # Warn before discarding unsaved changes. Return False to cancel the close.
-        try:
-            if api._core.any_dirty():
-                proceed = webview.windows[0].create_confirmation_dialog(
-                    "Ungespeicherte Änderungen",
-                    "Es gibt ungespeicherte Änderungen. Trotzdem schließen und verwerfen?")
-                return bool(proceed)
-        except Exception:
-            pass
-        return True
-
-    window.events.closing += _on_closing
-    # Run the warm-up only AFTER the window is up (start's func runs on its own
-    # thread once the GUI loop is live), so the heavy warming doesn't compete with
-    # window creation and the window paints as soon as possible.
+    core = CoreApi()  # shared across all windows; sessions are per window
+    _open_window(core)
+    # Warm up only AFTER the window is up (start's func runs on its own thread once
+    # the GUI loop is live), so warming doesn't compete with window creation.
     webview.start(_prewarm)
 
 

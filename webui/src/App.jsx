@@ -141,6 +141,9 @@ export default function App() {
 
   const onPreview = useCallback((req) => setPreviewReq(req), [])
 
+  // expose this window's unsaved state to the host (per-window close guard)
+  useEffect(() => { window.__belegDirty = dirty }, [dirty])
+
   useEffect(() => {
     run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
     core.config().then((r) => { if (r?.ok) setConfig(r) }).catch(() => {})
@@ -316,6 +319,7 @@ export default function App() {
         <h1>DigitalerBelegeOrdner</h1>
         <div className="toolbar">
           <button onClick={openFile}>📂 Öffnen</button>
+          <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
           <button onClick={exportPdf} title="Als PDF mit Inhaltsverzeichnis exportieren">⬇ Export PDF{selectedIds.length ? ' (Auswahl)' : ''}</button>

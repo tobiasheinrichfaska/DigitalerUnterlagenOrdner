@@ -84,6 +84,20 @@ class MoveMany:
 
 
 @dataclass(frozen=True)
+class InsertNodes:
+    """Insert already-built nodes (e.g. freshly imported files) under a folder.
+    Carries Node objects (with bytes), so it is created in-process by the import
+    API and dispatched directly — it is not part of the wire/JSON command set."""
+    parent_id: str
+    nodes: Tuple[Node, ...]
+    index: Optional[int] = None
+
+    def __post_init__(self):
+        if not isinstance(self.nodes, tuple):
+            object.__setattr__(self, "nodes", tuple(self.nodes))
+
+
+@dataclass(frozen=True)
 class GroupIntoFolder:
     """Create a new folder under ``parent_id`` and move every selected node into
     it (preserving order). The other half of "merge": keeps the nodes as separate
@@ -141,8 +155,10 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany,
-                GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, Merge]
+                GroupIntoFolder, InsertNodes, Compress, Commit, Reset, Rotate, Split, Merge]
 
+# Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
+# excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
     AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany, GroupIntoFolder,
     Compress, Commit, Reset, Rotate, Split, Merge,
@@ -326,6 +342,17 @@ def _move_many(doc: Document, cmd: MoveMany, engine=None) -> Document:
         doc = doc.remove_node(nid)
     for offset, node in enumerate(nodes):
         doc = doc.insert_child(cmd.new_parent_id, node, at + offset)
+    return doc
+
+
+@_handler(InsertNodes)
+def _insert_nodes(doc: Document, cmd: InsertNodes, engine=None) -> Document:
+    _require_folder(doc, cmd.parent_id)
+    if not cmd.nodes:
+        return doc
+    for offset, node in enumerate(cmd.nodes):
+        at = None if cmd.index is None else cmd.index + offset
+        doc = doc.insert_child(cmd.parent_id, node, at)
     return doc
 
 

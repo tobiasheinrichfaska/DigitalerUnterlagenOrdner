@@ -40,6 +40,11 @@ def document_from_storage(storage) -> Document:
     return Document(_node_from_pdfnode(storage.root))
 
 
+def node_from_pdfnode(pn) -> Node:
+    """Public: convert a single (imported) PDFNode subtree into an immutable Node."""
+    return _node_from_pdfnode(pn)
+
+
 def _pdfnode_from_node(node: Node):
     from pdf_node import PDFNode
     pn = PDFNode(name=node.name, is_folder=node.is_folder, pdf_data=None)

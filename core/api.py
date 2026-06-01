@@ -10,6 +10,7 @@ Every method returns a dict with ``ok: bool``; success carries ``session``,
 
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 
@@ -149,6 +150,73 @@ class CoreApi:
         )
         return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                 "original_size": len(data), "options": options}
+
+    # --- import ------------------------------------------------------------
+    def _import_path(self, path: str) -> list:
+        """Import one file from disk into immutable Node(s) — mirrors the Tk import:
+        .belegtool/PDF/zip/tar/email via PDFStorage, everything else (images,
+        Office, …) via UniversalImporter. Heavy; call outside the lock."""
+        from core.bridge import node_from_pdfnode
+        low = path.lower()
+        if low.endswith(".belegtool"):
+            return list(load_belegtool(path).root.children)
+        if low.endswith((".pdf", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
+            from pdf_storage import PDFStorage, create_wrapper_node
+            storage = PDFStorage(path, generate_previews=False)
+            return [node_from_pdfnode(create_wrapper_node(storage, path))]
+        from pdf_node import PDFNode
+        from universal_importer import UniversalImporter
+        result = UniversalImporter.convert(path)  # images / Office / …
+        data = result.data.getvalue() if hasattr(result.data, "getvalue") else result.data
+        pn = PDFNode(name=result.name)
+        pn.set_original_and_current_data(data, None, None, None, False, generate_preview=False)
+        return [node_from_pdfnode(pn)]
+
+    def import_paths(self, session: str, paths, parent_id: str = None) -> dict:
+        """Import real file paths (from the native dialog) under a folder (or root)."""
+        from core.commands import InsertNodes
+        nodes, errors = [], []
+        for path in paths:
+            try:
+                nodes.extend(self._import_path(path))
+            except Exception as e:
+                logger.exception("import failed: %s", path)
+                errors.append(f"{os.path.basename(path)}: {e}")
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            if not nodes:
+                return {"ok": False, "error": "; ".join(errors) or "nichts importiert"}
+            node = s.document.find(parent_id) if parent_id else None
+            target = parent_id if (node is not None and node.is_folder) else s.document.root.id
+            try:
+                s.dispatch(InsertNodes(parent_id=target, nodes=tuple(nodes)))
+            except CommandError as e:
+                return {"ok": False, "error": str(e)}
+            resp = self._doc_response_locked(session)
+        if errors:
+            resp["warning"] = "; ".join(errors)
+        return resp
+
+    def import_bytes(self, session: str, name: str, data_b64: str, parent_id: str = None) -> dict:
+        """Import a single dropped file given as base64 / data-URL — written to a
+        temp file (keeping its name) so the path pipeline (and COM) handle it."""
+        import base64
+        import shutil
+        import tempfile
+        try:
+            data = base64.b64decode((data_b64 or "").split(",")[-1])
+        except Exception as e:
+            return {"ok": False, "error": f"ungültige Daten: {e}"}
+        tmpdir = tempfile.mkdtemp(prefix="beleg_import_")
+        path = os.path.join(tmpdir, os.path.basename(name) or "import.bin")
+        try:
+            with open(path, "wb") as f:
+                f.write(data)
+            return self.import_paths(session, [path], parent_id)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def session_count(self) -> int:
         with self._lock:

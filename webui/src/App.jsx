@@ -31,6 +31,38 @@ function flattenIds(root) {
   return out
 }
 
+// depth of a node (root's children = 0)
+function depthOf(root, id, d = -1) {
+  if (root.id === id) return d
+  for (const c of root.children ?? []) {
+    const r = depthOf(c, id, d + 1)
+    if (r !== null) return r
+  }
+  return null
+}
+
+// Drop levels for the gap AFTER `id`: deepest first (insert right after the row,
+// at its own level), then — only while the row is the *last child* of its parent —
+// each shallower ancestor level, up to the root. Lets a bottom drop choose how far
+// to "pop out". Each entry = { parentId, index, depth }.
+function afterLevels(root, id) {
+  const levels = []
+  let curId = id
+  let depth = depthOf(root, id)
+  while (true) {
+    const parent = findParent(root, curId)
+    if (!parent) break
+    const idx = (parent.children ?? []).findIndex((c) => c.id === curId)
+    if (idx === -1) break
+    levels.push({ parentId: parent.id, index: idx + 1, depth })
+    const isLast = idx === parent.children.length - 1
+    if (!isLast || parent.id === root.id) break
+    curId = parent.id
+    depth -= 1
+  }
+  return levels
+}
+
 export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
@@ -140,6 +172,9 @@ export default function App() {
     dispatch({ type: 'MoveMany', node_ids: ids, new_parent_id: newParentId, index })
   }, [dispatch])
 
+  // pop-out drop levels for the gap after a row (for the slide-to-choose-level UX)
+  const levelsFor = useCallback((id) => (state?.tree ? afterLevels(state.tree, id) : []), [state])
+
   // plain click → single-select; Ctrl/Cmd-click → toggle; Shift-click → range
   // (over the visible pre-order, so it spans depths). The primary (preview) node
   // is the clicked one, or the last remaining on a Ctrl-deselect.
@@ -238,6 +273,7 @@ export default function App() {
               onContext={(x, y, node) => setMenu({ x, y, node })}
               onMove={onMove}
               onMoveMany={onMoveMany}
+              levelsFor={levelsFor}
             />
           )}
         </div>

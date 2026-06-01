@@ -7,7 +7,7 @@ const STATUSES = [
   ['vorjahreswert', 'Vorjahr'],
 ]
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group }) {
   if (!menu) return null
   const { x, y, node } = menu
   const isLeaf = !node.is_folder
@@ -17,6 +17,11 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds }) {
   }
   const merge = () => {
     dispatch({ type: 'Merge', node_ids: mergeIds })
+    onClose()
+  }
+  const groupInto = () => {
+    const name = window.prompt('Name des neuen Ordners', 'Neue Gruppe')
+    if (name) dispatch({ type: 'GroupIntoFolder', node_ids: group.ids, parent_id: group.parentId, name, new_id: null, index: null })
     onClose()
   }
 
@@ -38,9 +43,10 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds }) {
         onContextMenu={(e) => { e.preventDefault(); onClose() }}
       />
       <div className="context-menu" style={{ left: x, top: y }}>
-        {mergeIds && (
+        {(mergeIds || group) && (
           <>
-            <button onClick={merge}>Zusammenführen ({mergeIds.length})</button>
+            {mergeIds && <button onClick={merge}>Zusammenführen → 1 PDF ({mergeIds.length})</button>}
+            {group && <button onClick={groupInto}>In neuen Ordner ({group.ids.length})</button>}
             <div className="cm-sep" />
           </>
         )}

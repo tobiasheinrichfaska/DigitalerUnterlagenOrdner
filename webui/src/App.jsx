@@ -23,11 +23,20 @@ function findParent(node, id, parent = null) {
   return null
 }
 
+// visible pre-order list of ids (excludes the implicit root) — for shift-range
+function flattenIds(root) {
+  const out = []
+  const walk = (n) => { for (const c of n.children ?? []) { out.push(c.id); walk(c) } }
+  walk(root)
+  return out
+}
+
 export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null) // primary node (drives the preview)
-  const [selectedIds, setSelectedIds] = useState([]) // multi-selection (for Merge)
+  const [selectedIds, setSelectedIds] = useState([]) // multi-selection (Merge / group / multi-move)
+  const [anchorId, setAnchorId] = useState(null) // anchor for shift-range select
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
@@ -136,22 +145,41 @@ export default function App() {
     dispatch({ type: 'Move', node_id: nodeId, new_parent_id: newParentId, index: idx })
   }, [state, dispatch])
 
-  // plain click → single-select; Ctrl/Cmd-click → toggle in the multi-selection.
-  // The primary (preview) node is the clicked one, or the last remaining on deselect.
-  const select = useCallback((node, additive = false) => {
-    if (additive && selectedIds.includes(node.id)) {
+  // drag a multi-selection → move all of them into the target folder (appended)
+  const onMoveMany = useCallback((ids, newParentId) => {
+    dispatch({ type: 'MoveMany', node_ids: ids, new_parent_id: newParentId, index: null })
+  }, [dispatch])
+
+  // plain click → single-select; Ctrl/Cmd-click → toggle; Shift-click → range
+  // (over the visible pre-order, so it spans depths). The primary (preview) node
+  // is the clicked one, or the last remaining on a Ctrl-deselect.
+  const select = useCallback((node, mods = {}) => {
+    const { ctrl = false, shift = false } = mods
+    if (shift && anchorId && state?.tree) {
+      const order = flattenIds(state.tree)
+      const a = order.indexOf(anchorId)
+      const b = order.indexOf(node.id)
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a <= b ? [a, b] : [b, a]
+        setSelectedIds(order.slice(lo, hi + 1))
+        setSelected(node); setPages(null); setPreviewReq(null)
+        return
+      }
+    }
+    if (ctrl && selectedIds.includes(node.id)) {
       const next = selectedIds.filter((i) => i !== node.id)
       setSelectedIds(next)
       setSelected(next.length ? findNode(state.tree, next[next.length - 1]) : null)
     } else {
-      setSelectedIds(additive ? [...selectedIds, node.id] : [node.id])
+      setSelectedIds(ctrl ? [...selectedIds, node.id] : [node.id])
       setSelected(node)
     }
+    setAnchorId(node.id)
     setPages(null)
     setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
-  }, [selectedIds, state])
+  }, [selectedIds, state, anchorId])
 
-  // 2+ selected sibling leaves → the ids that can be merged (else null)
+  // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
   const mergeable = (() => {
     if (selectedIds.length < 2 || !state?.tree) return null
     const nodes = selectedIds.map((id) => findNode(state.tree, id))
@@ -159,6 +187,16 @@ export default function App() {
     const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
     if (new Set(parents).size !== 1 || parents.some((p) => p == null)) return null
     return selectedIds
+  })()
+
+  // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
+  // their common parent if they share one, else at the root (always safe).
+  const groupable = (() => {
+    if (selectedIds.length < 2 || !state?.tree) return null
+    if (selectedIds.some((id) => !findNode(state.tree, id))) return null
+    const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
+    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : state.tree.id
+    return { ids: selectedIds, parentId }
   })()
 
   const openFile = () =>
@@ -209,6 +247,7 @@ export default function App() {
               onSelect={select}
               onContext={(x, y, node) => setMenu({ x, y, node })}
               onMove={onMove}
+              onMoveMany={onMoveMany}
             />
           )}
         </div>
@@ -233,7 +272,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} />
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} />
     </div>
   )
 }

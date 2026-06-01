@@ -17,7 +17,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onContext, onMove, drag, setDrag }) {
+function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, drag, setDrag }) {
   const [over, setOver] = useState(null) // 'into' | 'before' | 'after' | null
 
   const handleDragOver = (e) => {
@@ -30,7 +30,11 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
     if (!drag || drag === node.id) { setOver(null); return }
     e.preventDefault()
     e.stopPropagation()
-    if (over === 'into') onMove(drag, node.id, null)
+    // dragging a member of the multi-selection moves the whole set (appended)
+    const many = selectedIds.includes(drag) && selectedIds.length > 1
+    if (many) {
+      onMoveMany(selectedIds, over === 'into' ? node.id : parentId)
+    } else if (over === 'into') onMove(drag, node.id, null)
     else if (over === 'before') onMove(drag, parentId, index)
     else if (over === 'after') onMove(drag, parentId, index + 1)
     setOver(null)
@@ -52,7 +56,7 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
         onDragOver={handleDragOver}
         onDragLeave={() => setOver(null)}
         onDrop={handleDrop}
-        onClick={(e) => onSelect(node, e.ctrlKey || e.metaKey)}
+        onClick={(e) => onSelect(node, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
         <span className={node.is_folder ? 'name folder' : 'name leaf'}>
@@ -64,7 +68,7 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
           {node.children.map((c, i) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i}
               selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
-              onMove={onMove} drag={drag} setDrag={setDrag} />
+              onMove={onMove} onMoveMany={onMoveMany} drag={drag} setDrag={setDrag} />
           ))}
         </ul>
       )}
@@ -72,19 +76,26 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove }) {
+export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
+  const dropOnRoot = (e) => {
+    if (!drag) return
+    e.preventDefault()
+    if (selectedIds.includes(drag) && selectedIds.length > 1) onMoveMany(selectedIds, node.id)
+    else onMove(drag, node.id, null)
+    setDrag(null)
+  }
   return (
     <ul
       className="tree"
       onDragOver={(e) => { if (drag) e.preventDefault() }}
-      onDrop={(e) => { if (drag) { e.preventDefault(); onMove(drag, node.id, null); setDrag(null) } }}
+      onDrop={dropOnRoot}
     >
       {(node.children ?? []).map((c, i) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i}
           selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
-          onMove={onMove} drag={drag} setDrag={setDrag} />
+          onMove={onMove} onMoveMany={onMoveMany} drag={drag} setDrag={setDrag} />
       ))}
     </ul>
   )

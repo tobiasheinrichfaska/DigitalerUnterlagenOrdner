@@ -7,7 +7,9 @@ from core.commands import (
     AddFolder,
     CommandError,
     Delete,
+    GroupIntoFolder,
     Move,
+    MoveMany,
     Rename,
     SetPeriod,
     SetStatus,
@@ -124,6 +126,46 @@ def test_move_into_non_folder_or_subtree_or_root_raises():
         apply(doc(), Move("nope", "f"))      # missing
 
 
+# --- MoveMany --------------------------------------------------------------
+
+def test_move_many_into_folder_preserves_order():
+    d = apply(doc(), MoveMany(node_ids=["a", "b"], new_parent_id="f"))
+    assert [c.id for c in d.find("f").children] == ["a", "b"]
+    assert [c.id for c in d.root.children] == ["f"]
+
+
+def test_move_many_skips_nested_member():
+    # select a folder and a node inside it → only the folder moves (child rides along)
+    d0 = apply(doc(), AddFolder(parent_id="root", name="g", new_id="g"))
+    d = apply(d0, MoveMany(node_ids=["f", "b"], new_parent_id="g"))
+    assert [c.id for c in d.find("g").children] == ["f"]            # only f moved
+    assert [c.id for c in d.find("f").children] == ["b"]            # b still inside f
+
+
+def test_move_many_into_own_subtree_raises():
+    with pytest.raises(CommandError):
+        apply(doc(), MoveMany(node_ids=["f"], new_parent_id="f"))
+
+
+# --- GroupIntoFolder -------------------------------------------------------
+
+def test_group_into_folder_moves_all_in_order():
+    d = apply(doc(), GroupIntoFolder(node_ids=["a", "b"], parent_id="root", name="G", new_id="grp"))
+    g = d.find("grp")
+    assert g.is_folder and g.name == "G"
+    assert [c.id for c in g.children] == ["a", "b"]
+    root_ids = [c.id for c in d.root.children]
+    assert "grp" in root_ids and "a" not in root_ids and "f" in root_ids
+    assert "b" not in [c.id for c in d.find("f").children]  # pulled out of f
+
+
+def test_group_into_non_folder_or_empty_raises():
+    with pytest.raises(CommandError):
+        apply(doc(), GroupIntoFolder(node_ids=["a"], parent_id="a"))   # 'a' is a leaf
+    with pytest.raises(CommandError):
+        apply(doc(), GroupIntoFolder(node_ids=[], parent_id="root"))   # nothing to group
+
+
 # --- reducer plumbing ------------------------------------------------------
 
 def test_apply_all_folds_commands():
@@ -152,6 +194,8 @@ def test_unknown_command_raises():
     SetPeriod(node_id="a", vz_start=2023, vz_end=None),
     Delete(node_id="b"),
     Move(node_id="a", new_parent_id="f", index=0),
+    MoveMany(node_ids=("a", "b"), new_parent_id="f", index=1),
+    GroupIntoFolder(node_ids=("a", "b"), parent_id="root", name="G", new_id="g"),
 ])
 def test_command_serialisation_roundtrip(cmd):
     assert command_from_dict(command_to_dict(cmd)) == cmd

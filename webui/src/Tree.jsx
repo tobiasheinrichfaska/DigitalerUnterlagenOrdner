@@ -19,6 +19,8 @@ function findNode(n, id) {
   return null
 }
 
+const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
+
 function dropZone(e, isFolder) {
   const r = e.currentTarget.getBoundingClientRect()
   const y = e.clientY - r.top
@@ -30,10 +32,18 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon }) {
+function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
+    if (hasFiles(e)) {
+      // OS file import → target the folder under the cursor (a leaf → its parent)
+      e.preventDefault()
+      e.stopPropagation()
+      setOver({ zone: 'fileInto', targetId: node.is_folder ? node.id : parentId,
+                targetName: node.is_folder ? node.name : (parentName || 'oberste Ebene') })
+      return
+    }
     if (!drag || drag === node.id) return
     e.preventDefault()
     e.stopPropagation()
@@ -55,6 +65,13 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   }
 
   const handleDrop = (e) => {
+    if (over?.zone === 'fileInto') {
+      e.preventDefault()
+      e.stopPropagation()
+      onDropFiles(e.dataTransfer.files, over.targetId)
+      setOver(null)
+      return
+    }
     if (!drag || drag === node.id || !over) { setOver(null); return }
     e.preventDefault()
     e.stopPropagation()
@@ -72,6 +89,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   if (node.id === primaryId) cls.push('primary')
   if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
   if (over?.zone === 'after' && !over.ghost) cls.push('drop-after')
+  if (over?.zone === 'fileInto') cls.push('file-target')
 
   return (
     <li>
@@ -90,6 +108,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         <span className={node.is_folder ? 'name folder' : 'name leaf'}>
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
+        {over?.zone === 'fileInto' && <span className="file-target-badge">→ {over.targetName}</span>}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (
@@ -102,10 +121,10 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
       {node.children?.length > 0 && (
         <ul>
           {node.children.map((c, i, arr) => (
-            <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
+            <TreeNode key={c.id} node={c} parentId={node.id} parentName={node.name} index={i} depth={depth + 1} isLast={i === arr.length - 1}
               selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-              dragLabel={dragLabel} dragIcon={dragIcon} />
+              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} />
           ))}
         </ul>
       )}
@@ -113,7 +132,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor }) {
+export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
@@ -122,6 +141,7 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
   const dropOnRoot = (e) => {
+    if (hasFiles(e)) { e.preventDefault(); onDropFiles(e.dataTransfer.files, node.id); return } // empty area → root
     if (!drag) return
     e.preventDefault()
     if (many) onMoveMany(selectedIds, node.id, null)
@@ -129,12 +149,12 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
     setDrag(null)
   }
   return (
-    <ul className="tree" onDragOver={(e) => { if (drag) e.preventDefault() }} onDrop={dropOnRoot}>
+    <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
-        <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
+        <TreeNode key={c.id} node={c} parentId={node.id} parentName={null} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-          dragLabel={dragLabel} dragIcon={dragIcon} />
+          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} />
       ))}
     </ul>
   )

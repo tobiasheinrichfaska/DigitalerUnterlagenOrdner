@@ -85,6 +85,7 @@ export default function App() {
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
+  const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -149,6 +150,7 @@ export default function App() {
     (resp) => {
       apply(resp)
       if (resp?.ok) {
+        setDirty(true) // an edit/undo/redo/import changed the document
         setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
         if (selected) setSelected(findNode(resp.tree, selected.id))
       }
@@ -171,27 +173,30 @@ export default function App() {
       if (resp?.warning) setError(`Teilweise importiert — ${resp.warning}`)
     })
 
-  // OS file drag-and-drop onto the window → read each file's content and import it.
-  // (Internal tree drags carry no "Files" type, so they're ignored here.)
+  // read each dropped file's content and import it under parentId (null = root).
+  const onDropFiles = async (files, parentId) => {
+    setDropActive(false)
+    for (const file of Array.from(files || [])) {
+      try {
+        const data = await readAsDataURL(file)
+        await handleImport(core.importBytes(session, file.name, data, parentId))
+      } catch (err) {
+        setError(String(err?.message || err))
+      }
+    }
+  }
+
+  // OS file drag onto the window: tree rows handle precise targeting (drop onto a
+  // folder); this is the fallback for drops elsewhere → the selected folder/root.
   useEffect(() => {
     if (!session) return undefined
     const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
     const onOver = (e) => { if (hasFiles(e)) { e.preventDefault(); setDropActive(true) } }
     const onLeave = (e) => { if (!e.relatedTarget) setDropActive(false) }
-    const onDrop = async (e) => {
+    const onDrop = (e) => {
       if (!hasFiles(e)) return
       e.preventDefault()
-      setDropActive(false)
-      const files = Array.from(e.dataTransfer.files || [])
-      const parentId = importTarget()
-      for (const file of files) {
-        try {
-          const data = await readAsDataURL(file)
-          await handleImport(core.importBytes(session, file.name, data, parentId))
-        } catch (err) {
-          setError(String(err?.message || err))
-        }
-      }
+      onDropFiles(e.dataTransfer.files, importTarget())
     }
     window.addEventListener('dragover', onOver)
     window.addEventListener('dragleave', onLeave)
@@ -274,11 +279,16 @@ export default function App() {
     return { ids: selectedIds, parentId }
   })()
 
-  const openFile = () =>
+  const openFile = () => {
+    if (dirty && !window.confirm('Das aktuelle Dokument hat ungespeicherte Änderungen.\nTrotzdem eine andere Datei öffnen und die Änderungen verwerfen?')) return
     run(core.openFile(session)).then((resp) => {
       apply(resp)
-      if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null) }
+      if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false) }
     })
+  }
+
+  const saveFile = () =>
+    run(core.saveFile(session)).then((resp) => { if (resp?.ok) setDirty(false) })
 
   if (!state && !error) {
     return (
@@ -296,7 +306,7 @@ export default function App() {
         <div className="toolbar">
           <button onClick={openFile}>📂 Öffnen</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
-          <button onClick={() => core.saveFile(session)}>💾 Speichern</button>
+          <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
           <span className="sep" />
           <button
             onClick={() =>
@@ -325,6 +335,7 @@ export default function App() {
               onMove={onMove}
               onMoveMany={onMoveMany}
               levelsFor={levelsFor}
+              onDropFiles={onDropFiles}
             />
           )}
         </div>
@@ -353,9 +364,8 @@ export default function App() {
 
       {dropActive && (
         <div className="drop-overlay">
-          <div className="drop-overlay-box">
-            📥 Dateien hier ablegen
-            <span>Import in {selected?.is_folder ? selected.name : 'oberste Ebene'}</span>
+          <div className="drop-overlay-badge">
+            📥 Dateien ablegen — auf einen Ordner für ein genaues Ziel, sonst in {selected?.is_folder ? selected.name : 'oberste Ebene'}
           </div>
         </div>
       )}

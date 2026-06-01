@@ -222,6 +222,12 @@ Current stable tag: **v3.5.3**
 ---
 
 ## Open / deferred items
+- **Auto-name untitled documents (React UI) — next change**: a fresh window opens
+  an empty, unnamed document. Give it a default name like Word's "Dokument 1",
+  "Dokument 2", … — auto-assigned so the first import(s) land in a sensibly-named
+  document, and used as the default save filename. Increment per new window
+  (process-wide counter). Likely a `CoreApi.open`/`new_window` concern (set the
+  root/document name) + the React title/save default.
 - **Zammad integration** — deferred, not started yet
 - **GUI test harness — Tk root churn (deferred)**: `tests/test_ui_lockout.py`
   creates a fresh `tk.Tk()` per test (see the `preview` fixture). Running *that

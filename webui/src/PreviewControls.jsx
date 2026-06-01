@@ -14,6 +14,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const off = node.no_compression
   const [dpi, setDpi] = useState(node.dpi_current ?? defaultDpi)
   const [options, setOptions] = useState(null) // method list, loaded on demand
+  const [loading, setLoading] = useState(false) // compression options being computed
   const [method, setMethod] = useState(node.compression_method ?? 'original')
 
   // keep the dropdown/slider in sync with the model after apply/reset/undo —
@@ -26,7 +27,11 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const preview = (d, m) => onPreview({ dpi: d, method: m })
   const loadOptions = (d) => {
     if (off) return
-    core.compressOptions(session, node.id, d).then((r) => setOptions(r?.ok ? r.options : []))
+    setLoading(true)
+    core.compressOptions(session, node.id, d).then((r) => {
+      setOptions(r?.ok ? r.options : [])
+      setLoading(false)
+    })
   }
 
   const onDpi = (d) => {
@@ -65,7 +70,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         onMouseDown={() => { if (!options) loadOptions(dpi) }}
         onFocus={() => { if (!options) loadOptions(dpi) }}
         onChange={(e) => onMethod(e.target.value)}>
-        <option value="original">Original (keine Kompression)</option>
+        <option value="original">{loading ? 'Kompression läuft …' : 'unkomprimierte Fassung'}</option>
         {/* before the list loads, keep the saved method selectable */}
         {!options && method !== 'original' && <option value={method}>{method}</option>}
         {options?.map((o, i) => (

@@ -345,7 +345,7 @@ export default function App() {
           <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
-          <button onClick={() => exportPdf()} title="Gesamtes Dokument als PDF mit Inhaltsverzeichnis exportieren">⬇ Export PDF</button>
+          <button onClick={() => exportPdf(selectedIds.length >= 2 ? selectedIds : null)} title="Als PDF mit Inhaltsverzeichnis exportieren (bei 2+ ausgewählten nur die Auswahl, sonst das ganze Dokument)">⬇ Export PDF{selectedIds.length >= 2 ? ` (Auswahl ${selectedIds.length})` : ''}</button>
           <span className="sep" />
           <button
             onClick={() =>
@@ -400,7 +400,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} />
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} selectedIds={selectedIds} />
 
       {dropActive && (
         <div className="drop-overlay">

@@ -10,8 +10,8 @@ const STATUSES = [
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds }) {
   if (!menu) return null
   const { x, y, node } = menu
-  // export the multi-selection if this node is part of one (2+), else just this node
-  const exportIds = (selectedIds?.includes(node.id) && selectedIds.length >= 2) ? selectedIds : [node.id]
+  // export the current selection if this node is part of it, else just this node
+  const exportIds = (selectedIds?.includes(node.id) && selectedIds.length >= 1) ? selectedIds : [node.id]
   const isLeaf = !node.is_folder
   const run = (extra) => {
     dispatch({ ...extra, node_id: node.id })

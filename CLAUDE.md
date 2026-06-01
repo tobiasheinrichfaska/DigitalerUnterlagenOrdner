@@ -83,6 +83,31 @@ for the core service + React UI. **Reference: [`docs/data-model.html`](docs/data
 Covered by `tests/test_model.py`, `test_commands.py`, `test_engine_commands.py`,
 `test_split_merge.py`, `test_session.py`, `test_bridge.py`, `test_core_*.py`.
 
+### React UI + pywebview host (the new front end)
+
+A **single warm Python process** ([`host.py`](host.py)) embeds the data-driven core
+in-process and exposes it to a **React + Vite SPA** (`webui/`) over the pywebview
+JS bridge (`window.pywebview.api.*`). No pipe/server in the active path; npm is
+build-time only (the prod build is static assets under `webui/dist/`).
+
+| File | Role |
+|---|---|
+| `host.py` | pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid; stores the uid, never the window object — that recurses). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty` via `evaluate_js`), startup `_prewarm` of the heavy PDF libs. |
+| `core/api.py` | `CoreApi` façade (JSON in/out, one `DocumentSession` per window): `open/save/dispatch/undo/redo/render/render_compressed/compress_options/import_paths/import_bytes/export/config/any_dirty`. Per-session `dirty` tracking. |
+| `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
+| `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
+| `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
+| `webui/src/ContextMenu.jsx`, `core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner); thin `window.pywebview.api` wrapper |
+
+**Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
+prod — `cd webui && npm run build` then `python host.py`. **Manual tests:**
+[`manual_tests/05_react_ui.md`](manual_tests/05_react_ui.md).
+
+Performance notes worth keeping: `.belegtool` is parsed **once** on load (was
+re-parsed per node); `universal_importer` (win32com/COM, ~2.6 s) is imported lazily
+only when an Office/archive/email import needs it; `host._prewarm` warms the
+render/compress path at startup.
+
 ---
 
 ## Dependencies (`requirements.txt` maintained in repo)

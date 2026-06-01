@@ -304,6 +304,27 @@ export default function App() {
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
     })
 
+  // keyboard shortcuts (ignored while typing in a field)
+  useEffect(() => {
+    if (!session) return undefined
+    const onKey = (e) => {
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const mod = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      if (mod && k === 's') { e.preventDefault(); saveFile() }
+      else if (mod && k === 'o') { e.preventDefault(); openFile() }
+      else if (mod && k === 'e') { e.preventDefault(); exportPdf() }
+      else if (mod && k === 'n') { e.preventDefault(); core.newWindow() }
+      else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (state?.can_redo) redo() }
+      else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); if (state?.can_redo) redo() }
+      else if (mod && k === 'z') { e.preventDefault(); if (state?.can_undo) undo() }
+      else if (k === 'delete' && selected) { e.preventDefault(); dispatch({ type: 'Delete', node_id: selected.id }) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }) // re-binds each render to close over current handlers/state
+
   if (!state && !error) {
     return (
       <div className="app loading">

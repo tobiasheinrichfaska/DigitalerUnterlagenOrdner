@@ -5,12 +5,17 @@ the app by hand. This complements the automated `pytest` suite — it checks the
 things only a person at the screen can confirm (visual previews, drag-and-drop,
 dialogs, export results).
 
+> **Two front ends.** Files 01–04 cover the shipped **Tk** app
+> (`python belegtool_main.py`). File [05_react_ui.md](05_react_ui.md) covers the
+> newer **React desktop UI** (`python host.py`) — its flows differ (drag-drop
+> import, slide-to-level drop, working-preview compression, multi-window).
+
 ## Before you start
 
 1. **Run the app** (one of):
-   - From source: open a terminal in the project root and run
-     `python belegtool_main.py`
-   - Or double-click the built `dist\PDF-Storage\PDF-Storage.exe`.
+   - Tk app from source: `python belegtool_main.py`, or the built
+     `dist\PDF-Storage\PDF-Storage.exe`.
+   - React UI: `cd webui && npm run build` then `python host.py` (see file 05).
 2. **Have a few sample files ready** on disk:
    - a multi-page **PDF**, a **JPG/PNG** image, optionally a **.zip**, an
      **.eml** or **.msg** e-mail with an attachment, and a Word/Excel file.
@@ -36,6 +41,7 @@ dialogs, export results).
 | [02_tree_operations.md](02_tree_operations.md) | Split, merge, folders, rename, delete, drag-and-drop |
 | [03_preview_and_compression.md](03_preview_and_compression.md) | Preview, DPI slider, compression, commit/reset, status colours |
 | [04_export_persistence_and_testmode.md](04_export_persistence_and_testmode.md) | Export (TOC), save/reload `.belegtool`, Test mode |
+| [05_react_ui.md](05_react_ui.md) | **React UI** (`host.py`): import/drop, tree edit, compression preview, multi-window, guards, export, shortcuts |
 
 > Keep these files current: whenever a user-facing flow changes, update the
 > matching test case. (Workspace convention — see the global CLAUDE.md.)

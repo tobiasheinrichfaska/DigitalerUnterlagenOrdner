@@ -114,6 +114,38 @@ def test_save_unknown_session(tmp_path):
     assert CoreApi().save("nope", str(tmp_path / "x.belegtool"))["ok"] is False
 
 
+def _doc_with_compressible_leaf():
+    return Document(Node(name="root", is_folder=True, children=(
+        Node(name="doc1", pdf_length=1, original_data=create_valid_pdf(pages=1)),
+    )))
+
+
+def test_config_reports_default_dpi():
+    resp = CoreApi().config()
+    assert resp["ok"] is True and resp["default_dpi"] == 150
+
+
+def test_dispatch_blocks_pending_clash_then_force(tmp_path):
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    sid = opened["session"]
+    leaf_id = opened["tree"]["children"][0]["id"]
+
+    compressed = api.dispatch(sid, {"type": "Compress", "node_id": leaf_id, "dpi": 150})
+    assert compressed["ok"] is True
+    assert compressed["tree"]["children"][0]["is_compressed"] is True  # pending now
+
+    blocked = api.dispatch(sid, {"type": "Rotate", "node_id": leaf_id, "direction": "right"})
+    assert blocked["ok"] is False and blocked["risk"] == "pending_compression"
+
+    forced = api.dispatch(sid, {"type": "Rotate", "node_id": leaf_id,
+                                "direction": "right", "force": True})
+    assert forced["ok"] is True
+    assert forced["tree"]["children"][0]["is_compressed"] is False  # pending discarded
+
+
 def test_compress_options_lists_methods_smallest_first(tmp_path):
     path = tmp_path / "s.belegtool"
     save_belegtool(_doc_with_leaf(pages=1), path)

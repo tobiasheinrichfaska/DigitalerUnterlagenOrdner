@@ -22,6 +22,7 @@ export default function App() {
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [zoom, setZoom] = useState(1) // preview zoom factor
+  const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -66,6 +67,7 @@ export default function App() {
 
   useEffect(() => {
     run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
+    core.config().then((r) => { if (r?.ok) setConfig(r) }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // after any edit/undo/redo: apply, keep `selected` fresh from the new tree, re-render preview
@@ -81,8 +83,19 @@ export default function App() {
     [selected, renderNode],
   )
 
+  // dispatch a command; if the core blocks it as a pending-change clash, ask the
+  // user and re-dispatch with force (the "block unless forced" policy).
   const dispatch = useCallback(
-    (command) => run(core.dispatch(session, command)).then(afterChange),
+    (command) =>
+      run(core.dispatch(session, command)).then((resp) => {
+        if (resp?.risk === 'pending_compression') {
+          if (window.confirm(`${resp.error}\n\nTrotzdem fortfahren?`)) {
+            return run(core.dispatch(session, { ...command, force: true })).then(afterChange)
+          }
+          return // cancelled — leave state untouched
+        }
+        afterChange(resp)
+      }),
     [session, afterChange, run],
   )
   const undo = () => run(core.undo(session)).then(afterChange)
@@ -147,7 +160,7 @@ export default function App() {
           )}
         </div>
         <div className="pane preview-pane" ref={previewRef}>
-          {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} />}
+          {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && pages?.length > 0 && (
             <div className="zoom-bar">
               <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>

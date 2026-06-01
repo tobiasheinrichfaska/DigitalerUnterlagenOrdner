@@ -4,14 +4,19 @@ import pytest
 
 from core.model import Document, Node
 from core.commands import (
+    DEFAULT_COMPRESSION_DPI,
     Commit,
     CommandError,
     Compress,
+    Merge,
+    PendingChangeError,
     Reset,
     Rotate,
+    Split,
     apply,
     command_from_dict,
     command_to_dict,
+    preflight,
 )
 
 
@@ -109,10 +114,48 @@ def test_reset_clears_compression():
 # --- Rotate ----------------------------------------------------------------
 
 def test_rotate_right_and_invalidates_compression():
+    # rotating a node with a pending compression is blocked → force past it here
     d0 = leaf_doc(current_data=b"OLD", is_compressed=True, dpi_current=120)
-    a = apply(d0, Rotate("a", "right"), ENGINE).find("a")
+    a = apply(d0, Rotate("a", "right", force=True), ENGINE).find("a")
     assert a.original_data == b"r90:" + DATA
     assert a.current_data is None and a.is_compressed is False and a.dpi_current is None
+
+
+# --- preflight: block clobbering a pending (uncommitted) change -------------
+
+def _pending_doc():
+    return leaf_doc(current_data=b"COMPRESSED", is_compressed=True, dpi_current=120)
+
+
+def test_preflight_flags_pending_clash_only():
+    d = _pending_doc()
+    assert preflight(d, Rotate("a")) is not None
+    assert preflight(d, Split("a")) is not None
+    assert preflight(d, Merge(("a", "b"))) is not None
+    # non-clashing / finishing commands are never blocked
+    assert preflight(d, Commit("a")) is None
+    assert preflight(d, Reset("a")) is None
+    assert preflight(d, Compress("a")) is None
+    # a clean (non-pending) node is never blocked
+    assert preflight(leaf_doc(), Rotate("a")) is None
+
+
+def test_apply_blocks_then_force_overrides():
+    d = _pending_doc()
+    with pytest.raises(PendingChangeError):
+        apply(d, Rotate("a"), ENGINE)  # blocked
+    a = apply(d, Rotate("a", force=True), ENGINE).find("a")  # forced → discards pending
+    assert a.current_data is None and a.is_compressed is False
+
+
+def test_commit_first_unblocks():
+    d = apply(_pending_doc(), Commit("a"))  # finalise → no longer pending
+    a = apply(d, Rotate("a"), ENGINE).find("a")  # now allowed without force
+    assert a.original_data == b"r90:COMPRESSED"
+
+
+def test_compress_uses_core_default_dpi():
+    assert Compress("a").dpi == DEFAULT_COMPRESSION_DPI
 
 
 def test_rotate_directions():

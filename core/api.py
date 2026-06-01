@@ -15,7 +15,12 @@ import uuid
 
 from core import CORE_VERSION
 from core.bridge import load_belegtool
-from core.commands import CommandError, command_from_dict
+from core.commands import (
+    DEFAULT_COMPRESSION_DPI,
+    CommandError,
+    PendingChangeError,
+    command_from_dict,
+)
 from core.engine import RealEngine
 from core.model import Document
 from core.session import DocumentSession
@@ -29,6 +34,10 @@ class CoreApi:
         self._lock = threading.Lock()
 
     # --- ops ---------------------------------------------------------------
+    def config(self) -> dict:
+        """Fixed core defaults the UI should use instead of hardcoding its own."""
+        return {"ok": True, "default_dpi": DEFAULT_COMPRESSION_DPI}
+
     def hello(self) -> dict:
         with self._lock:
             sid = self._new_locked(Document.empty())
@@ -124,6 +133,9 @@ class CoreApi:
                 return {"ok": False, "error": "unknown session"}
             try:
                 action(s)
+            except PendingChangeError as e:
+                # A blocked incomplete-change clash — the UI may re-dispatch with force.
+                return {"ok": False, "error": str(e), "risk": "pending_compression"}
             except CommandError as e:
                 return {"ok": False, "error": str(e)}
             except Exception as e:  # defensive — never crash the host

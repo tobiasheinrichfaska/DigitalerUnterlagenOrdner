@@ -18,9 +18,20 @@ from typing import Optional, Tuple, Union
 
 from core.model import Document, Node, STATUSES
 
+# Fixed core defaults (the model/logic layer owns these — not the UI).
+DEFAULT_COMPRESSION_DPI = 150
+
 
 class CommandError(Exception):
     """A command could not be applied (bad target, invalid value, …)."""
+
+
+class PendingChangeError(CommandError):
+    """The command would discard/clash with a pending (uncommitted) change.
+
+    Blocked by ``apply``'s preflight; re-issue the same command with ``force=True``
+    to proceed anyway. Subclass of CommandError so existing handlers still catch it.
+    """
 
 
 # --------------------------------------------------------------------------- #
@@ -71,7 +82,7 @@ class Move:
 @dataclass(frozen=True)
 class Compress:
     node_id: str
-    dpi: int = 150
+    dpi: int = DEFAULT_COMPRESSION_DPI
     method: Optional[str] = None  # jpg/png/pikepdf; None = best
 
 
@@ -89,6 +100,7 @@ class Reset:
 class Rotate:
     node_id: str
     direction: str = "right"  # "right" | "left" | "180"
+    force: bool = False  # override the pending-change preflight (see preflight)
 
 
 # --- engine-backed multi-node commands (D3b) -------------------------------
@@ -96,11 +108,13 @@ class Rotate:
 @dataclass(frozen=True)
 class Split:
     node_id: str  # a leaf -> one page-leaf per page
+    force: bool = False  # override the pending-change preflight
 
 
 @dataclass(frozen=True)
 class Merge:
     node_ids: Tuple[str, ...]  # >= 2 sibling leaves -> one leaf
+    force: bool = False  # override the pending-change preflight
 
     def __post_init__(self):
         if not isinstance(self.node_ids, tuple):
@@ -137,10 +151,17 @@ def apply(doc: Document, cmd: Command, engine=None) -> Document:
 
     Structural commands ignore ``engine``; engine-backed commands
     (Compress/Rotate/…) require it and raise CommandError if it is missing.
+
+    Before running, a **preflight** blocks commands that would discard or clash
+    with a pending (uncommitted) change, unless the command carries ``force``.
     """
     handler = _HANDLERS.get(type(cmd))
     if handler is None:
         raise CommandError(f"unknown command: {type(cmd).__name__}")
+    if not getattr(cmd, "force", False):
+        risk = preflight(doc, cmd)
+        if risk is not None:
+            raise PendingChangeError(risk)
     return handler(doc, cmd, engine)
 
 
@@ -149,6 +170,58 @@ def apply_all(doc: Document, cmds, engine=None) -> Document:
     for cmd in cmds:
         doc = apply(doc, cmd, engine)
     return doc
+
+
+# --------------------------------------------------------------------------- #
+# Preflight: block a change that would clobber an incomplete (pending) one
+# --------------------------------------------------------------------------- #
+
+# A node is "pending" when it holds an uncommitted compression — i.e. a
+# `current_data` variant that has not been committed (Commit) or discarded
+# (Reset). These commands consume a node's *original* bytes (or recombine
+# siblings), silently throwing that pending variant away, so the result differs
+# depending on whether the compression was finished first. Pure & data-driven.
+_PENDING_CLASH_VERBS = {"Rotate": "Rotating", "Split": "Splitting", "Merge": "Merging"}
+
+
+def _is_pending(node: Optional[Node]) -> bool:
+    return node is not None and node.current_data is not None
+
+
+def _merge_compression_state(nodes):
+    """Hypothetical compression outcome of merging ``nodes``:
+    ``(preserves, dpi_current, no_compression)``. Single source of truth shared
+    by ``_merge`` (to build the node) and ``preflight`` (to judge data loss)."""
+    dpi_set = {n.dpi_current for n in nodes if n.is_compressed and n.dpi_current is not None}
+    all_compressed = all(n.is_compressed for n in nodes)
+    no_compression = any(n.no_compression for n in nodes) or len(dpi_set) > 1
+    preserves = (not no_compression) and all_compressed and len(dpi_set) == 1
+    return preserves, (next(iter(dpi_set)) if preserves else None), no_compression
+
+
+def preflight(doc: Document, cmd: Command) -> Optional[str]:
+    """Return a human-readable reason if ``cmd`` would discard/clash with a
+    pending (uncommitted) change, else None. ``apply`` blocks on a non-None
+    result unless the command sets ``force=True``."""
+    name = type(cmd).__name__
+    if name in ("Rotate", "Split"):
+        ids = [cmd.node_id]
+    elif name == "Merge":
+        nodes = [doc.find(nid) for nid in cmd.node_ids]
+        # A merge that preserves the compression carries it forward — nothing is
+        # discarded, so it is not a clash. Only a dropping merge clobbers a pending one.
+        if all(n is not None for n in nodes) and _merge_compression_state(nodes)[0]:
+            return None
+        ids = list(cmd.node_ids)
+    else:
+        return None
+    pending = [n for n in (doc.find(nid) for nid in ids) if _is_pending(n)]
+    if not pending:
+        return None
+    names = ", ".join(n.name for n in pending)
+    verb = _PENDING_CLASH_VERBS.get(name, "This operation")
+    return (f"{verb} would discard an unconfirmed compression on: {names}. "
+            f"Commit it (“Lesbarkeit geprüft”) first, or force.")
 
 
 # --- validation helpers ----------------------------------------------------
@@ -335,21 +408,15 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
 
     # DPI-conflict invariant (see DATA_CONTRACT): differing compressed DPIs ->
     # drop compression and mark no_compression.
-    dpi_set = {n.dpi_current for n in nodes if n.is_compressed and n.dpi_current is not None}
-    dpi_conflict = len(dpi_set) > 1
-    all_compressed = all(n.is_compressed for n in nodes)
-    no_compression = any(n.no_compression for n in nodes) or dpi_conflict
-
+    preserves, dpi_current, no_compression = _merge_compression_state(nodes)
     method_set = {n.compression_method for n in nodes if n.is_compressed}
-    if not no_compression and all_compressed and len(dpi_set) == 1:
+    if preserves:
         current_data = engine.merge([n.current_data for n in nodes])
         is_compressed = True
-        dpi_current = next(iter(dpi_set))
         compression_method = next(iter(method_set)) if len(method_set) == 1 else None
     else:
         current_data = None
         is_compressed = False
-        dpi_current = None
         compression_method = None
 
     merged = Node(

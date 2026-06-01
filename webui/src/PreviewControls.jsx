@@ -7,8 +7,8 @@ import { core } from './core'
 
 const kb = (n) => `${Math.round(n / 1024)} KB`
 
-export function PreviewControls({ node, session, dispatch }) {
-  const [dpi, setDpi] = useState(node.dpi_current ?? 150)
+export function PreviewControls({ node, session, dispatch, defaultDpi = 150 }) {
+  const [dpi, setDpi] = useState(node.dpi_current ?? defaultDpi)
   const [options, setOptions] = useState(null) // [{method, size}] smallest first
   const off = node.no_compression
   // The chosen method lives in the model now → the dropdown is authoritative and

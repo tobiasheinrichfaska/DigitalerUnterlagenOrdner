@@ -63,6 +63,7 @@ ul.tree { user-select: none; } /* so Shift-click range-select doesn't highlight 
 ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 18px; }
 ul.tree { padding-left: 0; }
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -75,18 +76,19 @@ ul.tree { padding-left: 0; }
 .row[draggable="true"] { cursor: grab; }
 .row.drop-into { background: #d7ebff; outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
-/* level-aware "after" guide: a bold line indented to the chosen nesting level,
-   with a pill naming where it will land */
+/* level-aware "after" guide: an absolute overlay at the row's bottom edge (no
+   layout shift), indented to the chosen level, with a pill naming where it lands */
 .drop-guide {
-  position: relative; height: 0; border-top: 3px solid var(--accent);
-  margin: 3px 0; pointer-events: none;
+  position: absolute; bottom: -2px; right: 6px;
+  height: 0; border-top: 3px solid var(--accent);
+  pointer-events: none; z-index: 5;
 }
 .drop-guide::before {
-  content: ""; position: absolute; left: -4px; top: -4px;
-  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  content: ""; position: absolute; left: -3px; top: -4px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
 }
 .drop-guide-label {
-  position: absolute; top: -10px; left: 8px;
+  position: absolute; bottom: 2px; left: 8px;
   background: var(--accent); color: #fff; font-size: 10px; font-weight: 600;
   padding: 1px 7px; border-radius: 9px; white-space: nowrap;
 }

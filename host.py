@@ -12,7 +12,6 @@ Run:
 
 import io
 import os
-import threading
 
 import webview
 
@@ -121,12 +120,14 @@ class HostApi:
 
 def main():
     api = HostApi()
-    threading.Thread(target=_prewarm, daemon=True).start()
     entry = DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
     webview.create_window(
         "DigitalerBelegeOrdner", entry, js_api=api,
         width=1280, height=820, min_size=(900, 600))
-    webview.start()
+    # Run the warm-up only AFTER the window is up (start's func runs on its own
+    # thread once the GUI loop is live), so the heavy warming doesn't compete with
+    # window creation and the window paints as soon as possible.
+    webview.start(_prewarm)
 
 
 if __name__ == "__main__":

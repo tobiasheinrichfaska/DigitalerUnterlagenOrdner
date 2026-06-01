@@ -17,6 +17,24 @@ def test_real_page_count():
     assert ENGINE.page_count(create_valid_pdf(pages=3)) == 3
 
 
+def test_real_engine_caches_compression(monkeypatch):
+    # re-selecting a node must not recompute its compressions: compress_all_methods
+    # runs once per (content, dpi), then the cache serves compress + compress_methods.
+    import compress_pdf_bytes
+    calls = []
+    orig = compress_pdf_bytes.compress_all_methods
+    monkeypatch.setattr(compress_pdf_bytes, "compress_all_methods",
+                        lambda b, dpi: (calls.append(1), orig(b, dpi=dpi))[1])
+    eng = RealEngine()
+    data = create_valid_pdf(pages=2)
+    eng.compress_methods(data, 150)
+    eng.compress(data, 150, None)
+    eng.compress_methods(data, 150)
+    assert len(calls) == 1                       # computed once, then cached
+    eng.compress_methods(data, 120)              # different DPI → recompute
+    assert len(calls) == 2
+
+
 def test_real_compress_reduces_size():
     data = create_valid_pdf(pages=1)  # the compressible sample fixture
     out = ENGINE.compress(data, dpi=150)

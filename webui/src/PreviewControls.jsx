@@ -10,29 +10,36 @@ const kb = (n) => `${Math.round(n / 1024)} KB`
 export function PreviewControls({ node, session, dispatch }) {
   const [dpi, setDpi] = useState(node.dpi_current ?? 150)
   const [options, setOptions] = useState(null) // [{method, size}] smallest first
-  const [method, setMethod] = useState('original')
   const off = node.no_compression
+  // The chosen method lives in the model now → the dropdown is authoritative and
+  // survives reselect / undo / reload. ('original' = no compression.)
+  const method = off ? 'original' : (node.compression_method ?? 'original')
 
-  // apply compression (best, a chosen method, or "original" = none) and keep the
-  // method list + selection in sync.
+  // apply compression: fetch the method list first (so we know the best), then
+  // dispatch Compress with an explicit method so the model records the choice.
+  // m === null → auto-pick best; m === 'original' → Reset (no compression).
   const apply = (d, m = null) => {
     if (m === 'original') {
       dispatch({ type: 'Reset', node_id: node.id })
-      setMethod('original')
       return
     }
-    dispatch({ type: 'Compress', node_id: node.id, dpi: d, method: m })
     core.compressOptions(session, node.id, d).then((r) => {
       const opts = r?.ok ? r.options : []
       setOptions(opts)
-      setMethod(m ?? opts[0]?.method ?? 'original')
+      const chosen = m ?? opts[0]?.method
+      if (chosen) dispatch({ type: 'Compress', node_id: node.id, dpi: d, method: chosen })
     })
   }
 
-  // on select: always compress + choose best (so the dropdown is ready)
+  // on select: a node that already carries a compression keeps its saved method
+  // (just load the labels); a fresh leaf auto-compresses and picks the best.
   useEffect(() => {
-    if (off) { setOptions([]); setMethod('original'); return }
-    apply(dpi)
+    if (off) { setOptions([]); return }
+    if (node.is_compressed) {
+      core.compressOptions(session, node.id, dpi).then((r) => setOptions(r?.ok ? r.options : []))
+    } else {
+      apply(dpi)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps  (keyed per node)
 
   return (

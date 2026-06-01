@@ -58,6 +58,7 @@ class PDFNode:
         self.dpi_original: Optional[int] = None
         self.dpi_current: Optional[int] = None
         self.no_compression: bool = False
+        self.compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data
 
         # Zentralisierte Verarbeitung via set_original_and_current_data
         if pdf_data and not is_folder:
@@ -420,6 +421,7 @@ class PDFNode:
             "dpi_original": self.dpi_original,
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
+            "compression_method": self.compression_method,
             "children": [child.to_dict() for child in self.children]
         }
 

@@ -45,6 +45,7 @@ class Node:
     children: Tuple["Node", ...] = ()
     original_data: Optional[bytes] = None
     current_data: Optional[bytes] = None
+    compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data; None = none/auto
 
     # --- serialisation (structure only — no bytes) ------------------------
     def to_dict(self, position: Optional[int] = None) -> Dict[str, Any]:
@@ -61,6 +62,7 @@ class Node:
             "dpi_original": self.dpi_original,
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
+            "compression_method": self.compression_method,
             "children": [c.to_dict(i) for i, c in enumerate(self.children)],
         }
 
@@ -78,6 +80,7 @@ class Node:
             dpi_original=d.get("dpi_original"),
             dpi_current=d.get("dpi_current"),
             no_compression=d.get("no_compression", False),
+            compression_method=d.get("compression_method"),
             children=tuple(Node.from_dict(c) for c in d.get("children", [])),
         )
 

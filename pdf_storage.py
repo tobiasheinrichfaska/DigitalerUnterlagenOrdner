@@ -384,6 +384,7 @@ class PDFStorage:
         # provided; loading from disk always passes current_data=None, so we must read the
         # flag back from the serialised structure explicitly.
         node.is_compressed = bool(node_data.get("is_compressed", False))
+        node.compression_method = node_data.get("compression_method")
         node.pdf_length = length
 
         node.update_preview()

@@ -248,7 +248,8 @@ def _compress(doc: Document, cmd: Compress, engine=None) -> Document:
     if result is None:
         return doc  # this method / the best didn't beat the original → unchanged
     return doc.update_node(cmd.node_id, current_data=result,
-                           is_compressed=True, dpi_current=cmd.dpi)
+                           is_compressed=True, dpi_current=cmd.dpi,
+                           compression_method=cmd.method)
 
 
 @_handler(Commit)
@@ -264,6 +265,7 @@ def _commit(doc: Document, cmd: Commit, engine=None) -> Document:
         dpi_original=new_dpi_original,
         dpi_current=None,
         is_compressed=False,
+        compression_method=None,
     )
 
 
@@ -271,7 +273,8 @@ def _commit(doc: Document, cmd: Commit, engine=None) -> Document:
 def _reset(doc: Document, cmd: Reset, engine=None) -> Document:
     _require(doc, cmd.node_id)
     return doc.update_node(cmd.node_id, current_data=None,
-                           is_compressed=False, dpi_current=None)
+                           is_compressed=False, dpi_current=None,
+                           compression_method=None)
 
 
 @_handler(Rotate)
@@ -285,7 +288,8 @@ def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
     rotated = engine.rotate(node.original_data, _ROTATE_ANGLES[cmd.direction])
     # Rotating invalidates any compressed variant.
     return doc.update_node(cmd.node_id, original_data=rotated,
-                           current_data=None, is_compressed=False, dpi_current=None)
+                           current_data=None, is_compressed=False, dpi_current=None,
+                           compression_method=None)
 
 
 @_handler(Split)
@@ -336,14 +340,17 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
     all_compressed = all(n.is_compressed for n in nodes)
     no_compression = any(n.no_compression for n in nodes) or dpi_conflict
 
+    method_set = {n.compression_method for n in nodes if n.is_compressed}
     if not no_compression and all_compressed and len(dpi_set) == 1:
         current_data = engine.merge([n.current_data for n in nodes])
         is_compressed = True
         dpi_current = next(iter(dpi_set))
+        compression_method = next(iter(method_set)) if len(method_set) == 1 else None
     else:
         current_data = None
         is_compressed = False
         dpi_current = None
+        compression_method = None
 
     merged = Node(
         name=nodes[0].name,
@@ -354,6 +361,7 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
         dpi_original=max((n.dpi_original for n in nodes if n.dpi_original is not None), default=None),
         dpi_current=dpi_current,
         no_compression=no_compression,
+        compression_method=compression_method,
     )
 
     id_set = set(ids)

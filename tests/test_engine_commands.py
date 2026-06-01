@@ -51,6 +51,15 @@ def test_compress_sets_current_and_flags():
     assert d0.find("a").current_data is None  # original untouched (pure)
 
 
+def test_compress_records_chosen_method():
+    d0 = leaf_doc()
+    a = apply(d0, Compress("a", dpi=150, method="png"), ENGINE).find("a")
+    assert a.compression_method == "png"
+    # auto/best leaves it unset (None = "auto")
+    b = apply(d0, Compress("a", dpi=150), ENGINE).find("a")
+    assert b.compression_method is None
+
+
 def test_compress_no_gain_returns_unchanged():
     d0 = leaf_doc(data=b"ab")  # too small → FakeEngine returns None
     assert apply(d0, Compress("a"), ENGINE) is d0
@@ -90,9 +99,10 @@ def test_commit_without_current_raises():
 # --- Reset -----------------------------------------------------------------
 
 def test_reset_clears_compression():
-    d0 = leaf_doc(current_data=b"X", is_compressed=True, dpi_current=120)
+    d0 = leaf_doc(current_data=b"X", is_compressed=True, dpi_current=120, compression_method="jpg")
     a = apply(d0, Reset("a")).find("a")
     assert a.current_data is None and a.is_compressed is False and a.dpi_current is None
+    assert a.compression_method is None
     assert a.original_data == DATA  # original kept
 
 

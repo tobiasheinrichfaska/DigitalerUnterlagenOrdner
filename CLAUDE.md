@@ -180,7 +180,7 @@ python belegtool_main.py
 
 ## Tests
 
-Framework: `pytest`. Covered modules: `pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`. 31 test files in `tests/`.
+Framework: `pytest`. Covers the legacy modules (`pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`) **and** the data-driven `core/` (model, commands, engine, session, bridge, api, ipc). 49 test files in `tests/` (271 passing).
 
 ```powershell
 pytest

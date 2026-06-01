@@ -1,10 +1,14 @@
 // Recursive document-tree view. Click a node to select it (preview); right-click
 // for operations (rename, split, status, folders, delete) via the context menu.
-// Drag a row onto another to move it: dropping on the top/bottom quarter reorders
-// it as a sibling (before/after); dropping on the middle of a folder moves it
-// inside. The drop only dispatches a Move command — the tree re-renders from the
+// Drag a row onto another to move it: top quarter = before, bottom = after,
+// middle of a folder = inside. When dropping in the "after" gap of a row that is
+// the last child of its folder, slide the cursor left/right to choose the nesting
+// LEVEL (child of the deepest folder → … → root); a guide line shows where it
+// lands. The drop only dispatches a Move/MoveMany — the tree re-renders from the
 // core's returned state (no optimistic local mutation).
 import { useState } from 'react'
+
+const INDENT = 18 // px per nesting level (matches ul padding-left)
 
 function dropZone(e, isFolder) {
   const r = e.currentTarget.getBoundingClientRect()
@@ -17,27 +21,38 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, drag, setDrag }) {
-  const [over, setOver] = useState(null) // 'into' | 'before' | 'after' | null
+function TreeNode({ node, parentId, index, depth, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag }) {
+  const [over, setOver] = useState(null) // { zone, target?, depth? } | null
 
   const handleDragOver = (e) => {
     if (!drag || drag === node.id) return
     e.preventDefault()
     e.stopPropagation()
-    setOver(dropZone(e, node.is_folder))
+    const zone = dropZone(e, node.is_folder)
+    if (zone === 'after') {
+      // choose the nesting level from the cursor's horizontal position
+      const levels = levelsFor(node.id) // deepest → shallowest
+      const treeLeft = e.currentTarget.closest('ul.tree').getBoundingClientRect().left
+      const maxD = levels[0]?.depth ?? depth
+      const minD = levels[levels.length - 1]?.depth ?? depth
+      let d = Math.floor((e.clientX - treeLeft) / INDENT)
+      d = Math.max(minD, Math.min(maxD, d))
+      const target = levels.find((l) => l.depth === d) || levels[0]
+      setOver({ zone: 'after', target, depth: d })
+    } else {
+      setOver({ zone })
+    }
   }
+
   const handleDrop = (e) => {
-    if (!drag || drag === node.id) { setOver(null); return }
+    if (!drag || drag === node.id || !over) { setOver(null); return }
     e.preventDefault()
     e.stopPropagation()
-    // dragging a member of the multi-selection moves the whole set (at the drop spot)
     const many = selectedIds.includes(drag) && selectedIds.length > 1
-    if (many) {
-      if (over === 'into') onMoveMany(selectedIds, node.id, null)
-      else onMoveMany(selectedIds, parentId, over === 'before' ? index : index + 1)
-    } else if (over === 'into') onMove(drag, node.id, null)
-    else if (over === 'before') onMove(drag, parentId, index)
-    else if (over === 'after') onMove(drag, parentId, index + 1)
+    const move = (parent, idx) => (many ? onMoveMany(selectedIds, parent, idx) : onMove(drag, parent, idx))
+    if (over.zone === 'into') move(node.id, null)
+    else if (over.zone === 'before') move(parentId, index)
+    else if (over.zone === 'after') move(over.target.parentId, over.target.index)
     setOver(null)
     setDrag(null)
   }
@@ -45,7 +60,7 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
   const cls = ['row']
   if (selectedIds.includes(node.id)) cls.push('selected')
   if (node.id === primaryId) cls.push('primary')
-  if (over) cls.push(`drop-${over}`)
+  if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
 
   return (
     <li>
@@ -64,12 +79,16 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
       </div>
+      {/* level-aware drop guide for the "after" gap (indented to the chosen level) */}
+      {over?.zone === 'after' && (
+        <div className="drop-guide" style={{ marginLeft: `${(over.depth - depth) * INDENT}px` }} />
+      )}
       {node.children?.length > 0 && (
         <ul>
           {node.children.map((c, i) => (
-            <TreeNode key={c.id} node={c} parentId={node.id} index={i}
+            <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1}
               selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
-              onMove={onMove} onMoveMany={onMoveMany} drag={drag} setDrag={setDrag} />
+              onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag} />
           ))}
         </ul>
       )}
@@ -77,13 +96,13 @@ function TreeNode({ node, parentId, index, selectedIds, primaryId, onSelect, onC
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany }) {
+export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const dropOnRoot = (e) => {
     if (!drag) return
     e.preventDefault()
-    if (selectedIds.includes(drag) && selectedIds.length > 1) onMoveMany(selectedIds, node.id)
+    if (selectedIds.includes(drag) && selectedIds.length > 1) onMoveMany(selectedIds, node.id, null)
     else onMove(drag, node.id, null)
     setDrag(null)
   }
@@ -94,9 +113,9 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
       onDrop={dropOnRoot}
     >
       {(node.children ?? []).map((c, i) => (
-        <TreeNode key={c.id} node={c} parentId={node.id} index={i}
+        <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0}
           selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
-          onMove={onMove} onMoveMany={onMoveMany} drag={drag} setDrag={setDrag} />
+          onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag} />
       ))}
     </ul>
   )

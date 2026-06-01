@@ -75,7 +75,9 @@ ul.tree { padding-left: 0; }
 .row[draggable="true"] { cursor: grab; }
 .row.drop-into { background: #d7ebff; outline: 2px solid var(--accent); outline-offset: -2px; }
 .row.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
-.row.drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
+/* level-aware "after" guide: a line indented to the chosen nesting level */
+.drop-guide { height: 0; border-top: 2px solid var(--accent); margin: 1px 0; pointer-events: none; }
+.drop-guide::before { content: "▸"; color: var(--accent); font-size: 11px; margin-left: -10px; vertical-align: -2px; }
 
 .name.folder { font-weight: 600; color: #9a6700; }
 .name.leaf { color: var(--ink); }

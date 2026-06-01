@@ -27,6 +27,7 @@
 
 .name { cursor: pointer; }
 .row.selected { background: #e6f0fb; }
+.row.primary { box-shadow: inset 3px 0 0 0 var(--accent); }
 .error {
   color: #b4232c;
   background: #fdecee;

@@ -110,6 +110,19 @@ export default function App() {
   const undo = () => run(core.undo(session)).then(afterChange)
   const redo = () => run(core.redo(session)).then(afterChange)
 
+  // drag-drop move: dispatch a Move command (the core is the source of truth).
+  // Adjust the index for the core's remove-then-insert when reordering within the
+  // same parent to a later slot (the source's removal shifts everything down one).
+  const onMove = useCallback((nodeId, newParentId, index) => {
+    let idx = index
+    if (idx != null && state?.tree) {
+      const parent = findNode(state.tree, newParentId)
+      const from = parent?.children?.findIndex((c) => c.id === nodeId)
+      if (from != null && from !== -1 && from < idx) idx = idx - 1
+    }
+    dispatch({ type: 'Move', node_id: nodeId, new_parent_id: newParentId, index: idx })
+  }, [state, dispatch])
+
   const select = useCallback((node) => {
     setSelected(node)
     setPages(null)
@@ -162,6 +175,7 @@ export default function App() {
               selectedId={selected?.id}
               onSelect={select}
               onContext={(x, y, node) => setMenu({ x, y, node })}
+              onMove={onMove}
             />
           )}
         </div>

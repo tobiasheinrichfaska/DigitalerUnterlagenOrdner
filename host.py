@@ -23,19 +23,39 @@ def _prewarm():
     """Import + initialise the heavy PDF libraries in the background so the first
     real open/render doesn't pay the cold-start cost (the 2-4 s "first load is
     slow, the rest fast" symptom). Runs on a daemon thread at startup, concurrent
-    with the user looking at the window / picking a file. Best-effort."""
+    with the user looking at the window / picking a file. Best-effort.
+
+    The dominant cost is ``import pdf_storage`` (~2 s) — it pulls in
+    universal_importer → win32com/COM, extract-msg, pillow-heif. A tiny
+    save+load+render+compress round-trip warms the rest of the open path too.
+    """
     try:
+        import os
+        import tempfile
         from pypdf import PdfWriter
-        from services.render import render_pdf_to_pngs   # pulls in PyMuPDF/fitz
-        from compress_pdf_bytes import compress_all_methods  # pulls in PIL/pikepdf
+        import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
+        from core.bridge import save_belegtool, load_belegtool
+        from core.model import Document, Node
+        from services.render import render_pdf_to_pngs   # PyMuPDF/fitz
+        from compress_pdf_bytes import compress_all_methods  # PIL/pikepdf
 
         writer = PdfWriter()
         writer.add_blank_page(width=72, height=72)
         buf = io.BytesIO()
         writer.write(buf)
         tiny = buf.getvalue()
+
+        doc = Document(Node(name="root", is_folder=True, children=(
+            Node(name="w", pdf_length=1, original_data=tiny),)))
+        path = os.path.join(tempfile.gettempdir(), "_belegtool_warm.belegtool")
+        save_belegtool(doc, path)           # warm the save path
+        load_belegtool(path)                # warm the parse/slice load path
         render_pdf_to_pngs(tiny)            # warm the fitz render path
         compress_all_methods(tiny, dpi=72)  # warm the PIL/pikepdf compress path
+        try:
+            os.remove(path)
+        except Exception:
+            pass
     except Exception:
         pass  # warming is a best-effort optimisation; never block startup
 

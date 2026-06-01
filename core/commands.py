@@ -26,14 +26,6 @@ class CommandError(Exception):
     """A command could not be applied (bad target, invalid value, …)."""
 
 
-class PendingChangeError(CommandError):
-    """The command would discard/clash with a pending (uncommitted) change.
-
-    Blocked by ``apply``'s preflight; re-issue the same command with ``force=True``
-    to proceed anyway. Subclass of CommandError so existing handlers still catch it.
-    """
-
-
 # --------------------------------------------------------------------------- #
 # Command value objects (pure data)
 # --------------------------------------------------------------------------- #
@@ -130,7 +122,6 @@ class Reset:
 class Rotate:
     node_id: str
     direction: str = "right"  # "right" | "left" | "180"
-    force: bool = False  # override the pending-change preflight (see preflight)
 
 
 # --- engine-backed multi-node commands (D3b) -------------------------------
@@ -138,13 +129,11 @@ class Rotate:
 @dataclass(frozen=True)
 class Split:
     node_id: str  # a leaf -> one page-leaf per page
-    force: bool = False  # override the pending-change preflight
 
 
 @dataclass(frozen=True)
 class Merge:
     node_ids: Tuple[str, ...]  # >= 2 sibling leaves -> one leaf
-    force: bool = False  # override the pending-change preflight
 
     def __post_init__(self):
         if not isinstance(self.node_ids, tuple):
@@ -181,17 +170,10 @@ def apply(doc: Document, cmd: Command, engine=None) -> Document:
 
     Structural commands ignore ``engine``; engine-backed commands
     (Compress/Rotate/…) require it and raise CommandError if it is missing.
-
-    Before running, a **preflight** blocks commands that would discard or clash
-    with a pending (uncommitted) change, unless the command carries ``force``.
     """
     handler = _HANDLERS.get(type(cmd))
     if handler is None:
         raise CommandError(f"unknown command: {type(cmd).__name__}")
-    if not getattr(cmd, "force", False):
-        risk = preflight(doc, cmd)
-        if risk is not None:
-            raise PendingChangeError(risk)
     return handler(doc, cmd, engine)
 
 
@@ -202,56 +184,15 @@ def apply_all(doc: Document, cmds, engine=None) -> Document:
     return doc
 
 
-# --------------------------------------------------------------------------- #
-# Preflight: block a change that would clobber an incomplete (pending) one
-# --------------------------------------------------------------------------- #
-
-# A node is "pending" when it holds an uncommitted compression — i.e. a
-# `current_data` variant that has not been committed (Commit) or discarded
-# (Reset). These commands consume a node's *original* bytes (or recombine
-# siblings), silently throwing that pending variant away, so the result differs
-# depending on whether the compression was finished first. Pure & data-driven.
-_PENDING_CLASH_VERBS = {"Rotate": "Rotating", "Split": "Splitting", "Merge": "Merging"}
-
-
-def _is_pending(node: Optional[Node]) -> bool:
-    return node is not None and node.current_data is not None
-
-
 def _merge_compression_state(nodes):
     """Hypothetical compression outcome of merging ``nodes``:
-    ``(preserves, dpi_current, no_compression)``. Single source of truth shared
-    by ``_merge`` (to build the node) and ``preflight`` (to judge data loss)."""
+    ``(preserves, dpi_current, no_compression)``. Same DPI on all-compressed leaves
+    keeps the merged compression; otherwise it is dropped and no_compression set."""
     dpi_set = {n.dpi_current for n in nodes if n.is_compressed and n.dpi_current is not None}
     all_compressed = all(n.is_compressed for n in nodes)
     no_compression = any(n.no_compression for n in nodes) or len(dpi_set) > 1
     preserves = (not no_compression) and all_compressed and len(dpi_set) == 1
     return preserves, (next(iter(dpi_set)) if preserves else None), no_compression
-
-
-def preflight(doc: Document, cmd: Command) -> Optional[str]:
-    """Return a human-readable reason if ``cmd`` would discard/clash with a
-    pending (uncommitted) change, else None. ``apply`` blocks on a non-None
-    result unless the command sets ``force=True``."""
-    name = type(cmd).__name__
-    if name in ("Rotate", "Split"):
-        ids = [cmd.node_id]
-    elif name == "Merge":
-        nodes = [doc.find(nid) for nid in cmd.node_ids]
-        # A merge that preserves the compression carries it forward — nothing is
-        # discarded, so it is not a clash. Only a dropping merge clobbers a pending one.
-        if all(n is not None for n in nodes) and _merge_compression_state(nodes)[0]:
-            return None
-        ids = list(cmd.node_ids)
-    else:
-        return None
-    pending = [n for n in (doc.find(nid) for nid in ids) if _is_pending(n)]
-    if not pending:
-        return None
-    names = ", ".join(n.name for n in pending)
-    verb = _PENDING_CLASH_VERBS.get(name, "This operation")
-    return (f"{verb} would discard an unconfirmed compression on: {names}. "
-            f"Commit it (“Lesbarkeit geprüft”) first, or force.")
 
 
 # --- validation helpers ----------------------------------------------------
@@ -373,10 +314,16 @@ def _move_many(doc: Document, cmd: MoveMany, engine=None) -> Document:
     if not ids:
         return doc
     nodes = _validate_move_targets(doc, ids, cmd.new_parent_id)
+    # `index` is in the pre-removal frame (the UI's drop position). Discount the
+    # moved nodes that sit before it in the target parent, since removing them
+    # shifts the slot down — so the group lands exactly where it was dropped.
+    parent = doc.find(cmd.new_parent_id)
+    raw = len(parent.children) if cmd.index is None else max(0, min(cmd.index, len(parent.children)))
+    moved = set(ids)
+    before = sum(1 for i, c in enumerate(parent.children) if c.id in moved and i < raw)
+    at = raw - before
     for nid in ids:
         doc = doc.remove_node(nid)
-    parent = doc.find(cmd.new_parent_id)
-    at = len(parent.children) if cmd.index is None else max(0, min(cmd.index, len(parent.children)))
     for offset, node in enumerate(nodes):
         doc = doc.insert_child(cmd.new_parent_id, node, at + offset)
     return doc

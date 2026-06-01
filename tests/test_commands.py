@@ -147,6 +147,14 @@ def test_move_many_into_own_subtree_raises():
         apply(doc(), MoveMany(node_ids=["f"], new_parent_id="f"))
 
 
+def test_move_many_honours_drop_index():
+    # index is the pre-removal drop position; moved-out siblings before it are discounted
+    kids = tuple(Node(name=n, id=n) for n in ("x0", "x1", "x2", "x3"))
+    d = Document(Node(name="root", id="root", is_folder=True, children=kids))
+    d1 = apply(d, MoveMany(node_ids=["x0", "x2"], new_parent_id="root", index=3))
+    assert [c.id for c in d1.root.children] == ["x1", "x0", "x2", "x3"]
+
+
 # --- GroupIntoFolder -------------------------------------------------------
 
 def test_group_into_folder_moves_all_in_order():

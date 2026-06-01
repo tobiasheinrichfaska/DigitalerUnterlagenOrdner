@@ -18,7 +18,6 @@ from core.bridge import load_belegtool
 from core.commands import (
     DEFAULT_COMPRESSION_DPI,
     CommandError,
-    PendingChangeError,
     command_from_dict,
 )
 from core.engine import RealEngine
@@ -164,9 +163,6 @@ class CoreApi:
                 return {"ok": False, "error": "unknown session"}
             try:
                 action(s)
-            except PendingChangeError as e:
-                # A blocked incomplete-change clash — the UI may re-dispatch with force.
-                return {"ok": False, "error": str(e), "risk": "pending_compression"}
             except CommandError as e:
                 return {"ok": False, "error": str(e)}
             except Exception as e:  # defensive — never crash the host

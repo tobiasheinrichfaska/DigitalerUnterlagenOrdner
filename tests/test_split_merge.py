@@ -112,13 +112,12 @@ def test_merge_same_dpi_keeps_compression():
 
 
 def test_merge_dpi_conflict_drops_compression():
-    # dropping pending compressions is a clash → force past the preflight
     d1 = apply(
         merge_doc(
             a_kw=dict(is_compressed=True, dpi_current=100, current_data=b"ca"),
             b_kw=dict(is_compressed=True, dpi_current=200, current_data=b"cb"),
         ),
-        Merge(("a", "b"), force=True), ENGINE)
+        Merge(("a", "b")), ENGINE)
     merged = d1.root.children[0]
     assert merged.no_compression is True
     assert merged.is_compressed is False
@@ -126,10 +125,9 @@ def test_merge_dpi_conflict_drops_compression():
 
 
 def test_merge_mixed_compression_is_uncompressed():
-    # mixed (one pending-compressed, one not) drops compression → force past preflight
     d1 = apply(
         merge_doc(a_kw=dict(is_compressed=True, dpi_current=150, current_data=b"ca")),
-        Merge(("a", "b"), force=True), ENGINE)
+        Merge(("a", "b")), ENGINE)
     merged = d1.root.children[0]
     assert merged.is_compressed is False and merged.current_data is None
     assert merged.no_compression is False

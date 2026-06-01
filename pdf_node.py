@@ -793,9 +793,15 @@ class PDFNode:
         current_data: Optional[bytes],
         dpi_original: Optional[int],
         dpi_current: Optional[int],
-        no_compression: bool
+        no_compression: bool,
+        generate_preview: bool = True,
     ) -> None:
-        """Setzt Original- und Current-Daten, erzeugt Originalvorschau sofort, startet ggf. Lazy-Kompression."""
+        """Setzt Original- und Current-Daten, erzeugt Originalvorschau sofort, startet ggf. Lazy-Kompression.
+
+        ``generate_preview=False`` stores the bytes only — no eager PyMuPDF render
+        and no lazy compression. The headless core uses this on load (it renders /
+        compresses on demand), which is what makes loading fast.
+        """
         if self.is_folder:
             return
 
@@ -804,6 +810,11 @@ class PDFNode:
         self.no_compression = no_compression
         self.current_pdf_data = current_data
         self.original_pdf_data = original_data
+
+        if not generate_preview:
+            self._original_preview_pages = []
+            self._current_preview_pages = []
+            return
 
         # Vorschau für Original **immer** erzeugen
         try:

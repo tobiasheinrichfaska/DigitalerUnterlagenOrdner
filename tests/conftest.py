@@ -9,6 +9,22 @@ from belegtool_main import DigitalerBelegGUI
 
 OUTPUT_DIR = Path(__file__).parent / "data" / "output"
 
+# Keep the test run headless: the legacy GUI tests create real Tk roots, which
+# otherwise flash visible windows. Withdraw every root at creation — patched once
+# here so it also covers TkinterDnD.Tk and DigitalerBelegGUI (both subclass Tk).
+_orig_tk_init = tkinter.Tk.__init__
+
+
+def _withdrawn_tk_init(self, *args, **kwargs):
+    _orig_tk_init(self, *args, **kwargs)
+    try:
+        self.withdraw()
+    except Exception:
+        pass
+
+
+tkinter.Tk.__init__ = _withdrawn_tk_init
+
 @pytest.fixture
 def app():
     """Robustes GUI-Fenster mit sauberem Zustand und Memory Reset."""

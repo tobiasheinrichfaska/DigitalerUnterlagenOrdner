@@ -71,7 +71,8 @@ def document_to_storage(doc: Document):
 
 def load_belegtool(path) -> Document:
     from pdf_storage import PDFStorage
-    return document_from_storage(PDFStorage(str(path)))
+    # headless core renders previews on demand → skip the eager per-node render
+    return document_from_storage(PDFStorage(str(path), generate_previews=False))
 
 
 def save_belegtool(doc: Document, path) -> None:

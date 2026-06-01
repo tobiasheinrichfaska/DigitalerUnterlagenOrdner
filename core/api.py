@@ -99,8 +99,12 @@ class CoreApi:
             no_comp = node.no_compression
         if not data:
             return {"ok": True, "session": session, "node": node_id, "pages": [], "compressed": False}
-        # compress + render outside the lock (CPU-bound); never stored back
-        compressed = None if no_comp else self._engine.compress(data, dpi, method)
+        # compress + render outside the lock (CPU-bound); never stored back.
+        # "original"/None → render the original bytes directly (no compression run).
+        if no_comp or not method or method == "original":
+            compressed = None
+        else:
+            compressed = self._engine.compress(data, dpi, method)
         effective = compressed if compressed is not None else data
         from base64 import b64encode
         from services.render import render_pdf_to_pngs

@@ -39,10 +39,15 @@ def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     return wrapper
 
 class PDFStorage:
-    def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):
+    def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None,
+                 generate_previews: bool = True):
         self.filename: Optional[str] = None
         self.import_time = datetime.datetime.now()
         self.is_dirty: bool = False
+        # The Tk app needs PIL previews eagerly; the headless core renders on
+        # demand, so it loads with generate_previews=False (skips the per-node
+        # PyMuPDF render that dominates load time).
+        self._generate_previews = generate_previews
         self.root = PDFNode(name="root", is_folder=True)
         if source:
             self._load_pdf(source)
@@ -377,7 +382,8 @@ class PDFStorage:
             current_data=None,
             dpi_original=node_data.get("dpi_original"),
             dpi_current=node_data.get("dpi_current"),
-            no_compression=node_data.get("no_compression", False)
+            no_compression=node_data.get("no_compression", False),
+            generate_preview=self._generate_previews,
         )
         # Restore the persisted is_compressed flag instead of unconditionally resetting it.
         # set_original_and_current_data only sets is_compressed=True when current_data is
@@ -387,7 +393,8 @@ class PDFStorage:
         node.compression_method = node_data.get("compression_method")
         node.pdf_length = length
 
-        node.update_preview()
+        if self._generate_previews:
+            node.update_preview()
         current_start[0] = end + 1  # Seitenzähler fortschreiben
         return node
 

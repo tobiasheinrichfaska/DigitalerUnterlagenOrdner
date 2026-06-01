@@ -186,17 +186,22 @@ export default function App() {
     setDropActive(false)
     const target = parentId || state?.tree?.id
     const list = Array.from(files || [])
-    for (let i = 0; i < list.length; i++) {
-      // show the file in the tree immediately as a progress placeholder
-      const key = `pending-${Date.now()}-${i}`
-      setPending((p) => [...p, { key, name: list[i].name, parentId: target }])
+    const stamp = Date.now()
+    const items = list.map((file, i) => ({
+      key: `pending-${stamp}-${i}`, file, name: file.name,
+      idx: index == null ? null : index + i,
+    }))
+    // show ALL dropped files in the tree immediately as progress placeholders
+    setPending((p) => [...p, ...items.map(({ key, name }) => ({ key, name, parentId: target }))])
+    // import sequentially (keeps order); drop each placeholder as it finishes
+    for (const it of items) {
       try {
-        const data = await readAsDataURL(list[i])
-        await handleImport(core.importBytes(session, list[i].name, data, parentId, index == null ? null : index + i))
+        const data = await readAsDataURL(it.file)
+        await handleImport(core.importBytes(session, it.name, data, parentId, it.idx))
       } catch (err) {
         setError(String(err?.message || err))
       } finally {
-        setPending((p) => p.filter((x) => x.key !== key))
+        setPending((p) => p.filter((x) => x.key !== it.key))
       }
     }
   }

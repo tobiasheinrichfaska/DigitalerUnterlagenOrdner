@@ -198,6 +198,17 @@ def test_import_at_index_inserts_between(tmp_path):
     assert [c["name"] for c in r["tree"]["children"]] == ["a", "mid", "b"]
 
 
+def test_import_sets_pdf_length_for_converted_files(tmp_path):
+    # converted files (.md/images/Office) must get a real pdf_length — otherwise
+    # count_node_pages()==0 drops them from the export TOC and misaligns page numbers.
+    md = tmp_path / "notiz.md"
+    md.write_text("# Titel\n\nHallo Welt\n", encoding="utf-8")
+    api = CoreApi()
+    sid = api.open()["session"]
+    r = api.import_paths(sid, [str(md)], None)
+    assert r["tree"]["children"][0]["pdf_length"] >= 1
+
+
 def test_import_bytes_pdf(tmp_path):
     import base64
     api = CoreApi()

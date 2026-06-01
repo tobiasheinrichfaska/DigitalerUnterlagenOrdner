@@ -7,7 +7,10 @@ fake engine; ``RealEngine`` wraps the existing services / pypdf for production.
 
 from __future__ import annotations
 
+import hashlib
 import io
+import threading
+from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
 
 from pypdf import PdfReader, PdfWriter
@@ -35,14 +38,39 @@ class Engine(Protocol):
 
 
 class RealEngine:
-    """Production engine: pypdf for structure, compress_pdf_bytes for compression."""
+    """Production engine: pypdf for structure, compress_pdf_bytes for compression.
+
+    Memoises ``compress_all_methods`` per (content, dpi) so re-selecting a node
+    doesn't recompute its compressions. Keyed by a hash of the bytes, so it stays
+    valid as long as the node's bytes are unchanged and invalidates automatically
+    when they change (rotate/compress/import). Bounded LRU to cap memory.
+    """
+
+    def __init__(self):
+        self._mcache: "OrderedDict[tuple, dict]" = OrderedDict()
+        self._mcache_max = 16
+        self._mcache_lock = threading.Lock()
+
+    def _all_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
+        key = (hashlib.sha1(pdf_bytes).digest(), dpi)
+        with self._mcache_lock:
+            hit = self._mcache.get(key)
+            if hit is not None:
+                self._mcache.move_to_end(key)
+                return hit
+        from compress_pdf_bytes import compress_all_methods
+        result = compress_all_methods(pdf_bytes, dpi=dpi)  # only smaller-than-original
+        with self._mcache_lock:
+            self._mcache[key] = result
+            if len(self._mcache) > self._mcache_max:
+                self._mcache.popitem(last=False)  # evict the least-recently-used
+        return result
 
     def page_count(self, pdf_bytes: bytes) -> int:
         return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
 
     def compress(self, pdf_bytes: bytes, dpi: int, method=None) -> Optional[bytes]:
-        from compress_pdf_bytes import compress_all_methods
-        results = compress_all_methods(pdf_bytes, dpi=dpi)  # only smaller-than-original
+        results = self._all_methods(pdf_bytes, dpi)
         if not results:
             return None
         if method is not None:
@@ -50,8 +78,7 @@ class RealEngine:
         return min(results.values(), key=len)  # best (smallest)
 
     def compress_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
-        from compress_pdf_bytes import compress_all_methods
-        return {m: len(b) for m, b in compress_all_methods(pdf_bytes, dpi=dpi).items()}
+        return {m: len(b) for m, b in self._all_methods(pdf_bytes, dpi).items()}
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
         reader = PdfReader(io.BytesIO(pdf_bytes))

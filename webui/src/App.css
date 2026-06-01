@@ -35,6 +35,13 @@
   border-radius: 6px;
   padding: 8px 12px;
 }
+.notice {
+  color: #1d6f37;
+  background: #e7f6ec;
+  border: 1px solid #b9e3c6;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
 
 header {
   display: flex;

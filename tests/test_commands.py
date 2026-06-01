@@ -103,6 +103,16 @@ def test_move_relocates():
     assert "a" not in [c.id for c in d1.root.children]
 
 
+def test_move_reorder_same_parent_index_is_post_removal():
+    # Move's index is interpreted in the list AFTER the source is removed (the UI
+    # accounts for this off-by-one when reordering within a parent to a later slot).
+    x0, x1, x2 = (Node(name=n, id=n) for n in ("x0", "x1", "x2"))
+    d = Document(Node(name="root", id="root", is_folder=True, children=(x0, x1, x2)))
+    # remove x0 → [x1, x2]; insert at index 1 → between x1 and x2
+    d1 = apply(d, Move("x0", "root", index=1))
+    assert [c.id for c in d1.root.children] == ["x1", "x0", "x2"]
+
+
 def test_move_into_non_folder_or_subtree_or_root_raises():
     with pytest.raises(CommandError):
         apply(doc(), Move("b", "a"))         # 'a' is a leaf

@@ -1,11 +1,56 @@
 // Recursive document-tree view. Click a node to select it (preview); right-click
 // for operations (rename, split, status, folders, delete) via the context menu.
+// Drag a row onto another to move it: dropping on the top/bottom quarter reorders
+// it as a sibling (before/after); dropping on the middle of a folder moves it
+// inside. The drop only dispatches a Move command — the tree re-renders from the
+// core's returned state (no optimistic local mutation).
+import { useState } from 'react'
 
-function TreeNode({ node, selectedId, onSelect, onContext }) {
+function dropZone(e, isFolder) {
+  const r = e.currentTarget.getBoundingClientRect()
+  const y = e.clientY - r.top
+  if (isFolder) {
+    if (y < r.height * 0.25) return 'before'
+    if (y > r.height * 0.75) return 'after'
+    return 'into'
+  }
+  return y < r.height / 2 ? 'before' : 'after'
+}
+
+function TreeNode({ node, parentId, index, selectedId, onSelect, onContext, onMove, drag, setDrag }) {
+  const [over, setOver] = useState(null) // 'into' | 'before' | 'after' | null
+
+  const handleDragOver = (e) => {
+    if (!drag || drag === node.id) return
+    e.preventDefault()
+    e.stopPropagation()
+    setOver(dropZone(e, node.is_folder))
+  }
+  const handleDrop = (e) => {
+    if (!drag || drag === node.id) { setOver(null); return }
+    e.preventDefault()
+    e.stopPropagation()
+    if (over === 'into') onMove(drag, node.id, null)
+    else if (over === 'before') onMove(drag, parentId, index)
+    else if (over === 'after') onMove(drag, parentId, index + 1)
+    setOver(null)
+    setDrag(null)
+  }
+
+  const cls = ['row']
+  if (node.id === selectedId) cls.push('selected')
+  if (over) cls.push(`drop-${over}`)
+
   return (
     <li>
       <div
-        className={node.id === selectedId ? 'row selected' : 'row'}
+        className={cls.join(' ')}
+        draggable
+        onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragEnd={() => { setDrag(null); setOver(null) }}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setOver(null)}
+        onDrop={handleDrop}
         onClick={() => onSelect(node)}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
@@ -15,8 +60,10 @@ function TreeNode({ node, selectedId, onSelect, onContext }) {
       </div>
       {node.children?.length > 0 && (
         <ul>
-          {node.children.map((c) => (
-            <TreeNode key={c.id} node={c} selectedId={selectedId} onSelect={onSelect} onContext={onContext} />
+          {node.children.map((c, i) => (
+            <TreeNode key={c.id} node={c} parentId={node.id} index={i}
+              selectedId={selectedId} onSelect={onSelect} onContext={onContext}
+              onMove={onMove} drag={drag} setDrag={setDrag} />
           ))}
         </ul>
       )}
@@ -24,12 +71,19 @@ function TreeNode({ node, selectedId, onSelect, onContext }) {
   )
 }
 
-export function Tree({ node, selectedId, onSelect, onContext }) {
+export function Tree({ node, selectedId, onSelect, onContext, onMove }) {
   // `node` is the implicit root container — don't render it; show its children.
+  const [drag, setDrag] = useState(null)
   return (
-    <ul className="tree">
-      {(node.children ?? []).map((c) => (
-        <TreeNode key={c.id} node={c} selectedId={selectedId} onSelect={onSelect} onContext={onContext} />
+    <ul
+      className="tree"
+      onDragOver={(e) => { if (drag) e.preventDefault() }}
+      onDrop={(e) => { if (drag) { e.preventDefault(); onMove(drag, node.id, null); setDrag(null) } }}
+    >
+      {(node.children ?? []).map((c, i) => (
+        <TreeNode key={c.id} node={c} parentId={node.id} index={i}
+          selectedId={selectedId} onSelect={onSelect} onContext={onContext}
+          onMove={onMove} drag={drag} setDrag={setDrag} />
       ))}
     </ul>
   )

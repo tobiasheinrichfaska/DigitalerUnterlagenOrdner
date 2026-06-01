@@ -54,7 +54,8 @@ header {
 }
 header h1 { font-size: 19px; margin: 0; }
 
-.toolbar { display: flex; gap: 8px; }
+.toolbar { display: flex; gap: 8px; align-items: center; }
+.importing { font-size: 12px; color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button {
   font: inherit;
   padding: 5px 10px;

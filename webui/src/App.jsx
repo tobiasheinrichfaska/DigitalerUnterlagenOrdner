@@ -87,6 +87,7 @@ export default function App() {
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
+  const [importing, setImporting] = useState(null) // per-file import progress text
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -185,6 +186,7 @@ export default function App() {
     setDropActive(false)
     const list = Array.from(files || [])
     for (let i = 0; i < list.length; i++) {
+      setImporting(list.length > 1 ? `Importiere ${i + 1}/${list.length}: ${list[i].name}` : `Importiere ${list[i].name} …`)
       try {
         const data = await readAsDataURL(list[i])
         await handleImport(core.importBytes(session, list[i].name, data, parentId, index == null ? null : index + i))
@@ -192,6 +194,7 @@ export default function App() {
         setError(String(err?.message || err))
       }
     }
+    setImporting(null)
   }
 
   // OS file drag onto the window: tree rows handle precise targeting (drop onto a
@@ -339,7 +342,7 @@ export default function App() {
   return (
     <div className={busy ? 'app busy' : 'app'}>
       <header>
-        <h1>DigitalerBelegeOrdner</h1>
+        <h1 title="DigitalerBelegeOrdner">{state?.tree?.name || 'DigitalerBelegeOrdner'}{dirty ? ' •' : ''}</h1>
         <div className="toolbar">
           <button onClick={openFile}>📂 Öffnen</button>
           <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
@@ -357,6 +360,7 @@ export default function App() {
           <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
           {busy ? <span className="spinner" title="Arbeite…" /> : null}
+          {importing ? <span className="importing" title="Import läuft">{importing}</span> : null}
         </div>
       </header>
 

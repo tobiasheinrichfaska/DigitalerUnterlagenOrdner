@@ -59,6 +59,7 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
 
+ul.tree { user-select: none; } /* so Shift-click range-select doesn't highlight text */
 ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 18px; }
 ul.tree { padding-left: 0; }
 .row {

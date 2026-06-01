@@ -77,6 +77,36 @@ class Move:
     index: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class MoveMany:
+    """Move several nodes (any depth) under one folder, preserving their order.
+    Nested members are de-duplicated (a node already moving inside a selected
+    ancestor is skipped)."""
+    node_ids: Tuple[str, ...]
+    new_parent_id: str
+    index: Optional[int] = None
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
+class GroupIntoFolder:
+    """Create a new folder under ``parent_id`` and move every selected node into
+    it (preserving order). The other half of "merge": keeps the nodes as separate
+    documents inside a folder instead of concatenating them into one PDF."""
+    node_ids: Tuple[str, ...]
+    parent_id: str
+    name: str = "Neue Gruppe"
+    new_id: Optional[str] = None
+    index: Optional[int] = None
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
 # --- engine-backed commands (single-node; D3a) -----------------------------
 
 @dataclass(frozen=True)
@@ -121,11 +151,11 @@ class Merge:
             object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
-Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
-                Compress, Commit, Reset, Rotate, Split, Merge]
+Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany,
+                GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, Merge]
 
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetPeriod, Delete, Move,
+    AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany, GroupIntoFolder,
     Compress, Commit, Reset, Rotate, Split, Merge,
 )}
 
@@ -305,6 +335,67 @@ def _move(doc: Document, cmd: Move, engine=None) -> Document:
     if node.find(cmd.new_parent_id) is not None:
         raise CommandError("cannot move a node into itself or its own subtree")
     return doc.move_node(cmd.node_id, cmd.new_parent_id, cmd.index)
+
+
+def _top_level_ids(doc: Document, ids):
+    """Drop ids that already sit inside another selected id (so a folder + one of
+    its descendants only moves the folder)."""
+    id_set = set(ids)
+    out = []
+    for nid in ids:
+        p = doc.parent_of(nid)
+        nested = False
+        while p is not None:
+            if p.id in id_set:
+                nested = True
+                break
+            p = doc.parent_of(p.id)
+        if not nested:
+            out.append(nid)
+    return out
+
+
+def _validate_move_targets(doc: Document, ids, parent_id: str):
+    nodes = []
+    for nid in ids:
+        node = _require(doc, nid)
+        _reject_root(doc, nid, "move")
+        if node.find(parent_id) is not None:
+            raise CommandError("cannot move a node into itself or its own subtree")
+        nodes.append(node)
+    return nodes
+
+
+@_handler(MoveMany)
+def _move_many(doc: Document, cmd: MoveMany, engine=None) -> Document:
+    _require_folder(doc, cmd.new_parent_id)
+    ids = _top_level_ids(doc, list(cmd.node_ids))
+    if not ids:
+        return doc
+    nodes = _validate_move_targets(doc, ids, cmd.new_parent_id)
+    for nid in ids:
+        doc = doc.remove_node(nid)
+    parent = doc.find(cmd.new_parent_id)
+    at = len(parent.children) if cmd.index is None else max(0, min(cmd.index, len(parent.children)))
+    for offset, node in enumerate(nodes):
+        doc = doc.insert_child(cmd.new_parent_id, node, at + offset)
+    return doc
+
+
+@_handler(GroupIntoFolder)
+def _group_into_folder(doc: Document, cmd: GroupIntoFolder, engine=None) -> Document:
+    _require_folder(doc, cmd.parent_id)
+    ids = _top_level_ids(doc, list(cmd.node_ids))
+    if not ids:
+        raise CommandError("nothing to group")
+    _validate_move_targets(doc, ids, cmd.parent_id)
+    folder = Node(name=cmd.name or "Neue Gruppe", is_folder=True,
+                  **({"id": cmd.new_id} if cmd.new_id else {}))
+    fid = folder.id
+    doc = doc.insert_child(cmd.parent_id, folder, cmd.index)
+    for nid in ids:
+        doc = doc.move_node(nid, fid, None)
+    return doc
 
 
 # --- engine-backed handlers ------------------------------------------------

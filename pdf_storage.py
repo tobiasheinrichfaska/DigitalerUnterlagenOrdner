@@ -5,7 +5,10 @@ from typing import Optional, List, Union, Dict, Any
 from pypdf import PdfReader, PdfWriter
 from pdf_node import PDFNode
 import os
-from universal_importer import extract_zip_to_structure, extract_tar_to_structure, extract_email_to_structure
+# NOTE: universal_importer is imported lazily inside the archive/e-mail branches
+# below — it pulls in win32com/COM, extract-msg, pillow-heif (~2.6 s) which a plain
+# .belegtool/PDF load does not need. Keeping it out of module import makes loading
+# (and the headless core's startup) fast.
 from pikepdf import open as pike_open
 import pikepdf
 from log_config import logger
@@ -78,6 +81,7 @@ class PDFStorage:
 
         try:
             if filename.endswith(".zip"):
+                from universal_importer import extract_zip_to_structure
                 struktur = extract_zip_to_structure(data)
                 node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "ZIP-Datei erfolgreich geladen"
@@ -86,6 +90,7 @@ class PDFStorage:
                 return
 
             if filename.endswith((".tar", ".tar.gz", ".tgz")):
+                from universal_importer import extract_tar_to_structure
                 struktur = extract_tar_to_structure(data)
                 node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "TAR-Archiv erfolgreich geladen"
@@ -94,6 +99,7 @@ class PDFStorage:
                 return
 
             if filename.endswith((".eml", ".msg")):
+                from universal_importer import extract_email_to_structure
                 struktur = extract_email_to_structure(data)
                 node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "E-Mail erfolgreich geladen"

@@ -141,8 +141,9 @@ export default function App() {
 
   const onPreview = useCallback((req) => setPreviewReq(req), [])
 
-  // expose this window's unsaved state to the host (per-window close guard)
-  useEffect(() => { window.__belegDirty = dirty }, [dirty])
+  // push this window's unsaved state to the host (per-window close guard).
+  // (A Python-side flag, not evaluate_js — the latter hangs during window close.)
+  useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
   useEffect(() => {
     run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
@@ -297,9 +298,10 @@ export default function App() {
   const saveFile = () =>
     run(core.saveFile(session)).then((resp) => { if (resp?.ok) { setDirty(false); setNotice('Gespeichert') } })
 
-  // export the whole document (or the current selection) to a TOC PDF
-  const exportPdf = () =>
-    run(core.exportPdf(session, selectedIds.length ? selectedIds : null)).then((resp) => {
+  // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
+  // the context menu passes specific ids for an explicit selection export.
+  const exportPdf = (nodeIds = null) =>
+    run(core.exportPdf(session, nodeIds)).then((resp) => {
       if (resp?.ok) { setError(null); setNotice(`PDF exportiert (${resp.count} ${resp.count === 1 ? 'Eintrag' : 'Einträge'})`) }
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
     })
@@ -343,7 +345,7 @@ export default function App() {
           <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
           <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
-          <button onClick={exportPdf} title="Als PDF mit Inhaltsverzeichnis exportieren">⬇ Export PDF{selectedIds.length ? ' (Auswahl)' : ''}</button>
+          <button onClick={() => exportPdf()} title="Gesamtes Dokument als PDF mit Inhaltsverzeichnis exportieren">⬇ Export PDF</button>
           <span className="sep" />
           <button
             onClick={() =>
@@ -398,7 +400,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} />
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} />
 
       {dropActive && (
         <div className="drop-overlay">

@@ -73,12 +73,14 @@ def _entry():
     return DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
 
 
-def _bind_close(win):
-    """Per-window close guard: if that window's React app flagged unsaved changes
-    (window.__belegDirty), confirm before closing. Return False cancels the close."""
+def _bind_close(win, api):
+    """Per-window close guard: confirm before discarding unsaved changes. Uses the
+    Python-side dirty flag the React app pushes via set_dirty — NOT evaluate_js,
+    which hangs during window teardown (windows then wouldn't close). Return False
+    cancels the close."""
     def _on_closing():
         try:
-            if win.evaluate_js("window.__belegDirty === true"):
+            if api._dirty:
                 return bool(win.create_confirmation_dialog(
                     "Ungespeicherte Änderungen",
                     "Es gibt ungespeicherte Änderungen. Trotzdem schließen und verwerfen?"))
@@ -96,7 +98,7 @@ def _open_window(core):
         "DigitalerBelegeOrdner", _entry(), js_api=api,
         width=1280, height=820, min_size=(900, 600))
     api._uid = win.uid  # bind after creation (storing the window object recurses)
-    _bind_close(win)
+    _bind_close(win, api)
     return {"ok": True}
 
 
@@ -108,6 +110,11 @@ class HostApi:
     def __init__(self, core, uid=None):
         self._core = core
         self._uid = uid
+        self._dirty = False  # pushed from the React app for the close guard
+
+    def set_dirty(self, value):
+        self._dirty = bool(value)
+        return {"ok": True}
 
     def _win(self):
         for w in webview.windows:

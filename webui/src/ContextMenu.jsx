@@ -7,7 +7,7 @@ const STATUSES = [
   ['vorjahreswert', 'Vorjahr'],
 ]
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport }) {
   if (!menu) return null
   const { x, y, node } = menu
   const isLeaf = !node.is_folder
@@ -60,6 +60,8 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group }) {
             {label}
           </button>
         ))}
+        <div className="cm-sep" />
+        <button onClick={() => { onExport([node.id]); onClose() }}>Als PDF exportieren</button>
         <div className="cm-sep" />
         <button className="danger" onClick={() => run({ type: 'Delete' })}>Löschen</button>
       </div>

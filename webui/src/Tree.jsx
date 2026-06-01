@@ -77,6 +77,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
     <li>
       <div
         className={cls.join(' ')}
+        style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         draggable
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDrag(null); setOver(null) }}
@@ -92,7 +93,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         {/* ghost preview of where the dragged item will land (bottom drop), at the
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (
-          <div className="drop-ghost" style={{ left: `${(over.depth - depth) * INDENT}px` }}>
+          <div className="drop-ghost" style={{ left: `${over.depth * INDENT + 6}px` }}>
             <span className="drop-ghost-row">{dragIcon} {dragLabel}</span>
             <span className="drop-ghost-where">{over.target.parentName ? `in ${over.target.parentName}` : 'oberste Ebene'}</span>
           </div>

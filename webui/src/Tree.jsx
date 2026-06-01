@@ -36,19 +36,12 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
-    if (hasFiles(e)) {
-      // OS file import → target the folder under the cursor (a leaf → its parent)
-      e.preventDefault()
-      e.stopPropagation()
-      setOver({ zone: 'fileInto', targetId: node.is_folder ? node.id : parentId,
-                targetName: node.is_folder ? node.name : (parentName || 'oberste Ebene') })
-      return
-    }
-    if (!drag || drag === node.id) return
+    const files = hasFiles(e)
+    if (!files && (!drag || drag === node.id)) return
     e.preventDefault()
     e.stopPropagation()
     const zone = dropZone(e, node.is_folder)
-    if (zone !== 'after') { setOver({ zone }); return }
+    if (zone !== 'after') { setOver({ zone, files }); return }
     if (isLast) {
       // bottom of a level → choose the nesting level from the cursor's X, show ghost
       const levels = levelsFor(node.id) // deepest → shallowest
@@ -58,28 +51,28 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
       let d = Math.floor((e.clientX - treeLeft) / INDENT)
       d = Math.max(minD, Math.min(maxD, d))
       const target = levels.find((l) => l.depth === d) || levels[0]
-      setOver({ zone: 'after', target, depth: d, ghost: true })
+      setOver({ zone: 'after', target, depth: d, ghost: true, files })
     } else {
-      setOver({ zone: 'after', target: { parentId, index: index + 1 }, depth, ghost: false })
+      setOver({ zone: 'after', target: { parentId, index: index + 1 }, depth, ghost: false, files })
     }
   }
 
   const handleDrop = (e) => {
-    if (over?.zone === 'fileInto') {
-      e.preventDefault()
-      e.stopPropagation()
-      onDropFiles(e.dataTransfer.files, over.targetId)
-      setOver(null)
-      return
-    }
-    if (!drag || drag === node.id || !over) { setOver(null); return }
+    if (!over) { setOver(null); return }
+    const isFile = over.files
+    if (!isFile && (!drag || drag === node.id)) { setOver(null); return }
     e.preventDefault()
     e.stopPropagation()
-    const many = selectedIds.includes(drag) && selectedIds.length > 1
-    const move = (parent, idx) => (many ? onMoveMany(selectedIds, parent, idx) : onMove(drag, parent, idx))
-    if (over.zone === 'into') move(node.id, null)
-    else if (over.zone === 'before') move(parentId, index)
-    else if (over.zone === 'after') move(over.target.parentId, over.target.index)
+    const files = isFile ? Array.from(e.dataTransfer.files) : null
+    const many = !isFile && selectedIds.includes(drag) && selectedIds.length > 1
+    const place = (parent, idx) => {
+      if (isFile) onDropFiles(files, parent, idx)
+      else if (many) onMoveMany(selectedIds, parent, idx)
+      else onMove(drag, parent, idx)
+    }
+    if (over.zone === 'into') place(node.id, null)
+    else if (over.zone === 'before') place(parentId, index)
+    else if (over.zone === 'after') place(over.target.parentId, over.target.index)
     setOver(null)
     setDrag(null)
   }
@@ -89,7 +82,6 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
   if (node.id === primaryId) cls.push('primary')
   if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
   if (over?.zone === 'after' && !over.ghost) cls.push('drop-after')
-  if (over?.zone === 'fileInto') cls.push('file-target')
 
   return (
     <li>
@@ -108,12 +100,11 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
         <span className={node.is_folder ? 'name folder' : 'name leaf'}>
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
-        {over?.zone === 'fileInto' && <span className="file-target-badge">→ {over.targetName}</span>}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (
           <div className="drop-ghost" style={{ left: `${over.depth * INDENT + 6}px` }}>
-            <span className="drop-ghost-row">{dragIcon} {dragLabel}</span>
+            <span className="drop-ghost-row">{over.files ? '📥 importieren' : `${dragIcon} ${dragLabel}`}</span>
             <span className="drop-ghost-where">{over.target.parentName ? `in ${over.target.parentName}` : 'oberste Ebene'}</span>
           </div>
         )}

@@ -173,13 +173,15 @@ export default function App() {
       if (resp?.warning) setError(`Teilweise importiert — ${resp.warning}`)
     })
 
-  // read each dropped file's content and import it under parentId (null = root).
-  const onDropFiles = async (files, parentId) => {
+  // read each dropped file's content and import it under parentId at index (null =
+  // append). Multiple files keep their order (index bumps per file).
+  const onDropFiles = async (files, parentId, index = null) => {
     setDropActive(false)
-    for (const file of Array.from(files || [])) {
+    const list = Array.from(files || [])
+    for (let i = 0; i < list.length; i++) {
       try {
-        const data = await readAsDataURL(file)
-        await handleImport(core.importBytes(session, file.name, data, parentId))
+        const data = await readAsDataURL(list[i])
+        await handleImport(core.importBytes(session, list[i].name, data, parentId, index == null ? null : index + i))
       } catch (err) {
         setError(String(err?.message || err))
       }
@@ -365,7 +367,7 @@ export default function App() {
       {dropActive && (
         <div className="drop-overlay">
           <div className="drop-overlay-badge">
-            📥 Dateien ablegen — auf einen Ordner für ein genaues Ziel, sonst in {selected?.is_folder ? selected.name : 'oberste Ebene'}
+            📥 Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {selected?.is_folder ? selected.name : 'oberste Ebene'}
           </div>
         </div>
       )}

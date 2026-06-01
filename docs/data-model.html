@@ -167,9 +167,20 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>Compress</code></td><td>node_id, dpi=150, method=None</td><td>leaf → set <code>current_data</code>, <code>is_compressed</code>, <code>dpi_current</code>, <code>compression_method</code>; no-op if no gain; rejects <code>no_compression</code>.</td></tr>
 <tr><td><code>Commit</code></td><td>node_id</td><td>Promote <code>current_data</code> → <code>original_data</code>; clear compression flags.</td></tr>
 <tr><td><code>Reset</code></td><td>node_id</td><td>Drop the compressed variant (clear <code>current_data</code> + flags).</td></tr>
-<tr><td><code>Rotate</code></td><td>node_id, direction</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
-<tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one <code>no_compression</code> page-leaf per page, in place (single page = no-op).</td></tr>
-<tr><td><code>Merge</code></td><td>node_ids</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>.</td></tr>
+<tr><td><code>Rotate</code></td><td>node_id, direction, force=False</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
+<tr><td><code>Split</code></td><td>node_id, force=False</td><td>Leaf → one <code>no_compression</code> page-leaf per page, in place (single page = no-op).</td></tr>
+<tr><td><code>Merge</code></td><td>node_ids, force=False</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>.</td></tr>
+</table>
+
+<h3><span class="pill fn">guard</span> preflight <span class="src">— core/commands.py</span></h3>
+<p class="lead"><code>apply()</code> runs a pure <b>preflight</b> before every command and raises
+<code>PendingChangeError</code> (a <code>CommandError</code>) unless the command sets <code>force=True</code>.
+It blocks a change that would silently discard an <b>incomplete</b> (uncommitted) one — a node is
+<i>pending</i> when it holds an uncommitted <code>current_data</code> (between <code>Compress</code> and
+<code>Commit</code>/<code>Reset</code>).</p>
+<table>
+<tr><th>Function</th><th>Signature</th><th>Blocks</th></tr>
+<tr><td><code>preflight</code></td><td>(doc, cmd) → str | None</td><td><code>Rotate</code>/<code>Split</code> on a pending node, and <code>Merge</code> that would <i>drop</i> compression while a node is pending. A compression-preserving merge is <b>not</b> blocked (nothing discarded). Re-issue with <code>force=True</code> to proceed.</td></tr>
 </table>
 
 <h3>Pure tree transforms <span class="src">— core/model.py (commands build on these)</span></h3>

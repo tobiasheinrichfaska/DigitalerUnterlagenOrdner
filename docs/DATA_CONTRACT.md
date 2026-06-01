@@ -81,6 +81,20 @@ The IPC API the React UI calls — each maps to existing, UI-agnostic logic:
 Long-running ops (compress/render/export) run on the executor (`tasks`) and the
 worker pool; results/progress are pushed back to the UI.
 
+**Preflight (block-unless-forced).** `apply()` blocks any command that would
+silently discard an *incomplete* change, unless the command carries `force=True`.
+A node is **pending** when it holds an uncommitted `current_data` (between
+`Compress` and `Commit`/`Reset`). `Rotate`/`Split` on a pending node — and a
+`Merge` that would *drop* compression while a node is pending — raise
+`PendingChangeError`; `CoreApi.dispatch` returns `{ok:false, risk:"pending_compression"}`
+so the UI can confirm and re-dispatch with `force:true`. A compression-preserving
+merge is not blocked.
+
+**Defaults.** The default compression DPI is a fixed core constant
+(`DEFAULT_COMPRESSION_DPI = 150`, surfaced via `CoreApi.config()` → `default_dpi`),
+and the default method is "best" (smallest of `compress_methods`). The UI reads
+these from the core rather than hardcoding them.
+
 ---
 
 ## 4. Stability

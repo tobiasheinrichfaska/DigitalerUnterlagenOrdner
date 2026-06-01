@@ -34,6 +34,9 @@ class HostApi:
         self._core = CoreApi()
 
     # core ops (delegate)
+    def config(self):
+        return self._core.config()
+
     def open(self, session=None, path=None):
         return self._core.open(session, path)
 

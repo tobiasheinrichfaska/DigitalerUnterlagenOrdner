@@ -850,7 +850,8 @@ class PDFNode:
                     PreviewPage(img, i) for i, img in enumerate(current_preview)
                 ]
                 self.is_compressed = True  # ✅ Korrektur: komprimiert, weil current_data gesetzt
-            except Exception:
+            except Exception as e:
+                logger.warning("Vorschau für current_data von '%s' fehlgeschlagen: %s", self.name, e)
                 self._current_preview_pages = []
 
     @staticmethod

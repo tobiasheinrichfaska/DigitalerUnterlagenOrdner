@@ -129,6 +129,7 @@ export default function App() {
   // stored bytes. Re-fires when `selected` identity changes (every edit replaces
   // it) or the request changes, so edits and method/DPI browsing both refresh.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the preview is intended
     if (!session || !selected) { setPages(null); return }
     if (selected.is_folder) {
       run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
@@ -147,6 +148,7 @@ export default function App() {
   useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initial load
     run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
     core.config().then((r) => { if (r?.ok) setConfig(r) }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -331,7 +333,7 @@ export default function App() {
       else if (mod && k === 'e') { e.preventDefault(); exportPdf() }
       else if (mod && k === 'n') { e.preventDefault(); core.newWindow() }
       else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (state?.can_redo) redo() }
-      else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); if (state?.can_redo) redo() }
+      else if (mod && k === 'y') { e.preventDefault(); if (state?.can_redo) redo() }
       else if (mod && k === 'z') { e.preventDefault(); if (state?.can_undo) undo() }
       else if (k === 'delete' && selected) { e.preventDefault(); dispatch({ type: 'Delete', node_id: selected.id }) }
     }

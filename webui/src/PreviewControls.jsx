@@ -19,10 +19,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
 
   // keep the dropdown/slider in sync with the model after apply/reset/undo —
   // pure state, never triggers compression
+  /* eslint-disable react-hooks/set-state-in-effect -- intentionally re-sync local controls from the model */
   useEffect(() => {
     setMethod(node.compression_method ?? 'original')
     setDpi(node.dpi_current ?? defaultDpi)
   }, [node.is_compressed, node.compression_method, node.dpi_current]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const preview = (d, m) => onPreview({ dpi: d, method: m })
   const loadOptions = (d) => {

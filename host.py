@@ -16,6 +16,7 @@ import os
 import webview
 
 from core.api import CoreApi
+from log_config import logger
 
 
 def _prewarm():
@@ -56,7 +57,9 @@ def _prewarm():
         except Exception:
             pass
     except Exception:
-        pass  # warming is a best-effort optimisation; never block startup
+        # best-effort; never block startup — but log so a broken import path
+        # (missing DLL, library drift) is diagnosable instead of silently slow.
+        logger.exception("prewarm failed")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEV_URL = "http://localhost:5173"
@@ -117,10 +120,12 @@ class HostApi:
         return {"ok": True}
 
     def _win(self):
+        # this window only — never fall back to windows[0], or a dialog could open
+        # against the wrong document if this window was closed mid-call.
         for w in webview.windows:
             if w.uid == self._uid:
                 return w
-        return webview.windows[0] if webview.windows else None
+        return None
 
     # window management
     def new_window(self):
@@ -159,7 +164,10 @@ class HostApi:
         return self._core.import_bytes(session, name, data, parent_id, index)
 
     def export_dialog(self, session, node_ids=None):
-        path = self._win().create_file_dialog(
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        path = win.create_file_dialog(
             webview.FileDialog.SAVE, save_filename="Export.pdf", file_types=("PDF (*.pdf)",))
         if not path:
             return {"ok": False, "error": "cancelled"}
@@ -168,7 +176,10 @@ class HostApi:
         return self._core.export(session, path, node_ids)
 
     def import_dialog(self, session, parent_id=None):
-        result = self._win().create_file_dialog(
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        result = win.create_file_dialog(
             webview.FileDialog.OPEN, allow_multiple=True, file_types=IMPORT_FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
@@ -176,14 +187,20 @@ class HostApi:
 
     # host-only ops (native dialogs)
     def open_file(self, session=None):
-        result = self._win().create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.open(session, result[0])
 
     def save_file(self, session):
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
         name = self._core.document_name(session) or "unbenannt"
-        path = self._win().create_file_dialog(
+        path = win.create_file_dialog(
             webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
             file_types=("BelegTool (*.belegtool)",))
         if not path:

@@ -44,7 +44,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
@@ -124,7 +124,7 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
       {(node.children?.length > 0 || pending.some((p) => p.parentId === node.id)) && (
         <ul>
           {node.children?.map((c, i, arr) => (
-            <TreeNode key={c.id} node={c} parentId={node.id} parentName={node.name} index={i} depth={depth + 1} isLast={i === arr.length - 1}
+            <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
               selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
               dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
@@ -157,7 +157,7 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
   return (
     <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
-        <TreeNode key={c.id} node={c} parentId={node.id} parentName={null} index={i} depth={0} isLast={i === arr.length - 1}
+        <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
           dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />

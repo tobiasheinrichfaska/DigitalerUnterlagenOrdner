@@ -21,6 +21,18 @@ function findNode(n, id) {
 
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
 
+// optimistic placeholder shown while a dropped file is being imported (a sliding
+// progress shimmer on the node itself, replaced by the real node when done)
+function PendingRow({ name, depth }) {
+  return (
+    <li>
+      <div className="row pending" style={{ paddingLeft: `${depth * INDENT + 6}px` }}>
+        <span className="name leaf">📄 {name}</span>
+      </div>
+    </li>
+  )
+}
+
 function dropZone(e, isFolder) {
   const r = e.currentTarget.getBoundingClientRect()
   const y = e.clientY - r.top
@@ -32,7 +44,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles }) {
+function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
@@ -109,13 +121,16 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
           </div>
         )}
       </div>
-      {node.children?.length > 0 && (
+      {(node.children?.length > 0 || pending.some((p) => p.parentId === node.id)) && (
         <ul>
-          {node.children.map((c, i, arr) => (
+          {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} parentName={node.name} index={i} depth={depth + 1} isLast={i === arr.length - 1}
               selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} />
+              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
+          ))}
+          {pending.filter((p) => p.parentId === node.id).map((p) => (
+            <PendingRow key={p.key} name={p.name} depth={depth + 1} />
           ))}
         </ul>
       )}
@@ -123,7 +138,7 @@ function TreeNode({ node, parentId, parentName, index, depth, isLast, selectedId
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles }) {
+export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
@@ -145,7 +160,10 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
         <TreeNode key={c.id} node={c} parentId={node.id} parentName={null} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} />
+          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
+      ))}
+      {pending.filter((p) => p.parentId === node.id).map((p) => (
+        <PendingRow key={p.key} name={p.name} depth={0} />
       ))}
     </ul>
   )

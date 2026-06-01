@@ -87,7 +87,7 @@ export default function App() {
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
-  const [importing, setImporting] = useState(null) // per-file import progress text
+  const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -184,17 +184,21 @@ export default function App() {
   // append). Multiple files keep their order (index bumps per file).
   const onDropFiles = async (files, parentId, index = null) => {
     setDropActive(false)
+    const target = parentId || state?.tree?.id
     const list = Array.from(files || [])
     for (let i = 0; i < list.length; i++) {
-      setImporting(list.length > 1 ? `Importiere ${i + 1}/${list.length}: ${list[i].name}` : `Importiere ${list[i].name} …`)
+      // show the file in the tree immediately as a progress placeholder
+      const key = `pending-${Date.now()}-${i}`
+      setPending((p) => [...p, { key, name: list[i].name, parentId: target }])
       try {
         const data = await readAsDataURL(list[i])
         await handleImport(core.importBytes(session, list[i].name, data, parentId, index == null ? null : index + i))
       } catch (err) {
         setError(String(err?.message || err))
+      } finally {
+        setPending((p) => p.filter((x) => x.key !== key))
       }
     }
-    setImporting(null)
   }
 
   // OS file drag onto the window: tree rows handle precise targeting (drop onto a
@@ -360,7 +364,6 @@ export default function App() {
           <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
           {busy ? <span className="spinner" title="Arbeite…" /> : null}
-          {importing ? <span className="importing" title="Import läuft">{importing}</span> : null}
         </div>
       </header>
 
@@ -380,6 +383,7 @@ export default function App() {
               onMoveMany={onMoveMany}
               levelsFor={levelsFor}
               onDropFiles={onDropFiles}
+              pending={pending}
             />
           )}
         </div>

@@ -70,7 +70,7 @@ function TreeNode({ node, parentId, index, depth, selectedIds, primaryId, onSele
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDrag(null); setOver(null) }}
         onDragOver={handleDragOver}
-        onDragLeave={() => setOver(null)}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(null) }}
         onDrop={handleDrop}
         onClick={(e) => onSelect(node, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
@@ -78,16 +78,17 @@ function TreeNode({ node, parentId, index, depth, selectedIds, primaryId, onSele
         <span className={node.is_folder ? 'name folder' : 'name leaf'}>
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
+        {/* level-aware drop guide for the "after" gap: an absolute overlay (no
+            layout shift), indented to the chosen level, with a pill naming where
+            it lands so the level is obvious. */}
+        {over?.zone === 'after' && (
+          <div className="drop-guide" style={{ left: `${(over.depth - depth) * INDENT}px` }}>
+            <span className="drop-guide-label">
+              {over.target.parentName ? `→ ${over.target.parentName}` : '→ oberste Ebene'}
+            </span>
+          </div>
+        )}
       </div>
-      {/* level-aware drop guide for the "after" gap (indented to the chosen level,
-          with a pill naming the destination folder so the level is obvious) */}
-      {over?.zone === 'after' && (
-        <div className="drop-guide" style={{ marginLeft: `${(over.depth - depth) * INDENT}px` }}>
-          <span className="drop-guide-label">
-            {over.target.parentName ? `→ ${over.target.parentName}` : '→ oberste Ebene'}
-          </span>
-        </div>
-      )}
       {node.children?.length > 0 && (
         <ul>
           {node.children.map((c, i) => (

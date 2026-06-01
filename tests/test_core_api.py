@@ -213,6 +213,17 @@ def test_opened_file_is_named_after_the_file(tmp_path):
     assert api.document_name(r["session"]) == "Rechnungen 2024"
 
 
+def test_corrupt_archive_import_surfaces_archive_error(tmp_path):
+    # a broken .zip must report the real cause, not fall through to an opaque "not a PDF"
+    z = tmp_path / "kaputt.zip"
+    z.write_bytes(b"PK\x03\x04 this is not a real zip archive")
+    api = CoreApi()
+    sid = api.open()["session"]
+    r = api.import_paths(sid, [str(z)], None)
+    assert r["ok"] is False
+    assert "kaputt.zip" in r["error"] and "Archiv" in r["error"]
+
+
 def test_friendly_import_error_for_unsupported_type(tmp_path):
     f = tmp_path / "daten.xyz"
     f.write_bytes(b"not a known format")

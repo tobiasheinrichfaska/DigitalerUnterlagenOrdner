@@ -39,6 +39,8 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
         return f"{name}: Dateityp {ext} wird nicht unterstützt"
     if "passwort" in low or "password" in low or "encrypted" in low:
         return f"{name}: Datei ist passwortgeschützt"
+    if name.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
+        return f"{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg[:80]})"
     if "kein gültiges pdf" in low or "not a pdf" in low or "eof marker" in low or "startxref" in low:
         return f"{name}: beschädigte oder ungültige Datei"
     return f"{name}: {msg}"

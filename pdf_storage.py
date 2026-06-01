@@ -108,6 +108,11 @@ class PDFStorage:
                 return
         except Exception as e:
             logger.warning("Strukturierter Import fehlgeschlagen (%s): %s", filename, e)
+            # For genuine archive/e-mail files, surface the real cause instead of
+            # silently falling through to PDF parsing (which then fails with an
+            # opaque "not a PDF"). Other extensions still fall back to PDF import.
+            if filename.endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
+                raise
             # → Fallback auf regulären PDF-Import
 
 

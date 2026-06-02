@@ -6,4 +6,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  test: {
+    // core.js touches window + the pywebviewready event; jsdom provides them.
+    environment: 'jsdom',
+  },
 })

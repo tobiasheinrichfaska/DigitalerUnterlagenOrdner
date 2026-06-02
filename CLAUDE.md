@@ -100,7 +100,9 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/ContextMenu.jsx`, `core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner); thin `window.pywebview.api` wrapper |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
-prod — `cd webui && npm run build` then `python host.py`. **Manual tests:**
+prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
+&& npm test` (Vitest + jsdom; `src/core.test.js` smoke-tests the `core.js` bridge —
+method-name mapping and the `pywebviewready` wait/fail-fast). **Manual tests:**
 [`manual_tests/05_react_ui.md`](manual_tests/05_react_ui.md).
 
 Performance notes worth keeping: `.belegtool` is parsed **once** on load (was

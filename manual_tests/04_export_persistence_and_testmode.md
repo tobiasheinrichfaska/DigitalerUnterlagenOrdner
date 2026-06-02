@@ -66,3 +66,32 @@ results side by side. It needs the test fixtures present.
 - Turning the toggle off restores the normal editor.
 - *Not obvious:* if the fixtures are missing you get a message telling you to run
   `python tests/make_fixtures.py` instead of an empty view.
+
+
+---
+
+## MT-17: Committed compression drops the source (irreversible)
+
+Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft"),
+the saved file keeps only the compressed result — the uncompressed original is
+dropped, and a reloaded committed node can no longer be re-compressed or reset.
+
+**Preconditions:** the new GUI (`python app.py --new`); a multi-page color PDF imported as a node.
+
+**Steps:**
+1. Select the imported node. In the compression controls, pick a method (e.g.
+   **JPEG (Farbe)** or **JPEG (Graustufen)**) and click **❓ Lesbarkeit geprüft**.
+2. **Save** the document as a `.belegtool` file.
+3. Close the window, then **open** that saved `.belegtool` again.
+4. Select the same node and open the compression dropdown.
+
+**Expected:**
+- After saving, the file is noticeably smaller than the original import (only the
+  compressed result is stored, not the source).
+- On reload the node still previews correctly (rendered from the compressed bytes).
+- *Not obvious / important:* the compression dropdown for that node now shows
+  **"bereits komprimiert (keine Quelle)"** and is **disabled** — you cannot
+  re-compress or reset it, because the original was intentionally discarded on
+  save. This is by design and **irreversible**: the only copy is the compressed one.
+- A node you did **not** compress before saving keeps its source and remains fully
+  compressible after reload.

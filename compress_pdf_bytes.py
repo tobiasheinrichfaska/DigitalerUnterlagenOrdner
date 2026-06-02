@@ -28,11 +28,14 @@ class CompressionConfig:
         methods: Tuple of method keys tried by compress_all_methods.
     """
     dpi: int = 150
-    jpeg_quality: int = 60
+    jpeg_quality: int = 60        # grayscale JPEG ("jpg")
+    jpeg_quality_color: int = 75  # colour JPEG ("jpg_color") — a touch higher
     png_compress_level: int = 6
     colorspace: str = "gray"
     max_width_pt: float = 595.0   # A4 width in points
-    methods: Tuple[str, ...] = ("jpg", "png", "pikepdf")
+    # "jpg"/"png" render grayscale; "jpg_color" keeps colour; "pikepdf" is
+    # structural-only (no re-render, colour preserved).
+    methods: Tuple[str, ...] = ("jpg", "jpg_color", "png", "pikepdf")
 
 
 # Module-level default used by all public entry points.
@@ -97,8 +100,13 @@ def _render_pdf_as_images(
     The colorspace, JPEG quality, and PNG compression level are taken from
     ``config`` so that all magic numbers are centralised in CompressionConfig.
     """
-    cs = fitz.csGRAY if config.colorspace == "gray" else fitz.csRGB
-    pil_mode = "L" if config.colorspace == "gray" else "RGB"
+    # "jpg_color" always renders colour, regardless of the config colorspace;
+    # the other image methods follow config.colorspace (grayscale by default).
+    if method == "jpg_color":
+        cs, pil_mode = fitz.csRGB, "RGB"
+    else:
+        cs = fitz.csGRAY if config.colorspace == "gray" else fitz.csRGB
+        pil_mode = "L" if config.colorspace == "gray" else "RGB"
 
     input_pdf = fitz.open(stream=input_bytes, filetype="pdf")
     output_pdf = fitz.open()
@@ -121,8 +129,9 @@ def _render_pdf_as_images(
             image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
 
             buf = io.BytesIO()
-            if method == "jpg":
-                image.save(buf, format="JPEG", quality=config.jpeg_quality)
+            if method in ("jpg", "jpg_color"):
+                quality = config.jpeg_quality_color if method == "jpg_color" else config.jpeg_quality
+                image.save(buf, format="JPEG", quality=quality)
             elif method == "png":
                 image.save(buf, format="PNG", compress_level=config.png_compress_level)
             else:

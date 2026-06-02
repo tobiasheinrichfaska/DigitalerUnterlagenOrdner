@@ -422,7 +422,11 @@ def _commit(doc: Document, cmd: Commit, engine=None) -> Document:
 
 @_handler(Reset)
 def _reset(doc: Document, cmd: Reset, engine=None) -> Document:
-    _require(doc, cmd.node_id)
+    node = _require(doc, cmd.node_id)
+    # A committed node reloaded from disk has no source (original dropped on save):
+    # there is nothing to reset to, and clearing current_data would blank it.
+    if not node.is_folder and node.original_data is None and node.current_data is not None:
+        raise CommandError("kein Original vorhanden – Zurücksetzen nicht möglich")
     return doc.update_node(cmd.node_id, current_data=None,
                            is_compressed=False, dpi_current=None,
                            compression_method=None)

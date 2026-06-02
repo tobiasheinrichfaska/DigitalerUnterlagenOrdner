@@ -10,8 +10,20 @@ import { core } from './core'
 
 const kb = (n) => `${Math.round(n / 1024)} KB`
 
+// Readable labels for the backend compression method keys.
+const METHOD_LABELS = {
+  jpg: 'JPEG (Graustufen)',
+  jpg_color: 'JPEG (Farbe)',
+  png: 'PNG (Graustufen)',
+  pikepdf: 'Struktur (Farbe erhalten)',
+}
+const methodLabel = (m) => METHOD_LABELS[m] ?? m
+
 export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi = 150 }) {
-  const off = node.no_compression
+  // A committed node reloaded from disk has no source bytes (original dropped on
+  // save) → it can't be re-compressed or reset; lock the controls.
+  const noSource = node.has_source === false
+  const off = node.no_compression || noSource
   const [dpi, setDpi] = useState(node.dpi_current ?? defaultDpi)
   const [options, setOptions] = useState(null) // method list, loaded on demand
   const [loading, setLoading] = useState(false) // compression options being computed
@@ -72,12 +84,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         onMouseDown={() => { if (!options) loadOptions(dpi) }}
         onFocus={() => { if (!options) loadOptions(dpi) }}
         onChange={(e) => onMethod(e.target.value)}>
-        <option value="original">{loading ? 'Kompression läuft …' : 'unkomprimierte Fassung'}</option>
+        <option value="original">{noSource ? 'bereits komprimiert (keine Quelle)' : loading ? 'Kompression läuft …' : 'unkomprimierte Fassung'}</option>
         {/* before the list loads, keep the saved method selectable */}
-        {!options && method !== 'original' && <option value={method}>{method}</option>}
+        {!options && method !== 'original' && <option value={method}>{methodLabel(method)}</option>}
         {options?.map((o, i) => (
           <option key={o.method} value={o.method}>
-            {o.method} — {kb(o.size)}{i === 0 ? ' · beste' : ''}
+            {methodLabel(o.method)} — {kb(o.size)}{i === 0 ? ' · beste' : ''}
           </option>
         ))}
       </select>

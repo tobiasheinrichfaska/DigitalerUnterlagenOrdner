@@ -63,6 +63,9 @@ class Node:
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
             "compression_method": self.compression_method,
+            # UI hint: a committed node reloaded from disk has no source bytes
+            # (the original was dropped on save), so it can't be re-compressed/reset.
+            "has_source": self.original_data is not None,
             "children": [c.to_dict(i) for i, c in enumerate(self.children)],
         }
 

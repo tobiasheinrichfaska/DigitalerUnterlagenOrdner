@@ -8,18 +8,27 @@
 
 Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.5.3**.
 
-Entry point: `belegtool_main.py` — run with `python belegtool_main.py`.
+Entry point: `app.py` — one executable, two GUIs (`python app.py` for the legacy
+Tk GUI, `python app.py --new` for the React/pywebview GUI). See **Build** for the
+full dispatch table.
 
 ---
 
 ## Architecture
 
-### GUI layer
+### Entry point & launch
+
+| File | Role |
+|---|---|
+| `app.py` | Single entry: routes to the legacy Tk GUI or (with `--new`) the React/pywebview GUI; passes a startup `.belegtool` through to the new GUI |
+| `launch_util.py` | `new_gui_command()` — builds the argv to relaunch the new GUI (frozen: the exe itself; dev: `python app.py`); used by the legacy "open in new GUI" transfer |
+
+### GUI layer (legacy Tk)
 
 | File | Role |
 |---|---|
 | `belegtool_main.py` | Main window (TkinterDnD), menu bar, `_update_menu_states()` |
-| `panel_controls.py` | Toolbar (3 buttons), all action handlers (import, export, split, merge, …) |
+| `panel_controls.py` | Toolbar, all action handlers (import, export, split, merge, **open-in-new-GUI**, …) |
 | `view_tree.py` | TreeView frame, context menu, drag-and-drop, keyboard bindings |
 | `view_preview.py` | Preview canvas, zoom, DPI slider, compression commit/reset, rotation |
 
@@ -163,19 +172,34 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 
 ### Prerequisites
 - Python 3.12 in PATH
+- Node.js (the build runs `npm run build` in `webui/` first)
 - `tkinterdnd2/tkdnd` directory at the path specified in `belegtool.spec`
 
-### Build (clean venv, onedir)
+### Build (clean venv, onedir) — one exe, both GUIs
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
-Output: `dist\PDF-Storage\PDF-Storage.exe` + all DLLs/data in the same directory.
+Output: `dist\BelegTool\BelegTool.exe` + all DLLs/data in the same directory.
+`build.ps1` builds `webui/dist` (Vite) before PyInstaller; the spec bundles those
+assets plus the pywebview + pythonnet/clr (Edge WebView2) stack.
 
-onedir is intentional — faster startup, no temp extraction.
+**Single executable, two front ends** — dispatched by [`app.py`](app.py):
+| Command | GUI |
+|---|---|
+| `BelegTool.exe` | legacy Tk GUI |
+| `BelegTool.exe <file.belegtool>` | legacy Tk GUI, opening that file |
+| `BelegTool.exe --new` | React/pywebview GUI |
+| `BelegTool.exe --new <file.belegtool>` | React/pywebview GUI, opening that file |
+
+When frozen, `sys.executable` is `BelegTool.exe` itself, so the legacy GUI's
+**"In neuer Oberfläche öffnen"** button relaunches it with `--new <snapshot>`
+([`launch_util.new_gui_command`](launch_util.py)). onedir is intentional —
+faster startup, no temp extraction.
 
 ### Run for development
 ```powershell
-python belegtool_main.py
+python app.py            # legacy Tk GUI (or: python belegtool_main.py)
+python app.py --new      # React/pywebview GUI (needs webui/dist built first)
 ```
 
 ---

@@ -14,7 +14,7 @@ other via subprocess without a second executable — that is what the planned
 
 import sys
 
-NEW_GUI_FLAG = "--new"
+from launch_util import NEW_GUI_FLAG
 
 
 def select_gui(args):
@@ -22,11 +22,17 @@ def select_gui(args):
     return "new" if NEW_GUI_FLAG in args else "old"
 
 
+def _startup_path(args):
+    """First non-flag argument, if any — the .belegtool to open on launch."""
+    rest = [a for a in args if a != NEW_GUI_FLAG]
+    return rest[0] if rest else None
+
+
 def main(args=None):
     args = sys.argv[1:] if args is None else args
     if select_gui(args) == "new":
         from host import main as host_main
-        host_main()
+        host_main(_startup_path(args))
     else:
         from belegtool_main import start_gui
         start_gui()

@@ -52,6 +52,7 @@ a = Analysis(
         'tools',
         'preview_page',
         'toc_export',
+        'launch_util',
         # new React/pywebview GUI
         'host',
         'clr',

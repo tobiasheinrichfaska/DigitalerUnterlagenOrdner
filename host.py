@@ -97,10 +97,13 @@ def _bind_close(win, api):
     win.events.closing += _on_closing
 
 
-def _open_window(core):
+def _open_window(core, startup_path=None):
     """Open a document window with its own HostApi (sharing one CoreApi — sessions
-    are independent per window). Used for the first window and every 'new window'."""
+    are independent per window). Used for the first window and every 'new window'.
+    ``startup_path`` (only the first window) is a .belegtool the React app opens on
+    load — used when the legacy GUI hands a document over via 'open in new GUI'."""
     api = HostApi(core)
+    api._startup_path = startup_path
     win = webview.create_window(
         APP_NAME, _entry(), js_api=api,
         width=1280, height=820, min_size=(900, 600))
@@ -118,6 +121,7 @@ class HostApi:
         self._core = core
         self._uid = uid
         self._dirty = False  # pushed from the React app for the close guard
+        self._startup_path = None  # .belegtool to open on load (first window only)
 
     def set_dirty(self, value):
         self._dirty = bool(value)
@@ -140,7 +144,10 @@ class HostApi:
 
     # core ops (delegate)
     def config(self):
-        return self._core.config()
+        cfg = dict(self._core.config())
+        if self._startup_path:
+            cfg["startup_path"] = self._startup_path  # React opens this on load
+        return cfg
 
     def open(self, session=None, path=None):
         return self._core.open(session, path)
@@ -214,9 +221,9 @@ class HostApi:
         return self._core.save(session, path)
 
 
-def main():
+def main(startup_path=None):
     core = CoreApi()  # shared across all windows; sessions are per window
-    _open_window(core)
+    _open_window(core, startup_path)
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     webview.start(_prewarm)

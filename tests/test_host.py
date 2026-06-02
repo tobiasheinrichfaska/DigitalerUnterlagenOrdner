@@ -2,6 +2,9 @@
 
 import host
 from core.api import CoreApi
+from core.bridge import save_belegtool
+from core.model import Document, Node
+from helpers import create_valid_pdf
 
 
 class _FakeWin:
@@ -35,6 +38,36 @@ def test_set_dirty_tracks_flag_for_close_guard():
     assert api._dirty is False
     api.set_dirty(True)
     assert api._dirty is True
+
+
+def test_config_omits_startup_path_by_default():
+    api = host.HostApi(CoreApi())
+    assert "startup_path" not in api.config()
+
+
+def test_config_exposes_startup_path_when_set():
+    # The first window carries the .belegtool handed over by the legacy GUI;
+    # the React app reads it from config() and opens it on load.
+    api = host.HostApi(CoreApi())
+    api._startup_path = r"C:\tmp\handover.belegtool"
+    cfg = api.config()
+    assert cfg["startup_path"] == r"C:\tmp\handover.belegtool"
+    assert cfg["ok"] and "app_name" in cfg  # still carries the core config
+
+
+def test_startup_path_file_opens_via_host(tmp_path):
+    # The hand-over round-trip: a .belegtool snapshot opens in the new GUI exactly
+    # as App.jsx does it — core.open(null, startup_path).
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="Übergabe", pdf_length=1, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "handover.belegtool"
+    save_belegtool(src, path)
+    api = host.HostApi(CoreApi())
+    api._startup_path = str(path)
+    opened = api.open(None, api.config()["startup_path"])
+    assert opened["ok"]
+    assert [c["name"] for c in opened["tree"]["children"]] == ["Übergabe"]
 
 
 def test_hostapi_delegates_core_ops():

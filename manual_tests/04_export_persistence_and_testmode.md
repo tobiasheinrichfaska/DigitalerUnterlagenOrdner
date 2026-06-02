@@ -68,3 +68,34 @@ dropped, and a reloaded committed node can no longer be re-compressed or reset.
   save. This is by design and **irreversible**: the only copy is the compressed one.
 - A node you did **not** compress before saving keeps its source and remains fully
   compressible after reload.
+
+
+---
+
+## MT-18: Testmodus (React UI) — input vs live vs expected
+
+Re-introduced in the React UI (v3.6.0+). A developer/QA view that runs the
+golden-master operations and shows the results side by side. Needs the fixtures.
+
+**Preconditions:** the app is running (`python host.py`); `tests/data/input/`
+exists (if not, a developer runs `python tests/make_fixtures.py`).
+
+**Steps:**
+1. In the toolbar, click **🧪 Testmodus**.
+2. Wait a moment ("Operationen laufen …" shows while the operations run).
+3. Scroll through the overlay.
+4. Click **Schließen**.
+
+**Expected:**
+- A full-window overlay appears with sections **Kompression**, **Splitten**,
+  **Zusammenführen**.
+- Each item shows three columns — **Eingabe**, **Live** (the operation run right
+  now), **Referenz** — as page thumbnails.
+- Each item carries a badge: **✓ stimmt mit Referenz überein** (live matches the
+  golden master), **✗ weicht ab**, or **⚠ keine Referenz** / **⚠ kein Ergebnis**.
+- *Not obvious:* with unchanged code every item that has a reference should be
+  green (✓). A red ✗ means a live operation drifted from its golden master.
+- *Not obvious:* if the fixtures are missing, the overlay shows a clear message
+  telling you to run `python tests/make_fixtures.py` instead of empty columns.
+- **Schließen** restores the normal editor; the open document is untouched
+  (Testmodus is read-only).

@@ -25,6 +25,7 @@ from core.engine import RealEngine
 from core.model import Document
 from core.session import DocumentSession
 from log_config import logger
+from version_info import APP_NAME
 
 
 def _friendly_import_error(path: str, exc: Exception) -> str:
@@ -61,7 +62,7 @@ class CoreApi:
     # --- ops ---------------------------------------------------------------
     def config(self) -> dict:
         """Fixed core defaults the UI should use instead of hardcoding its own."""
-        return {"ok": True, "default_dpi": DEFAULT_COMPRESSION_DPI}
+        return {"ok": True, "default_dpi": DEFAULT_COMPRESSION_DPI, "app_name": APP_NAME}
 
     def hello(self) -> dict:
         with self._lock:
@@ -198,13 +199,20 @@ class CoreApi:
             nodes = list(storage.root.children)
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
-        from toc_export import export_pdf_with_toc
+        from toc_export import export_pdf_with_toc, empty_leaf_names
+
+        # Leaves with no pages are silently dropped from the export/TOC; collect
+        # their names so the UI can tell the user what was left out.
+        skipped = empty_leaf_names(nodes)
         try:
             export_pdf_with_toc(nodes, path)
         except Exception as e:
             logger.exception("export failed")
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "session": session, "path": path, "count": len(nodes)}
+        result = {"ok": True, "session": session, "path": path, "count": len(nodes)}
+        if skipped:
+            result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
+        return result
 
     def any_dirty(self) -> bool:
         """True if any open session has unsaved changes (for the close prompt)."""

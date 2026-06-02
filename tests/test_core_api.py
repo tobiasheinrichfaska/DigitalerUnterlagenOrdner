@@ -123,6 +123,7 @@ def test_export_pdf_with_toc(tmp_path):
     r = api.export(sid, str(out))
     assert r["ok"] and r["count"] == 2
     assert out.exists() and out.read_bytes().startswith(b"%PDF")
+    assert "warning" not in r  # nothing skipped → no warning
 
 
 def test_dirty_tracking_cleared_on_save(tmp_path):

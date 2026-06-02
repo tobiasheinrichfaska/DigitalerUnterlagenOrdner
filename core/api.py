@@ -53,6 +53,14 @@ class CoreApi:
         self._sessions = {}
         self._lock = threading.Lock()
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
+        self._render_service = None  # lazy windowed render cache (shared across windows)
+
+    def _renderer(self):
+        if self._render_service is None:
+            from services.render import render_page
+            from services.render_service import RenderService
+            self._render_service = RenderService(render_page)
+        return self._render_service
 
     def _next_untitled_name(self) -> str:
         with self._lock:
@@ -152,6 +160,61 @@ class CoreApi:
         ]
         return {"ok": True, "session": session, "node": node_id,
                 "pages": pages, "compressed": compressed is not None}
+
+    # --- windowed render cache --------------------------------------------
+    def _effective(self, node):
+        """Effective bytes + a content-derived version (so a compress/rotate/edit
+        changes the version and the cache auto-invalidates)."""
+        import zlib
+        data = node.current_data or node.original_data
+        return (data, zlib.crc32(data)) if data else (None, 0)
+
+    def _leaf_data(self, session, node_id):
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return None, None, {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return None, None, {"ok": False, "error": f"node not found: {node_id}"}
+            return node, (node.current_data or node.original_data), None
+
+    def page_count(self, session: str, node_id: str) -> dict:
+        node, data, err = self._leaf_data(session, node_id)
+        if err:
+            return err
+        from services.render import page_count
+        return {"ok": True, "session": session, "node": node_id, "count": page_count(data)}
+
+    def page_dims(self, session: str, node_id: str) -> dict:
+        """(width, height) per page in points — for stable placeholder boxes."""
+        node, data, err = self._leaf_data(session, node_id)
+        if err:
+            return err
+        from services.render import page_dims
+        return {"ok": True, "session": session, "node": node_id,
+                "dims": [[w, h] for (w, h) in page_dims(data)]}
+
+    def render_window(self, session: str, node_id: str, first: int = 0,
+                      count: int = 10, dpi: int = 100) -> dict:
+        """Render only pages ``[first, first+count)`` of a leaf, cache-first via the
+        shared RenderService. The windowed replacement for ``render`` (all pages)."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            data, version = self._effective(node)
+        if not data:
+            return {"ok": True, "session": session, "node": node_id, "first": first, "pages": []}
+        from base64 import b64encode
+        # render outside the lock (CPU-bound)
+        pages = self._renderer().render_window(node_id, version, data, first, count, dpi)
+        urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
+                for p in pages]
+        return {"ok": True, "session": session, "node": node_id, "first": first, "pages": urls}
 
     def save(self, session: str, path: str) -> dict:
         with self._lock:

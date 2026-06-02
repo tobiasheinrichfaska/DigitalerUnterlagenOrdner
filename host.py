@@ -17,6 +17,7 @@ import webview
 
 from core.api import CoreApi
 from log_config import logger
+from version_info import APP_NAME
 
 
 def _prewarm():
@@ -98,7 +99,7 @@ def _open_window(core):
     are independent per window). Used for the first window and every 'new window'."""
     api = HostApi(core)
     win = webview.create_window(
-        "DigitalerBelegeOrdner", _entry(), js_api=api,
+        APP_NAME, _entry(), js_api=api,
         width=1280, height=820, min_size=(900, 600))
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     _bind_close(win, api)

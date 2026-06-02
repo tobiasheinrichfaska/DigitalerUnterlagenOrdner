@@ -316,7 +316,11 @@ export default function App() {
   // the context menu passes specific ids for an explicit selection export.
   const exportPdf = (nodeIds = null) =>
     run(core.exportPdf(session, nodeIds)).then((resp) => {
-      if (resp?.ok) { setError(null); setNotice(`PDF exportiert (${resp.count} ${resp.count === 1 ? 'Eintrag' : 'Einträge'})`) }
+      if (resp?.ok) {
+        setError(null)
+        const base = `PDF exportiert (${resp.count} ${resp.count === 1 ? 'Eintrag' : 'Einträge'})`
+        setNotice(resp.warning ? `${base} — ${resp.warning}` : base)
+      }
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
     })
 
@@ -353,7 +357,7 @@ export default function App() {
   return (
     <div className={busy ? 'app busy' : 'app'}>
       <header>
-        <h1 title="DigitalerBelegeOrdner">{state?.tree?.name || 'DigitalerBelegeOrdner'}{dirty ? ' •' : ''}</h1>
+        <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <div className="toolbar">
           <button onClick={openFile}>📂 Öffnen</button>
           <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>

@@ -61,6 +61,23 @@ def count_total_pages(nodes: List[PDFNode]) -> int:
     return sum(count_node_pages(n) for n in nodes)
 
 
+def empty_leaf_names(nodes: List[PDFNode]) -> List[str]:
+    """Names of leaf nodes with no pages — these are silently dropped from the
+    export/TOC, so callers can warn the user about what was left out."""
+    names: List[str] = []
+
+    def _walk(node: PDFNode) -> None:
+        if node.is_folder:
+            for child in node.children:
+                _walk(child)
+        elif count_node_pages(node) == 0:
+            names.append(node.name)
+
+    for n in nodes:
+        _walk(n)
+    return names
+
+
 def _build_toc_items(nodes: List[PDFNode], depth: int = 0,
                      counter: Optional[List[int]] = None) -> List[_TocItem]:
     if counter is None:

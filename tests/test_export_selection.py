@@ -3,6 +3,7 @@ import pytest
 from pypdf import PdfReader
 from pdf_storage import PDFStorage
 from pdf_node import PDFNode
+from toc_export import empty_leaf_names
 from helpers import create_valid_pdf
 
 
@@ -83,3 +84,19 @@ def test_export_empty_selection_produces_empty_pdf(tmp_path):
     out = str(tmp_path / "out.pdf")
     storage.export_selection([], out)
     assert page_count(out) == 0
+
+
+# --- skipped empty-leaf detection (drives the export warning channel) ---
+
+def test_empty_leaf_names_reports_only_pageless_leaves():
+    folder = PDFNode("Ordner", is_folder=True)
+    real = PDFNode("Dok1", pdf_data=create_valid_pdf(pages=1))
+    empty = PDFNode("Leer")  # no pdf_data → 0 pages
+    folder.add_child(real)
+    folder.add_child(empty)
+    assert empty_leaf_names([folder]) == ["Leer"]  # recurses; folders not reported
+
+
+def test_empty_leaf_names_empty_when_all_have_pages():
+    real = PDFNode("Dok1", pdf_data=create_valid_pdf(pages=1))
+    assert empty_leaf_names([real]) == []

@@ -1,9 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 from PyInstaller.utils.hooks import collect_submodules, collect_all
-import tkinterdnd2
 
-tkdnd_src = os.path.join(os.path.dirname(tkinterdnd2.__file__), 'tkdnd')
 PROJECT_DIR = SPECPATH  # injected by PyInstaller: the spec's directory
 
 reportlab_imports = collect_submodules('reportlab')
@@ -18,20 +16,16 @@ pynet_datas, pynet_bins, pynet_hidden = collect_all('pythonnet')
 clrloader_datas, clrloader_bins, clrloader_hidden = collect_all('clr_loader')
 
 a = Analysis(
-    ['app.py'],
+    ['host.py'],
     pathex=[PROJECT_DIR],
     binaries=webview_bins + pynet_bins + clrloader_bins,
     datas=[
-        (tkdnd_src, 'tkinterdnd2/tkdnd'),
         # React production assets the pywebview host loads (PROD_INDEX).
         (os.path.join(PROJECT_DIR, 'webui', 'dist'), os.path.join('webui', 'dist')),
     ] + webview_datas + pynet_datas + clrloader_datas,
     hiddenimports=[
-        # legacy Tk GUI
-        'tkinterdnd2',
         'PIL',
         'PIL.Image',
-        'PIL.ImageTk',
         'fitz',
         'pikepdf',
         'pypdf',
@@ -42,18 +36,13 @@ a = Analysis(
         'pdf_node',
         'pdf_storage',
         'compress_pdf_bytes',
-        'view_preview',
-        'view_tree',
-        'panel_controls',
         'universal_importer',
-        'status_display',
         'version_info',
         'log_config',
         'tools',
         'preview_page',
         'toc_export',
-        'launch_util',
-        # new React/pywebview GUI
+        # React/pywebview GUI
         'host',
         'clr',
         'webview.platforms.edgechromium',

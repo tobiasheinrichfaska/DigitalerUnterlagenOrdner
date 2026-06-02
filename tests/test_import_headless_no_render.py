@@ -19,14 +19,21 @@ from pdf_node import PDFNode
 
 @pytest.fixture
 def count_renders(monkeypatch):
-    """Count every render_pdf_to_images call across the import."""
+    """Count render_pdf_to_images calls made *synchronously on the import thread*.
+
+    Only main-thread renders count: a background compression daemon left running
+    by another test must not poison this counter (the headless import path never
+    renders on any thread, sync or async — that is exactly what we assert)."""
+    import threading
+    main = threading.main_thread()
     calls = {"n": 0, "pages": 0}
     real = render_mod.render_pdf_to_images
 
     def counting(data, dpi=100):
         out = real(data, dpi=dpi)
-        calls["n"] += 1
-        calls["pages"] += len(out)
+        if threading.current_thread() is main:
+            calls["n"] += 1
+            calls["pages"] += len(out)
         return out
 
     # patch both the source module and the name imported into pdf_node

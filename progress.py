@@ -2,12 +2,8 @@
 
 The core/model signals background-task start/finish through this module without
 knowing anything about a GUI. By default nothing is wired up (a no-op), so the
-domain code stays platform-agnostic and testable. The application installs a
-reporter that forwards the signals to its status display (Tk today, the React
-shell / core service later).
-
-Part of the GUI<->core decoupling — replaces the model's direct dependency on
-``status_display`` (which imports ``tkinter``).
+domain code stays platform-agnostic and testable. The application (the
+React/pywebview host) can install a reporter that forwards the signals to its UI.
 """
 
 from typing import Optional, Protocol, runtime_checkable

@@ -6,31 +6,26 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.6.0**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.6.0**.
 
-Entry point: `app.py` — one executable, two GUIs (`python app.py` for the legacy
-Tk GUI, `python app.py --new` for the React/pywebview GUI). See **Build** for the
-full dispatch table.
+Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
+the GUI; `python host.py <file.belegtool>` opens that file on startup.
+
+> **v3.6.0 removed the legacy Tk GUI** and the dual `app.py` entry point. The only
+> front end is now the React/pywebview GUI; `host.py` is the sole entry. Removed
+> files: `app.py`, `launch_util.py`, `belegtool_main.py`, `panel_controls.py`,
+> `view_tree.py`, `view_preview.py`, `status_display.py`, `test_mode.py` (and their
+> tests). `tkinterdnd2` is gone from `requirements.txt`.
 
 ---
 
 ## Architecture
 
-### Entry point & launch
+### Entry point & host
 
 | File | Role |
 |---|---|
-| `app.py` | Single entry: routes to the legacy Tk GUI or (with `--new`) the React/pywebview GUI; passes a startup `.belegtool` through to the new GUI |
-| `launch_util.py` | `new_gui_command()` — builds the argv to relaunch the new GUI (frozen: the exe itself; dev: `python app.py`); used by the legacy "open in new GUI" transfer |
-
-### GUI layer (legacy Tk)
-
-| File | Role |
-|---|---|
-| `belegtool_main.py` | Main window (TkinterDnD), menu bar, `_update_menu_states()` |
-| `panel_controls.py` | Toolbar, all action handlers (import, export, split, merge, **open-in-new-GUI**, …) |
-| `view_tree.py` | TreeView frame, context menu, drag-and-drop, keyboard bindings |
-| `view_preview.py` | Preview canvas, zoom, DPI slider, compression commit/reset, rotation |
+| `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. |
 
 ### Data model
 
@@ -52,27 +47,26 @@ full dispatch table.
 | File | Role |
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.5.3) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.6.0) |
 | `log_config.py` | Logging setup |
-| `status_display.py` | Title bar status loop (Tk; **app layer only**) |
-| `preview_page.py` | Preview page holder (PIL only — no Tk) |
+| `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |
 
 ### Headless core layer & ports (GUI-decoupled)
 
-The domain model and processing modules import **no `tkinter`** — the GUI toolkit
-lives only in the app layer (`belegtool_main`, `view_*`, `panel_controls`,
-`status_display`, `test_mode`). This is Phase 1 of the React migration; see
-[`docs/REACT_MIGRATION_PLAN.md`](docs/REACT_MIGRATION_PLAN.md) (on the
-`react-migration` branch).
+The domain model and processing modules import **no `tkinter`**. With the legacy
+Tk GUI removed (v3.6.0), the only UI is the React/pywebview host; the React
+migration that this decoupling enabled is effectively complete.
 
 | File | Role |
 |---|---|
-| `services/render.py` | **Headless** PDF→preview rendering: `render_pdf_to_images` (PIL, for the Tk canvas) and `render_pdf_to_pngs` (PNG bytes, for a web UI). `PDFNode._create_previews` delegates here. |
-| `progress.py` | Progress **port**: the core signals background-task start/finish (`task_started`/`task_finished`); the app installs a reporter forwarding to `status_display`. No-op by default. |
+| `services/render.py` | **Headless** render: `render_pdf_to_images` (PIL), `render_pdf_to_pngs` (PNG bytes for the SPA), and the windowed-cache primitives `render_page` (single page), `page_count`, `page_dims`. |
+| `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the (in-progress) windowed render cache. |
+| `progress.py` | Progress **port**: the core signals background-task start/finish (`task_started`/`task_finished`); the app may install a reporter forwarding to its UI. No-op by default. |
 | `tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). |
 
-Ports are installed by the GUI in `belegtool_main` (`progress.set_reporter`,
-`tasks.set_ui_dispatcher`); a future backend installs its own implementations.
+Ports default to a no-op reporter and a daemon-thread executor; the host can
+install its own implementations (`progress.set_reporter`, `tasks.set_ui_dispatcher`)
+if it needs to surface progress or marshal onto a UI thread.
 
 ### Data-driven core (`core/`)
 
@@ -125,7 +119,6 @@ render/compress path at startup.
 
 | Package | Purpose |
 |---|---|
-| `tkinterdnd2` | Drag-and-drop in TreeView |
 | `PyMuPDF` (`fitz`) | PDF rendering to images |
 | `Pillow` | Image processing; HEIC support via `pillow-heif` |
 | `pikepdf` | Advanced PDF manipulation (annotations, outline/bookmarks) |
@@ -184,8 +177,7 @@ enforced in the logic layer and surfaced to the UI via `has_source` in `Node.to_
 - **Reset is blocked** — nothing to revert to (`_reset` raises `CommandError`).
 - The compression dropdown shows **"bereits komprimiert (keine Quelle)"**, disabled.
 - ⚠ **Irreversible:** the source is gone for committed nodes — see `manual_tests` MT-17.
-Uncommitted nodes keep their source and stay fully editable. The legacy Tk path
-(`generate_previews=True`) keeps its prior reload behavior.
+Uncommitted nodes keep their source and stay fully editable.
 
 ---
 
@@ -194,40 +186,34 @@ Uncommitted nodes keep their source and stay fully editable. The legacy Tk path
 ### Prerequisites
 - Python 3.12 in PATH
 - Node.js (the build runs `npm run build` in `webui/` first)
-- `tkinterdnd2/tkdnd` directory at the path specified in `belegtool.spec`
 
-### Build (clean venv, onedir) — one exe, both GUIs
+### Build (clean venv, onedir) — single React/pywebview exe
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 Output: `dist\BelegTool\BelegTool.exe` + all DLLs/data in the same directory.
-`build.ps1` builds `webui/dist` (Vite) before PyInstaller; the spec bundles those
-assets plus the pywebview + pythonnet/clr (Edge WebView2) stack.
+`build.ps1` builds `webui/dist` (Vite) before PyInstaller; the spec
+([`belegtool.spec`](belegtool.spec)) has **`host.py`** as its single Analysis
+entry and bundles the React assets plus the pywebview + pythonnet/clr (Edge
+WebView2) stack. onedir is intentional — faster startup, no temp extraction.
 
-**Single executable, two front ends** — dispatched by [`app.py`](app.py):
 | Command | GUI |
 |---|---|
-| `BelegTool.exe` | legacy Tk GUI |
-| `BelegTool.exe <file.belegtool>` | legacy Tk GUI, opening that file |
-| `BelegTool.exe --new` | React/pywebview GUI |
-| `BelegTool.exe --new <file.belegtool>` | React/pywebview GUI, opening that file |
-
-When frozen, `sys.executable` is `BelegTool.exe` itself, so the legacy GUI's
-**"In neuer Oberfläche öffnen"** button relaunches it with `--new <snapshot>`
-([`launch_util.new_gui_command`](launch_util.py)). onedir is intentional —
-faster startup, no temp extraction.
+| `BelegTool.exe` | React/pywebview GUI |
+| `BelegTool.exe <file.belegtool>` | React/pywebview GUI, opening that file |
 
 ### Run for development
 ```powershell
-python app.py            # legacy Tk GUI (or: python belegtool_main.py)
-python app.py --new      # React/pywebview GUI (needs webui/dist built first)
+cd webui && npm run build   # build the SPA once (or `npm run dev` + BELEG_DEV=1)
+python host.py              # launch the GUI
+python host.py file.belegtool   # …opening a file
 ```
 
 ---
 
 ## Tests
 
-Framework: `pytest`. ~50 test files in `tests/` cover the legacy modules (`pdf_node`, `pdf_storage`, `view_tree`, `view_preview`, `panel_controls`) **and** the data-driven `core/` (model, commands, engine, session, bridge, api, ipc) plus the pywebview host glue (`test_host.py`). Run `pytest` for the current pass count.
+Framework: `pytest`. Tests in `tests/` cover the data model (`pdf_node`, `pdf_storage`), compression/import, the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, and the pywebview host glue (`test_host.py`). Run `pytest` for the current pass count.
 
 ```powershell
 pytest
@@ -269,6 +255,14 @@ Current stable tag: **v3.6.0**
 ---
 
 ## Open / deferred items
+- **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
+  removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
+  against the React UI. The features themselves are unchanged.
+- **Dead Tk-preview path in the data model** — `PDFNode` still carries the eager
+  PIL-preview / `compress_lazy` / `PreviewPage` machinery (the `generate_previews=True`
+  branch) that only the removed Tk GUI used. The headless React path never calls it.
+  Safe to keep, but a candidate for a focused data-model cleanup (would also drop
+  `preview_page.py` and the background-compress-on-import threads the tests still trip on).
 - **Headless import is now bytes-only end to end** — plain-PDF *and* archive/email
   paths honor `generate_previews=False` (`from_recursive_array`/`_from_structure_entry`
   thread the flag); page count uses `fitz.page_count`; the `/JSONStructure` metadata
@@ -297,7 +291,7 @@ Current stable tag: **v3.6.0**
 ---
 
 ## UI conventions
-- Style: Windows-native ttk ("faithful ttk"), no custom colors except status highlights
-- Toolbar: 3 buttons — [Import] [Save] [Save as]
-- Context menu order: optimized by frequency of use (see `view_tree.py`)
-- `_update_menu_states()` in `belegtool_main.py` controls context-sensitive activation of all menu items
+- React + Vite SPA in `webui/`; rendered inside the pywebview host
+- Toolbar: open/import/save/export/new-window/undo/redo ([`App.jsx`](webui/src/App.jsx))
+- Tree + drag-and-drop in [`Tree.jsx`](webui/src/Tree.jsx); right-click ops in [`ContextMenu.jsx`](webui/src/ContextMenu.jsx)
+- Compression controls (method dropdown incl. `jpg_color`, DPI, apply/reset) in [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)

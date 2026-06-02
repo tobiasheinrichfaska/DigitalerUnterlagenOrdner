@@ -43,33 +43,6 @@ least one compressed node.
 
 ---
 
-## MT-16: Test mode — input vs live vs expected
-
-This is a developer/QA view that runs the golden-master operations and shows the
-results side by side. It needs the test fixtures present.
-
-**Preconditions:** `tests/data/input/` exists (if not, a developer runs
-`python tests/make_fixtures.py`).
-
-**Steps:**
-1. Menu **Ansicht → Testmodus** (toggle it on).
-2. Wait a few seconds (a busy cursor shows while the operations run).
-3. Scroll through the view.
-4. Toggle **Ansicht → Testmodus** off again.
-
-**Expected:**
-- The normal editor is replaced by a comparison view with three columns per item:
-  **Input**, **Live** (the operation run right now), **Erwartet (Referenz)**.
-- Each row shows a badge: **✓ stimmt mit Referenz überein** (live matches the
-  golden master), **✗ weicht ab**, or **⚠ keine Referenz**.
-- Sections appear for **Kompression**, **Splitten**, **Zusammenführen**.
-- Turning the toggle off restores the normal editor.
-- *Not obvious:* if the fixtures are missing you get a message telling you to run
-  `python tests/make_fixtures.py` instead of an empty view.
-
-
----
-
 ## MT-17: Committed compression drops the source (irreversible)
 
 Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft"),

@@ -1,7 +1,7 @@
 # 05 — React desktop UI (pywebview)
 
-Covers the **new** React front end (`python host.py`), separate from the Tk app
-tested in 01–04. Launch with `cd webui && npm run build` then `python host.py`.
+Covers the React/pywebview front end (`python host.py`) — the only UI since
+v3.6.0. Launch with `cd webui && npm run build` then `python host.py`.
 
 ---
 

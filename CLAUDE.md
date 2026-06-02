@@ -273,14 +273,17 @@ Current stable tag: **v3.6.0**
   still honored — locked by `test_structured_pdf_import_honors_json`). Warm import is
   ~1 ms; the remaining cold-open cost is Windows Defender scanning the file, outside
   our control.
-- **Windowed render cache — backend done, UI pending.** Built: pure
-  `predict_window`/`next_fill_target` ([`core/render_policy.py`](core/render_policy.py)),
+- **Windowed render cache — wired into the UI; background filler not yet activated.**
+  Done: pure `predict_window`/`next_fill_target` ([`core/render_policy.py`](core/render_policy.py)),
   `RenderService`/`RenderCache` ([`services/render_service.py`](services/render_service.py)),
-  and the `CoreApi.render_window`/`page_count`/`page_dims` API (+ HostApi + `core.js`
-  bindings). **Remaining:** a virtualized `Preview.jsx` that uses `renderWindow` with
-  placeholders (`pageDims`), ±5 prefetch, and per-node scroll memory — then the
-  background filler can be driven on idle. Until the UI switches, the preview still
-  calls the all-pages `CoreApi.render` (~28 s + 157 MiB for a 200-page file).
+  `CoreApi.render_window`/`page_count`/`page_dims` (+ HostApi + `core.js`), and the
+  virtualized [`Preview.jsx`](webui/src/Preview.jsx) (IntersectionObserver +
+  aspect-ratio placeholders + ±5 prefetch + per-node scroll memory). The plain leaf
+  preview now uses it; compression-browsing + folders still use the all-pages path.
+  ⚠ **Needs on-screen QA** (manual test MT-39) — virtualized scrolling can't be
+  verified headlessly. **Remaining:** drive the background filler
+  (`RenderService.fill_until_idle`) on idle via the host (CPU-throttled), so
+  neighbouring pages/nodes pre-warm; today only the viewport window ±5 is fetched.
 - **Zammad integration** — deferred, not started yet
 
 ---

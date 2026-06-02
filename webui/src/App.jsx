@@ -3,6 +3,7 @@ import { core } from './core'
 import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
 import { ContextMenu } from './ContextMenu'
+import { TestMode } from './TestMode'
 import './App.css'
 
 function readAsDataURL(file) {
@@ -88,6 +89,7 @@ export default function App() {
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
+  const [testMode, setTestMode] = useState(false) // Testmodus overlay (dev/QA golden-master review)
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -378,9 +380,13 @@ export default function App() {
           </button>
           <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
+          <span className="sep" />
+          <button onClick={() => setTestMode((v) => !v)} title="Testmodus: Golden-Master-Vergleich (Entwickler/QA)">🧪 Testmodus</button>
           {busy ? <span className="spinner" title="Arbeite…" /> : null}
         </div>
       </header>
+
+      {testMode && <TestMode onClose={() => setTestMode(false)} />}
 
       {error && <p className="error">⚠ {error}</p>}
       {notice && !error && <p className="notice">✓ {notice}</p>}

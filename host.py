@@ -170,6 +170,9 @@ class HostApi:
     def compress_options(self, session, node_id, dpi=150):
         return self._core.compress_options(session, node_id, dpi)
 
+    def test_mode(self, dpi=60, max_pages=3):
+        return self._core.test_mode(dpi, max_pages)
+
     # import (drop path uses bytes; the button uses the native dialog → real paths)
     def import_bytes(self, session, name, data, parent_id=None, index=None):
         return self._core.import_bytes(session, name, data, parent_id, index)

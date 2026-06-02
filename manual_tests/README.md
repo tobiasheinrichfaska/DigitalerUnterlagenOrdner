@@ -41,7 +41,7 @@ dialogs, export results).
 | [01_import.md](01_import.md) | Importing PDFs, images, e-mails, archives; import-safety |
 | [02_tree_operations.md](02_tree_operations.md) | Split, merge, folders, rename, delete, drag-and-drop |
 | [03_preview_and_compression.md](03_preview_and_compression.md) | Preview, DPI slider, compression, commit/reset, status colours |
-| [04_export_persistence_and_testmode.md](04_export_persistence_and_testmode.md) | Export (TOC), save/reload `.belegtool`, committed-compression drop |
+| [04_export_persistence_and_testmode.md](04_export_persistence_and_testmode.md) | Export (TOC), save/reload `.belegtool`, committed-compression drop, **Testmodus** |
 | [05_react_ui.md](05_react_ui.md) | **React UI** (`host.py`): import/drop, tree edit, compression preview, multi-window, guards, export, shortcuts |
 
 > Keep these files current: whenever a user-facing flow changes, update the

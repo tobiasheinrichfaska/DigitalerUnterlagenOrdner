@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { core } from './core'
 import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
+import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { TestMode } from './TestMode'
 import './App.css'
@@ -137,11 +138,18 @@ export default function App() {
       run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
       return
     }
-    const p = previewReq
-      ? core.renderCompressed(session, selected.id, previewReq.dpi, previewReq.method)
-      : core.render(session, selected.id)
-    run(p).then((r) => setPages(r?.ok ? r.pages : []))
+    if (previewReq) {
+      // transient compressed working-preview (all pages, via renderCompressed)
+      run(core.renderCompressed(session, selected.id, previewReq.dpi, previewReq.method))
+        .then((r) => setPages(r?.ok ? r.pages : []))
+    } else {
+      // plain stored preview is windowed on demand by <Preview>
+      setPages(null)
+    }
   }, [selected, previewReq, session]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // plain leaf preview is virtualized; folders + compression-browsing use `pages`
+  const windowed = !!(selected && !selected.is_folder && !previewReq)
 
   const onPreview = useCallback((req) => setPreviewReq(req), [])
 
@@ -410,7 +418,7 @@ export default function App() {
         </div>
         <div className="pane preview-pane" ref={previewRef}>
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
-          {selected && pages?.length > 0 && (
+          {selected && (windowed || pages?.length > 0) && (
             <div className="zoom-bar">
               <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>
               <span>{Math.round(zoom * 100)}%</span>
@@ -419,11 +427,12 @@ export default function App() {
             </div>
           )}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
-          {selected && busy > 0 && pages === null && <div className="spinner big" />}
-          {selected && busy === 0 && pages?.length === 0 && (
+          {windowed && <Preview session={session} node={selected} zoom={zoom} />}
+          {!windowed && selected && busy > 0 && pages === null && <div className="spinner big" />}
+          {!windowed && selected && busy === 0 && pages?.length === 0 && (
             <p className="status">Keine Vorschau (Ordner oder leer)</p>
           )}
-          {selected && pages?.map((src, i) => (
+          {!windowed && selected && pages?.map((src, i) => (
             <img key={i} src={src} alt={`Seite ${i + 1}`} className="preview-page" style={{ width: `${zoom * 100}%` }} />
           ))}
         </div>

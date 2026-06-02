@@ -142,24 +142,31 @@ a Word/Excel/`.md` file.
 
 ---
 
-## MT-38: Transfer from the legacy GUI ("In neuer Oberfläche öffnen")
+## MT-39: Windowed preview — big PDF scrolls without the long load
 
-Covers the hand-off from the **old Tk GUI** to the **new React GUI** in the
-combined `BelegTool.exe` build.
+Validates the virtualized preview (v3.6.0+). A large PDF should open its preview
+**immediately** (first pages only) and render more as you scroll, instead of
+freezing while every page renders.
 
-**Preconditions:** A built `dist\BelegTool\BelegTool.exe` (run `build.ps1`).
+**Preconditions:** the app is running (`python host.py`); import a **large**
+PDF (ideally 100+ pages; a colour scan is a good stress test).
 
 **Steps:**
-1. Launch the legacy GUI: double-click `BelegTool.exe` (no arguments).
-2. Open or import a document, then make an **unsaved** change (e.g. rename a node).
-3. Click the toolbar button **→ Neue Oberfläche** (or menu **Datei → In neuer
-   Oberfläche öffnen…**).
+1. Select the large PDF node in the tree.
+2. Watch the preview pane appear.
+3. Scroll down slowly through the document.
+4. Scroll quickly (flick) far down, then back up.
+5. Select a different node, then select the large PDF again.
 
 **Expected:**
-- A **second window** opens — the React/pywebview GUI — showing the **same tree**,
-  including the unsaved change you just made.
-- The **original Tk window stays open and unchanged** — *not obvious:* the transfer
-  is a snapshot, so the old window still shows its unsaved-changes state and its
-  current file path is **not** repointed to the temporary hand-off file.
-- If no document is open, the button shows a hint ("kein Dokument zum Übertragen")
-  instead of launching anything.
+- The preview appears **right away**: the first page(s) show within ~1–2 s, not
+  after a long freeze. Pages not yet rendered show a light **striped placeholder**
+  box of the correct size (the layout does not jump when the real page arrives).
+- *Not obvious:* scrolling at a normal/reading pace stays smooth — pages fill in
+  just ahead of the viewport (a few pages are prefetched in each direction).
+- A fast flick may briefly show placeholders that fill in within a moment; the
+  scrollbar position stays stable (no jumping).
+- *Not obvious:* returning to the large PDF restores **the same scroll position**
+  you left it at, and already-seen pages reappear instantly (cached).
+- The compression dropdown ("Lesbarkeit geprüft" working-preview) still shows the
+  whole compressed document as before — that path is intentionally not windowed.

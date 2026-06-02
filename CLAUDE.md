@@ -61,7 +61,8 @@ migration that this decoupling enabled is effectively complete.
 | File | Role |
 |---|---|
 | `services/render.py` | **Headless** render: `render_pdf_to_images` (PIL), `render_pdf_to_pngs` (PNG bytes for the SPA), and the windowed-cache primitives `render_page` (single page), `page_count`, `page_dims`. |
-| `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the (in-progress) windowed render cache. |
+| `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
+| `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
 | `progress.py` | Progress **port**: the core signals background-task start/finish (`task_started`/`task_finished`); the app may install a reporter forwarding to its UI. No-op by default. |
 | `tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). |
 
@@ -272,22 +273,15 @@ Current stable tag: **v3.6.0**
   still honored — locked by `test_structured_pdf_import_honors_json`). Warm import is
   ~1 ms; the remaining cold-open cost is Windows Defender scanning the file, outside
   our control.
-- **Windowed render cache (designed, not built)** — see the design discussion: render
-  only a page window on demand (±5 prefetch), pure `predict_window`/`next_fill_target`
-  policy functions in the core, a stateful `RenderService` (200 MiB global LRU,
-  per-node `version` invalidation, CPU-headroom-throttled background filler) in an
-  application/service layer between the pure model and the UI. Today `CoreApi.render`
-  rasterizes **all** pages into one base64 blob (~28 s + 157 MiB for a 200-page file).
+- **Windowed render cache — backend done, UI pending.** Built: pure
+  `predict_window`/`next_fill_target` ([`core/render_policy.py`](core/render_policy.py)),
+  `RenderService`/`RenderCache` ([`services/render_service.py`](services/render_service.py)),
+  and the `CoreApi.render_window`/`page_count`/`page_dims` API (+ HostApi + `core.js`
+  bindings). **Remaining:** a virtualized `Preview.jsx` that uses `renderWindow` with
+  placeholders (`pageDims`), ±5 prefetch, and per-node scroll memory — then the
+  background filler can be driven on idle. Until the UI switches, the preview still
+  calls the all-pages `CoreApi.render` (~28 s + 157 MiB for a 200-page file).
 - **Zammad integration** — deferred, not started yet
-- **GUI test harness — Tk root churn (deferred)**: `tests/test_ui_lockout.py`
-  creates a fresh `tk.Tk()` per test (see the `preview` fixture). Running *that
-  file alone in a tight loop* intermittently fails Tk init
-  (`couldn't read … panedwindow.tcl`). A shared module/session root was tried and
-  **regressed the full suite** — leaked `after`-poll timers from one test fire
-  against the next test's destroyed frame (`TclError`). Per-test root is reliable
-  in normal/full runs (119 passed, 0 failed). A proper fix needs one
-  session-wide root for *all* GUI tests **plus** strict per-test `after`-timer
-  cancellation — a real refactor, not a quick win. Low priority (isolation-only).
 
 ---
 

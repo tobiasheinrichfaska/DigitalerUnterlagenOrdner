@@ -173,6 +173,16 @@ class HostApi:
     def test_mode(self, dpi=60, max_pages=3):
         return self._core.test_mode(dpi, max_pages)
 
+    # windowed render cache
+    def page_count(self, session, node_id):
+        return self._core.page_count(session, node_id)
+
+    def page_dims(self, session, node_id):
+        return self._core.page_dims(session, node_id)
+
+    def render_window(self, session, node_id, first=0, count=10, dpi=100):
+        return self._core.render_window(session, node_id, first, count, dpi)
+
     # import (drop path uses bytes; the button uses the native dialog → real paths)
     def import_bytes(self, session, name, data, parent_id=None, index=None):
         return self._core.import_bytes(session, name, data, parent_id, index)

@@ -12,6 +12,7 @@ Run:
 
 import io
 import os
+import sys
 
 import webview
 
@@ -62,7 +63,9 @@ def _prewarm():
         # (missing DLL, library drift) is diagnosable instead of silently slow.
         logger.exception("prewarm failed")
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# Frozen (PyInstaller onedir): data files live under sys._MEIPASS, not next to
+# this module (which is packed into the archive). Dev: resolve from the source.
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")

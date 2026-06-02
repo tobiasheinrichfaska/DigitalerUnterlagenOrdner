@@ -1,22 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules, collect_all
 import tkinterdnd2
 
 tkdnd_src = os.path.join(os.path.dirname(tkinterdnd2.__file__), 'tkdnd')
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = SPECPATH  # injected by PyInstaller: the spec's directory
 
 reportlab_imports = collect_submodules('reportlab')
 xhtml2pdf_imports = collect_submodules('xhtml2pdf')
+core_imports = collect_submodules('core')
+
+# New GUI stack: pywebview + its Windows EdgeChromium backend (pythonnet/clr).
+# collect_all grabs the package submodules, data files and the native DLLs
+# (WebView2Loader, Python.Runtime, …) that the backend loads at runtime.
+webview_datas, webview_bins, webview_hidden = collect_all('webview')
+pynet_datas, pynet_bins, pynet_hidden = collect_all('pythonnet')
+clrloader_datas, clrloader_bins, clrloader_hidden = collect_all('clr_loader')
 
 a = Analysis(
-    ['belegtool_main.py'],
+    ['app.py'],
     pathex=[PROJECT_DIR],
-    binaries=[],
+    binaries=webview_bins + pynet_bins + clrloader_bins,
     datas=[
         (tkdnd_src, 'tkinterdnd2/tkdnd'),
-    ],
+        # React production assets the pywebview host loads (PROD_INDEX).
+        (os.path.join(PROJECT_DIR, 'webui', 'dist'), os.path.join('webui', 'dist')),
+    ] + webview_datas + pynet_datas + clrloader_datas,
     hiddenimports=[
+        # legacy Tk GUI
         'tkinterdnd2',
         'PIL',
         'PIL.Image',
@@ -41,7 +52,13 @@ a = Analysis(
         'tools',
         'preview_page',
         'toc_export',
-    ] + reportlab_imports + xhtml2pdf_imports,
+        # new React/pywebview GUI
+        'host',
+        'clr',
+        'webview.platforms.edgechromium',
+        'webview.platforms.winforms',
+    ] + reportlab_imports + xhtml2pdf_imports + core_imports
+      + webview_hidden + pynet_hidden + clrloader_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -57,7 +74,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='PDF-Storage',
+    name='BelegTool',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -78,5 +95,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='PDF-Storage',
+    name='BelegTool',
 )

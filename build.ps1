@@ -8,6 +8,13 @@ Remove-Item -Recurse -Force "$Root\build" -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force "$Root\dist"  -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $VenvDir       -ErrorAction SilentlyContinue
 
+Write-Host "=== React-UI bauen (webui/dist) ===" -ForegroundColor Cyan
+Push-Location "$Root\webui"
+npm install
+npm run build
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "webui build failed" }
+Pop-Location
+
 Write-Host "=== Saubere venv erstellen ===" -ForegroundColor Cyan
 python -m venv $VenvDir
 
@@ -21,4 +28,6 @@ Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
     --workpath "$Root\build" `
     --noconfirm
 
-Write-Host "=== Fertig: dist\PDF-Storage\PDF-Storage.exe ===" -ForegroundColor Green
+Write-Host "=== Fertig: dist\BelegTool\BelegTool.exe ===" -ForegroundColor Green
+Write-Host "    Alte GUI:  dist\BelegTool\BelegTool.exe" -ForegroundColor Green
+Write-Host "    Neue GUI:  dist\BelegTool\BelegTool.exe --new" -ForegroundColor Green

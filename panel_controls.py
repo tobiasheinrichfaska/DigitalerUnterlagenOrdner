@@ -21,6 +21,9 @@ class ControlPanel(ttk.Frame):
         self.save_as_button = ttk.Button(self, text="Speichern als", command=self.save_as)
         self.save_as_button.pack(side="left", padx=5, pady=5)
 
+        self.new_gui_button = ttk.Button(self, text="→ Neue Oberfläche", command=self.open_in_new_gui)
+        self.new_gui_button.pack(side="left", padx=5, pady=5)
+
 
     def update_buttons(self, node):
         """
@@ -523,6 +526,29 @@ class ControlPanel(ttk.Frame):
         )
         if path:
             self._do_save(path)
+
+    def open_in_new_gui(self):
+        """Hand the current document to the new React/pywebview GUI: snapshot the
+        in-memory state (incl. unsaved edits) to a temp .belegtool via the
+        side-effect-free export, then launch the new GUI on it. The old window
+        stays open — non-destructive."""
+        storage = self.controller.storage
+        if not storage or not storage.root.children:
+            messagebox.showinfo("Hinweis", "Es ist kein Dokument zum Übertragen geöffnet.")
+            return
+        try:
+            self.controller.set_busy(True)
+            import tempfile
+            import subprocess
+            from launch_util import new_gui_command
+            fd, temp = tempfile.mkstemp(suffix=".belegtool", prefix="beleg_transfer_")
+            os.close(fd)
+            storage.export_selection(list(storage.root.children), temp)
+            subprocess.Popen(new_gui_command(temp))
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Konnte die neue Oberfläche nicht öffnen:\n{e}")
+        finally:
+            self.controller.set_busy(False)
 
 
     def export_selected(self):

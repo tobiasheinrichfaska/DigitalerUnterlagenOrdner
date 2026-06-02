@@ -124,6 +124,8 @@ class DigitalerBelegGUI(TkinterDnD.Tk):
         datei_menu.add_command(label="Speichern als…",  accelerator="Strg+Umsch+S",  command=self.control_panel.save_as)
         datei_menu.add_command(label="Exportieren…",                                 command=self.control_panel.export_selected)
         datei_menu.add_separator()
+        datei_menu.add_command(label="In neuer Oberfläche öffnen…",                  command=self.control_panel.open_in_new_gui)
+        datei_menu.add_separator()
         datei_menu.add_command(label="Schließen",                                    command=self.control_panel.close_storage)
         datei_menu.add_separator()
         datei_menu.add_command(label="Beenden",         accelerator="Alt+F4",        command=self._exit_app)

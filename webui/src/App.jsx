@@ -148,9 +148,13 @@ export default function App() {
   useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initial load
-    run(core.open()).then(apply).catch((e) => setError(String(e.message || e)))
-    core.config().then((r) => { if (r?.ok) setConfig(r) }).catch(() => {})
+    // Fetch config first so we can honour a startup_path (a .belegtool handed
+    // over by the legacy GUI's "open in new GUI"); otherwise open an empty doc.
+    core.config()
+      .then((r) => { if (r?.ok) setConfig(r); return r })
+      .catch(() => null)
+      .then((r) => run(core.open(null, r?.startup_path || null)).then(apply))
+      .catch((e) => setError(String(e.message || e)))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // after any edit/undo/redo: apply, keep `selected` fresh from the new tree

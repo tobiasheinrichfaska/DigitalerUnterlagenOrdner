@@ -139,3 +139,27 @@ a Word/Excel/`.md` file.
 **Expected:**
 - Shortcuts work, but are **ignored while typing** in a text field/dialog.
 - **Entf** deletes the selected node (undoable). Ctrl+wheel zooms the preview only.
+
+---
+
+## MT-38: Transfer from the legacy GUI ("In neuer Oberfläche öffnen")
+
+Covers the hand-off from the **old Tk GUI** to the **new React GUI** in the
+combined `BelegTool.exe` build.
+
+**Preconditions:** A built `dist\BelegTool\BelegTool.exe` (run `build.ps1`).
+
+**Steps:**
+1. Launch the legacy GUI: double-click `BelegTool.exe` (no arguments).
+2. Open or import a document, then make an **unsaved** change (e.g. rename a node).
+3. Click the toolbar button **→ Neue Oberfläche** (or menu **Datei → In neuer
+   Oberfläche öffnen…**).
+
+**Expected:**
+- A **second window** opens — the React/pywebview GUI — showing the **same tree**,
+  including the unsaved change you just made.
+- The **original Tk window stays open and unchanged** — *not obvious:* the transfer
+  is a snapshot, so the old window still shows its unsaved-changes state and its
+  current file path is **not** repointed to the temporary hand-off file.
+- If no document is open, the button shows a hint ("kein Dokument zum Übertragen")
+  instead of launching anything.

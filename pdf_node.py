@@ -127,10 +127,15 @@ class PDFNode:
         if not data:
             return 0
         try:
-            reader = PdfReader(io.BytesIO(data))
-            return len(reader.pages)
+            # fitz page_count is ~ms; pypdf's len(reader.pages) parses the whole
+            # page tree and dominated headless import time.
+            with fitz.open(stream=data, filetype="pdf") as doc:
+                return doc.page_count
         except Exception:
-            return 0
+            try:
+                return len(PdfReader(io.BytesIO(data)).pages)
+            except Exception:
+                return 0
 
 
     def _create_previews(self, data: Optional[bytes]) -> List[Image.Image]:
@@ -764,7 +769,8 @@ class PDFNode:
 
 
     @classmethod
-    def from_recursive_array(cls, name: str, structure: List[Dict[str, Any]]) -> 'PDFNode':
+    def from_recursive_array(cls, name: str, structure: List[Dict[str, Any]],
+                             generate_preview: bool = True) -> 'PDFNode':
         """
         Erzeugt einen übergeordneten Ordnerknoten aus einer rekursiven Datenstruktur.
 
@@ -782,7 +788,7 @@ class PDFNode:
             if isinstance(content, io.BytesIO):
                 entry["content"] = content.getvalue()
 
-            node = cls._from_structure_entry(entry, parent=root)
+            node = cls._from_structure_entry(entry, parent=root, generate_preview=generate_preview)
             root.add_child(node)
 
         return root
@@ -855,7 +861,8 @@ class PDFNode:
                 self._current_preview_pages = []
 
     @staticmethod
-    def _from_structure_entry(entry: Dict[str, Any], parent: Optional['PDFNode'] = None) -> 'PDFNode':
+    def _from_structure_entry(entry: Dict[str, Any], parent: Optional['PDFNode'] = None,
+                              generate_preview: bool = True) -> 'PDFNode':
         """
         Wandelt einen einzelnen Dictionary-Eintrag in einen PDFNode um (rekursiv bei children).
 
@@ -872,14 +879,22 @@ class PDFNode:
             # Ordnerknoten erzeugen
             node = PDFNode(name=name, is_folder=True)
             for child_entry in entry["children"]:
-                child_node = PDFNode._from_structure_entry(child_entry, parent=node)
+                child_node = PDFNode._from_structure_entry(child_entry, parent=node,
+                                                           generate_preview=generate_preview)
                 node.add_child(child_node)
         else:
             # Blattknoten mit PDF-Inhalt (content kann auch None sein)
             content = entry.get("content")
             if isinstance(content, io.BytesIO):
                 content = content.getvalue()
-            node = PDFNode(name=name, is_folder=False, pdf_data=content)
+            node = PDFNode(name=name, is_folder=False)
+            if content:
+                # Honor generate_preview (headless core = bytes only, no eager render).
+                node.set_original_and_current_data(
+                    original_data=content, current_data=None,
+                    dpi_original=None, dpi_current=None,
+                    no_compression=False, generate_preview=generate_preview,
+                )
 
         node.parent = parent
         return node

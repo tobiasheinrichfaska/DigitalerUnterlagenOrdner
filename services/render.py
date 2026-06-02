@@ -86,3 +86,70 @@ def render_pdf_to_pngs(
         img.save(buf, format="PNG")
         pngs.append(buf.getvalue())
     return pngs
+
+
+def _raw(data: Optional[Union[bytes, io.BytesIO]]) -> bytes:
+    if not data:
+        return b""
+    return data.getvalue() if isinstance(data, io.BytesIO) else data
+
+
+def render_page(
+    data: Optional[Union[bytes, io.BytesIO]],
+    page_index: int,
+    dpi: int = DEFAULT_PREVIEW_DPI,
+) -> bytes:
+    """Render a **single** page to PNG bytes (the windowed-cache unit).
+
+    Returns ``b""`` on empty/invalid input or an out-of-range page, so callers
+    can treat empty as "no preview" without raising.
+    """
+    raw = _raw(data)
+    if not raw:
+        return b""
+    try:
+        doc = fitz.open(stream=raw, filetype="pdf")
+    except Exception as e:
+        logger.warning("render_page: PDF konnte nicht geöffnet werden: %s", e)
+        return b""
+    try:
+        if page_index < 0 or page_index >= doc.page_count:
+            return b""
+        pix = doc[page_index].get_pixmap(dpi=dpi)
+        ppm = pix.tobytes("ppm")
+        if not ppm.startswith(b"P6"):
+            return b""
+        with Image.open(io.BytesIO(ppm)) as im:
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:
+        logger.warning("render_page: Fehler auf Seite %d: %s", page_index, e)
+        return b""
+    finally:
+        doc.close()
+
+
+def page_count(data: Optional[Union[bytes, io.BytesIO]]) -> int:
+    """Cheap page count (no rasterizing)."""
+    raw = _raw(data)
+    if not raw:
+        return 0
+    try:
+        with fitz.open(stream=raw, filetype="pdf") as doc:
+            return doc.page_count
+    except Exception:
+        return 0
+
+
+def page_dims(data: Optional[Union[bytes, io.BytesIO]]) -> List[tuple]:
+    """``(width, height)`` in points for every page — for stable placeholder
+    boxes in the virtualized scroller (no rasterizing)."""
+    raw = _raw(data)
+    if not raw:
+        return []
+    try:
+        with fitz.open(stream=raw, filetype="pdf") as doc:
+            return [(p.rect.width, p.rect.height) for p in doc]
+    except Exception:
+        return []

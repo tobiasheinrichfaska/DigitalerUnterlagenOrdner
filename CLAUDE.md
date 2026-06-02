@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.5.3**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: Python/Tkinter (ttk). Version: **3.6.0**.
 
 Entry point: `app.py` — one executable, two GUIs (`python app.py` for the legacy
 Tk GUI, `python app.py --new` for the React/pywebview GUI). See **Build** for the
@@ -152,7 +152,11 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 
 ### Preview & compression
 - Lazy-generated, cached; DPI slider 50–300 DPI
-- Multi-method: test JPG, PNG, pikepdf in parallel → pick best; methods larger than original are hidden from the dropdown
+- Multi-method: test JPG (grayscale), **JPG color (`jpg_color`)**, PNG (grayscale),
+  pikepdf (structural, color preserved) in parallel → pick smallest; methods larger
+  than original are hidden from the dropdown. `jpg_color` keeps color so color
+  documents aren't silently desaturated; readable labels live in `PreviewControls.jsx`
+  (`METHOD_LABELS`).
 - Original file size shown in labels for comparison
 - Commit button (replace original), reset button
 
@@ -164,7 +168,24 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 ### Export
 - Single PDF with table of contents (TOC), clickable links, sidebar bookmarks
 - Auto-split at >100 pages with cross-references
-- .belegtool format (metadata + ZIP)
+- `.belegtool` format: a single PDF whose pages are the nodes' **effective bytes**
+  (`current_pdf_data`), with the tree serialized into the `/JSONStructure` metadata
+  key. Import gates the (expensive) structure parse on a cheap `b"/JSONStructure"`
+  byte check.
+
+### Persistence / save policy (v3.6.0)
+The file stores **only `current_pdf_data` per node** — never a separate original.
+So a **committed** node ("Lesbarkeit geprüft" = a `Compress` was applied) saves only
+its compressed result; its source is **dropped on save** (the file is never 2×).
+On reload (headless/core path) a committed node comes back **coherently**:
+`current_data = bytes, original_data = None, is_compressed = True`. Consequences,
+enforced in the logic layer and surfaced to the UI via `has_source` in `Node.to_dict`:
+- **Re-compress is blocked** — `Compress` guards on `original_data` (no double compression).
+- **Reset is blocked** — nothing to revert to (`_reset` raises `CommandError`).
+- The compression dropdown shows **"bereits komprimiert (keine Quelle)"**, disabled.
+- ⚠ **Irreversible:** the source is gone for committed nodes — see `manual_tests` MT-17.
+Uncommitted nodes keep their source and stay fully editable. The legacy Tk path
+(`generate_previews=True`) keeps its prior reload behavior.
 
 ---
 
@@ -243,11 +264,25 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.5.3**
+Current stable tag: **v3.6.0**
 
 ---
 
 ## Open / deferred items
+- **Headless import is now bytes-only end to end** — plain-PDF *and* archive/email
+  paths honor `generate_previews=False` (`from_recursive_array`/`_from_structure_entry`
+  thread the flag); page count uses `fitz.page_count`; the `/JSONStructure` metadata
+  parse is gated on a cheap `b"/JSONStructure" in data` byte check (the marker
+  survives pikepdf's compress+linearize, so `.belegtool`/structured-PDF imports are
+  still honored — locked by `test_structured_pdf_import_honors_json`). Warm import is
+  ~1 ms; the remaining cold-open cost is Windows Defender scanning the file, outside
+  our control.
+- **Windowed render cache (designed, not built)** — see the design discussion: render
+  only a page window on demand (±5 prefetch), pure `predict_window`/`next_fill_target`
+  policy functions in the core, a stateful `RenderService` (200 MiB global LRU,
+  per-node `version` invalidation, CPU-headroom-throttled background filler) in an
+  application/service layer between the pure model and the UI. Today `CoreApi.render`
+  rasterizes **all** pages into one base64 blob (~28 s + 157 MiB for a 200-page file).
 - **Zammad integration** — deferred, not started yet
 - **GUI test harness — Tk root churn (deferred)**: `tests/test_ui_lockout.py`
   creates a fresh `tk.Tk()` per test (see the `preview` fixture). Running *that

@@ -32,7 +32,7 @@ def test_compress_all_methods_sorted_smallest_first():
 def test_compress_all_methods_known_keys():
     data = create_valid_pdf(pages=1)
     results = compress_all_methods(data, dpi=72)
-    allowed = {"jpg", "png", "pikepdf"}
+    allowed = {"jpg", "jpg_color", "png", "pikepdf"}
     assert set(results.keys()).issubset(allowed)
 
 

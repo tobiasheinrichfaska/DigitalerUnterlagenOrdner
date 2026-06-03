@@ -14,7 +14,7 @@ const baseTree = {
 function renderTree(props = {}) {
   const spies = {
     onSelect: vi.fn(), onContext: vi.fn(), onToggleCollapse: vi.fn(),
-    onMove: vi.fn(), onMoveMany: vi.fn(), onDropFiles: vi.fn(),
+    onMove: vi.fn(), onMoveMany: vi.fn(), onDropFiles: vi.fn(), onRename: vi.fn(),
   }
   const result = render(
     <Tree node={baseTree} selectedIds={[]} primaryId={null} grabbedId={null} forceExpand={false}
@@ -76,6 +76,23 @@ describe('Tree', () => {
     const { container } = renderTree({ selectedIds: ['L1', 'L2'], primaryId: 'L2' })
     expect(container.querySelectorAll('.row.selected').length).toBe(2)
     expect(container.querySelector('.row.primary').textContent).toMatch(/doc2/)
+  })
+
+  it('clicking an already-marked node again starts inline rename → Enter dispatches onRename', async () => {
+    const { onRename } = renderTree({ primaryId: 'L2' }) // doc2 is already the primary
+    fireEvent.click(screen.getByText(/doc2/))            // click marked again → schedules rename
+    const input = await screen.findByDisplayValue('doc2', {}, { timeout: 1000 })
+    fireEvent.change(input, { target: { value: 'neuerName' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onRename).toHaveBeenCalledWith('L2', 'neuerName')
+  })
+
+  it('Escape in the rename input cancels (no onRename)', async () => {
+    const { onRename } = renderTree({ primaryId: 'L2' })
+    fireEvent.click(screen.getByText(/doc2/))
+    const input = await screen.findByDisplayValue('doc2', {}, { timeout: 1000 })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(onRename).not.toHaveBeenCalled()
   })
 
   it('rows are draggable and right-click opens the context menu', () => {

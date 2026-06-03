@@ -473,6 +473,10 @@ export default function App() {
               onMove={onMove}
               onMoveMany={onMoveMany}
               levelsFor={levelsFor}
+              onRename={(id, name) => {
+                const n = findNode(state.tree, id)
+                if (n && name && name.trim() && name.trim() !== n.name) dispatch({ type: 'Rename', node_id: id, name: name.trim() })
+              }}
               onDropFiles={onDropFiles}
               pending={pending}
             />

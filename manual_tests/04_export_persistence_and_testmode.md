@@ -49,7 +49,7 @@ Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft
 the saved file keeps only the compressed result — the uncompressed original is
 dropped, and a reloaded committed node can no longer be re-compressed or reset.
 
-**Preconditions:** the new GUI (`python app.py --new`); a multi-page color PDF imported as a node.
+**Preconditions:** the app running (`python host.py`); a multi-page color PDF imported as a node.
 
 **Steps:**
 1. Select the imported node. In the compression controls, pick a method (e.g.
@@ -90,7 +90,14 @@ exists (if not, a developer runs `python tests/make_fixtures.py`).
 - A full-window overlay appears with sections **Kompression**, **Splitten**,
   **Zusammenführen**.
 - Each item shows three columns — **Eingabe**, **Live** (the operation run right
-  now), **Referenz** — as page thumbnails.
+  now), **Referenz** — as page thumbnails (up to ~12 pages per item, so multi-page
+  results are visible in full).
+- **Splitten:** each row is one page of the source — **Eingabe** shows the
+  *original* page *i*, **Live** the split piece *i*, **Referenz** the golden piece.
+  You can verify by eye that piece *i* really is page *i* of the source.
+- **Zusammenführen:** the two **Quelle** rows show `merge1_a`/`merge1_b` and their
+  pages; the **Ergebnis** row shows the full merged document (a's page, then b's
+  pages) in **Live** and **Referenz**, so you can confirm the concatenation order.
 - Each item carries a badge: **✓ stimmt mit Referenz überein** (live matches the
   golden master), **✗ weicht ab**, or **⚠ keine Referenz** / **⚠ kein Ergebnis**.
 - *Not obvious:* with unchanged code every item that has a reference should be

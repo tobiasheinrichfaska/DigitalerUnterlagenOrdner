@@ -41,6 +41,27 @@ def test_comparison_status_values():
     assert item_statuses <= {STATUS_MATCH, STATUS_NO_EXPECTED, "differ", "no-live"}
 
 
+def test_split_shows_original_page_as_input():
+    from services.render import page_count
+    from testmode import build_split_dataset
+
+    ds = build_split_dataset()
+    assert ds.items
+    for it in ds.items:
+        # input column is now the corresponding ORIGINAL page (one page), next to
+        # the split piece (live) — so a tester can verify the split kept page i.
+        assert it.input_pdf and page_count(it.input_pdf) == 1
+        assert it.live_pdf and page_count(it.live_pdf) == 1
+
+
+def test_merge_result_has_no_redundant_input():
+    from testmode import build_merge_dataset
+
+    ds = build_merge_dataset()
+    result = ds.items[-1]
+    assert result.input_pdf is None and result.live_pdf is not None  # Live | Referenz only
+
+
 def test_core_api_test_mode_report():
     api = CoreApi()
     r = api.test_mode(dpi=50, max_pages=2)

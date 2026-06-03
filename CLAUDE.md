@@ -203,6 +203,10 @@ Uncommitted nodes keep their source and stay fully editable.
 ### Prerequisites
 - Python 3.12 in PATH
 - Node.js (the build runs `npm run build` in `webui/` first)
+- App icon: source `assets/icon.svg`; the exe icon is `assets/icon.ico` (multi-size,
+  generated from the SVG; `belegtool.spec` sets `EXE(icon=…)`). The same artwork is
+  the web favicon (`webui/public/favicon.svg`). Regenerate the `.ico` from the SVG if
+  the artwork changes.
 
 ### Build (clean venv, onedir) — single React/pywebview exe
 ```powershell

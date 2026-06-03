@@ -32,6 +32,7 @@ function PendingRow({ name, depth }) {
       <div className="row pending" style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         onDragOver={(e) => e.stopPropagation()}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation() }}>
+        <span className="tw-chevron" />
         <span className="name leaf">📄 {name}</span>
       </div>
     </li>

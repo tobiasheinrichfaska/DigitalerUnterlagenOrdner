@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    
+    <linearGradient id="duoBody" x1="0.15" y1="0.05" x2="0.85" y2="0.98">
+      <stop offset="0" stop-color="#FFD27E"></stop>
+      <stop offset="0.45" stop-color="#F4A63E"></stop>
+      <stop offset="1" stop-color="#D77A1C"></stop>
+    </linearGradient>
+    
+    <radialGradient id="duoSheen" cx="0.5" cy="0.14" r="0.62">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"></stop>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.10"></stop>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"></stop>
+    </radialGradient>
+    
+    <radialGradient id="duoDepth" cx="0.5" cy="0.92" r="0.7">
+      <stop offset="0" stop-color="#7A3B05" stop-opacity="0.28"></stop>
+      <stop offset="0.5" stop-color="#7A3B05" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="duoPageBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF6E8"></stop>
+      <stop offset="1" stop-color="#FBE6C8"></stop>
+    </linearGradient>
+    <linearGradient id="duoPageFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"></stop>
+      <stop offset="1" stop-color="#FFF4E2"></stop>
+    </linearGradient>
+    <linearGradient id="duoFold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6DDB4"></stop>
+      <stop offset="1" stop-color="#EBC68C"></stop>
+    </linearGradient>
+    <filter id="duoShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#5A2C04" flood-opacity="0.30"></feDropShadow>
+    </filter>
+  </defs>
+
+  
+  <circle cx="512" cy="512" r="512" fill="url(#duoBody)"></circle>
+  <circle cx="512" cy="512" r="512" fill="url(#duoDepth)"></circle>
+
+  
+  <g filter="url(#duoShadow)">
+    
+    <rect x="372" y="318" width="300" height="392" rx="34" fill="url(#duoPageBack)" transform="rotate(8 512 514)"></rect>
+    
+    <g transform="rotate(-5 512 514)">
+      <path d="M352 352&#xA;               q0-30 30-30 h178 l72 72 v286 q0 30-30 30 h-220 q-30 0-30-30 z" fill="url(#duoPageFront)"></path>
+      
+      <path d="M560 322 v42 q0 30 30 30 h42 z" fill="url(#duoFold)"></path>
+      
+      <g fill="#E7C79A">
+        <rect x="392" y="430" width="200" height="22" rx="11"></rect>
+        <rect x="392" y="482" width="200" height="22" rx="11"></rect>
+        <rect x="392" y="534" width="200" height="22" rx="11"></rect>
+        <rect x="392" y="586" width="120" height="22" rx="11"></rect>
+      </g>
+    </g>
+  </g>
+
+  
+  <circle cx="512" cy="512" r="512" fill="url(#duoSheen)"></circle>
+  <circle cx="512" cy="512" r="506" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="3"></circle>
+</svg>

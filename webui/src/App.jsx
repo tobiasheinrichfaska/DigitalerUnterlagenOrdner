@@ -322,7 +322,7 @@ export default function App() {
   })()
 
   const openFile = () => {
-    if (dirty && !window.confirm('Das aktuelle Dokument hat ungespeicherte Änderungen.\nTrotzdem eine andere Datei öffnen und die Änderungen verwerfen?')) return
+    if (dirty && !window.confirm('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?')) return
     run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false) }

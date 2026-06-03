@@ -90,7 +90,7 @@ def _bind_close(win, api):
             if api._dirty:
                 return bool(win.create_confirmation_dialog(
                     "Ungespeicherte Änderungen",
-                    "Es gibt ungespeicherte Änderungen. Trotzdem schließen und verwerfen?"))
+                    "Das Fenster schließen und die ungespeicherten Änderungen verwerfen?"))
         except Exception:
             pass
         return True

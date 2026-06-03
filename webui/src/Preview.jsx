@@ -1,17 +1,22 @@
 // Virtualized, windowed preview for a selected leaf. Renders a placeholder box
 // per page (height fixed by the page aspect-ratio, so it doesn't jump when the
-// real image arrives), and only fetches the pages near the viewport (±BUFFER
-// prefetch). Scroll position is remembered per node.
+// real image arrives), and only fetches the pages near the viewport.
 //
-// `previewReq` (from the compression controls) switches the *source*: null →
-// the plain stored bytes (core.renderWindow); {dpi, method} → a transient
-// compressed variant (core.renderCompressedWindow). Both go through the same
-// RenderService cache (keyed by the variant's content hash), so switching
-// methods/back-to-original is windowed and cached, not an all-pages re-render.
+// The UI asks ONLY for the page(s) currently on screen (a small, fast request).
+// Prefetching the pages around the request — and seeding the rest lazily — is the
+// middleware's job (RenderService.seed): it warms the cache around each request in
+// the background and yields the instant a newer request arrives. So a jump or a
+// node switch renders the visible page immediately, and scrolling hits a warm cache.
+//
+// On every scroll (incl. jumps / scrollbar drag) we compute the visible page range
+// by binary-searching page offsets and fetch exactly that.
+//
+// `previewReq` switches the source: null → plain bytes (renderWindow); {dpi, method}
+// → a transient compressed variant (renderCompressedWindow). Both go through the
+// same RenderService cache. Scroll position is remembered per node.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { core } from './core'
 
-const BUFFER = 5 // pages to prefetch on each side of the visible range
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)
 
 export function Preview({ session, node, zoom = 1, previewReq = null }) {
@@ -24,12 +29,11 @@ export function Preview({ session, node, zoom = 1, previewReq = null }) {
 
   const scrollRef = useRef(null)
   const pageEls = useRef([])
-  const visible = useRef(new Set())
   const inflight = useRef(new Set()) // ranges already requested ("first-last")
   const token = useRef(0) // bumped on node/variant change to drop stale responses
+  const raf = useRef(0)
 
-  // page count + dims depend only on the node (a compressed variant has the same
-  // page geometry), so fetch them once per node.
+  // page count + dims depend only on the node (a variant has the same geometry)
   useEffect(() => {
     if (!session || !nodeId) { setCount(0); setDims([]); return }
     let alive = true
@@ -43,20 +47,16 @@ export function Preview({ session, node, zoom = 1, previewReq = null }) {
     return () => { alive = false }
   }, [session, nodeId])
 
-  // drop rendered images whenever the node OR the variant (method/dpi) changes;
-  // the IntersectionObserver below then refetches the visible window.
+  // drop rendered images when the node OR the variant changes
   useEffect(() => {
     token.current += 1
-    visible.current = new Set()
     inflight.current = new Set()
     setPages({})
   }, [nodeId, reqKey])
 
-  const fetchRange = useCallback((lo, hi) => {
-    if (!session || !nodeId || count === 0) return
-    const first = Math.max(0, lo - BUFFER)
-    const last = Math.min(count - 1, hi + BUFFER)
-    if (last < first) return
+  // fetch pages [first, last] (no buffer added here — callers decide the span)
+  const fetchSpan = useCallback((first, last) => {
+    if (first > last || first < 0 || !session || !nodeId) return
     const key = `${first}-${last}`
     if (inflight.current.has(key)) return
     inflight.current.add(key)
@@ -75,36 +75,54 @@ export function Preview({ session, node, zoom = 1, previewReq = null }) {
         })
       })
       .catch(() => inflight.current.delete(key))
-  }, [session, nodeId, count, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session, nodeId, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // observe which pages are on screen; (re)attaches on node/variant change so the
-  // visible window is refetched with the right source.
+  // the visible page range, via binary search on page offsets (O(log n) — fine for
+  // huge documents and correct after a jump).
+  const visibleRange = useCallback(() => {
+    const root = scrollRef.current
+    if (!root || count === 0) return null
+    const top = root.scrollTop
+    const bottom = top + root.clientHeight
+    const els = pageEls.current
+    let lo = 0, hi = count - 1, firstV = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      const el = els[mid]
+      if (!el) { lo = mid + 1; continue }
+      if (el.offsetTop + el.offsetHeight >= top) { firstV = mid; hi = mid - 1 } else { lo = mid + 1 }
+    }
+    if (firstV < 0) return null
+    let lastV = firstV
+    for (let i = firstV; i < count; i++) {
+      const el = els[i]
+      if (!el || el.offsetTop > bottom) break
+      lastV = i
+    }
+    return [firstV, lastV]
+  }, [count])
+
+  // fetch exactly the visible page(s); the middleware seeds the surrounding pages.
+  const update = useCallback(() => {
+    const vr = visibleRange()
+    if (!vr) return
+    fetchSpan(vr[0], vr[1])
+  }, [visibleRange, fetchSpan])
+
+  const onScroll = useCallback(() => {
+    if (nodeId && scrollRef.current) scrollMemory.set(nodeId, scrollRef.current.scrollTop)
+    if (raf.current) return
+    raf.current = requestAnimationFrame(() => { raf.current = 0; update() })
+  }, [nodeId, update])
+
+  // restore scroll position + fetch the visible window on node/variant/count change
   useEffect(() => {
     const root = scrollRef.current
     if (!root || count === 0) return
     root.scrollTop = scrollMemory.get(nodeId) || 0
-    const io = new IntersectionObserver((entries) => {
-      let changed = false
-      for (const e of entries) {
-        const idx = Number(e.target.dataset.page)
-        if (e.isIntersecting) {
-          if (!visible.current.has(idx)) { visible.current.add(idx); changed = true }
-        } else if (visible.current.delete(idx)) {
-          changed = true
-        }
-      }
-      if (changed && visible.current.size) {
-        const arr = [...visible.current]
-        fetchRange(Math.min(...arr), Math.max(...arr))
-      }
-    }, { root, rootMargin: '300px 0px' })
-    pageEls.current.slice(0, count).forEach((el) => el && io.observe(el))
-    return () => io.disconnect()
-  }, [count, nodeId, reqKey, fetchRange])
-
-  const onScroll = useCallback(() => {
-    if (nodeId && scrollRef.current) scrollMemory.set(nodeId, scrollRef.current.scrollTop)
-  }, [nodeId])
+    const id = requestAnimationFrame(() => update())
+    return () => cancelAnimationFrame(id)
+  }, [count, nodeId, reqKey, update])
 
   if (!nodeId) return null
   if (count === 0) return <p className="status">Keine Vorschau (Ordner oder leer)</p>

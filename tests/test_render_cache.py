@@ -127,6 +127,15 @@ def test_fill_until_idle_respects_budget():
     assert len(svc.cache) == 2
 
 
+def test_seed_warms_around_focus_in_background():
+    fake = FakeRenderer()
+    svc = RenderService(fake, budget_bytes=10**7, cpu_load=lambda: 0.0, seed_steps=8)
+    svc.seed([("a", 1, 100)], "a", 50, lambda nid: nid.encode(), 100)
+    svc._exec().shutdown(wait=True)  # wait for the background seed job to finish
+    assert len(svc.cache) == 8                 # seed_steps pages warmed
+    assert ("a", 1, 50, 100) in svc.cache      # incl. the focus page
+
+
 def test_fill_until_idle_aborts_on_new_request():
     svc = RenderService(FakeRenderer(), budget_bytes=10**9, cpu_load=lambda: 0.0)
     specs = [("a", 1, 50)]

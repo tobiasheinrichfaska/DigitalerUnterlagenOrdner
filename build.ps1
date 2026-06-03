@@ -28,6 +28,6 @@ Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
     --workpath "$Root\build" `
     --noconfirm
 
-Write-Host "=== Fertig: dist\BelegTool\BelegTool.exe ===" -ForegroundColor Green
-Write-Host "    Alte GUI:  dist\BelegTool\BelegTool.exe" -ForegroundColor Green
-Write-Host "    Neue GUI:  dist\BelegTool\BelegTool.exe --new" -ForegroundColor Green
+Write-Host "=== Fertig ===" -ForegroundColor Green
+Write-Host "    App:   dist\BelegTool\BelegTool.exe" -ForegroundColor Green
+Write-Host "    Datei: dist\BelegTool\BelegTool.exe <datei.belegtool>" -ForegroundColor Green

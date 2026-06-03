@@ -1,11 +1,13 @@
 import fitz
 from PIL import Image
 import io
+import threading
 from dataclasses import dataclass
 from typing import Tuple
 from pypdf import PdfReader, PdfWriter
 import pikepdf
 from log_config import logger
+from services import cpu
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,82 @@ def compress_all_methods(
     return dict(sorted(candidates.items(), key=lambda kv: len(kv[1])))
 
 
+# --- parallel page rendering ----------------------------------------------
+# Compression rasterizes every page (the slow part). We spread that across a
+# capped, below-normal-priority thread pool (terminal-server fair, see services/cpu).
+# PyMuPDF 1.26 renders concurrently as long as each thread uses its OWN Document,
+# so each worker opens its own doc over a contiguous page range; the image bytes
+# are deterministic and assembled back in page order → output stays byte-identical
+# to the old sequential path.
+# Only parallelize documents big enough to amortize the pool coordination — small
+# PDFs render inline (sequentially), which is plenty fast and keeps timing simple.
+_PARALLEL_MIN_PAGES = 8
+_compress_pool = None
+_compress_pool_lock = threading.Lock()
+
+
+def _get_compress_pool():
+    global _compress_pool
+    if _compress_pool is None:
+        with _compress_pool_lock:
+            if _compress_pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+                _compress_pool = ThreadPoolExecutor(
+                    max_workers=cpu.worker_count(),
+                    initializer=cpu.set_current_thread_below_normal,
+                    thread_name_prefix="compress-pool",
+                )
+    return _compress_pool
+
+
+def _contiguous_chunks(n: int, k: int):
+    """Split range(n) into <=k contiguous index lists (keeps page locality)."""
+    size = (n + k - 1) // k
+    return [list(range(i, min(i + size, n))) for i in range(0, n, size)]
+
+
+def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
+    """Rasterize + encode a single page → (img_bytes, width, height). Pure: no
+    shared state, so it is safe to run on a worker thread (with that thread's doc)."""
+    page = doc.load_page(page_index)
+    if config.max_width_pt is not None and page.rect.width >= config.max_width_pt:
+        scale_factor = config.max_width_pt / page.rect.width
+        dpi_rel = int(dpi * scale_factor)
+        target_width = config.max_width_pt
+        target_height = page.rect.height * scale_factor
+    else:
+        dpi_rel = dpi
+        target_width = page.rect.width
+        target_height = page.rect.height
+    pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
+    image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
+    buf = io.BytesIO()
+    if method in ("jpg", "jpg_color"):
+        quality = config.jpeg_quality_color if method == "jpg_color" else config.jpeg_quality
+        image.save(buf, format="JPEG", quality=quality)
+    elif method == "png":
+        image.save(buf, format="PNG", compress_level=config.png_compress_level)
+    else:
+        raise ValueError(f"Unbekannte Komprimierungsmethode: {method}")
+    return buf.getvalue(), target_width, target_height
+
+
+def _render_chunk(input_bytes, indices, dpi, method, config, cs, pil_mode):
+    """Render a contiguous range of pages on one worker, each on its OWN doc."""
+    doc = fitz.open(stream=input_bytes, filetype="pdf")
+    out = []
+    try:
+        for page_index in indices:
+            try:
+                img, w, h = _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode)
+                out.append((page_index, img, w, h))
+            except Exception as e:
+                logger.warning("Fehler bei Seite %d: %s", page_index, e)
+    finally:
+        doc.close()
+    return out
+
+
 def _render_pdf_as_images(
     input_bytes: bytes,
     dpi: int = DEFAULT_CONFIG.dpi,
@@ -108,43 +186,28 @@ def _render_pdf_as_images(
         cs = fitz.csGRAY if config.colorspace == "gray" else fitz.csRGB
         pil_mode = "L" if config.colorspace == "gray" else "RGB"
 
-    input_pdf = fitz.open(stream=input_bytes, filetype="pdf")
+    with fitz.open(stream=input_bytes, filetype="pdf") as src:
+        n_pages = src.page_count
+
+    # rasterize+encode every page (the slow part) — across workers when it pays off
+    workers = min(cpu.worker_count(), max(1, n_pages))
+    if workers <= 1 or n_pages < _PARALLEL_MIN_PAGES:
+        rendered = _render_chunk(input_bytes, range(n_pages), dpi, method, config, cs, pil_mode)
+    else:
+        pool = _get_compress_pool()
+        chunks = _contiguous_chunks(n_pages, workers)
+        rendered = []
+        for fut in [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode)
+                    for ch in chunks]:
+            rendered.extend(fut.result())
+
+    # assemble sequentially in page order → byte-identical to the old serial path
+    rendered.sort(key=lambda t: t[0])
     output_pdf = fitz.open()
-
-    for page_index in range(len(input_pdf)):
-        try:
-            page = input_pdf.load_page(page_index)
-
-            if config.max_width_pt is not None and page.rect.width >= config.max_width_pt:
-                scale_factor = config.max_width_pt / page.rect.width
-                dpi_rel = int(dpi * scale_factor)
-                target_width = config.max_width_pt
-                target_height = page.rect.height * scale_factor
-            else:
-                dpi_rel = dpi
-                target_width = page.rect.width
-                target_height = page.rect.height
-
-            pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
-            image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
-
-            buf = io.BytesIO()
-            if method in ("jpg", "jpg_color"):
-                quality = config.jpeg_quality_color if method == "jpg_color" else config.jpeg_quality
-                image.save(buf, format="JPEG", quality=quality)
-            elif method == "png":
-                image.save(buf, format="PNG", compress_level=config.png_compress_level)
-            else:
-                raise ValueError(f"Unbekannte Komprimierungsmethode: {method}")
-            buf.seek(0)
-
-            rect = fitz.Rect(0, 0, target_width, target_height)
-            img_page = output_pdf.new_page(width=target_width, height=target_height)
-            img_page.insert_image(rect, stream=buf.getvalue(), keep_proportion=True)
-
-        except Exception as e:
-            logger.warning("Fehler bei Seite %d: %s", page_index, e)
-            continue
+    for _idx, img_bytes, target_width, target_height in rendered:
+        rect = fitz.Rect(0, 0, target_width, target_height)
+        img_page = output_pdf.new_page(width=target_width, height=target_height)
+        img_page.insert_image(rect, stream=img_bytes, keep_proportion=True)
 
     out_buf = io.BytesIO()
     output_pdf.save(out_buf)

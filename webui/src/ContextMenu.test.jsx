@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { ContextMenu } from './ContextMenu'
+import { ContextMenu, STATUS_LABELS } from './ContextMenu'
+
+// derive the status keys/labels from the component's own source (not a re-typed
+// copy). The keys themselves come from the core at runtime via config().statuses
+// — that core↔config contract is asserted in tests/test_status_config.py.
+const STATUS_KEYS = Object.keys(STATUS_LABELS)
 
 function setup(node, extra = {}) {
   const spies = {
@@ -10,7 +15,7 @@ function setup(node, extra = {}) {
   const result = render(
     <ContextMenu menu={{ x: 10, y: 10, node }} mergeIds={extra.mergeIds ?? null}
       group={extra.group ?? null} selectedIds={extra.selectedIds ?? []}
-      statuses={extra.statuses ?? ['erfasst', 'zu erfassen', 'vorjahreswert']} {...spies} />,
+      statuses={extra.statuses ?? STATUS_KEYS} {...spies} />,
   )
   return { ...result, ...spies }
 }

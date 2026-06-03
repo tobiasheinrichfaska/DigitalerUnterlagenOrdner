@@ -58,6 +58,7 @@ class PDFNode:
         self.dpi_original: Optional[int] = None
         self.dpi_current: Optional[int] = None
         self.no_compression: bool = False
+        self.collapsed: bool = False  # folder collapsed in the tree view (persisted)
         self.compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data
 
         # Zentralisierte Verarbeitung via set_original_and_current_data
@@ -426,6 +427,7 @@ class PDFNode:
             "dpi_original": self.dpi_original,
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
+            "collapsed": self.collapsed,
             "compression_method": self.compression_method,
             "children": [child.to_dict() for child in self.children]
         }

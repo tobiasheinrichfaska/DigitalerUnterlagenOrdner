@@ -147,6 +147,7 @@ class HostApi:
         cfg = dict(self._core.config())
         if self._startup_path:
             cfg["startup_path"] = self._startup_path  # React opens this on load
+        cfg["dev"] = bool(os.environ.get("BELEG_DEV"))  # gate dev-only UI (Testmodus)
         return cfg
 
     def open(self, session=None, path=None):

@@ -29,6 +29,12 @@
 .name { cursor: pointer; }
 .row.selected { background: #e6f0fb; }
 .row.primary { box-shadow: inset 3px 0 0 0 var(--accent); }
+.row.grabbed { outline: 1px dashed var(--accent); outline-offset: -1px; background: #eef5ff; }
+.tw-chevron {
+  display: inline-block; width: 14px; min-width: 14px; text-align: center; border: none;
+  background: none; padding: 0; margin-right: 1px; color: var(--muted); cursor: pointer; font-size: 11px;
+}
+.tw-chevron:hover { color: var(--accent); }
 .error {
   color: #b4232c;
   background: #fdecee;

@@ -49,7 +49,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
@@ -97,6 +97,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   const cls = ['row']
   if (selectedIds.includes(node.id)) cls.push('selected')
   if (node.id === primaryId) cls.push('primary')
+  if (node.id === grabbedId) cls.push('grabbed')
   if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
   if (over?.zone === 'after' && !over.ghost) cls.push('drop-after')
 
@@ -114,6 +115,12 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         onClick={(e) => onSelect(node, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
+        {node.is_folder ? (
+          <button className="tw-chevron" title={node.collapsed ? 'Aufklappen' : 'Zuklappen'}
+            onClick={(e) => { e.stopPropagation(); onToggleCollapse(node.id) }}>
+            {node.collapsed ? '▸' : '▾'}
+          </button>
+        ) : <span className="tw-chevron" />}
         <span className={node.is_folder ? 'name folder' : 'name leaf'}>
           {node.is_folder ? '📁' : '📄'} {node.name}
         </span>
@@ -126,11 +133,12 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
           </div>
         )}
       </div>
-      {(node.children?.length > 0 || pending.some((p) => p.parentId === node.id)) && (
+      {(forceExpand || !node.collapsed) && (node.children?.length > 0 || pending.some((p) => p.parentId === node.id)) && (
         <ul>
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
-              selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
+              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} onToggleCollapse={onToggleCollapse}
+              onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
               dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
           ))}
@@ -143,7 +151,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles, pending = [] }) {
+export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
@@ -163,7 +171,8 @@ export function Tree({ node, selectedIds, primaryId, onSelect, onContext, onMove
     <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
-          selectedIds={selectedIds} primaryId={primaryId} onSelect={onSelect} onContext={onContext}
+          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} onToggleCollapse={onToggleCollapse}
+          onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
           dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
       ))}

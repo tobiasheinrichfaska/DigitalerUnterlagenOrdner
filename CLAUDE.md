@@ -143,7 +143,22 @@ render/compress path at startup.
 - **Email** (eml, msg) → body + attachments extracted as tree structure
 
 ### Tree operations
-Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop (Ctrl = copy), keyboard move (Ctrl+arrows)
+Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop.
+
+**Keyboard structuring** (`webui/src/treeNav.js` pure helpers + `App.jsx` `onKey`):
+↑/↓ navigate the visible rows; ←/→ collapse/expand a folder (or step out/in).
+**Insert** grabs the selected node (dashed outline); while grabbed, arrows move it
+**optically** (↑/↓ reorder, → nest into the folder above, ← out a level) — nothing is
+committed until **Insert** drops it (a single undoable `Move`); **Esc** cancels and
+reverts. (Ctrl is multi-select, so it can't be the move modifier.)
+
+**Folder collapse** is a **persisted** `Node.collapsed` field (set via `SetCollapsed`
+/ `SetAllCollapsed` commands — undoable, marks dirty, round-trips in `.belegtool`).
+Chevron in the tree, ←/→ keys, and context-menu **Aufklappen/Zuklappen** + **Alle
+auf-/zuklappen**. Cuts scrolling on large trees.
+
+**Testmodus is dev-only:** the 🧪 button shows only when `BELEG_DEV` is set
+(`HostApi.config().dev`); the production exe never sets it.
 
 ### Preview & compression
 - Lazy-generated, cached; DPI slider 50–300 DPI

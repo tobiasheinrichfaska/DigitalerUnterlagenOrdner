@@ -51,6 +51,17 @@ class SetStatus:
 
 
 @dataclass(frozen=True)
+class SetCollapsed:
+    node_id: str
+    collapsed: bool
+
+
+@dataclass(frozen=True)
+class SetAllCollapsed:
+    collapsed: bool
+
+
+@dataclass(frozen=True)
 class SetPeriod:
     node_id: str
     vz_start: Optional[int]
@@ -154,14 +165,15 @@ class Merge:
             object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
-Command = Union[AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany,
-                GroupIntoFolder, InsertNodes, Compress, Commit, Reset, Rotate, Split, Merge]
+Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod,
+                Delete, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress, Commit,
+                Reset, Rotate, Split, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetPeriod, Delete, Move, MoveMany, GroupIntoFolder,
-    Compress, Commit, Reset, Rotate, Split, Merge,
+    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, Delete, Move,
+    MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, Merge,
 )}
 
 _ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
@@ -269,6 +281,28 @@ def _set_status(doc: Document, cmd: SetStatus, engine=None) -> Document:
     if cmd.status not in STATUSES:
         raise CommandError(f"invalid status: {cmd.status!r}")
     return doc.update_node(cmd.node_id, status=cmd.status)
+
+
+@_handler(SetCollapsed)
+def _set_collapsed(doc: Document, cmd: SetCollapsed, engine=None) -> Document:
+    node = _require(doc, cmd.node_id)
+    if not node.is_folder:
+        raise CommandError("only folders can be collapsed")
+    return doc.update_node(cmd.node_id, collapsed=bool(cmd.collapsed))
+
+
+@_handler(SetAllCollapsed)
+def _set_all_collapsed(doc: Document, cmd: SetAllCollapsed, engine=None) -> Document:
+    """Collapse/expand every folder at once (one undo step)."""
+    value = bool(cmd.collapsed)
+
+    def walk(n: Node, is_root: bool) -> Node:
+        kids = tuple(walk(c, False) for c in n.children)
+        if n.is_folder and not is_root:
+            return dataclasses.replace(n, collapsed=value, children=kids)
+        return dataclasses.replace(n, children=kids)
+
+    return Document(walk(doc.root, True))
 
 
 @_handler(SetPeriod)

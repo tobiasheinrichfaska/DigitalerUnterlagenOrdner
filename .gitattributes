@@ -1,3 +1,25 @@
+# Line-ending normalization (see workspace CLAUDE.md § Git → Line endings).
+# Keeps Git-for-Windows (system core.autocrlf=true) from emitting
+# "LF will be replaced by CRLF" warnings on edits. The Git-LFS rules below
+# come last so they stay authoritative for the binary globs they cover.
+* text=auto eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.svg   text eol=lf
+
+# Extra binaries not covered by the LFS rules below
+*.ico   binary
+*.gif   binary
+*.webp  binary
+*.wav   binary
+*.mp3   binary
+*.zip   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+
+# Git LFS (existing — authoritative for these globs)
 tests/data/** filter=lfs diff=lfs merge=lfs -text
 *.pdf filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text

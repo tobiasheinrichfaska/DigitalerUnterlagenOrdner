@@ -503,10 +503,9 @@ def _split(doc: Document, cmd: Split, engine=None) -> Document:
     parts = engine.split(node.original_data)
     if len(parts) < 2:
         return doc  # single page → nothing to split
-    # Split parts come from an already-processed document → not re-compressed.
+    # Split parts carry the source (original_data) pages → still compressible.
     new_leaves = [
-        Node(name=f"{node.name}_{i + 1}", pdf_length=1, no_compression=True,
-             original_data=part)
+        Node(name=f"{node.name}_{i + 1}", pdf_length=1, original_data=part)
         for i, part in enumerate(parts)
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)
@@ -530,8 +529,7 @@ def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
     if not cmd.into_folder and len(chunks) < 2:
         return doc  # nothing to split in place (single chunk)
     new_leaves = [
-        Node(name=f"{node.name}_{i + 1}", pdf_length=cnt, no_compression=True,
-             original_data=data)
+        Node(name=f"{node.name}_{i + 1}", pdf_length=cnt, original_data=data)
         for i, (data, cnt) in enumerate(chunks)
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)

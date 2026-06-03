@@ -29,14 +29,14 @@
 .zoom-bar { display: flex; align-items: center; gap: 6px; align-self: flex-end; font-size: 13px; color: var(--muted); }
 .zoom-bar span { min-width: 42px; text-align: center; }
 
-.name { cursor: pointer; }
+.name { cursor: pointer; white-space: nowrap; }
 .row.selected { background: #e6f0fb; }
 .row.primary { box-shadow: inset 3px 0 0 0 var(--accent); }
 .row.grabbed { outline: 1px dashed var(--accent); outline-offset: -1px; background: #eef5ff; }
 .tw-chevron {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; min-width: 20px; height: 20px; border: none;
-  background: none; padding: 0; margin-right: 2px; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1;
+  width: 30px; min-width: 30px; height: 30px; border: none;
+  background: none; padding: 0; margin-right: 3px; color: var(--muted); cursor: pointer; font-size: 24px; line-height: 1;
 }
 .tw-chevron:hover { color: var(--accent); }
 .rename-input { flex: 1; min-width: 0; font: inherit; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; }
@@ -170,6 +170,7 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); padding: 4px;
   display: flex; flex-direction: column;
+  max-height: calc(100vh - 8px); overflow-y: auto; /* never taller than the window */
 }
 .context-menu button {
   text-align: left; border: none; background: none; padding: 6px 10px; border-radius: 5px;

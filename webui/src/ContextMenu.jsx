@@ -1,14 +1,27 @@
 // Right-click context menu for a tree node — operations live here (like the old
 // app's tree context menu), not as buttons.
-import { useState } from 'react'
+import { useState, useLayoutEffect, useRef } from 'react'
 
 // UI labels for the core's status vocabulary (the keys come from config().statuses).
 export const STATUS_LABELS = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const [splitOpen, setSplitOpen] = useState(false)
+  const menuRef = useRef(null)
+  const [pos, setPos] = useState(null)  // null until measured → render at cursor first
+  const { x, y, node } = menu ?? {}
+  // clamp the menu into the viewport so a right-click near the bottom/right edge
+  // isn't cut off (flip up / pull left to fit). useLayoutEffect runs pre-paint.
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!el) { setPos(null); return }
+    const { width, height } = el.getBoundingClientRect()
+    setPos({
+      left: Math.max(4, Math.min(x, window.innerWidth - width - 4)),
+      top: Math.max(4, Math.min(y, window.innerHeight - height - 4)),
+    })
+  }, [menu, x, y])
   if (!menu) return null
-  const { x, y, node } = menu
 
   const splitN = (intoFolder) => {
     const s = window.prompt('Seiten pro Knoten:', '10')
@@ -50,7 +63,8 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose() }}
       />
-      <div className="context-menu" style={{ left: x, top: y }}>
+      <div ref={menuRef} className="context-menu"
+        style={{ left: pos ? pos.left : x, top: pos ? pos.top : y }}>
         {(mergeIds || group) && (
           <>
             {mergeIds && <button onClick={merge}>Zusammenführen → 1 PDF ({mergeIds.length})</button>}

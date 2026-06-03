@@ -28,6 +28,7 @@
 .dpi input[type="range"] { width: 120px; }
 .zoom-bar { display: flex; align-items: center; gap: 6px; align-self: flex-end; font-size: 13px; color: var(--muted); }
 .zoom-bar span { min-width: 42px; text-align: center; }
+.zoom-bar .page-info { min-width: 0; margin-right: 10px; white-space: nowrap; }
 
 .name { cursor: pointer; white-space: nowrap; }
 .row.selected { background: #e6f0fb; }

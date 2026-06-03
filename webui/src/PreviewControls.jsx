@@ -26,6 +26,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const off = node.no_compression || noSource
   const [dpi, setDpi] = useState(node.dpi_current ?? defaultDpi)
   const [options, setOptions] = useState(null) // method list, loaded on demand
+  const [origSize, setOrigSize] = useState(null) // byte size of the uncompressed source
   const [loading, setLoading] = useState(false) // compression options being computed
   const [method, setMethod] = useState(node.compression_method ?? 'original')
 
@@ -44,6 +45,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
     setLoading(true)
     core.compressOptions(session, node.id, d).then((r) => {
       setOptions(r?.ok ? r.options : [])
+      setOrigSize(r?.ok ? r.original_size : null)
       setLoading(false)
     })
   }
@@ -84,7 +86,11 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         onMouseDown={() => { if (!options) loadOptions(dpi) }}
         onFocus={() => { if (!options) loadOptions(dpi) }}
         onChange={(e) => onMethod(e.target.value)}>
-        <option value="original">{noSource ? 'bereits komprimiert (keine Quelle)' : loading ? 'Kompression läuft …' : 'unkomprimierte Fassung'}</option>
+        <option value="original">{
+          noSource ? 'bereits komprimiert (keine Quelle)'
+            : loading ? 'Kompression läuft …'
+              : `unkomprimierte Fassung${origSize != null ? ` — ${kb(origSize)}` : ''}`
+        }</option>
         {/* before the list loads, keep the saved method selectable */}
         {!options && method !== 'original' && <option value={method}>{methodLabel(method)}</option>}
         {options?.map((o, i) => (

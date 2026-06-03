@@ -19,6 +19,7 @@ from core.render_policy import (
     DEFAULT_AHEAD,
     DEFAULT_BEHIND,
     DEFAULT_HEAD,
+    fill_order,
     next_fill_target,
     predict_window,
 )
@@ -104,6 +105,7 @@ class RenderService:
         ahead: int = DEFAULT_AHEAD,
         behind: int = DEFAULT_BEHIND,
         head: int = DEFAULT_HEAD,
+        seed_steps: int = 32,
     ):
         self._render_page = render_page_fn
         self.cache = RenderCache(budget_bytes)
@@ -113,6 +115,8 @@ class RenderService:
         self._gen = 0
         self._lock = threading.RLock()
         self.ahead, self.behind, self.head = ahead, behind, head
+        self.seed_steps = seed_steps    # pages to warm per background seed
+        self._executor = None           # lazy single background worker
 
     # --- generation / access history --------------------------------------
     @property
@@ -189,16 +193,56 @@ class RenderService:
 
     def fill_until_idle(self, node_specs: Sequence[NodeSpec], focus_node: str,
                         focus_page: int, data_for: Callable[[str], bytes], dpi: int,
-                        *, max_steps: int = 1_000_000) -> int:
-        """Repeatedly ``warm_step`` until nothing is left, the budget is full, the
-        CPU is busy, or a newer foreground request bumps the generation. Returns
-        the number of pages warmed."""
-        gen = self.generation
+                        *, max_steps: int = 1_000_000, since_gen: Optional[int] = None) -> int:
+        """Warm pages in priority order (current node from the focus outward, then
+        neighbours) into FREE budget, until ``max_steps`` are warmed, the budget is
+        full, the CPU is busy, or a newer foreground request bumps the generation.
+        One ``fill_order`` pass (skipping already-cached pages), so it's O(pages),
+        not O(pages²). Returns the number of pages warmed."""
+        gen = self.generation if since_gen is None else since_gen
+        nodes = [(nid, cnt) for nid, _v, cnt in node_specs]
+        vmap = {nid: v for nid, v, _c in node_specs}
         warmed = 0
-        for _ in range(max_steps):
-            if self.generation != gen:  # superseded by a new request → abandon
+        for nid, page in fill_order(nodes, focus_node, focus_page,
+                                    ahead=self.ahead, behind=self.behind, head=self.head):
+            if warmed >= max_steps:
                 break
-            if not self.warm_step(node_specs, focus_node, focus_page, data_for, dpi):
+            if self.generation != gen:        # superseded by a newer request → abandon
+                break
+            if self.cache.free() <= 0:
+                break
+            if self._cpu_load() >= self.cpu_ceiling:
+                break
+            key = (nid, vmap[nid], page, dpi)
+            if key in self.cache:             # already warm (e.g. the foreground page)
+                continue
+            rendered = self._render_page(data_for(nid), page, dpi)
+            if not self.cache.put(key, rendered, evict=False):  # prefetch into free space only
                 break
             warmed += 1
         return warmed
+
+    # --- background seeding (fire-and-forget) -----------------------------
+    def _exec(self):
+        if self._executor is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="render-seed")
+        return self._executor
+
+    def seed(self, node_specs: Sequence[NodeSpec], focus_node: str, focus_page: int,
+             data_for: Callable[[str], bytes], dpi: int) -> None:
+        """Warm ``seed_steps`` pages around ``focus_page`` on the background worker,
+        superseding any previous seed (it abandons as soon as the next foreground
+        request bumps the generation). Returns immediately — the foreground render
+        is never blocked by it."""
+        gen = self.generation
+        specs = list(node_specs)
+
+        def job():
+            try:
+                self.fill_until_idle(specs, focus_node, focus_page, data_for, dpi,
+                                     max_steps=self.seed_steps, since_gen=gen)
+            except Exception:  # background; never crash the worker
+                pass
+
+        self._exec().submit(job)

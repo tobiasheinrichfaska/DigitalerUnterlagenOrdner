@@ -54,6 +54,7 @@ class CoreApi:
         self._lock = threading.Lock()
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
+        self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
 
     def _renderer(self):
         if self._render_service is None:
@@ -61,6 +62,22 @@ class CoreApi:
             from services.render_service import RenderService
             self._render_service = RenderService(render_page)
         return self._render_service
+
+    def _count_for(self, node_id, version, data):
+        key = (node_id, version)
+        c = self._pcount.get(key)
+        if c is None:
+            from services.render import page_count
+            c = page_count(data)
+            self._pcount[key] = c
+        return c
+
+    def _seed_around(self, node_id, version, data, focus_page, dpi):
+        """Ask the middleware to warm the cache around this request (background)."""
+        count = self._count_for(node_id, version, data)
+        if count > 0:
+            self._renderer().seed([(node_id, version, count)], node_id, focus_page,
+                                  lambda _nid: data, dpi)
 
     def _next_untitled_name(self) -> str:
         with self._lock:
@@ -210,8 +227,10 @@ class CoreApi:
         if not data:
             return {"ok": True, "session": session, "node": node_id, "first": first, "pages": []}
         from base64 import b64encode
-        # render outside the lock (CPU-bound)
+        # render the requested (small) window now — foreground priority — then ask
+        # the middleware to warm the cache around it in the background.
         pages = self._renderer().render_window(node_id, version, data, first, count, dpi)
+        self._seed_around(node_id, version, data, first, dpi)
         urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first, "pages": urls}
@@ -247,6 +266,7 @@ class CoreApi:
         version = zlib.crc32(variant)  # variant bytes → its own cache identity
         from base64 import b64encode
         pages = self._renderer().render_window(node_id, version, variant, first, count, 100)
+        self._seed_around(node_id, version, variant, first, 100)
         urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first,

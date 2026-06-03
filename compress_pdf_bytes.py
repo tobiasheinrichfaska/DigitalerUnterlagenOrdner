@@ -97,9 +97,11 @@ def compress_all_methods(
 # so each worker opens its own doc over a contiguous page range; the image bytes
 # are deterministic and assembled back in page order → output stays byte-identical
 # to the old sequential path.
-# Only parallelize documents big enough to amortize the pool coordination — small
-# PDFs render inline (sequentially), which is plenty fast and keeps timing simple.
-_PARALLEL_MIN_PAGES = 8
+# Only parallelize documents big enough to amortize the pool coordination. Thread
+# parallelism is GIL-limited for PyMuPDF (~1.2x), so the win is marginal and only
+# worth the overhead (extra fitz doc opens, task dispatch) on large documents — small
+# and medium PDFs render inline (sequentially), which is plenty fast. One-line tunable.
+_PARALLEL_MIN_PAGES = 50
 _compress_pool = None
 _compress_pool_lock = threading.Lock()
 

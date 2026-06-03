@@ -322,8 +322,10 @@ Current stable tag: **v3.6.0**
   process pool** (~2.4× measured, warm+chunked) plus `multiprocessing.freeze_support()` in
   `host.py` and testing inside the packaged exe — deliberately deferred (2026-06-03).
 - **Compression speed for large nodes — partially addressed.** The rasterize loop in
-  `compress_pdf_bytes._render_pdf_as_images` runs across the below-normal pool for docs
-  `≥ 8` pages (smaller render inline). Same GIL caveat (~1.2× via threads). The **bigger**
+  `compress_pdf_bytes._render_pdf_as_images` runs across the below-normal pool only for
+  large docs (`_PARALLEL_MIN_PAGES`, default **50**; smaller render inline). Same GIL
+  caveat (~1.2× via threads), so the floor is high on purpose — the pool overhead isn't
+  worth it below that. The **bigger**
   remaining win is *work-avoidance*: the compression dropdown (`compress_options` →
   `compress_all_methods`) still renders **all pages × every image method** just to size
   them — a sample-based estimate + persisting committed variants (Phase 4) would cut the

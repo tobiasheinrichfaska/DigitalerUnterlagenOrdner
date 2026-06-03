@@ -6,7 +6,7 @@
 // slide the cursor left/right to choose the nesting LEVEL (child of the deepest
 // folder → … → root). The drop only dispatches a Move/MoveMany — the tree
 // re-renders from the core's returned state (no optimistic local mutation).
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
 
@@ -50,7 +50,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, editing, setEditing, onRename, renameTimer, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
 
   const handleDragOver = (e) => {
@@ -107,13 +107,22 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
       <div
         className={cls.join(' ')}
         style={{ paddingLeft: `${depth * INDENT + 6}px` }}
-        draggable
+        draggable={editing !== node.id}
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDrag(null); setOver(null) }}
         onDragOver={handleDragOver}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(null) }}
         onDrop={handleDrop}
-        onClick={(e) => onSelect(node, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })}
+        onClick={(e) => {
+          const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }
+          clearTimeout(renameTimer.current)
+          // click an already-selected (marked) node again → inline rename (Explorer-style);
+          // a double-click cancels the pending rename.
+          if (!mods.ctrl && !mods.shift && node.id === primaryId) {
+            renameTimer.current = setTimeout(() => setEditing(node.id), 350)
+          } else onSelect(node, mods)
+        }}
+        onDoubleClick={() => clearTimeout(renameTimer.current)}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
         {node.is_folder ? (
@@ -122,9 +131,23 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
             {node.collapsed ? '▸' : '▾'}
           </button>
         ) : <span className="tw-chevron" />}
-        <span className={node.is_folder ? 'name folder' : 'name leaf'}>
-          {node.is_folder ? '📁' : '📄'} {node.name}
-        </span>
+        {editing === node.id ? (
+          <input className="rename-input" defaultValue={node.name} autoFocus
+            onFocus={(e) => e.target.select()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') { onRename(node.id, e.target.value); setEditing(null) }
+              else if (e.key === 'Escape') setEditing(null)
+            }}
+            onBlur={(e) => { onRename(node.id, e.target.value); setEditing(null) }}
+          />
+        ) : (
+          <span className={node.is_folder ? 'name folder' : 'name leaf'}>
+            {node.is_folder ? '📁' : '📄'} {node.name}
+          </span>
+        )}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (
@@ -138,7 +161,8 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         <ul>
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
-              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} onToggleCollapse={onToggleCollapse}
+              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
+              editing={editing} setEditing={setEditing} onRename={onRename} renameTimer={renameTimer} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
               dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
@@ -152,9 +176,11 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onDropFiles, pending = [] }) {
+export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
+  const [editing, setEditing] = useState(null) // node id being inline-renamed
+  const renameTimer = useRef(0) // shared: click-marked-again schedules a rename
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
   const dragNode = drag ? findNode(node, drag) : null
   const dragLabel = many ? `${selectedIds.length} Elemente` : (dragNode?.name ?? '')
@@ -172,7 +198,8 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onT
     <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
-          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} onToggleCollapse={onToggleCollapse}
+          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
+          editing={editing} setEditing={setEditing} onRename={onRename} renameTimer={renameTimer} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
           dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />

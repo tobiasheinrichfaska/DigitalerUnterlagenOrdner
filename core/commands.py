@@ -526,14 +526,13 @@ def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
     if parent is None:
         raise CommandError("cannot split the root node")
     size = max(1, int(cmd.size))
-    pages = engine.split(node.original_data)               # per-page parts
-    groups = [pages[i:i + size] for i in range(0, len(pages), size)]
-    if not cmd.into_folder and len(groups) < 2:
+    chunks = engine.split_chunks(node.original_data, size)  # direct range copy (fast)
+    if not cmd.into_folder and len(chunks) < 2:
         return doc  # nothing to split in place (single chunk)
     new_leaves = [
-        Node(name=f"{node.name}_{i + 1}", pdf_length=len(g), no_compression=True,
-             original_data=(g[0] if len(g) == 1 else engine.merge(g)))
-        for i, g in enumerate(groups)
+        Node(name=f"{node.name}_{i + 1}", pdf_length=cnt, no_compression=True,
+             original_data=data)
+        for i, (data, cnt) in enumerate(chunks)
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)
     doc = doc.remove_node(cmd.node_id)

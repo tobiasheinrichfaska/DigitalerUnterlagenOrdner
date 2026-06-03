@@ -175,6 +175,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>Reset</code></td><td>node_id</td><td>Drop the compressed variant (clear <code>current_data</code> + flags).</td></tr>
 <tr><td><code>Rotate</code></td><td>node_id, direction</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
 <tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one <code>no_compression</code> page-leaf per page, in place (single page = no-op).</td></tr>
+<tr><td><code>SplitInto</code></td><td>node_id, size=1, into_folder=False</td><td>Leaf → chunks of <code>size</code> pages (1 = per page). <code>into_folder</code> wraps the parts in a NEW folder named after the node; else in place. In-place single-chunk = no-op.</td></tr>
 <tr><td><code>Merge</code></td><td>node_ids</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>.</td></tr>
 </table>
 

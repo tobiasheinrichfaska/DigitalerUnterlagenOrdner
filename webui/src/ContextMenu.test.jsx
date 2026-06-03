@@ -25,7 +25,7 @@ describe('ContextMenu', () => {
 
   it('leaf: Split shown (multi-page), no folder-only entries', () => {
     setup(leaf)
-    expect(screen.getByText('Splitten')).toBeInTheDocument()
+    expect(screen.getByText(/Splitten/)).toBeInTheDocument()
     expect(screen.queryByText('Ordner anlegen')).toBeNull()
     expect(screen.queryByText('Zuklappen')).toBeNull()
     expect(screen.getByText('Alle aufklappen')).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('ContextMenu', () => {
 
   it('single-page leaf hides Split', () => {
     setup({ ...leaf, pdf_length: 1 })
-    expect(screen.queryByText('Splitten')).toBeNull()
+    expect(screen.queryByText(/Splitten/)).toBeNull()
   })
 
   it('folder: Ordner anlegen + Zuklappen + Alle entries; no Split', () => {
@@ -42,7 +42,7 @@ describe('ContextMenu', () => {
     expect(screen.getByText('Zuklappen')).toBeInTheDocument() // expanded → "Zuklappen"
     expect(screen.getByText('Alle aufklappen')).toBeInTheDocument()
     expect(screen.getByText('Alle zuklappen')).toBeInTheDocument()
-    expect(screen.queryByText('Splitten')).toBeNull()
+    expect(screen.queryByText(/Splitten/)).toBeNull()
   })
 
   it('collapsed folder shows Aufklappen', () => {
@@ -50,10 +50,35 @@ describe('ContextMenu', () => {
     expect(screen.getByText('Aufklappen')).toBeInTheDocument()
   })
 
-  it('Splitten dispatches Split + closes', () => {
+  it('Split submenu: "pro Seite" dispatches Split', () => {
     const { dispatch, onClose } = setup(leaf)
-    fireEvent.click(screen.getByText('Splitten'))
+    fireEvent.click(screen.getByText(/Splitten/))      // open the submenu
+    fireEvent.click(screen.getByText('pro Seite'))
     expect(dispatch).toHaveBeenCalledWith({ type: 'Split', node_id: 'L' })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('Split submenu: "pro Seite → neuer Ordner" dispatches SplitInto into a folder', () => {
+    const { dispatch } = setup(leaf)
+    fireEvent.click(screen.getByText(/Splitten/))
+    fireEvent.click(screen.getByText(/pro Seite → neuer Ordner/))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SplitInto', size: 1, into_folder: true, node_id: 'L' })
+  })
+
+  it('Split submenu: "N Seiten pro Knoten…" prompts and dispatches SplitInto(size=N)', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('5')
+    const { dispatch } = setup(leaf)
+    fireEvent.click(screen.getByText(/Splitten/))
+    fireEvent.click(screen.getByText(/N Seiten pro Knoten/))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SplitInto', size: 5, into_folder: false, node_id: 'L' })
+  })
+
+  it('Split submenu: cancelled N prompt dispatches nothing', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue(null)
+    const { dispatch, onClose } = setup(leaf)
+    fireEvent.click(screen.getByText(/Splitten/))
+    fireEvent.click(screen.getByText(/N Seiten → neuer Ordner/))
+    expect(dispatch).not.toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })
 

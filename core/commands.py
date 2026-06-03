@@ -157,6 +157,16 @@ class Split:
 
 
 @dataclass(frozen=True)
+class SplitInto:
+    """Split a leaf into chunks of ``size`` pages (size=1 -> per page). When
+    ``into_folder`` is set, the parts go into a NEW folder named after the node;
+    otherwise they replace the node in place."""
+    node_id: str
+    size: int = 1
+    into_folder: bool = False
+
+
+@dataclass(frozen=True)
 class Merge:
     node_ids: Tuple[str, ...]  # >= 2 sibling leaves -> one leaf
 
@@ -167,13 +177,13 @@ class Merge:
 
 Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod,
                 Delete, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress, Commit,
-                Reset, Rotate, Split, Merge]
+                Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
     AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, Delete, Move,
-    MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, Merge,
+    MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
 _ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
@@ -501,6 +511,35 @@ def _split(doc: Document, cmd: Split, engine=None) -> Document:
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)
     doc = doc.remove_node(cmd.node_id)
+    for offset, leaf in enumerate(new_leaves):
+        doc = doc.insert_child(parent.id, leaf, index + offset)
+    return doc
+
+
+@_handler(SplitInto)
+def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
+    node = _require_leaf(doc, cmd.node_id)
+    _require_engine(engine)
+    if not node.original_data:
+        raise CommandError("node has no data to split")
+    parent = doc.parent_of(cmd.node_id)
+    if parent is None:
+        raise CommandError("cannot split the root node")
+    size = max(1, int(cmd.size))
+    pages = engine.split(node.original_data)               # per-page parts
+    groups = [pages[i:i + size] for i in range(0, len(pages), size)]
+    if not cmd.into_folder and len(groups) < 2:
+        return doc  # nothing to split in place (single chunk)
+    new_leaves = [
+        Node(name=f"{node.name}_{i + 1}", pdf_length=len(g), no_compression=True,
+             original_data=(g[0] if len(g) == 1 else engine.merge(g)))
+        for i, g in enumerate(groups)
+    ]
+    index = [c.id for c in parent.children].index(cmd.node_id)
+    doc = doc.remove_node(cmd.node_id)
+    if cmd.into_folder:
+        folder = Node(name=node.name, is_folder=True, children=tuple(new_leaves))
+        return doc.insert_child(parent.id, folder, index)
     for offset, leaf in enumerate(new_leaves):
         doc = doc.insert_child(parent.id, leaf, index + offset)
     return doc

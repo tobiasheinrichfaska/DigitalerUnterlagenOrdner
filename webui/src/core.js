@@ -40,6 +40,8 @@ export const core = {
   pageDims: (session, nodeId) => call('page_dims', session, nodeId),
   renderWindow: (session, nodeId, first = 0, count = 10, dpi = 100) =>
     call('render_window', session, nodeId, first, count, dpi),
+  renderCompressedWindow: (session, nodeId, dpi, method, first = 0, count = 10) =>
+    call('render_compressed_window', session, nodeId, dpi, method, first, count),
   exportPdf: (session, nodeIds = null) => call('export_dialog', session, nodeIds),
   importDialog: (session, parentId = null) => call('import_dialog', session, parentId),
   importBytes: (session, name, data, parentId = null, index = null) => call('import_bytes', session, name, data, parentId, index),

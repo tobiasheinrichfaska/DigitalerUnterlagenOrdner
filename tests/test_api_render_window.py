@@ -56,3 +56,30 @@ def test_effective_version_tracks_bytes():
 def test_render_window_unknown_node():
     api, _ = _session_with_pdf(pages=1)
     assert api.render_window("s", "nope", 0, 1)["ok"] is False
+
+
+# --- compressed-variant presentation routed through the same cache ---------
+
+def test_render_compressed_window_returns_window():
+    api, nid = _session_with_pdf(pages=4)
+    r = api.render_compressed_window("s", nid, dpi=150, method="jpg", first=1, count=2)
+    assert r["ok"] and r["first"] == 1 and len(r["pages"]) == 2
+    assert all(p.startswith("data:image/png;base64,") for p in r["pages"])
+
+
+def test_render_compressed_window_original_reuses_plain_cache():
+    api, nid = _session_with_pdf(pages=3)
+    api.render_window("s", nid, 0, 3, 100)               # plain preview @ dpi 100
+    n = len(api._renderer().cache)
+    r = api.render_compressed_window("s", nid, dpi=150, method="original", first=0, count=3)
+    assert r["ok"] and r["compressed"] is False
+    # "original" renders the same bytes @ dpi 100 → identical keys → no new entries
+    assert len(api._renderer().cache) == n
+
+
+def test_render_compressed_window_caches_on_repeat():
+    api, nid = _session_with_pdf(pages=3)
+    api.render_compressed_window("s", nid, 150, "jpg", 0, 3)
+    n = len(api._renderer().cache)
+    api.render_compressed_window("s", nid, 150, "jpg", 0, 3)  # same variant → cache hit
+    assert len(api._renderer().cache) == n

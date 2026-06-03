@@ -1,18 +1,23 @@
 // Virtualized, windowed preview for a selected leaf. Renders a placeholder box
 // per page (height fixed by the page aspect-ratio, so it doesn't jump when the
-// real image arrives), and only fetches the pages near the viewport via
-// core.renderWindow (±BUFFER prefetch). Scroll position is remembered per node.
+// real image arrives), and only fetches the pages near the viewport (±BUFFER
+// prefetch). Scroll position is remembered per node.
 //
-// Used for the plain stored preview; the compression-browsing preview and folders
-// still go through App's all-pages path.
+// `previewReq` (from the compression controls) switches the *source*: null →
+// the plain stored bytes (core.renderWindow); {dpi, method} → a transient
+// compressed variant (core.renderCompressedWindow). Both go through the same
+// RenderService cache (keyed by the variant's content hash), so switching
+// methods/back-to-original is windowed and cached, not an all-pages re-render.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { core } from './core'
 
 const BUFFER = 5 // pages to prefetch on each side of the visible range
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)
 
-export function Preview({ session, node, zoom = 1 }) {
+export function Preview({ session, node, zoom = 1, previewReq = null }) {
   const nodeId = node?.id
+  const reqKey = previewReq ? `${previewReq.dpi}:${previewReq.method}` : 'orig'
+
   const [count, setCount] = useState(0)
   const [dims, setDims] = useState([])
   const [pages, setPages] = useState({}) // pageIndex -> data-URL
@@ -21,17 +26,16 @@ export function Preview({ session, node, zoom = 1 }) {
   const pageEls = useRef([])
   const visible = useRef(new Set())
   const inflight = useRef(new Set()) // ranges already requested ("first-last")
-  const token = useRef(0) // bumped on node change to drop stale responses
+  const token = useRef(0) // bumped on node/variant change to drop stale responses
 
-  // --- metadata on node change ---
+  // page count + dims depend only on the node (a compressed variant has the same
+  // page geometry), so fetch them once per node.
   useEffect(() => {
-    if (!session || !nodeId) { setCount(0); setDims([]); setPages({}); return }
-    const t = ++token.current
+    if (!session || !nodeId) { setCount(0); setDims([]); return }
     let alive = true
-    setPages({}); visible.current = new Set(); inflight.current = new Set(); pageEls.current = []
     Promise.all([core.pageCount(session, nodeId), core.pageDims(session, nodeId)])
       .then(([c, d]) => {
-        if (!alive || token.current !== t) return
+        if (!alive) return
         setCount(c?.ok ? c.count : 0)
         setDims(d?.ok ? d.dims : [])
       })
@@ -39,7 +43,15 @@ export function Preview({ session, node, zoom = 1 }) {
     return () => { alive = false }
   }, [session, nodeId])
 
-  // --- fetch a window of pages covering [lo, hi] (± BUFFER) ---
+  // drop rendered images whenever the node OR the variant (method/dpi) changes;
+  // the IntersectionObserver below then refetches the visible window.
+  useEffect(() => {
+    token.current += 1
+    visible.current = new Set()
+    inflight.current = new Set()
+    setPages({})
+  }, [nodeId, reqKey])
+
   const fetchRange = useCallback((lo, hi) => {
     if (!session || !nodeId || count === 0) return
     const first = Math.max(0, lo - BUFFER)
@@ -49,7 +61,10 @@ export function Preview({ session, node, zoom = 1 }) {
     if (inflight.current.has(key)) return
     inflight.current.add(key)
     const t = token.current
-    core.renderWindow(session, nodeId, first, last - first + 1)
+    const req = previewReq
+      ? core.renderCompressedWindow(session, nodeId, previewReq.dpi, previewReq.method, first, last - first + 1)
+      : core.renderWindow(session, nodeId, first, last - first + 1)
+    req
       .then((r) => {
         inflight.current.delete(key)
         if (!r?.ok || token.current !== t) return
@@ -60,9 +75,10 @@ export function Preview({ session, node, zoom = 1 }) {
         })
       })
       .catch(() => inflight.current.delete(key))
-  }, [session, nodeId, count])
+  }, [session, nodeId, count, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- observe which pages are on screen; fetch around them ---
+  // observe which pages are on screen; (re)attaches on node/variant change so the
+  // visible window is refetched with the right source.
   useEffect(() => {
     const root = scrollRef.current
     if (!root || count === 0) return
@@ -83,9 +99,8 @@ export function Preview({ session, node, zoom = 1 }) {
       }
     }, { root, rootMargin: '300px 0px' })
     pageEls.current.slice(0, count).forEach((el) => el && io.observe(el))
-    if (!scrollMemory.get(nodeId)) fetchRange(0, 0) // fresh node at the top
     return () => io.disconnect()
-  }, [count, nodeId, fetchRange])
+  }, [count, nodeId, reqKey, fetchRange])
 
   const onScroll = useCallback(() => {
     if (nodeId && scrollRef.current) scrollMemory.set(nodeId, scrollRef.current.scrollTop)

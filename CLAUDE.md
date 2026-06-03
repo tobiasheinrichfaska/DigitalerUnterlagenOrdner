@@ -278,12 +278,17 @@ Current stable tag: **v3.6.0**
   `RenderService`/`RenderCache` ([`services/render_service.py`](services/render_service.py)),
   `CoreApi.render_window`/`page_count`/`page_dims` (+ HostApi + `core.js`), and the
   virtualized [`Preview.jsx`](webui/src/Preview.jsx) (IntersectionObserver +
-  aspect-ratio placeholders + ±5 prefetch + per-node scroll memory). The plain leaf
-  preview now uses it; compression-browsing + folders still use the all-pages path.
-  ⚠ **Needs on-screen QA** (manual test MT-39) — virtualized scrolling can't be
-  verified headlessly. **Remaining:** drive the background filler
+  aspect-ratio placeholders + ±5 prefetch + per-node scroll memory). **Every leaf
+  preview uses it — both the plain stored bytes and the compression working-preview**
+  (`render_compressed_window` renders the variant through the same cache, keyed by the
+  variant's `crc32`, so the service stays compression-agnostic). Only folders use the
+  all-pages path. ⚠ **Needs on-screen QA** (manual test MT-39) — virtualized scrolling
+  can't be verified headlessly. **Remaining:** drive the background filler
   (`RenderService.fill_until_idle`) on idle via the host (CPU-throttled), so
   neighbouring pages/nodes pre-warm; today only the viewport window ±5 is fetched.
+  Note: the compression *computation* (variant bytes) is still all-pages-expensive on
+  first browse per dpi (engine memo, in-session) — that's the separate **Phase 4**
+  background pre-compression / persistence work, not the render cache.
 - **Zammad integration** — deferred, not started yet
 
 ---

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 // UI labels for the core's status vocabulary (the keys come from config().statuses).
-const STATUS_LABELS = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
+export const STATUS_LABELS = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const [splitOpen, setSplitOpen] = useState(false)

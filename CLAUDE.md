@@ -62,7 +62,8 @@ migration that this decoupling enabled is effectively complete.
 |---|---|
 | `services/render.py` | **Headless** render: `render_pdf_to_images` (PIL), `render_pdf_to_pngs` (PNG bytes for the SPA), and the windowed-cache primitives `render_page` (single page), `page_count`, `page_dims`. |
 | `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
-| `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
+| `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler that warms **up to `max_workers` pages at once** on a below-normal-priority thread pool. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
+| `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ Thread parallelism is **GIL-limited** for PyMuPDF rasterization (~1.2× on 4 workers); its real value is fairness + foreground preemption, not raw throughput (true multicore would need processes — see Open items). |
 | `progress.py` | Progress **port**: the core signals background-task start/finish (`task_started`/`task_finished`); the app may install a reporter forwarding to its UI. No-op by default. |
 | `tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). |
 
@@ -167,8 +168,14 @@ auf-/zuklappen**. Cuts scrolling on large trees.
   than original are hidden from the dropdown. `jpg_color` keeps color so color
   documents aren't silently desaturated; readable labels live in `PreviewControls.jsx`
   (`METHOD_LABELS`).
-- Original file size shown in labels for comparison
+- Original file size shown in labels for comparison — incl. the size of the
+  "unkomprimierte Fassung" entry itself (from `compress_options.original_size`)
 - Commit button (replace original), reset button
+- The preview zoom bar shows the windowed viewport's page position (**"Seite n / m"**,
+  reported up from `Preview.jsx`), falling back to the node's total page count
+- **Split parts are compressible:** `Split`/`SplitInto` parts carry the *uncompressed
+  source* pages, so they are no longer flagged `no_compression`. ⚠ Parts in
+  already-saved `.belegtool` files keep the old flag until re-split.
 
 ### Status system (per node)
 - `erfasst` — green
@@ -234,7 +241,7 @@ python host.py file.belegtool   # …opening a file
 
 ## Tests
 
-Framework: `pytest`. Tests in `tests/` cover the data model (`pdf_node`, `pdf_storage`), compression/import, the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, and the pywebview host glue (`test_host.py`). Run `pytest` for the current pass count.
+Framework: `pytest`. Tests in `tests/` cover the data model (`pdf_node`, `pdf_storage`), compression/import (incl. `test_compress_parallel` — content+order match of the multi-worker path), the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, the CPU-fairness primitives (`test_cpu`), and the pywebview host glue (`test_host.py`). The Tk-era eager-preview/background-compress unit tests were removed (dead code; see Open items). Run `pytest` for the current pass count.
 
 ```powershell
 pytest
@@ -281,9 +288,14 @@ Current stable tag: **v3.6.0**
   against the React UI. The features themselves are unchanged.
 - **Dead Tk-preview path in the data model** — `PDFNode` still carries the eager
   PIL-preview / `compress_lazy` / `PreviewPage` machinery (the `generate_previews=True`
-  branch) that only the removed Tk GUI used. The headless React path never calls it.
-  Safe to keep, but a candidate for a focused data-model cleanup (would also drop
-  `preview_page.py` and the background-compress-on-import threads the tests still trip on).
+  branch) that only the removed Tk GUI used. The headless React path never calls it; the
+  app imports/saves via `PDFStorage` with `generate_previews=False` and compresses through
+  `core/engine` → `compress_pdf_bytes`. The **dead-machinery tests were removed** (13 files,
+  e.g. `test_pdf_node_compression`/`_split`/`_merge`/`_rotate`/`_copy`, the `*preview*`
+  tests) — `PDFNode`'s remaining use by the dev-only Testmodus is covered end-to-end by
+  `test_testmode`, and split/merge/rotate/compress by the `core/` tests. Remaining cleanup:
+  delete the dead `PDFNode` preview/compress code itself + `preview_page.py` (rebasing
+  Testmodus onto the core engine first).
 - **Headless import is now bytes-only end to end** — plain-PDF *and* archive/email
   paths honor `generate_previews=False` (`from_recursive_array`/`_from_structure_entry`
   thread the flag); page count uses `fitz.page_count`; the `/JSONStructure` metadata
@@ -292,7 +304,7 @@ Current stable tag: **v3.6.0**
   still honored — locked by `test_structured_pdf_import_honors_json`). Warm import is
   ~1 ms; the remaining cold-open cost is Windows Defender scanning the file, outside
   our control.
-- **Windowed render cache — wired into the UI; background filler not yet activated.**
+- **Windowed render cache — wired into the UI; background filler active (thread-pooled).**
   Done: pure `predict_window`/`next_fill_target` ([`core/render_policy.py`](core/render_policy.py)),
   `RenderService`/`RenderCache` ([`services/render_service.py`](services/render_service.py)),
   `CoreApi.render_window`/`page_count`/`page_dims` (+ HostApi + `core.js`), and the
@@ -301,13 +313,21 @@ Current stable tag: **v3.6.0**
   preview uses it — both the plain stored bytes and the compression working-preview**
   (`render_compressed_window` renders the variant through the same cache, keyed by the
   variant's `crc32`, so the service stays compression-agnostic). Only folders use the
-  all-pages path. ⚠ **Needs on-screen QA** (manual test MT-39) — virtualized scrolling
-  can't be verified headlessly. **Remaining:** drive the background filler
-  (`RenderService.fill_until_idle`) on idle via the host (CPU-throttled), so
-  neighbouring pages/nodes pre-warm; today only the viewport window ±5 is fetched.
-  Note: the compression *computation* (variant bytes) is still all-pages-expensive on
-  first browse per dpi (engine memo, in-session) — that's the separate **Phase 4**
-  background pre-compression / persistence work, not the render cache.
+  all-pages path. On each request the service **seeds** the surrounding window in the
+  background (`RenderService.seed` → parallel `fill_until_idle`) on a capped,
+  below-normal-priority pool that yields to foreground (generation token) and to a busy
+  box (real `SystemCpuSampler`, terminal-server fair). ⚠ **Needs on-screen QA** (MT-39).
+  ⚠ **Multicore caveat:** thread parallelism is GIL-limited for PyMuPDF (~1.2×), so this
+  overlaps prefetch with idle rather than saturating cores; **true multicore would need a
+  process pool** (~2.4× measured, warm+chunked) plus `multiprocessing.freeze_support()` in
+  `host.py` and testing inside the packaged exe — deliberately deferred (2026-06-03).
+- **Compression speed for large nodes — partially addressed.** The rasterize loop in
+  `compress_pdf_bytes._render_pdf_as_images` runs across the below-normal pool for docs
+  `≥ 8` pages (smaller render inline). Same GIL caveat (~1.2× via threads). The **bigger**
+  remaining win is *work-avoidance*: the compression dropdown (`compress_options` →
+  `compress_all_methods`) still renders **all pages × every image method** just to size
+  them — a sample-based estimate + persisting committed variants (Phase 4) would cut the
+  felt wait far more than threads do. Deferred per user decision (2026-06-03).
 - **Zammad integration** — deferred, not started yet
 
 ---

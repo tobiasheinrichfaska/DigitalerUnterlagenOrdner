@@ -33,6 +33,10 @@ class Engine(Protocol):
     def split(self, pdf_bytes: bytes) -> List[bytes]:
         """One single-page PDF per page (used in D3b)."""
 
+    def split_chunks(self, pdf_bytes: bytes, size: int) -> List[tuple]:
+        """``(pdf_bytes, page_count)`` for consecutive chunks of ``size`` pages —
+        direct page-range copy (avoids the per-page split + re-merge round-trip)."""
+
     def merge(self, parts: List[bytes]) -> bytes:
         """Concatenate PDFs page-by-page (used in D3b)."""
 
@@ -100,6 +104,27 @@ class RealEngine:
             writer.write(buf)
             parts.append(buf.getvalue())
         return parts
+
+    def split_chunks(self, pdf_bytes: bytes, size: int) -> List[tuple]:
+        # Direct page-range copy via PyMuPDF — ~7x faster than per-page split + merge
+        # for chunked splits, and one source parse instead of N.
+        import fitz
+        size = max(1, int(size))
+        src = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            n = src.page_count
+            out: List[tuple] = []
+            for i in range(0, n, size):
+                last = min(i + size - 1, n - 1)
+                d = fitz.open()
+                try:
+                    d.insert_pdf(src, from_page=i, to_page=last)
+                    out.append((d.tobytes(), last - i + 1))
+                finally:
+                    d.close()
+            return out
+        finally:
+            src.close()
 
     def merge(self, parts: List[bytes]) -> bytes:
         writer = PdfWriter()

@@ -505,7 +505,7 @@ export default function App() {
       </div>
 
       <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} selectedIds={selectedIds}
-        onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} />
+        onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} />
 
       {dropActive && (
         <div className="drop-overlay">

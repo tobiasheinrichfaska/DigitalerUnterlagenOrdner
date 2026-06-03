@@ -9,7 +9,8 @@ function setup(node, extra = {}) {
   }
   const result = render(
     <ContextMenu menu={{ x: 10, y: 10, node }} mergeIds={extra.mergeIds ?? null}
-      group={extra.group ?? null} selectedIds={extra.selectedIds ?? []} {...spies} />,
+      group={extra.group ?? null} selectedIds={extra.selectedIds ?? []}
+      statuses={extra.statuses ?? ['erfasst', 'zu erfassen', 'vorjahreswert']} {...spies} />,
   )
   return { ...result, ...spies }
 }

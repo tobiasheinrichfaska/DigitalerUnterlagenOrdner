@@ -2,13 +2,10 @@
 // app's tree context menu), not as buttons.
 import { useState } from 'react'
 
-const STATUSES = [
-  ['erfasst', 'Erfasst'],
-  ['zu erfassen', 'Zu erfassen'],
-  ['vorjahreswert', 'Vorjahr'],
-]
+// UI labels for the core's status vocabulary (the keys come from config().statuses).
+const STATUS_LABELS = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const [splitOpen, setSplitOpen] = useState(false)
   if (!menu) return null
   const { x, y, node } = menu
@@ -87,9 +84,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         <button onClick={() => { onCollapseAll(); onClose() }}>Alle zuklappen</button>
         <div className="cm-sep" />
         <div className="cm-label">Status</div>
-        {STATUSES.map(([key, label]) => (
+        {statuses.map((key) => (
           <button key={key} className={node.status === key ? 'active' : ''} onClick={() => run({ type: 'SetStatus', status: key })}>
-            {label}
+            {STATUS_LABELS[key] ?? key}
           </button>
         ))}
         <div className="cm-sep" />

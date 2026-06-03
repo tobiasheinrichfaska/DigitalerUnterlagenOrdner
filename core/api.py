@@ -22,7 +22,7 @@ from core.commands import (
     command_from_dict,
 )
 from core.engine import RealEngine
-from core.model import Document
+from core.model import Document, STATUSES
 from core.session import DocumentSession
 from log_config import logger
 from version_info import APP_NAME
@@ -87,7 +87,8 @@ class CoreApi:
     # --- ops ---------------------------------------------------------------
     def config(self) -> dict:
         """Fixed core defaults the UI should use instead of hardcoding its own."""
-        return {"ok": True, "default_dpi": DEFAULT_COMPRESSION_DPI, "app_name": APP_NAME}
+        return {"ok": True, "default_dpi": DEFAULT_COMPRESSION_DPI, "app_name": APP_NAME,
+                "statuses": list(STATUSES)}  # status vocabulary lives in the core
 
     def hello(self) -> dict:
         with self._lock:

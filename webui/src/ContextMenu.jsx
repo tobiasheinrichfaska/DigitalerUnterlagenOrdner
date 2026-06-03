@@ -1,5 +1,6 @@
 // Right-click context menu for a tree node — operations live here (like the old
 // app's tree context menu), not as buttons.
+import { useState } from 'react'
 
 const STATUSES = [
   ['erfasst', 'Erfasst'],
@@ -8,8 +9,16 @@ const STATUSES = [
 ]
 
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll }) {
+  const [splitOpen, setSplitOpen] = useState(false)
   if (!menu) return null
   const { x, y, node } = menu
+
+  const splitN = (intoFolder) => {
+    const s = window.prompt('Seiten pro Knoten:', '10')
+    const n = parseInt(s, 10)
+    if (n >= 1) run({ type: 'SplitInto', size: n, into_folder: intoFolder })
+    else onClose()
+  }
   // export the current selection if this node is part of it, else just this node
   const exportIds = (selectedIds?.includes(node.id) && selectedIds.length >= 1) ? selectedIds : [node.id]
   const isLeaf = !node.is_folder
@@ -53,7 +62,21 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           </>
         )}
         <button onClick={rename}>Umbenennen</button>
-        {isLeaf && node.pdf_length > 1 && <button onClick={() => run({ type: 'Split' })}>Splitten</button>}
+        {isLeaf && node.pdf_length > 1 && (
+          <div className="cm-haschild" onMouseEnter={() => setSplitOpen(true)} onMouseLeave={() => setSplitOpen(false)}>
+            <button className="cm-trigger" onClick={() => setSplitOpen((v) => !v)}>
+              Splitten<span className="cm-arrow">▸</span>
+            </button>
+            {splitOpen && (
+              <div className="context-menu cm-flyout">
+                <button onClick={() => run({ type: 'Split' })}>pro Seite</button>
+                <button onClick={() => splitN(false)}>N Seiten pro Knoten…</button>
+                <button onClick={() => run({ type: 'SplitInto', size: 1, into_folder: true })}>pro Seite → neuer Ordner</button>
+                <button onClick={() => splitN(true)}>N Seiten → neuer Ordner…</button>
+              </div>
+            )}
+          </div>
+        )}
         {node.is_folder && <button onClick={addFolder}>Ordner anlegen</button>}
         {node.is_folder && (
           <button onClick={() => { onSetCollapsed(node.id, !node.collapsed); onClose() }}>

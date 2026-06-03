@@ -93,6 +93,10 @@ export default function App() {
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [testMode, setTestMode] = useState(false) // Testmodus overlay (dev/QA golden-master review)
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
+  const [treeWidth, setTreeWidth] = useState(() => {
+    const v = parseInt(localStorage.getItem('beleg.treeWidth'), 10)
+    return v >= 220 && v <= 800 ? v : 340 // px; remembered across sessions (UI prefs, not the document)
+  })
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -301,6 +305,24 @@ export default function App() {
   const expandAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: false }), [dispatch])
   const collapseAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: true }), [dispatch])
 
+  // drag the splitter to resize the tree pane (persisted to localStorage)
+  useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
+  const startResize = useCallback((e) => {
+    e.preventDefault()
+    const startX = e.clientX, startW = treeWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (ev) => setTreeWidth(Math.max(220, Math.min(800, startW + ev.clientX - startX)))
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [treeWidth])
+
   // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
   const mergeable = (() => {
     if (selectedIds.length < 2 || !state?.tree) return null
@@ -459,7 +481,7 @@ export default function App() {
       {notice && !error && <p className="notice">✓ {notice}</p>}
 
       <div className="body">
-        <div className="pane tree-pane">
+        <div className="pane tree-pane" style={{ flex: `0 0 ${treeWidth}px` }}>
           {state && (
             <Tree
               node={grab ? grab.tree : state.tree}
@@ -482,6 +504,7 @@ export default function App() {
             />
           )}
         </div>
+        <div className="splitter" onMouseDown={startResize} title="Breite der Baumansicht ziehen" />
         <div className="pane preview-pane" ref={previewRef}>
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && (windowed || pages?.length > 0) && (

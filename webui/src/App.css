@@ -81,7 +81,8 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start; /* chevron + name stay left-aligned (was space-between,
+     which pushed the name to the right edge once the chevron added a 2nd flex child) */
   gap: 8px;
   padding: 3px 6px;
   border-radius: 6px;

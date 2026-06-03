@@ -136,6 +136,33 @@ def test_seed_warms_around_focus_in_background():
     assert ("a", 1, 50, 100) in svc.cache      # incl. the focus page
 
 
+def test_fill_until_idle_renders_in_parallel_bounded_by_workers():
+    """The background filler must actually use multiple cores (concurrent renders)
+    yet never exceed max_workers in flight at once."""
+    import threading
+    import time
+
+    svc = RenderService(FakeRenderer(), budget_bytes=10**7, cpu_load=lambda: 0.0,
+                        max_workers=4)
+    lock = threading.Lock()
+    peak = {"cur": 0, "max": 0}
+
+    def renderer(data, page, dpi):
+        with lock:
+            peak["cur"] += 1
+            peak["max"] = max(peak["max"], peak["cur"])
+        time.sleep(0.02)  # hold the "core" so overlap is observable
+        with lock:
+            peak["cur"] -= 1
+        return bytes(100)
+
+    svc._render_page = renderer
+    warmed = svc.fill_until_idle([("a", 1, 20)], "a", 0, lambda nid: nid.encode(), 100)
+    assert warmed == 20
+    assert peak["max"] >= 2          # genuinely concurrent (would be 1 if serial)
+    assert peak["max"] <= 4          # never more than the worker cap
+
+
 def test_fill_until_idle_aborts_on_new_request():
     svc = RenderService(FakeRenderer(), budget_bytes=10**9, cpu_load=lambda: 0.0)
     specs = [("a", 1, 50)]

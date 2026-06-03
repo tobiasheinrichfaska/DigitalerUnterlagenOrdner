@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import threading
 from collections import OrderedDict, defaultdict, deque
+from concurrent.futures import as_completed
 from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
 
+from services import cpu
 from core.render_policy import (
     DEFAULT_AHEAD,
     DEFAULT_BEHIND,
@@ -106,17 +108,24 @@ class RenderService:
         behind: int = DEFAULT_BEHIND,
         head: int = DEFAULT_HEAD,
         seed_steps: int = 32,
+        max_workers: Optional[int] = None,
     ):
         self._render_page = render_page_fn
         self.cache = RenderCache(budget_bytes)
-        self._cpu_load = cpu_load or (lambda: 0.0)
+        # default to the real whole-system CPU sampler so background prefetch backs
+        # off when the box is loaded (by us OR other users on a terminal server).
+        self._cpu_load = cpu_load or cpu.default_sampler.load
         self.cpu_ceiling = cpu_ceiling
         self._hist: Dict[str, Deque[int]] = defaultdict(lambda: deque(maxlen=history_len))
         self._gen = 0
         self._lock = threading.RLock()
         self.ahead, self.behind, self.head = ahead, behind, head
         self.seed_steps = seed_steps    # pages to warm per background seed
-        self._executor = None           # lazy single background worker
+        # session-aware, capped pool size; background render threads run at
+        # below-normal priority so the OS preempts them for any interactive work.
+        self.max_workers = max_workers if max_workers is not None else cpu.worker_count()
+        self._executor = None           # lazy single seed-dispatcher worker
+        self._pool = None               # lazy N-worker render pool
 
     # --- generation / access history --------------------------------------
     @property
@@ -191,35 +200,71 @@ class RenderService:
         rendered = self._render_page(data_for(nid), page, dpi)
         return self.cache.put((nid, version, page, dpi), rendered, evict=False)
 
+    def _pool_exec(self):
+        """Lazy N-worker render pool. Workers run at below-normal priority so the OS
+        preempts them for foreground / other sessions' work (terminal-server fair)."""
+        if self._pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._pool = ThreadPoolExecutor(
+                max_workers=self.max_workers,
+                initializer=cpu.set_current_thread_below_normal,
+                thread_name_prefix="render-pool",
+            )
+        return self._pool
+
     def fill_until_idle(self, node_specs: Sequence[NodeSpec], focus_node: str,
                         focus_page: int, data_for: Callable[[str], bytes], dpi: int,
                         *, max_steps: int = 1_000_000, since_gen: Optional[int] = None) -> int:
         """Warm pages in priority order (current node from the focus outward, then
-        neighbours) into FREE budget, until ``max_steps`` are warmed, the budget is
-        full, the CPU is busy, or a newer foreground request bumps the generation.
-        One ``fill_order`` pass (skipping already-cached pages), so it's O(pages),
-        not O(pages²). Returns the number of pages warmed."""
+        neighbours) into FREE budget, **rendering up to ``max_workers`` pages at once**,
+        until ``max_steps`` are warmed, the budget is full, the CPU is busy, or a newer
+        foreground request bumps the generation. One ``fill_order`` pass (skipping
+        already-cached pages). Returns the number of pages warmed."""
         gen = self.generation if since_gen is None else since_gen
         nodes = [(nid, cnt) for nid, _v, cnt in node_specs]
         vmap = {nid: v for nid, v, _c in node_specs}
-        warmed = 0
-        for nid, page in fill_order(nodes, focus_node, focus_page,
-                                    ahead=self.ahead, behind=self.behind, head=self.head):
-            if warmed >= max_steps:
-                break
+        order = list(fill_order(nodes, focus_node, focus_page,
+                                ahead=self.ahead, behind=self.behind, head=self.head))
+        pool = self._pool_exec()
+        warmed, i, n = 0, 0, len(order)
+        while i < n and warmed < max_steps:
             if self.generation != gen:        # superseded by a newer request → abandon
                 break
             if self.cache.free() <= 0:
                 break
             if self._cpu_load() >= self.cpu_ceiling:
                 break
-            key = (nid, vmap[nid], page, dpi)
-            if key in self.cache:             # already warm (e.g. the foreground page)
+            # collect the next batch of not-yet-cached pages (one per worker)
+            batch = []
+            while i < n and len(batch) < self.max_workers:
+                nid, page = order[i]
+                i += 1
+                key = (nid, vmap[nid], page, dpi)
+                if key not in self.cache:     # already warm (e.g. the foreground page)
+                    batch.append((key, nid, page))
+            if not batch:
                 continue
-            rendered = self._render_page(data_for(nid), page, dpi)
-            if not self.cache.put(key, rendered, evict=False):  # prefetch into free space only
+            futures = {pool.submit(self._render_page, data_for(nid), page, dpi): key
+                       for key, nid, page in batch}
+            stop = False
+            for fut in as_completed(futures):
+                key = futures[fut]
+                try:
+                    rendered = fut.result()
+                except Exception:             # background; a bad page never crashes the fill
+                    continue
+                if self.generation != gen:    # a foreground request landed mid-batch
+                    stop = True
+                    break
+                if not self.cache.put(key, rendered, evict=False):  # free space only
+                    stop = True
+                    break
+                warmed += 1
+                if warmed >= max_steps:
+                    stop = True
+                    break
+            if stop:
                 break
-            warmed += 1
         return warmed
 
     # --- background seeding (fire-and-forget) -----------------------------

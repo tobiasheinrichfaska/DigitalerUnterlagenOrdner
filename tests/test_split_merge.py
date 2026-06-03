@@ -5,6 +5,7 @@ import pytest
 from core.model import Document, Node
 from core.commands import (
     CommandError,
+    Compress,
     Merge,
     Split,
     apply,
@@ -50,8 +51,22 @@ def test_split_replaces_leaf_with_page_leaves_in_place():
     assert [k.name for k in kids] == ["a_1", "a_2", "a_3", "z"]
     parts = [k.original_data for k in kids[:3]]
     assert parts == [b"P1", b"P2", b"P3"]
-    assert all(k.pdf_length == 1 and k.no_compression for k in kids[:3])
+    # split parts carry the uncompressed source pages → still compressible
+    assert all(k.pdf_length == 1 and not k.no_compression for k in kids[:3])
     assert d0.find("a") is not None  # original untouched (pure)
+
+
+def test_split_parts_are_compressible():
+    """Regression: split parts carry the uncompressed source, so Compress must work
+    on them (previously they were wrongly flagged no_compression and rejected)."""
+    class CompressEngine(FakeEngine):
+        def compress(self, b, dpi, method=None):
+            return b"C:" + b
+    d1 = apply(split_doc(), Split("a"), ENGINE)
+    part = d1.root.children[0]
+    d2 = apply(d1, Compress(part.id, dpi=150, method="jpg"), CompressEngine())
+    out = d2.find(part.id)
+    assert out.is_compressed is True and out.current_data == b"C:P1"
 
 
 def test_split_single_page_is_noop():

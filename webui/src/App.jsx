@@ -88,6 +88,7 @@ export default function App() {
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
+  const [pageInfo, setPageInfo] = useState(null) // {page, total} of the windowed preview viewport
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
@@ -138,6 +139,7 @@ export default function App() {
   // stored bytes. Re-fires when `selected` identity changes (every edit replaces
   // it) or the request changes, so edits and method/DPI browsing both refresh.
   useEffect(() => {
+    setPageInfo(null) // stale page indicator until the new node reports its viewport
     // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the preview is intended
     if (!session || !selected) { setPages(null); return }
     if (selected.is_folder) {
@@ -509,6 +511,11 @@ export default function App() {
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && (windowed || pages?.length > 0) && (
             <div className="zoom-bar">
+              {(() => {
+                const total = pageInfo?.total ?? selected.pdf_length
+                if (!total) return null
+                return <span className="page-info">{pageInfo ? `Seite ${pageInfo.page} / ${total}` : `${total} Seiten`}</span>
+              })()}
               <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>
               <span>{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title="größer">＋</button>
@@ -516,7 +523,7 @@ export default function App() {
             </div>
           )}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
-          {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} />}
+          {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} onPage={(page, total) => setPageInfo({ page, total })} />}
           {!windowed && selected && busy > 0 && pages === null && <div className="spinner big" />}
           {!windowed && selected && busy === 0 && pages?.length === 0 && (
             <p className="status">Keine Vorschau (Ordner oder leer)</p>

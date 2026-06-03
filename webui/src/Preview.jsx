@@ -19,7 +19,7 @@ import { core } from './core'
 
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)
 
-export function Preview({ session, node, zoom = 1, previewReq = null }) {
+export function Preview({ session, node, zoom = 1, previewReq = null, onPage = null }) {
   const nodeId = node?.id
   const reqKey = previewReq ? `${previewReq.dpi}:${previewReq.method}` : 'orig'
 
@@ -107,7 +107,8 @@ export function Preview({ session, node, zoom = 1, previewReq = null }) {
     const vr = visibleRange()
     if (!vr) return
     fetchSpan(vr[0], vr[1])
-  }, [visibleRange, fetchSpan])
+    onPage?.(vr[0] + 1, count) // 1-based first visible page + total
+  }, [visibleRange, fetchSpan, onPage, count])
 
   const onScroll = useCallback(() => {
     if (nodeId && scrollRef.current) scrollMemory.set(nodeId, scrollRef.current.scrollTop)

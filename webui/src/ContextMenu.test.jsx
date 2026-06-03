@@ -1,0 +1,106 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { ContextMenu } from './ContextMenu'
+
+function setup(node, extra = {}) {
+  const spies = {
+    dispatch: vi.fn(), onClose: vi.fn(), onExport: vi.fn(),
+    onSetCollapsed: vi.fn(), onExpandAll: vi.fn(), onCollapseAll: vi.fn(),
+  }
+  const result = render(
+    <ContextMenu menu={{ x: 10, y: 10, node }} mergeIds={extra.mergeIds ?? null}
+      group={extra.group ?? null} selectedIds={extra.selectedIds ?? []} {...spies} />,
+  )
+  return { ...result, ...spies }
+}
+
+const leaf = { id: 'L', name: 'doc', is_folder: false, pdf_length: 3, status: 'zu erfassen' }
+const folder = { id: 'F', name: 'Ord', is_folder: true, collapsed: false, status: 'zu erfassen' }
+
+describe('ContextMenu', () => {
+  it('renders nothing without a menu', () => {
+    const { container } = render(<ContextMenu menu={null} />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('leaf: Split shown (multi-page), no folder-only entries', () => {
+    setup(leaf)
+    expect(screen.getByText('Splitten')).toBeInTheDocument()
+    expect(screen.queryByText('Ordner anlegen')).toBeNull()
+    expect(screen.queryByText('Zuklappen')).toBeNull()
+    expect(screen.getByText('Alle aufklappen')).toBeInTheDocument()
+  })
+
+  it('single-page leaf hides Split', () => {
+    setup({ ...leaf, pdf_length: 1 })
+    expect(screen.queryByText('Splitten')).toBeNull()
+  })
+
+  it('folder: Ordner anlegen + Zuklappen + Alle entries; no Split', () => {
+    setup(folder)
+    expect(screen.getByText('Ordner anlegen')).toBeInTheDocument()
+    expect(screen.getByText('Zuklappen')).toBeInTheDocument() // expanded → "Zuklappen"
+    expect(screen.getByText('Alle aufklappen')).toBeInTheDocument()
+    expect(screen.getByText('Alle zuklappen')).toBeInTheDocument()
+    expect(screen.queryByText('Splitten')).toBeNull()
+  })
+
+  it('collapsed folder shows Aufklappen', () => {
+    setup({ ...folder, collapsed: true })
+    expect(screen.getByText('Aufklappen')).toBeInTheDocument()
+  })
+
+  it('Splitten dispatches Split + closes', () => {
+    const { dispatch, onClose } = setup(leaf)
+    fireEvent.click(screen.getByText('Splitten'))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'Split', node_id: 'L' })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('status entry dispatches SetStatus', () => {
+    const { dispatch } = setup(leaf)
+    fireEvent.click(screen.getByText('Erfasst'))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SetStatus', node_id: 'L', status: 'erfasst' })
+  })
+
+  it('folder collapse entry toggles via onSetCollapsed', () => {
+    const { onSetCollapsed, onClose } = setup(folder)
+    fireEvent.click(screen.getByText('Zuklappen'))
+    expect(onSetCollapsed).toHaveBeenCalledWith('F', true)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('Alle auf-/zuklappen call the handlers', () => {
+    const { onExpandAll, onCollapseAll } = setup(leaf)
+    fireEvent.click(screen.getByText('Alle aufklappen'))
+    expect(onExpandAll).toHaveBeenCalled()
+    fireEvent.click(screen.getByText('Alle zuklappen'))
+    expect(onCollapseAll).toHaveBeenCalled()
+  })
+
+  it('Löschen dispatches Delete (danger styling)', () => {
+    const { dispatch } = setup(leaf)
+    const del = screen.getByText('Löschen')
+    expect(del).toHaveClass('danger')
+    fireEvent.click(del)
+    expect(dispatch).toHaveBeenCalledWith({ type: 'Delete', node_id: 'L' })
+  })
+
+  it('merge entry appears with mergeIds and dispatches Merge', () => {
+    const { dispatch } = setup(leaf, { mergeIds: ['L', 'M'] })
+    fireEvent.click(screen.getByText(/Zusammenführen/))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'Merge', node_ids: ['L', 'M'] })
+  })
+
+  it('export uses the selection when the node is part of it', () => {
+    const { onExport } = setup(leaf, { selectedIds: ['L', 'X'] })
+    fireEvent.click(screen.getByText(/Auswahl als PDF exportieren/))
+    expect(onExport).toHaveBeenCalledWith(['L', 'X'])
+  })
+
+  it('backdrop click closes', () => {
+    const { onClose, container } = setup(leaf)
+    fireEvent.click(container.querySelector('.cm-backdrop'))
+    expect(onClose).toHaveBeenCalled()
+  })
+})

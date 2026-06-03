@@ -9,5 +9,6 @@ export default defineConfig({
   test: {
     // core.js touches window + the pywebviewready event; jsdom provides them.
     environment: 'jsdom',
+    setupFiles: './src/test-setup.js',
   },
 })

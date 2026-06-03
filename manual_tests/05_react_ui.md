@@ -173,3 +173,49 @@ PDF (ideally 100+ pages; a colour scan is a good stress test).
   visible pages render, and switching back to a method (or to the original) you
   already viewed is instant. (The first browse at a new DPI still pauses while the
   compressed variant is computed — that's compression, not rendering.)
+
+
+---
+
+## MT-40: Keyboard tree-structuring, folder collapse, dev-only Testmodus
+
+Covers the keyboard restructuring + folder collapse (persisted) added for large
+trees, and confirms Testmodus is dev-only.
+
+**Preconditions:** dev app running (`python host.py`); a document with a few
+folders and nested nodes.
+
+**A — Folder collapse (persisted):**
+1. Click the **▾ chevron** on a folder → it collapses to **▸** and its children hide.
+2. Right-click a folder → **Zuklappen/Aufklappen**; right-click anywhere → **Alle
+   zuklappen** / **Alle aufklappen**.
+3. **Speichern**, close, **reopen** the file.
+
+**Expected (A):**
+- Collapsing hides children and cuts scrolling; the chevron reflects the state.
+- *Not obvious:* collapsing marks the document **dirty (•)** — it's a saved model
+  change, so it **survives reload**: the folders you left collapsed come back
+  collapsed. (Undo/Ctrl+Z reverses a collapse, like a status change.)
+
+**B — Keyboard navigation + collapse:**
+4. Click a node, then use **↑/↓** to move the selection (collapsed folders' children
+   are skipped). On a folder, **→** expands / steps in, **←** collapses / steps out.
+
+**Expected (B):** selection follows the visible rows; ←/→ fold/unfold folders.
+
+**C — Carry-move (Insert grab → arrows → Insert drop):**
+5. Select a node, press **Insert** — it gets a **dashed outline** (grabbed).
+6. Press **↑/↓** (reorder among siblings), **→** (nest into the folder directly
+   above), **←** (move out one level). The node moves **visually only**.
+7. Press **Insert** again to **drop**.
+8. Repeat, but press **Esc** instead of the final Insert.
+
+**Expected (C):**
+- While grabbed, the tree shows fully expanded and the node slides as you arrow,
+  but **nothing is committed yet**. **Insert** drops it — a single **undoable** move
+  (Ctrl+Z reverts it in one step). **Esc** cancels and the node snaps back with **no
+  change** to the document.
+
+**D — Testmodus is dev-only:**
+9. In the dev app the **🧪 Testmodus** button is present. In the built
+   `dist\BelegTool\BelegTool.exe`, it is **absent**.

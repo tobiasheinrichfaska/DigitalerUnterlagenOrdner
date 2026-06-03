@@ -394,6 +394,7 @@ class PDFStorage:
 
         if is_folder:
             node = PDFNode(name=name, is_folder=True)
+            node.collapsed = bool(node_data.get("collapsed", False))
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages)
                 if child_node:

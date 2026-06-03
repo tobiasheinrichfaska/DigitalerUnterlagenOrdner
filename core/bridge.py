@@ -28,6 +28,7 @@ def _node_from_pdfnode(pn) -> Node:
         dpi_original=pn.dpi_original,
         dpi_current=pn.dpi_current,
         no_compression=pn.no_compression,
+        collapsed=getattr(pn, "collapsed", False),
         compression_method=getattr(pn, "compression_method", None),
         children=tuple(_node_from_pdfnode(c) for c in pn.children),
         # raw per-node bytes (folders have none — never the aggregated property)
@@ -57,6 +58,7 @@ def _pdfnode_from_node(node: Node):
     pn.dpi_original = node.dpi_original
     pn.dpi_current = node.dpi_current
     pn.no_compression = node.no_compression
+    pn.collapsed = node.collapsed
     pn.compression_method = node.compression_method
     if not node.is_folder:
         # property setters store the bytes without triggering lazy compression

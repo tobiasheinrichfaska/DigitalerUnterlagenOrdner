@@ -5,6 +5,7 @@ import { PreviewControls } from './PreviewControls'
 import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { TestMode } from './TestMode'
+import { visibleOrder, navStep, moveTarget, applyMove, locate } from './treeNav'
 import './App.css'
 
 function readAsDataURL(file) {
@@ -91,6 +92,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [testMode, setTestMode] = useState(false) // Testmodus overlay (dev/QA golden-master review)
+  const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -290,6 +292,15 @@ export default function App() {
     setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
   }, [selectedIds, state, anchorId])
 
+  // --- folder collapse/expand (persisted: SetCollapsed / SetAllCollapsed) ---
+  const setCollapsedFor = useCallback((id, val) => dispatch({ type: 'SetCollapsed', node_id: id, collapsed: val }), [dispatch])
+  const toggleCollapse = useCallback((id) => {
+    const n = state?.tree && findNode(state.tree, id)
+    if (n) setCollapsedFor(id, !n.collapsed)
+  }, [state, setCollapsedFor])
+  const expandAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: false }), [dispatch])
+  const collapseAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: true }), [dispatch])
+
   // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
   const mergeable = (() => {
     if (selectedIds.length < 2 || !state?.tree) return null
@@ -341,6 +352,59 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
+      const tree = state?.tree
+
+      // Insert = grab / drop (carry-move). The carry is optical (grab.tree) until
+      // dropped; dropping commits a single Move only if the position changed.
+      if (e.key === 'Insert') {
+        e.preventDefault()
+        if (grab) {
+          const from = locate(tree, grab.id)
+          const to = locate(grab.tree, grab.id)
+          if (to && (!from || from.parentId !== to.parentId || from.index !== to.index)) {
+            dispatch({ type: 'Move', node_id: grab.id, new_parent_id: to.parentId, index: to.index })
+          }
+          setGrab(null)
+        } else if (selected && tree) {
+          setGrab({ id: selected.id, tree })
+        }
+        return
+      }
+      // While carrying: arrows move optically; Esc cancels (reverts); swallow the rest.
+      if (grab) {
+        if (e.key === 'Escape') { e.preventDefault(); setGrab(null); return }
+        const dir = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key]
+        if (dir) {
+          e.preventDefault()
+          const t = moveTarget(grab.tree, grab.id, dir)
+          if (t) setGrab({ id: grab.id, tree: applyMove(grab.tree, grab.id, t.new_parent_id, t.index) })
+        }
+        return
+      }
+      // Navigation (not carrying)
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && tree) {
+        e.preventDefault()
+        const order = visibleOrder(tree)
+        const nextId = selected ? navStep(order, selected.id, e.key === 'ArrowUp' ? 'up' : 'down') : order[0]?.id
+        const nn = nextId && findNode(tree, nextId)
+        if (nn) select(nn)
+        return
+      }
+      if (e.key === 'ArrowRight' && selected?.is_folder && tree) {
+        e.preventDefault()
+        const n = findNode(tree, selected.id)
+        if (n?.collapsed) setCollapsedFor(selected.id, false)
+        else { const first = n?.children?.[0]; if (first) select(first) }
+        return
+      }
+      if (e.key === 'ArrowLeft' && tree) {
+        e.preventDefault()
+        const n = selected && findNode(tree, selected.id)
+        if (n?.is_folder && !n.collapsed) { setCollapsedFor(selected.id, true); return }
+        const p = selected && findParent(tree, selected.id)
+        if (p && p.id !== tree.id) select(p)
+        return
+      }
       if (mod && k === 's') { e.preventDefault(); saveFile() }
       else if (mod && k === 'o') { e.preventDefault(); openFile() }
       else if (mod && k === 'e') { e.preventDefault(); exportPdf() }
@@ -383,13 +447,13 @@ export default function App() {
           </button>
           <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
-          <span className="sep" />
-          <button onClick={() => setTestMode((v) => !v)} title="Testmodus: Golden-Master-Vergleich (Entwickler/QA)">🧪 Testmodus</button>
+          {config?.dev && <span className="sep" />}
+          {config?.dev && <button onClick={() => setTestMode((v) => !v)} title="Testmodus: Golden-Master-Vergleich (Entwickler/QA)">🧪 Testmodus</button>}
           {busy ? <span className="spinner" title="Arbeite…" /> : null}
         </div>
       </header>
 
-      {testMode && <TestMode onClose={() => setTestMode(false)} />}
+      {config?.dev && testMode && <TestMode onClose={() => setTestMode(false)} />}
 
       {error && <p className="error">⚠ {error}</p>}
       {notice && !error && <p className="notice">✓ {notice}</p>}
@@ -398,9 +462,12 @@ export default function App() {
         <div className="pane tree-pane">
           {state && (
             <Tree
-              node={state.tree}
+              node={grab ? grab.tree : state.tree}
               selectedIds={selectedIds}
               primaryId={selected?.id}
+              grabbedId={grab?.id}
+              forceExpand={!!grab}
+              onToggleCollapse={toggleCollapse}
               onSelect={select}
               onContext={(x, y, node) => setMenu({ x, y, node })}
               onMove={onMove}
@@ -433,7 +500,8 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} selectedIds={selectedIds} />
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} selectedIds={selectedIds}
+        onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} />
 
       {dropActive && (
         <div className="drop-overlay">

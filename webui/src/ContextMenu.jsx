@@ -7,7 +7,7 @@ const STATUSES = [
   ['vorjahreswert', 'Vorjahr'],
 ]
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll }) {
   if (!menu) return null
   const { x, y, node } = menu
   // export the current selection if this node is part of it, else just this node
@@ -55,6 +55,13 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         <button onClick={rename}>Umbenennen</button>
         {isLeaf && node.pdf_length > 1 && <button onClick={() => run({ type: 'Split' })}>Splitten</button>}
         {node.is_folder && <button onClick={addFolder}>Ordner anlegen</button>}
+        {node.is_folder && (
+          <button onClick={() => { onSetCollapsed(node.id, !node.collapsed); onClose() }}>
+            {node.collapsed ? 'Aufklappen' : 'Zuklappen'}
+          </button>
+        )}
+        <button onClick={() => { onExpandAll(); onClose() }}>Alle aufklappen</button>
+        <button onClick={() => { onCollapseAll(); onClose() }}>Alle zuklappen</button>
         <div className="cm-sep" />
         <div className="cm-label">Status</div>
         {STATUSES.map(([key, label]) => (

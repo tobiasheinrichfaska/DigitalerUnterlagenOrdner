@@ -360,7 +360,7 @@ class CoreApi:
                 "original_size": len(data), "options": options}
 
     # --- test mode (Testmodus) --------------------------------------------
-    def test_mode(self, dpi: int = 60, max_pages: int = 3) -> dict:
+    def test_mode(self, dpi: int = 72, max_pages: int = 12) -> dict:
         """Golden-master comparison data for the Testmodus view: per item, base64
         PNG thumbnails of its input/live/expected PDFs plus a match status. Pure
         dev/QA aid — independent of any open document/session."""

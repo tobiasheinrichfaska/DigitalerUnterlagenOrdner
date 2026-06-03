@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
 
+import fitz
+
 from log_config import logger
 from pdf_node import PDFNode
 
@@ -72,6 +74,23 @@ def _read_optional(path: Path) -> Optional[bytes]:
     return path.read_bytes() if path.exists() else None
 
 
+def _page_pdf(data: Optional[bytes], index: int) -> Optional[bytes]:
+    """Single-page PDF holding page ``index`` of ``data`` (for the split 'input'
+    column, so the original page sits next to its split piece)."""
+    if not data:
+        return None
+    try:
+        src = fitz.open(stream=data, filetype="pdf")
+        out = fitz.open()
+        out.insert_pdf(src, from_page=index, to_page=index)
+        b = out.tobytes()
+        out.close()
+        src.close()
+        return b
+    except Exception:
+        return None
+
+
 def _wait_until(predicate: Callable[[], bool], timeout: float = 20.0,
                 interval: float = 0.05) -> bool:
     start = time.time()
@@ -118,8 +137,11 @@ def build_split_dataset() -> Dataset:
         n.dpi_current = None
         n.update_preview()
         live = n.current_pdf_data
+        # input column = the corresponding ORIGINAL page, so a tester can verify the
+        # split piece (live) really is page i of the source.
+        original_page = _page_pdf(input_bytes, i - 1)
         expected = _read_optional(EXPECTED_DIR / f"split_{src.stem}_{i:02}.pdf")
-        ds.items.append(ComparisonItem(f"Seite {i}", live, live, expected))
+        ds.items.append(ComparisonItem(f"Seite {i}", original_page, live, expected))
     return ds
 
 
@@ -147,9 +169,11 @@ def build_merge_dataset() -> Dataset:
 
     live = base.current_pdf_data
     expected = _read_optional(EXPECTED_DIR / "merge1.pdf")
-    ds.items.append(ComparisonItem("merge1_a.pdf", parts[0].read_bytes(), None, None))
-    ds.items.append(ComparisonItem("merge1_b.pdf", parts[1].read_bytes(), None, None))
-    ds.items.append(ComparisonItem("merge1 (Ergebnis)", live, live, expected))
+    # Show each source (its pages) and the merged result with ALL its pages, so the
+    # concatenation order (a's pages, then b's pages) is visible end to end.
+    ds.items.append(ComparisonItem("merge1_a.pdf (Quelle)", parts[0].read_bytes(), None, None))
+    ds.items.append(ComparisonItem("merge1_b.pdf (Quelle)", parts[1].read_bytes(), None, None))
+    ds.items.append(ComparisonItem("merge1 (Ergebnis)", None, live, expected))
     return ds
 
 

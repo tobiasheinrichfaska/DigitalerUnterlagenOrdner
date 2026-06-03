@@ -136,20 +136,15 @@ export default function App() {
     if (!session || !selected) { setPages(null); return }
     if (selected.is_folder) {
       run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
-      return
-    }
-    if (previewReq) {
-      // transient compressed working-preview (all pages, via renderCompressed)
-      run(core.renderCompressed(session, selected.id, previewReq.dpi, previewReq.method))
-        .then((r) => setPages(r?.ok ? r.pages : []))
     } else {
-      // plain stored preview is windowed on demand by <Preview>
+      // leaves (plain stored bytes AND the compressed working-preview) are
+      // windowed on demand by <Preview>; nothing to fetch here.
       setPages(null)
     }
-  }, [selected, previewReq, session]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected, session]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // plain leaf preview is virtualized; folders + compression-browsing use `pages`
-  const windowed = !!(selected && !selected.is_folder && !previewReq)
+  // every leaf preview is virtualized; only folders use the `pages` path
+  const windowed = !!(selected && !selected.is_folder)
 
   const onPreview = useCallback((req) => setPreviewReq(req), [])
 
@@ -427,7 +422,7 @@ export default function App() {
             </div>
           )}
           {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
-          {windowed && <Preview session={session} node={selected} zoom={zoom} />}
+          {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} />}
           {!windowed && selected && busy > 0 && pages === null && <div className="spinner big" />}
           {!windowed && selected && busy === 0 && pages?.length === 0 && (
             <p className="status">Keine Vorschau (Ordner oder leer)</p>

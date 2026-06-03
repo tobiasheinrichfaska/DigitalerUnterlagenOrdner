@@ -168,5 +168,8 @@ PDF (ideally 100+ pages; a colour scan is a good stress test).
   scrollbar position stays stable (no jumping).
 - *Not obvious:* returning to the large PDF restores **the same scroll position**
   you left it at, and already-seen pages reappear instantly (cached).
-- The compression dropdown ("Lesbarkeit geprüft" working-preview) still shows the
-  whole compressed document as before — that path is intentionally not windowed.
+- *Not obvious:* the compression working-preview (method dropdown / DPI) is now
+  **also windowed** — browsing methods on a big document no longer freezes; only the
+  visible pages render, and switching back to a method (or to the original) you
+  already viewed is instant. (The first browse at a new DPI still pauses while the
+  compressed variant is computed — that's compression, not rendering.)

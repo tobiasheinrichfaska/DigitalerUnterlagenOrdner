@@ -216,6 +216,42 @@ class CoreApi:
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first, "pages": urls}
 
+    def render_compressed_window(self, session: str, node_id: str,
+                                 dpi: int = DEFAULT_COMPRESSION_DPI, method: str = None,
+                                 first: int = 0, count: int = 10) -> dict:
+        """Windowed render of a **transient** compressed variant: compress the node's
+        original bytes with ``method``@``dpi`` (engine-memoised), then render pages
+        ``[first, first+count)`` of the result through the same RenderService —
+        keyed by the *variant's* content hash, so re-browsing a method/DPI is
+        instant and only the visible window renders. Never mutates the document.
+        ``method`` None/"original" (or ``no_compression``) renders the original
+        bytes, reusing the plain preview's cache."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            node = s.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            data = node.original_data
+            no_comp = node.no_compression
+        if not data:
+            return {"ok": True, "session": session, "node": node_id, "first": first,
+                    "pages": [], "compressed": False}
+        # compress + render outside the lock (CPU-bound); never stored back.
+        if no_comp or not method or method == "original":
+            variant = data
+        else:
+            variant = self._engine.compress(data, dpi, method) or data
+        import zlib
+        version = zlib.crc32(variant)  # variant bytes → its own cache identity
+        from base64 import b64encode
+        pages = self._renderer().render_window(node_id, version, variant, first, count, 100)
+        urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
+                for p in pages]
+        return {"ok": True, "session": session, "node": node_id, "first": first,
+                "pages": urls, "compressed": variant is not data}
+
     def save(self, session: str, path: str) -> dict:
         with self._lock:
             s = self._sessions.get(session)

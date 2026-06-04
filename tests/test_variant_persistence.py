@@ -1,0 +1,81 @@
+"""Compression variants persist in the .belegtool (embedded per-node attachments)
+and are rehydrated into the engine on reopen — no recompute."""
+
+import fitz
+
+from core.api import CoreApi
+from core.engine import RealEngine
+from services import variant_blobs
+
+
+def _make_pdf(n=2):
+    doc = fitz.open()
+    for i in range(n):
+        p = doc.new_page(width=595, height=842)
+        p.insert_text((50, 90), f"Seite {i + 1} " * 40)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_variant_blobs_roundtrip():
+    v = {150: {"jpg": b"AAA", "png": b"BBB"}, 100: {"jpg": b"CCC"}}
+    assert variant_blobs.unpack(variant_blobs.pack(v)) == v
+    assert variant_blobs.unpack(b"not a zip") == {}  # robust to garbage
+
+
+def test_engine_seed_serves_without_recompute():
+    eng = RealEngine()
+    src = _make_pdf()
+    eng.seed_variants(src, {150: {"jpg": b"X", "png": b"YY"}})
+    assert eng.compress_methods(src, 150) == {"jpg": 1, "png": 2}  # from persisted layer
+    assert eng.variants_for(src) == {150: {"jpg": b"X", "png": b"YY"}}
+
+
+def _first_leaf(tree):
+    if not tree.get("is_folder"):
+        return tree
+    for c in tree.get("children", []):
+        r = _first_leaf(c)
+        if r:
+            return r
+    return None
+
+
+def test_save_reload_persists_variants(tmp_path):
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(2))
+    bel = str(tmp_path / "doc.belegtool")
+
+    # build a document with one imported node, seed it with (fake) variants, save
+    api = CoreApi()
+    sid = api.open()["session"]
+    resp = api.import_paths(sid, [str(pdf_path)])
+    node = _first_leaf(resp["tree"])
+    assert node is not None
+    src = api._sessions[sid].document.find(node["id"]).original_data
+    api._engine.seed_variants(src, {150: {"jpg": b"VARIANT-JPG", "pikepdf": b"VARIANT-PK"}})
+    assert api.save(sid, bel)["ok"]
+
+    # reopen in a FRESH engine → variants must be back, keyed to the reloaded source
+    api2 = CoreApi()
+    sid2 = api2.open(path=bel)["session"]
+    reloaded = api2._sessions[sid2].document
+    leaf = next(n for n in reloaded.root.iter() if not n.is_folder and n.original_data)
+    got = api2._engine.variants_for(leaf.original_data)
+    assert got == {150: {"jpg": b"VARIANT-JPG", "pikepdf": b"VARIANT-PK"}}
+
+
+def test_node_id_survives_save_reload(tmp_path):
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(1))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    resp = api.import_paths(sid, [str(pdf_path)])
+    saved_id = _first_leaf(resp["tree"])["id"]
+    api.save(sid, bel)
+    api2 = CoreApi()
+    sid2 = api2.open(path=bel)["session"]
+    leaf = next(n for n in api2._sessions[sid2].document.root.iter() if not n.is_folder)
+    assert leaf.id == saved_id  # uid persisted → attachments match

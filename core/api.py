@@ -221,6 +221,11 @@ class CoreApi:
             document = load_belegtool(path)
             name = os.path.splitext(os.path.basename(path))[0] or "Dokument"
             document = Document(dataclasses.replace(document.root, name=name))
+            try:  # rehydrate persisted compression variants (instant, no recompute)
+                from services.variant_store import seed_variants_from_file
+                seed_variants_from_file(path, document, self._engine)
+            except Exception:
+                logger.warning("[variants] seed on open failed", exc_info=True)
         else:
             document = Document.empty(self._next_untitled_name())  # "Dokument N"
         with self._lock:
@@ -453,6 +458,8 @@ class CoreApi:
         from core.bridge import save_belegtool
         try:
             save_belegtool(document, path)
+            from services.variant_store import embed_variants
+            embed_variants(path, document, self._engine)  # persist computed variants
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}

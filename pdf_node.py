@@ -416,6 +416,7 @@ class PDFNode:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "uid": self.uid,  # persist node id so attachments (compression variants) match on reload
             "name": self.name,
             "is_folder": self.is_folder,
             "status": self.status,

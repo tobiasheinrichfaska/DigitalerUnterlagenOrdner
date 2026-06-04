@@ -115,3 +115,24 @@ still present (not yet saved+reopened).
 - Splitting/deleting a node that is **currently compressing** **stops** that
   compression — the **Komprimiere N** count drops (it doesn't run to completion on a
   node that's gone).
+
+---
+
+## MT-46: Compression variants persist across reload
+
+**Preconditions:** A node that compresses well, **not** yet applied.
+
+**Steps:**
+1. Select the node; open the compression dropdown and let the method **sizes** load
+   (the variants are now computed for this session). Do **not** click "Lesbarkeit
+   geprüft".
+2. **Save** the file (💾). Close the app. Reopen it and open the same file.
+3. Select that node and open the compression dropdown again.
+
+**Expected:**
+- The method list and previews come back **instantly** — no "Kompression läuft …",
+  no multi-second wait. The variants were embedded in the `.belegtool` (as hidden
+  per-node attachments) and reloaded. *Not obvious:* the file still opens normally in
+  any PDF viewer (the variants are attachments, not pages); a committed node has no
+  source and stores no variants.
+

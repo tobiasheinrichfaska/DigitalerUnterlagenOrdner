@@ -203,6 +203,19 @@ enforced in the logic layer and surfaced to the UI via `has_source` in `Node.to_
 - ⚠ **Irreversible:** the source is gone for committed nodes — see `manual_tests` MT-17.
 Uncommitted nodes keep their source and stay fully editable.
 
+**Persisted compression variants (Option A).** Computed-but-not-applied variants are
+embedded in the `.belegtool` so reopening doesn't recompute (the 6–9 s sweep). Each
+node's variants are a **PDF attachment keyed by node id** (`variant_<id>`) — not pages,
+not tree nodes; ignored by plain viewers. `CoreApi.save` calls
+[`services/variant_store.embed_variants`](services/variant_store.py) (packs
+`{dpi:{method:bytes}}` via [`variant_blobs`](services/variant_blobs.py) ↔ a stored ZIP,
+no pickle); `open` calls `seed_variants_from_file` → `RealEngine.seed_variants` (an
+unbounded **persisted** layer next to the LRU memo). For id-keyed blocks to match on
+reload, the node **`uid` is now persisted** in `/JSONStructure` (`to_dict`/`_parse_node`).
+This does **not** reverse drop-source-on-save: only nodes that *still have a source*
+(uncommitted) store variants; a committed node has none. Per-file variant budget caps
+the bloat. ⚠ Variants live in the file → it grows; not a separate sidecar.
+
 ---
 
 ## Build

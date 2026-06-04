@@ -99,6 +99,50 @@ def test_document_path_is_remembered(tmp_path):
     assert api2.document_path(sid2) == bel        # opening binds the path too
 
 
+def _seed_one_variant(api, sid):
+    """Seed a (fake) compression alternative on the first leaf; return its source."""
+    src = next(n for n in api._sessions[sid].document.root.iter()
+               if not n.is_folder and n.original_data).original_data
+    api._engine.seed_variants(src, {150: {"jpg": b"VARIANT-JPG"}})
+    return src
+
+
+def test_save_info_detects_alternatives(tmp_path):
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(2))
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_path)])
+    # nothing computed yet → no alternatives to store, no dialog
+    assert api.save_info(sid) == {"ok": True, "has_alternatives": False, "count": 0}
+    # a computed variant appears → the save dialog should be offered
+    _seed_one_variant(api, sid)
+    info = api.save_info(sid)
+    assert info["ok"] and info["has_alternatives"] is True and info["count"] == 1
+
+
+def test_save_without_alternatives_skips_embed(tmp_path):
+    import pikepdf
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(2))
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_path)])
+    _seed_one_variant(api, sid)
+
+    # 'Original speichern' → no variant_ attachments despite a pending variant
+    plain = str(tmp_path / "plain.belegtool")
+    assert api.save(sid, plain, store_alternatives=False)["ok"]
+    with pikepdf.open(plain) as pdf:
+        assert not any(str(n).startswith("variant_") for n in pdf.attachments)
+
+    # 'Wie geplant speichern' (default) → the alternative IS embedded
+    full = str(tmp_path / "full.belegtool")
+    assert api.save(sid, full, store_alternatives=True)["ok"]
+    with pikepdf.open(full) as pdf:
+        assert any(str(n).startswith("variant_") for n in pdf.attachments)
+
+
 def test_node_id_survives_save_reload(tmp_path):
     pdf_path = tmp_path / "src.pdf"
     pdf_path.write_bytes(_make_pdf(1))

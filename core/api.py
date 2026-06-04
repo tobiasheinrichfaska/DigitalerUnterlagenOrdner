@@ -457,7 +457,23 @@ class CoreApi:
         return {"ok": True, "session": session, "node": node_id, "first": first,
                 "pages": urls, "compressed": variant is not data}
 
-    def save(self, session: str, path: str) -> dict:
+    def save_info(self, session: str) -> dict:
+        """Preflight for the save dialog: are there computed compression
+        alternatives this save would embed? Lets the UI decide whether to ask
+        'store alternatives' vs 'save original' before committing to a path."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            document = s.document
+        from services.variant_store import pending_variant_count
+        count = pending_variant_count(document, self._engine)
+        return {"ok": True, "has_alternatives": count > 0, "count": count}
+
+    def save(self, session: str, path: str, store_alternatives: bool = True) -> dict:
+        """Save the document to ``path``. When ``store_alternatives`` is False the
+        computed compression variants are NOT embedded (smaller file; the options
+        recompute on reopen) — the 'Original speichern' choice in the save dialog."""
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -466,8 +482,9 @@ class CoreApi:
         from core.bridge import save_belegtool
         try:
             save_belegtool(document, path)
-            from services.variant_store import embed_variants
-            embed_variants(path, document, self._engine)  # persist computed variants
+            if store_alternatives:
+                from services.variant_store import embed_variants
+                embed_variants(path, document, self._engine)  # persist computed variants
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}

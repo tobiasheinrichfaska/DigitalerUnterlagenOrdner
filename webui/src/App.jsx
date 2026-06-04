@@ -4,7 +4,6 @@ import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
 import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
-import { TestMode } from './TestMode'
 import { StatusBar } from './StatusBar'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './treeNav'
 import { resolveSelection } from './selection'
@@ -107,7 +106,6 @@ export default function App() {
   const [dropActive, setDropActive] = useState(false) // OS file drag hovering the window
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
-  const [testMode, setTestMode] = useState(false) // Testmodus overlay (dev/QA golden-master review)
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
   const [treeWidth, setTreeWidth] = useState(() => {
     const v = parseInt(localStorage.getItem('beleg.treeWidth'), 10)
@@ -576,13 +574,10 @@ export default function App() {
               <option key={code} value={code}>🌐 {name}</option>
             ))}
           </select>
-          {config?.dev && <span className="sep" />}
-          {config?.dev && <button onClick={() => setTestMode((v) => !v)} title={t('Testmodus: Golden-Master-Vergleich (Entwickler/QA)')}>🧪 {t('Testmodus')}</button>}
           {busy ? <span className="spinner" title={t('Arbeite…')} /> : null}
         </div>
       </header>
 
-      {config?.dev && testMode && <TestMode onClose={() => setTestMode(false)} />}
 
       {error && <p className="error">⚠ {error}</p>}
       {notice && !error && <p className="notice">✓ {notice}</p>}

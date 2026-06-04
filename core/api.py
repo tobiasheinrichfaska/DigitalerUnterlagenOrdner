@@ -546,40 +546,6 @@ class CoreApi:
         return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                 "original_size": len(data), "options": options}
 
-    # --- test mode (Testmodus) --------------------------------------------
-    def test_mode(self, dpi: int = 72, max_pages: int = 12) -> dict:
-        """Golden-master comparison data for the Testmodus view: per item, base64
-        PNG thumbnails of its input/live/expected PDFs plus a match status. Pure
-        dev/QA aid — independent of any open document/session."""
-        import testmode
-        if not testmode.fixtures_available():
-            return {"ok": False,
-                    "error": "Testfixtures fehlen – bitte `python tests/make_fixtures.py` ausführen."}
-        from base64 import b64encode
-        from services.render import render_pdf_to_pngs
-
-        def thumbs(data):
-            if not data:
-                return []
-            return ["data:image/png;base64," + b64encode(p).decode("ascii")
-                    for p in render_pdf_to_pngs(data, dpi=dpi)[:max_pages]]
-
-        datasets = []
-        for ds in testmode.build_all_datasets():
-            datasets.append({
-                "name": ds.name,
-                "description": ds.description,
-                "error": ds.error,
-                "items": [{
-                    "label": it.label,
-                    "status": it.status,
-                    "input": thumbs(it.input_pdf),
-                    "live": thumbs(it.live_pdf),
-                    "expected": thumbs(it.expected_pdf),
-                } for it in ds.items],
-            })
-        return {"ok": True, "datasets": datasets}
-
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:
         """Import one file from disk into immutable Node(s) — mirrors the Tk import:

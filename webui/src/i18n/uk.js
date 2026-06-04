@@ -1,0 +1,108 @@
+// Ukrainian translations: German source text → Ukrainian.
+export const uk = {
+  'Verbinde mit Core…': 'Підключення до ядра…',
+  'Arbeite…': 'Обробка…',
+  'Sprache': 'Мова',
+
+  'Bereit': 'Готово',
+  'Komprimiere {n}': 'Стиснення {n}',
+  'Vorschau lädt {n}': 'Завантаження попереднього перегляду {n}',
+  'Cache füllt': 'Заповнення кешу',
+  'Vorschau-Cache · {free} MB frei': 'Кеш перегляду · {free} МБ вільно',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Кеш {used}/{total} МБ · {pages}/{doc} сторінок',
+  'Cache vergrößern (+50 MB)': 'Збільшити кеш (+50 МБ)',
+  'Cache verkleinern (−50 MB)': 'Зменшити кеш (−50 МБ)',
+
+  'Öffnen': 'Відкрити',
+  'Neues Fenster': 'Нове вікно',
+  'Weiteres Dokument in neuem Fenster': 'Інший документ у новому вікні',
+  'Importieren': 'Імпорт',
+  'Speichern': 'Зберегти',
+  'Speichern unter…': 'Зберегти як…',
+  'Export PDF': 'Експорт у PDF',
+  'Komprimierungs-Alternativen speichern?': 'Зберегти варіанти стиснення?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    'Документів з обчисленими варіантами стиснення: {n}.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '«Як заплановано» зберігає варіанти у файлі (більший розмір, доступні одразу під час повторного відкриття). «Оригінал» зберігає лише базову версію (менший розмір; варіанти перераховуються під час відкриття).',
+  'Wie geplant speichern': 'Зберегти як заплановано',
+  'Original speichern': 'Зберегти оригінал',
+  'Abbrechen': 'Скасувати',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Експортувати у PDF зі змістом (вибір, інакше весь документ)',
+  'Auswahl': 'Вибір',
+  'Ordner': 'Папка',
+  'Rückgängig': 'Скасувати дію',
+  'Wiederholen': 'Повторити',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    'Відкрити інший файл і відхилити незбережені зміни?',
+  'Gespeichert': 'Збережено',
+  'PDF exportiert ({count} {entries})': 'PDF експортовано ({count} {entries})',
+  'Eintrag': 'запис',
+  'Einträge': 'записів',
+
+  'Breite der Baumansicht ziehen': 'Перетягніть, щоб змінити ширину панелі дерева',
+
+  'Knoten auswählen für die Vorschau': 'Виберіть вузол для перегляду',
+  'Keine Vorschau (Ordner oder leer)': 'Немає перегляду (папка або порожньо)',
+  'Seite {page} / {total}': 'Сторінка {page} / {total}',
+  '{total} Seiten': '{total} сторінок',
+  'Seite {n}': 'Сторінка {n}',
+  'kleiner': 'менше',
+  'größer': 'більше',
+  'zurücksetzen': 'скинути',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Перетягніть файли — на позицію в дереві (всередину/між) для точної цілі, інакше в {target}',
+  'oberste Ebene': 'верхній рівень',
+
+  'Neuer Ordner': 'Нова папка',
+  'Umbenennen': 'Перейменувати',
+  'Neuer Name': 'Нове ім’я',
+  'Splitten': 'Розділити',
+  'pro Seite': 'на сторінку',
+  'N Seiten pro Knoten…': 'N сторінок на вузол…',
+  'pro Seite → neuer Ordner': 'на сторінку → нова папка',
+  'N Seiten → neuer Ordner…': 'N сторінок → нова папка…',
+  'Seiten pro Knoten:': 'Сторінок на вузол:',
+  'Ordner anlegen': 'Створити папку',
+  'Aufklappen': 'Розгорнути',
+  'Zuklappen': 'Згорнути',
+  'Alle aufklappen': 'Розгорнути все',
+  'Alle zuklappen': 'Згорнути все',
+  'Status': 'Статус',
+  'Als PDF exportieren': 'Експортувати у PDF',
+  'Auswahl als PDF exportieren ({count})': 'Експортувати вибір у PDF ({count})',
+  'Löschen': 'Видалити',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'Папка «{name}» містить невибрані елементи, які буде включено. Продовжити?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '«{name}»: включити всю папку? (Скасувати = лише вибрані елементи, виключити папку)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Використати лише вибрані елементи та виключити «{name}»? (Скасувати = скасувати операцію)',
+  'Zusammenführen → 1 PDF ({count})': 'Об’єднати → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'У нову папку ({count})',
+  'Name des neuen Ordners': 'Ім’я нової папки',
+  'Neue Gruppe': 'Нова група',
+
+  'Erfasst': 'Враховано',
+  'Zu erfassen': 'До обліку',
+  'Vorjahr': 'Минулий рік',
+
+  'JPEG (Graustufen)': 'JPEG (відтінки сірого)',
+  'JPEG (Farbe)': 'JPEG (колір)',
+  'PNG (Graustufen)': 'PNG (відтінки сірого)',
+  'Struktur (Farbe erhalten)': 'Структурне (колір збережено)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Розмір поточного вибору за цього DPI',
+  'Kompressions-DPI': 'DPI стиснення',
+  'unkomprimierte Fassung': 'нестиснена версія',
+  'Kompression läuft …': 'Стиснення …',
+  'bereits komprimiert (keine Quelle)': 'вже стиснено (немає джерела)',
+  'beste': 'найкраще',
+  'Lesbarkeit geprüft': 'Читабельність перевірено',
+  'übernommen': 'застосовано',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Застосувати поточне показане стиснення',
+  'rechts drehen': 'повернути праворуч',
+  'links drehen': 'повернути ліворуч',
+}

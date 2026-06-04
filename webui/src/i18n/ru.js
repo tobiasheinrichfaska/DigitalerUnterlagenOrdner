@@ -1,0 +1,108 @@
+// Russian translations: German source text → Russian.
+export const ru = {
+  'Verbinde mit Core…': 'Подключение к ядру…',
+  'Arbeite…': 'Обработка…',
+  'Sprache': 'Язык',
+
+  'Bereit': 'Готово',
+  'Komprimiere {n}': 'Сжатие {n}',
+  'Vorschau lädt {n}': 'Загрузка предпросмотра {n}',
+  'Cache füllt': 'Заполнение кэша',
+  'Vorschau-Cache · {free} MB frei': 'Кэш предпросмотра · {free} МБ свободно',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Кэш {used}/{total} МБ · {pages}/{doc} страниц',
+  'Cache vergrößern (+50 MB)': 'Увеличить кэш (+50 МБ)',
+  'Cache verkleinern (−50 MB)': 'Уменьшить кэш (−50 МБ)',
+
+  'Öffnen': 'Открыть',
+  'Neues Fenster': 'Новое окно',
+  'Weiteres Dokument in neuem Fenster': 'Другой документ в новом окне',
+  'Importieren': 'Импорт',
+  'Speichern': 'Сохранить',
+  'Speichern unter…': 'Сохранить как…',
+  'Export PDF': 'Экспорт в PDF',
+  'Komprimierungs-Alternativen speichern?': 'Сохранить варианты сжатия?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    'Документов с вычисленными вариантами сжатия: {n}.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '«Как запланировано» сохраняет варианты в файле (больше размер, доступны сразу при повторном открытии). «Оригинал» сохраняет только базовую версию (меньше размер; варианты пересчитываются при открытии).',
+  'Wie geplant speichern': 'Сохранить как запланировано',
+  'Original speichern': 'Сохранить оригинал',
+  'Abbrechen': 'Отмена',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Экспортировать в PDF с оглавлением (выделение, иначе весь документ)',
+  'Auswahl': 'Выделение',
+  'Ordner': 'Папка',
+  'Rückgängig': 'Отменить',
+  'Wiederholen': 'Повторить',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    'Открыть другой файл и отменить несохранённые изменения?',
+  'Gespeichert': 'Сохранено',
+  'PDF exportiert ({count} {entries})': 'PDF экспортирован ({count} {entries})',
+  'Eintrag': 'запись',
+  'Einträge': 'записей',
+
+  'Breite der Baumansicht ziehen': 'Перетащите, чтобы изменить ширину панели дерева',
+
+  'Knoten auswählen für die Vorschau': 'Выберите узел для предпросмотра',
+  'Keine Vorschau (Ordner oder leer)': 'Нет предпросмотра (папка или пусто)',
+  'Seite {page} / {total}': 'Страница {page} / {total}',
+  '{total} Seiten': '{total} страниц',
+  'Seite {n}': 'Страница {n}',
+  'kleiner': 'меньше',
+  'größer': 'больше',
+  'zurücksetzen': 'сбросить',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Перетащите файлы — на позицию в дереве (внутрь/между) для точной цели, иначе в {target}',
+  'oberste Ebene': 'верхний уровень',
+
+  'Neuer Ordner': 'Новая папка',
+  'Umbenennen': 'Переименовать',
+  'Neuer Name': 'Новое имя',
+  'Splitten': 'Разделить',
+  'pro Seite': 'на страницу',
+  'N Seiten pro Knoten…': 'N страниц на узел…',
+  'pro Seite → neuer Ordner': 'на страницу → новая папка',
+  'N Seiten → neuer Ordner…': 'N страниц → новая папка…',
+  'Seiten pro Knoten:': 'Страниц на узел:',
+  'Ordner anlegen': 'Создать папку',
+  'Aufklappen': 'Развернуть',
+  'Zuklappen': 'Свернуть',
+  'Alle aufklappen': 'Развернуть все',
+  'Alle zuklappen': 'Свернуть все',
+  'Status': 'Статус',
+  'Als PDF exportieren': 'Экспортировать в PDF',
+  'Auswahl als PDF exportieren ({count})': 'Экспортировать выделение в PDF ({count})',
+  'Löschen': 'Удалить',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'Папка «{name}» содержит невыбранные элементы, которые будут включены. Продолжить?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '«{name}»: включить всю папку? (Отмена = только выбранные элементы, исключить папку)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Использовать только выбранные элементы и исключить «{name}»? (Отмена = отменить операцию)',
+  'Zusammenführen → 1 PDF ({count})': 'Объединить → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'В новую папку ({count})',
+  'Name des neuen Ordners': 'Имя новой папки',
+  'Neue Gruppe': 'Новая группа',
+
+  'Erfasst': 'Учтено',
+  'Zu erfassen': 'К учёту',
+  'Vorjahr': 'Прошлый год',
+
+  'JPEG (Graustufen)': 'JPEG (оттенки серого)',
+  'JPEG (Farbe)': 'JPEG (цвет)',
+  'PNG (Graustufen)': 'PNG (оттенки серого)',
+  'Struktur (Farbe erhalten)': 'Структурное (цвет сохранён)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Размер текущего выбора при этом DPI',
+  'Kompressions-DPI': 'DPI сжатия',
+  'unkomprimierte Fassung': 'несжатая версия',
+  'Kompression läuft …': 'Сжатие …',
+  'bereits komprimiert (keine Quelle)': 'уже сжато (нет источника)',
+  'beste': 'лучшее',
+  'Lesbarkeit geprüft': 'Читаемость проверена',
+  'übernommen': 'применено',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Применить текущее показанное сжатие',
+  'rechts drehen': 'повернуть вправо',
+  'links drehen': 'повернуть влево',
+}

@@ -7,7 +7,7 @@ import { visibleOrder, navStep, moveTarget, applyMove, locate } from '../lib/tre
 // Ignored while typing in INPUT/TEXTAREA/SELECT. Re-binds each render to close over
 // current state/handlers.
 export function useKeyboard({
-  enabled, tree, selected, selectedIds, grab, setGrab, select, dispatch,
+  enabled, reorderEnabled = true, tree, selected, selectedIds, grab, setGrab, select, dispatch,
   setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
   deleteSelection, canUndo, canRedo,
 }) {
@@ -21,8 +21,10 @@ export function useKeyboard({
 
       // Insert = grab / drop (carry-move). The carry is optical (grab.tree) until
       // dropped; dropping commits a single Move only if the position changed.
+      // Disabled while a filtered view is active (positions are virtual there).
       if (e.key === 'Insert') {
         e.preventDefault()
+        if (!reorderEnabled) return
         if (grab) {
           const from = locate(tree, grab.id)
           const to = locate(grab.tree, grab.id)
@@ -77,7 +79,7 @@ export function useKeyboard({
       else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (canRedo) redo() }
       else if (mod && k === 'y') { e.preventDefault(); if (canRedo) redo() }
       else if (mod && k === 'z') { e.preventDefault(); if (canUndo) undo() }
-      else if (k === 'delete' && (selectedIds.length || selected)) { e.preventDefault(); deleteSelection() }
+      else if (k === 'delete' && reorderEnabled && (selectedIds.length || selected)) { e.preventDefault(); deleteSelection() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

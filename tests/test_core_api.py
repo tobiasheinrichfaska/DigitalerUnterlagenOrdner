@@ -110,6 +110,37 @@ def test_save_roundtrip(tmp_path):
     assert {"doc1", "G"}.issubset({c["name"] for c in reopened["tree"]["children"]})
 
 
+def test_materialize_subset_keeps_only_displayed_in_normal_order(tmp_path):
+    # root → F[a, b], c ; a tag view displays F, a, c (b hidden) → expect F[a], c
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="F", is_folder=True, id="F", children=(
+            Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+            Node(name="b", id="b", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+        )),
+        Node(name="c", id="c", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+
+    res = api.materialize_subset(sid, ["F", "a", "c"], name="Spende - root")
+    assert res["ok"] is True and res["count"] == 3 and res["path"].endswith(".belegtool")
+
+    tree = CoreApi().open(path=res["path"])["tree"]
+    assert tree["name"] == "Spende - root"  # new doc named: used tag prefixed onto old name
+    # normal order preserved (F then c); the hidden sibling b is dropped
+    assert [n["name"] for n in tree["children"]] == ["F", "c"]
+    assert [n["name"] for n in tree["children"][0]["children"]] == ["a"]
+
+
+def test_materialize_subset_empty_selection_is_rejected():
+    api = CoreApi()
+    sid = api.open()["session"]
+    assert api.materialize_subset(sid, [])["ok"] is False
+    assert api.materialize_subset("nope", ["x"])["ok"] is False
+
+
 def test_export_pdf_with_toc(tmp_path):
     src = Document(Node(name="root", is_folder=True, children=(
         Node(name="A", pdf_length=1, original_data=create_valid_pdf(1)),

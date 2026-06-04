@@ -538,6 +538,46 @@ class CoreApi:
             result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
         return result
 
+    def materialize_subset(self, session: str, node_ids, name=None) -> dict:
+        """Write a NEW .belegtool containing only ``node_ids`` — the nodes a tag view
+        is currently displaying — kept in the document's **normal order and structure**
+        (an ancestor of a kept node is itself kept). The view's grouping is NOT applied:
+        the copy mirrors the real tree, just without the hidden nodes. ``name`` renames
+        the new document's root (the used tag prefixed onto the old name). Returns the
+        temp file path so the host can open it in a fresh, fully-editable window."""
+        from dataclasses import replace
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            document = s.document
+        ids = set(node_ids or [])
+        if not ids:
+            return {"ok": False, "error": "nichts angezeigt"}
+
+        # keep a child only if it is displayed; ancestors of a displayed node are
+        # themselves displayed (the view always shows the path), so a node absent from
+        # ``ids`` has no displayed descendants and is dropped whole.
+        def prune(n):
+            return replace(n, children=tuple(prune(c) for c in n.children if c.id in ids))
+
+        new_root = prune(document.root)
+        if not new_root.children:
+            return {"ok": False, "error": "nichts angezeigt"}
+        import re
+        import tempfile
+        from core.bridge import save_belegtool
+        # open() titles a document from its FILE NAME (stem), so encode the wanted name
+        # there — in its own temp dir to avoid mkstemp's random suffix in the title.
+        safe = re.sub(r'[<>:"/\\|?*]', "_", (name or "Ansicht")).strip() or "Ansicht"
+        path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
+        try:
+            save_belegtool(Document(new_root), path)
+        except Exception as e:
+            logger.exception("materialize_subset failed")
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "path": path, "count": sum(1 for _ in new_root.iter()) - 1}
+
     def any_dirty(self) -> bool:
         """True if any open session has unsaved changes (for the close prompt)."""
         with self._lock:

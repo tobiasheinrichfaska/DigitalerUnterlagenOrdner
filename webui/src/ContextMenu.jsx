@@ -8,7 +8,7 @@ import { useT } from './i18n/LanguageProvider'
 const STATUS_DE = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)  // internal helper; not exported (keeps fast-refresh happy)
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
@@ -73,7 +73,7 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
       />
       <div ref={menuRef} className="context-menu"
         style={{ left: pos ? pos.left : x, top: pos ? pos.top : y }}>
-        {(mergeIds || group) && (
+        {!editLocked && (mergeIds || group) && (
           <>
             {mergeIds && <button onClick={merge}>{t('Zusammenführen → 1 PDF ({count})', { count: mergeIds.length })}</button>}
             {group && <button onClick={groupInto}>{t('In neuen Ordner ({count})', { count: group.ids.length })}</button>}
@@ -81,7 +81,7 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           </>
         )}
         <button onClick={rename}>{t('Umbenennen')}</button>
-        {isLeaf && node.pdf_length > 1 && (
+        {!editLocked && isLeaf && node.pdf_length > 1 && (
           <div className="cm-haschild" onMouseEnter={() => setSplitOpen(true)} onMouseLeave={() => setSplitOpen(false)}>
             <button className="cm-trigger" onClick={() => setSplitOpen((v) => !v)}>
               {t('Splitten')}<span className="cm-arrow">▸</span>
@@ -96,7 +96,7 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
             )}
           </div>
         )}
-        {node.is_folder && <button onClick={addFolder}>{t('Ordner anlegen')}</button>}
+        {!editLocked && node.is_folder && <button onClick={addFolder}>{t('Ordner anlegen')}</button>}
         {node.is_folder && (
           <button onClick={() => { onSetCollapsed(node.id, !node.collapsed); onClose() }}>
             {node.collapsed ? t('Aufklappen') : t('Zuklappen')}
@@ -115,11 +115,15 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         <button onClick={() => { onExport(exportIds); onClose() }}>
           {exportIds.length > 1 ? t('Auswahl als PDF exportieren ({count})', { count: exportIds.length }) : t('Als PDF exportieren')}
         </button>
-        <div className="cm-sep" />
-        <button className="danger" onClick={() => {
-          if (onDelete && selectedIds?.includes(node.id) && selectedIds.length > 1) { onDelete(); onClose() }
-          else run({ type: 'Delete' })
-        }}>{t('Löschen')}{selectedIds?.includes(node.id) && selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}</button>
+        {!editLocked && (
+          <>
+            <div className="cm-sep" />
+            <button className="danger" onClick={() => {
+              if (onDelete && selectedIds?.includes(node.id) && selectedIds.length > 1) { onDelete(); onClose() }
+              else run({ type: 'Delete' })
+            }}>{t('Löschen')}{selectedIds?.includes(node.id) && selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}</button>
+          </>
+        )}
       </div>
     </>
   )

@@ -37,10 +37,12 @@ a = Analysis(
         'pdf_storage',
         'compress_pdf_bytes',
         'universal_importer',
+        'universal_importer.converters',
+        'universal_importer.importer',
+        'universal_importer.archives',
         'version_info',
         'log_config',
         'tools',
-        'preview_page',
         'toc_export',
         # React/pywebview GUI
         'host',

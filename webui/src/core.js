@@ -2,19 +2,32 @@
 // pywebview attaches the API after the window loads (the `pywebviewready` event),
 // so every call waits for it first. In a plain browser (no host) calls reject.
 
+const apiObj = () => (window.pywebview && window.pywebview.api) || null
+
 function waitForApi() {
   return new Promise((resolve, reject) => {
-    if (window.pywebview && window.pywebview.api) return resolve(window.pywebview.api)
-    window.addEventListener(
-      'pywebviewready',
-      () => resolve(window.pywebview.api),
-      { once: true },
-    )
+    if (apiObj()) return resolve(apiObj())
+    window.addEventListener('pywebviewready', () => resolve(apiObj()), { once: true })
     // Fail fast if we're not running inside the host (e.g. opened in a browser).
     setTimeout(() => {
-      if (!(window.pywebview && window.pywebview.api)) reject(new Error('core API not available (not running in the host)'))
+      if (!apiObj()) reject(new Error('core API not available (not running in the host)'))
     }, 4000)
   })
+}
+
+// A runtime-created (2nd) window can expose `window.pywebview.api` a beat BEFORE its
+// methods are bound, so a startup call would hit "api[method] is not a function".
+// Wait until THIS method is actually callable, not just until `api` exists.
+async function resolveMethod(method) {
+  let api = await waitForApi()
+  for (let i = 0; i < 100 && !(api && typeof api[method] === 'function'); i++) {
+    await new Promise((r) => setTimeout(r, 50))
+    api = apiObj() || api
+  }
+  if (!api || typeof api[method] !== 'function') {
+    throw new Error(`core API method not available: ${method}`)
+  }
+  return api
 }
 
 // --- background-activity tracking (for the status bar) ---------------------
@@ -40,7 +53,7 @@ function categoryOf(method) {
 }
 
 async function call(method, ...args) {
-  const api = await waitForApi()
+  const api = await resolveMethod(method)
   const cat = categoryOf(method)
   const nodeId = args[1] // tracked calls are (session, nodeId, …)
   if (cat === 'compress') { compressing.set(nodeId, (compressing.get(nodeId) || 0) + 1); notifyActivity() }

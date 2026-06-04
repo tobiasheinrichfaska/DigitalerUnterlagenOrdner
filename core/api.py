@@ -68,7 +68,9 @@ class CoreApi:
         if self._render_service is None:
             from services.render import render_page
             from services.render_service import RenderService
-            self._render_service = RenderService(render_page)
+            from services.cpu import default_budget_for_ram, total_physical_ram
+            budget = default_budget_for_ram(total_physical_ram())
+            self._render_service = RenderService(render_page, budget_bytes=budget)
         return self._render_service
 
     def _count_for(self, node_id, version, data):

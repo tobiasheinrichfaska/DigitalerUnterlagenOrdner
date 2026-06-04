@@ -12,3 +12,103 @@ export function allTags(root) {
   walk(root)
   return [...set].sort((a, b) => a.localeCompare(b))
 }
+
+/** Effective tags of `nodeId` = its own ∪ all ancestor folders' tags (DOWNWARD
+ *  inheritance), de-duplicated. Returns { own: [...], inherited: [...] } so the UI
+ *  can render own tags solid and inherited ones faded. */
+export function effectiveTagsOf(root, nodeId) {
+  let own = []
+  let inherited = []
+  const walk = (n, ancTags, isRoot) => {
+    if (n.id === nodeId) {
+      own = n.tags || []
+      inherited = [...new Set(ancTags)].filter((t) => !own.includes(t))
+      return true
+    }
+    const childAnc = isRoot ? ancTags : [...ancTags, ...(n.tags || [])]
+    for (const c of n.children || []) if (walk(c, childAnc, false)) return true
+    return false
+  }
+  walk(root, [], true)
+  return { own, inherited }
+}
+
+/** View-only filter by TAG only (never by node name): keep a node whose EFFECTIVE
+ *  tags (own ∪ ancestor-folder tags) match the query — that node's whole subtree is
+ *  kept, since every descendant inherits the tag downward — plus the ancestors of any
+ *  match as containers. So a tagged folder shows everything inside, while an untagged
+ *  folder containing one tagged item shows only that path (not its other children).
+ *  Returns a new (pruned) root; empty query → the original root unchanged. */
+export function filterTree(root, query) {
+  const q = (query || '').trim().toLowerCase()
+  if (!q || !root) return root
+  const hit = (s) => (s || '').toLowerCase().includes(q)
+  const walk = (node, ancestorTags) => {
+    const eff = [...ancestorTags, ...(node.tags || [])]
+    if (eff.some(hit)) return node // tag match → whole subtree inherits the tag
+    const kept = (node.children || []).map((c) => walk(c, eff)).filter(Boolean)
+    return kept.length ? { ...node, children: kept } : null
+  }
+  const kids = (root.children || []).map((c) => walk(c, root.tags || [])).filter(Boolean)
+  return { ...root, children: kids }
+}
+
+const GROUP_PREFIX = '__tag__' // synthetic group-folder id marker (not a real node)
+/** True for the synthetic folders groupByTag produces (so the UI can skip ops on them). */
+export const isGroupNode = (id) => typeof id === 'string' && id.startsWith(GROUP_PREFIX)
+
+/** Every REAL node id currently displayed by a view (skips synthetic group folders;
+ *  de-duplicated, since grouping can show a node more than once). Feeds the backend
+ *  "open this view in a new window" materialiser. */
+export function displayedNodeIds(view) {
+  const ids = new Set()
+  const walk = (n) => {
+    if (!n) return
+    if (!isGroupNode(n.id)) ids.add(n.id)
+    for (const c of n.children || []) walk(c)
+  }
+  for (const c of view?.children || []) walk(c) // skip the root container itself
+  return [...ids]
+}
+
+/** View-only reshape: one synthetic folder per OWN tag (sorted). Inside each tag's
+ *  folder is a pruned copy of the document showing the **paths** to every node that
+ *  carries that tag — a tagged FOLDER is kept whole (all children come with it), a
+ *  tagged leaf keeps its **ancestor folders** as context. Nodes may appear more than
+ *  once (a node with several tags shows under each; an item tagged differently from
+ *  its tagged parent shows both inside the parent and under its own tag). A final
+ *  "untagged" group holds the paths that carry no tag at all (omitted if none).
+ *  All real nodes keep their real ids (selection/preview work); only the group-folder
+ *  headers carry synthetic ids (isGroupNode) and are never persisted — pure view. */
+export function groupByTag(root, { untaggedLabel = 'Ohne Tags' } = {}) {
+  if (!root) return root
+  const ownTags = new Set()
+  const collect = (n) => { for (const tg of n.tags || []) ownTags.add(tg); (n.children || []).forEach(collect) }
+  ;(root.children || []).forEach(collect)
+
+  // paths to nodes whose OWN tags include `tag`; a tagged node keeps its whole subtree
+  const subtreeFor = (tag) => {
+    const walk = (n) => {
+      if ((n.tags || []).includes(tag)) return n // tagged → keep node + whole subtree
+      const kept = (n.children || []).map(walk).filter(Boolean)
+      return kept.length ? { ...n, children: kept } : null // else keep only as a container
+    }
+    return (root.children || []).map(walk).filter(Boolean)
+  }
+  // paths entirely free of tags (the leftover documents)
+  const untaggedWalk = (n) => {
+    if ((n.tags || []).length) return null // a tagged node belongs to a tag group, not here
+    if (!n.is_folder) return n
+    const kept = (n.children || []).map(untaggedWalk).filter(Boolean)
+    return kept.length ? { ...n, children: kept } : null
+  }
+
+  const children = [...ownTags].sort((a, b) => a.localeCompare(b)).map((tag) => ({
+    id: `${GROUP_PREFIX}${tag}`, name: tag, is_folder: true, tags: [], collapsed: false, children: subtreeFor(tag),
+  }))
+  const untagged = (root.children || []).map(untaggedWalk).filter(Boolean)
+  if (untagged.length) {
+    children.push({ id: GROUP_PREFIX, name: untaggedLabel, is_folder: true, tags: [], collapsed: false, children: untagged })
+  }
+  return { ...root, children }
+}

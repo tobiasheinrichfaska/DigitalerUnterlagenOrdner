@@ -142,6 +142,19 @@ class HostApi:
         except Exception as e:  # never crash the caller
             return {"ok": False, "error": str(e)}
 
+    def open_view_in_new_window(self, session, node_ids, name=None):
+        """Materialise the currently displayed tag view (``node_ids``) as a temp
+        .belegtool and open it in a fresh window — a real, editable copy of just the
+        shown nodes, in normal tree order (grouping not applied). ``name`` becomes the
+        new document's title (the used tag prefixed onto the old name)."""
+        try:
+            res = self._core.materialize_subset(session, node_ids, name)
+            if not res.get("ok"):
+                return res
+            return _open_window(self._core, startup_path=res["path"])
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     # core ops (delegate)
     def config(self):
         cfg = dict(self._core.config())

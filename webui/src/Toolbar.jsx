@@ -7,21 +7,22 @@ import { LANGUAGE_NAMES } from './i18n/index'
 export function Toolbar({
   onOpen, onNewWindow, onImport, onSave, onSaveAs, onExport, onAddFolder,
   onUndo, onRedo, onToggleTags, lang, setLang,
-  dirty, selectedCount, canUndo, canRedo, tagsOn, busy,
+  dirty, selectedCount, canUndo, canRedo, tagsOn, busy, editLocked = false,
 }) {
   const { t } = useT()
+  const lockTitle = editLocked ? t('In der gefilterten Ansicht nicht verfügbar') : undefined
   return (
     <div className="toolbar">
       <button onClick={onOpen}>📂 {t('Öffnen')}</button>
       <button onClick={onNewWindow} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
-      <button onClick={onImport}>📥 {t('Importieren')}</button>
+      <button onClick={onImport} disabled={editLocked} title={lockTitle}>📥 {t('Importieren')}</button>
       <button onClick={onSave}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
       <button onClick={onSaveAs} title={t('Speichern unter…')}>💾…</button>
       <button onClick={onExport} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>
         ⬇ {t('Export PDF')}{selectedCount ? ` (${t('Auswahl')} ${selectedCount})` : ''}
       </button>
       <span className="sep" />
-      <button onClick={onAddFolder}>＋ {t('Ordner')}</button>
+      <button onClick={onAddFolder} disabled={editLocked} title={lockTitle}>＋ {t('Ordner')}</button>
       <button onClick={onUndo} disabled={!canUndo} title={t('Rückgängig')}>↶</button>
       <button onClick={onRedo} disabled={!canRedo} title={t('Wiederholen')}>↷</button>
       <span className="sep" />

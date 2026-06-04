@@ -5,8 +5,9 @@ import { PreviewPane } from './PreviewPane'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
 import { Toolbar } from './Toolbar'
+import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
-import { allTags } from './lib/tags'
+import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
 import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
@@ -39,6 +40,15 @@ export default function App() {
   const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
   const [tagsOn, setTagsOn] = useState(false) // tagging off by default; auto-on when a loaded file has tags
   const toggleTags = () => setTagsOn((v) => !v)
+  const [tagSearch, setTagSearch] = useState('') // view-only filter by name / effective tag
+  const [groupBy, setGroupBy] = useState(false) // view-only: flatten leaves into one folder per tag
+  // A non-identity view (an active search OR group-by-tag). While on, the displayed
+  // positions are virtual → structural ops (reorder, import, delete, add-folder) are
+  // disabled; content edits on existing nodes stay available.
+  const viewActive = tagsOn && (tagSearch.trim() !== '' || groupBy)
+  // A real SUBSET exists only when a tag search is active (group-by alone reshapes the
+  // whole tree). "Open in new window" is offered on that basis — independent of group-by.
+  const filterActive = tagsOn && tagSearch.trim() !== ''
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
@@ -106,6 +116,18 @@ export default function App() {
   // every leaf preview is virtualized; only folders use the `pages` path
   const windowed = !!(selected && !selected.is_folder)
 
+  // The tree shown in the pane: a keyboard carry preview, else the view-only
+  // transforms (search filter, then group-by-tag), else the real tree. filterTree
+  // returns the original ref for an empty query, so this is cheap when idle.
+  const untaggedLabel = t('Ohne Tags')
+  const baseTree = state?.tree
+  const treeForView = useMemo(() => {
+    if (grab) return grab.tree
+    if (!tagsOn || !baseTree) return baseTree
+    const filtered = tagSearch.trim() ? filterTree(baseTree, tagSearch) : baseTree
+    return groupBy ? groupByTag(filtered, { untaggedLabel }) : filtered
+  }, [grab, tagsOn, baseTree, tagSearch, groupBy, untaggedLabel])
+
   const onPreview = useCallback((req) => setPreviewReq(req), [])
 
   // push this window's unsaved state to the host (per-window close guard).
@@ -158,6 +180,7 @@ export default function App() {
   // append). Multiple files keep their order (index bumps per file).
   const onDropFiles = async (files, parentId, index = null) => {
     setDropActive(false)
+    if (viewActive) return // structural add disabled while a filtered view is active
     const target = parentId || state?.tree?.id
     const list = Array.from(files || [])
     const stamp = Date.now()
@@ -182,7 +205,7 @@ export default function App() {
 
   // OS file drag onto the window: tree rows handle precise targeting (drop onto a
   // folder); this is the fallback for drops elsewhere → the selected folder/root.
-  useOsFileDrop((files) => onDropFiles(files, importTarget()), setDropActive, !!session)
+  useOsFileDrop((files) => onDropFiles(files, importTarget()), setDropActive, !!session && !viewActive)
 
   // Resolve a multi-selection to a clean (non-mixed) set, asking the user how to
   // handle any folder that overlaps with its own selected items. Reused by delete,
@@ -230,6 +253,7 @@ export default function App() {
   // (over the visible pre-order, so it spans depths). The primary (preview) node
   // is the clicked one, or the last remaining on a Ctrl-deselect.
   const select = useCallback((node, mods = {}) => {
+    if (isGroupNode(node.id)) return // synthetic group-by-tag folder: not a real node
     const { ctrl = false, shift = false } = mods
     if (shift && anchorId && state?.tree) {
       const order = flattenIds(state.tree)
@@ -286,6 +310,7 @@ export default function App() {
   // then focus the next remaining node.
   const deleteSelection = useCallback(() => {
     const tree = state?.tree
+    if (viewActive) return // a filtered folder may hide non-matching children → deleting it would remove them silently
     const ids = selectedIds.length ? selectedIds : (selected ? [selected.id] : [])
     if (!ids.length || !tree) return
     const toDelete = resolveSel(ids, { warnNone: true })  // data layer rejects mixed
@@ -306,7 +331,7 @@ export default function App() {
         setPreviewReq(null)
       }
     })
-  }, [selectedIds, selected, state, session, run, apply, resolveSel])
+  }, [selectedIds, selected, state, session, run, apply, resolveSel, viewActive])
 
 
   // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
@@ -331,7 +356,7 @@ export default function App() {
 
   // group the selection into a new folder, resolving folder/child overlaps first
   const groupSelection = (name) => {
-    if (!name || !groupable || !state?.tree) return
+    if (viewActive || !name || !groupable || !state?.tree) return
     const ids = resolveSel(groupable.ids)
     if (!ids || !ids.length) return
     const parents = ids.map((id) => findParent(state.tree, id)?.id)
@@ -380,9 +405,24 @@ export default function App() {
     })
   }
 
+  // Open the CURRENTLY DISPLAYED view (filtered/grouped) as a fresh, editable window:
+  // a real copy of just the shown nodes in normal tree order (grouping not applied).
+  // The new document is named after the used tag, prefixed onto the old name.
+  const openViewInNewWindow = () => {
+    const ids = displayedNodeIds(treeForView)
+    if (!ids.length) return
+    const tag = tagSearch.trim()
+    const oldName = state?.tree?.name || ''
+    const name = tag ? `${tag} - ${oldName}`.trim() : oldName
+    run(core.openViewInNewWindow(session, ids, name)).then((resp) => {
+      if (resp?.ok) setNotice(t('Ansicht in neuem Fenster geöffnet ({count})', { count: resp.count }))
+      else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
+    })
+  }
+
   // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing)
   useKeyboard({
-    enabled: !!session, tree: state?.tree, selected, selectedIds, grab, setGrab,
+    enabled: !!session, reorderEnabled: !viewActive, tree: state?.tree, selected, selectedIds, grab, setGrab,
     select, dispatch, setCollapsedFor, saveFile, openFile, exportPdf,
     newWindow: () => core.newWindow(), undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
@@ -413,7 +453,7 @@ export default function App() {
           lang={lang} setLang={setLang}
           dirty={dirty} selectedCount={selectedIds.length}
           canUndo={state?.can_undo} canRedo={state?.can_redo}
-          tagsOn={tagsOn} busy={busy}
+          tagsOn={tagsOn} busy={busy} editLocked={viewActive}
         />
       </header>
 
@@ -423,16 +463,23 @@ export default function App() {
 
       <div className="body">
         <div className="pane tree-pane" style={{ flex: `0 0 ${treeWidth}px` }}>
+          {tagsOn && (
+            <TagViewBar search={tagSearch} setSearch={setTagSearch}
+              grouped={groupBy} setGrouped={setGroupBy} active={viewActive}
+              onReset={() => { setTagSearch(''); setGroupBy(false) }}
+              onOpenInNewWindow={filterActive ? openViewInNewWindow : undefined} />
+          )}
           {state && (
             <Tree
-              node={grab ? grab.tree : state.tree}
+              node={treeForView}
               selectedIds={selectedIds}
               primaryId={selected?.id}
               grabbedId={grab?.id}
-              forceExpand={!!grab}
+              forceExpand={!!grab || viewActive}
+              reorderDisabled={viewActive}
               onToggleCollapse={toggleCollapse}
               onSelect={select}
-              onContext={(x, y, node) => setMenu({ x, y, node })}
+              onContext={(x, y, node) => { if (!isGroupNode(node.id)) setMenu({ x, y, node }) }}
               onMove={onMove}
               onMoveMany={onMoveMany}
               levelsFor={levelsFor}
@@ -457,7 +504,7 @@ export default function App() {
       </div>
 
       <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} selectedIds={selectedIds}
-        onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} />
+        onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} editLocked={viewActive} />
 
       {saveAsk && (
         <SaveDialog count={saveAsk.count}

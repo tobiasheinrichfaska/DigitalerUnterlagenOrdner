@@ -106,6 +106,19 @@ export const en = {
   'Aus Favoriten entfernen': 'Remove from favourites',
   'Favorit hinzufügen': 'Add favourite',
 
+  // tag view bar (search / filtered view / group by tag)
+  'Tags suchen…': 'Search tags…',
+  'Suche löschen': 'Clear search',
+  'Ansicht gefiltert — Umsortieren aus': 'View filtered — restructuring off',
+  'Nach Tag gruppieren': 'Group by tag',
+  'Nach Tag gruppiert — Umsortieren aus': 'Grouped by tag — restructuring off',
+  'Belege nach Tag gruppieren (nur Ansicht)': 'Group documents by tag (view only)',
+  'Ohne Tags': 'Untagged',
+  'In neuem Fenster öffnen': 'Open in new window',
+  'Ansicht in neuem Fenster geöffnet ({count})': 'View opened in a new window ({count})',
+  'Ansicht zurücksetzen': 'Reset view',
+  'In der gefilterten Ansicht nicht verfügbar': 'Not available in the filtered view',
+
   // status labels (German display → English; the data keys stay erfasst/…)
   'Erfasst': 'Recorded',
   'Zu erfassen': 'To record',

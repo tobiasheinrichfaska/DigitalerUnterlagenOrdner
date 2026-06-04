@@ -43,11 +43,12 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
   const { t } = useT()
 
   const handleDragOver = (e) => {
+    if (reorderDisabled) return // filtered view: positions are virtual, no drops
     const files = hasFiles(e)
     if (!files && (!drag || drag === node.id)) return
     e.preventDefault()
@@ -101,7 +102,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
       <div
         className={cls.join(' ')}
         style={{ paddingLeft: `${depth * INDENT + 6}px` }}
-        draggable={editing !== node.id}
+        draggable={editing !== node.id && !reorderDisabled}
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDrag(null); setOver(null) }}
         onDragOver={handleDragOver}
@@ -160,7 +161,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         <ul>
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
-              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
+              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
               editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
@@ -175,7 +176,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   )
 }
 
-export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
+export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled = false, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const [editing, setEditing] = useState(null) // node id being inline-renamed
@@ -186,6 +187,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onT
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
   const dropOnRoot = (e) => {
+    if (reorderDisabled) return // filtered view: no drops
     if (hasFiles(e)) { e.preventDefault(); onDropFiles(e.dataTransfer.files, node.id); return } // empty area → root
     if (!drag) return
     e.preventDefault()
@@ -197,7 +199,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onT
     <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
-          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
+          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
           editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}

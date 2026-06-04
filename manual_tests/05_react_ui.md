@@ -215,3 +215,85 @@ folders and nested nodes.
   but **nothing is committed yet**. **Insert** drops it — a single **undoable** move
   (Ctrl+Z reverts it in one step). **Esc** cancels and the node snaps back with **no
   change** to the document.
+
+---
+
+## MT-41: Tags — on/off, editing, and the filtered view
+
+Covers the tag toggle (default off, auto-on for tagged files), tag editing, and the
+view-only tag/name filter with its structural-edit lock.
+
+**Preconditions:** dev app running; a document with several leaves in a couple of
+folders.
+
+**A — Toggle + auto-on:**
+1. Note the toolbar **🏷️ Tags** button is **off** on a fresh/empty document — no tag
+   chips and no tag editor are shown.
+2. Click **🏷️ Tags** → it highlights (on); the tag editor appears above the preview
+   and a **search bar** appears above the tree.
+3. Add a tag (e.g. `Spende`) to one leaf, **Speichern**, close, **reopen** the file.
+
+**Expected (A):**
+- *Not obvious:* a file that **already has tags** opens with tagging **on
+  automatically** — you don't have to flip the switch to see existing tags. Turning
+  tagging **off** hides all chips and every tag function, but the tags **stay stored**
+  (reopen / toggle on shows them again).
+
+**B — Filter view + inheritance:**
+4. Tag a **folder** with `Steuer`; tag one leaf inside another folder with `Spende`.
+5. In the search bar type `steuer`.
+6. Clear it, then type `spende`.
+7. Clear it again, then type a **node name** (e.g. part of a document's filename).
+
+**Expected (B):**
+- `steuer` → the tagged folder shows with its **whole subtree** (a folder tag applies
+  downward to everything inside).
+- `spende` → only the **path** to the matching leaf shows: its parent folder appears
+  as a container but its **non-matching siblings are hidden** (not the whole folder).
+- Search matches **tags only** (case-insensitive) — typing a **node/file name** finds
+  **nothing** (names are deliberately *not* searched).
+
+**B2 — Group by tag:**
+8. Tick **Nach Tag gruppieren** (no search).
+
+**Expected (B2):**
+- The tree is replaced by one folder **per tag** (sorted). Inside each tag's folder is
+  the **path** to every node that carries it: a tagged **folder** is kept **whole**
+  (all its children come with it); a tagged **leaf** keeps its **parent folders** as
+  context. A node with several tags appears under **each**, and an item tagged
+  differently from its tagged parent shows **both** inside the parent and under its own
+  tag (nodes may appear more than once — that's intended). Fully-untagged paths fall
+  into a final **„Ohne Tags"** group.
+- *Not obvious:* the per-tag group **headers** are a view only (synthetic) — clicking/
+  right-clicking a header does nothing; but the **real** folders/leaves inside are still
+  selectable and previewable. Structure stays locked (same as filtering). Untick the box
+  (or **Ansicht zurücksetzen**) to return.
+
+**B3 — Open the view in a new window:**
+9. With a **tag search** active, click **In neuem Fenster öffnen** in the view bar.
+
+**Expected (B3):**
+- A **new window** opens containing a **real, editable copy** of just the **displayed**
+  nodes — in the **normal tree order/structure** (any grouping is *not* carried over;
+  hidden nodes are absent). The original window is unchanged.
+- The new document is **named after the searched tag**, prefixed onto the old name
+  (e.g. `Spende - <old name>`); that title is also the suggested filename on **Speichern**.
+- *Not obvious:* the button appears **only when a tag search is active** — turning
+  **Nach Tag gruppieren** on/off does **not** show or hide it (grouping alone reshapes
+  the whole tree, so there's no subset to extract). Editing the copy does **not** touch
+  the source document.
+
+**C — Structural edit-lock while filtered:**
+7. With a search active, note the **⚠ "Ansicht gefiltert — Umsortieren aus"** hint and
+   try: drag a row, press **Insert**, press **Delete**, click **📥 Importieren** / **＋
+   Ordner**, drag a file from Explorer onto the tree, right-click a node.
+
+**Expected (C):**
+- While filtered, the view is **read-only for structure**: rows **don't drag**, Insert/
+  Delete do nothing, **Importieren** and **＋ Ordner** are **disabled** (greyed), an OS
+  file-drop is ignored, and the right-click menu hides **Löschen / Zusammenführen / In
+  neuen Ordner / Splitten / Ordner anlegen**.
+- *Why (call out):* a filtered folder can hide non-matching children, so deleting or
+  moving it would silently affect rows you can't see — so structure is locked until you
+  **Ansicht zurücksetzen** (clear the search). **Content edits stay available**: rename,
+  status, and compression still work on the rows you can see.

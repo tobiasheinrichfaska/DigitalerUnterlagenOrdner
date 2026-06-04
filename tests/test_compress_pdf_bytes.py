@@ -1,7 +1,7 @@
 from pypdf import PdfReader
 import io
 
-from compress_pdf_bytes import compress_pdf_bytes
+from formats.compress_pdf_bytes import compress_pdf_bytes
 from helpers import create_valid_pdf
 
 

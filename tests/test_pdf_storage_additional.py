@@ -3,8 +3,8 @@ import io
 import tempfile
 import os
 import pytest
-from pdf_storage import PDFStorage
-from pdf_node import PDFNode
+from formats.pdf_storage import PDFStorage
+from formats.pdf_node import PDFNode
 from helpers import create_valid_pdf
 
 def test_mark_and_clear_dirty():

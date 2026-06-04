@@ -504,7 +504,7 @@ class CoreApi:
             nodes = list(storage.root.children)
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
-        from toc_export import export_pdf_with_toc, empty_leaf_names
+        from formats.toc_export import export_pdf_with_toc, empty_leaf_names
 
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
@@ -556,10 +556,10 @@ class CoreApi:
         if low.endswith(".belegtool"):
             return list(load_belegtool(path).root.children)
         if low.endswith((".pdf", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
-            from pdf_storage import PDFStorage, create_wrapper_node
+            from formats.pdf_storage import PDFStorage, create_wrapper_node
             storage = PDFStorage(path)
             return [node_from_pdfnode(create_wrapper_node(storage, path))]
-        from pdf_node import PDFNode
+        from formats.pdf_node import PDFNode
         from universal_importer import UniversalImporter
         result = UniversalImporter.convert(path)  # images / Office / …
         data = result.data.getvalue() if hasattr(result.data, "getvalue") else result.data

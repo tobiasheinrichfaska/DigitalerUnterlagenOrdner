@@ -47,7 +47,7 @@ def node_from_pdfnode(pn) -> Node:
 
 
 def _pdfnode_from_node(node: Node):
-    from pdf_node import PDFNode
+    from formats.pdf_node import PDFNode
     pn = PDFNode(name=node.name, is_folder=node.is_folder, pdf_data=None)
     pn.uid = node.id
     pn.status = node.status
@@ -70,14 +70,14 @@ def _pdfnode_from_node(node: Node):
 
 
 def document_to_storage(doc: Document):
-    from pdf_storage import PDFStorage
+    from formats.pdf_storage import PDFStorage
     storage = PDFStorage()
     storage.root = _pdfnode_from_node(doc.root)
     return storage
 
 
 def load_belegtool(path) -> Document:
-    from pdf_storage import PDFStorage
+    from formats.pdf_storage import PDFStorage
     return document_from_storage(PDFStorage(str(path)))
 
 

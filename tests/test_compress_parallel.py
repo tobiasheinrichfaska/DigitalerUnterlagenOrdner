@@ -9,7 +9,7 @@ import threading
 import fitz
 import pytest
 
-import compress_pdf_bytes as C
+from formats import compress_pdf_bytes as C
 
 
 def _make_pdf(n_pages: int) -> bytes:

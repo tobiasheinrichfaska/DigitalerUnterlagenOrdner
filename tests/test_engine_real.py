@@ -20,7 +20,7 @@ def test_real_page_count():
 def test_real_engine_caches_compression(monkeypatch):
     # re-selecting a node must not recompute its compressions: compress_all_methods
     # runs once per (content, dpi), then the cache serves compress + compress_methods.
-    import compress_pdf_bytes
+    from formats import compress_pdf_bytes
     calls = []
     orig = compress_pdf_bytes.compress_all_methods
     monkeypatch.setattr(compress_pdf_bytes, "compress_all_methods",

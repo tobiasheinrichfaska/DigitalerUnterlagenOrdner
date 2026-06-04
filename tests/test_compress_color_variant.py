@@ -5,7 +5,7 @@ import io
 import fitz
 from PIL import Image
 
-from compress_pdf_bytes import (
+from formats.compress_pdf_bytes import (
     CompressionConfig,
     _render_pdf_as_images,
     compress_all_methods,

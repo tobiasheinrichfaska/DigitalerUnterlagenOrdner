@@ -14,7 +14,7 @@ folder reporting ``is_valid() == False`` / missing pages.
 from pypdf import PdfReader
 import io
 
-from pdf_node import PDFNode
+from formats.pdf_node import PDFNode
 from helpers import create_valid_pdf
 
 

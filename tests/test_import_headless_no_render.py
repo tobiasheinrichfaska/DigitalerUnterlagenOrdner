@@ -11,7 +11,7 @@ import pytest
 
 import services.render as render_mod
 from helpers import create_valid_pdf
-from pdf_node import PDFNode
+from formats.pdf_node import PDFNode
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def _write_plain_pdf(tmp_path, pages=3):
 
 
 def test_headless_import_renders_nothing(tmp_path, count_renders):
-    from pdf_storage import PDFStorage
+    from formats.pdf_storage import PDFStorage
 
     path = _write_plain_pdf(tmp_path, pages=3)
     storage = PDFStorage(path)
@@ -64,7 +64,7 @@ def test_headless_archive_import_renders_nothing(tmp_path, count_renders):
     """ZIP/email import stores bytes only — no eager render either."""
     import zipfile
 
-    from pdf_storage import PDFStorage
+    from formats.pdf_storage import PDFStorage
 
     zpath = tmp_path / "docs.zip"
     with zipfile.ZipFile(zpath, "w") as z:
@@ -96,7 +96,7 @@ def test_structured_pdf_import_honors_json(tmp_path, count_renders):
     compress+linearize). Re-import must restore the folders, and still render
     nothing.
     """
-    from pdf_storage import PDFStorage
+    from formats.pdf_storage import PDFStorage
 
     root = PDFNode(name="root", is_folder=True)
     folder = PDFNode(name="Ordner A", is_folder=True)

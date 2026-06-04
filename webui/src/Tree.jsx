@@ -51,7 +51,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, editing, setEditing, onRename, renameTimer, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
   const { t } = useT()
 
@@ -117,14 +117,14 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         onDrop={handleDrop}
         onClick={(e) => {
           const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }
-          clearTimeout(renameTimer.current)
+          clearTimeout(renameTimerRef.current)
           // click an already-selected (marked) node again → inline rename (Explorer-style);
           // a double-click cancels the pending rename.
           if (!mods.ctrl && !mods.shift && node.id === primaryId) {
-            renameTimer.current = setTimeout(() => setEditing(node.id), 350)
+            renameTimerRef.current = setTimeout(() => setEditing(node.id), 350)
           } else onSelect(node, mods)
         }}
-        onDoubleClick={() => clearTimeout(renameTimer.current)}
+        onDoubleClick={() => clearTimeout(renameTimerRef.current)}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
         {node.is_folder ? (
@@ -164,7 +164,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
               selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
-              editing={editing} setEditing={setEditing} onRename={onRename} renameTimer={renameTimer} onToggleCollapse={onToggleCollapse}
+              editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
               dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
@@ -182,7 +182,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onT
   // `node` is the implicit root container — don't render it; show its children.
   const [drag, setDrag] = useState(null)
   const [editing, setEditing] = useState(null) // node id being inline-renamed
-  const renameTimer = useRef(0) // shared: click-marked-again schedules a rename
+  const renameTimerRef = useRef(0) // shared: click-marked-again schedules a rename
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
   const dragNode = drag ? findNode(node, drag) : null
   const dragLabel = many ? `${selectedIds.length} Elemente` : (dragNode?.name ?? '')
@@ -201,7 +201,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, onT
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand}
-          editing={editing} setEditing={setEditing} onRename={onRename} renameTimer={renameTimer} onToggleCollapse={onToggleCollapse}
+          editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
           dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />

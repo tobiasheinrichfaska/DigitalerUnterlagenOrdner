@@ -6,7 +6,7 @@ import { useT } from './i18n/LanguageProvider'
 // The status DATA keys (from config().statuses) → their German display text, which
 // t() then translates. Keys stay erfasst/zu erfassen/vorjahreswert (persisted data).
 const STATUS_DE = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
-export const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)
+const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)  // internal helper; not exported (keeps fast-refresh happy)
 
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const { t } = useT()

@@ -69,6 +69,31 @@ def test_split_parts_are_compressible():
     assert out.is_compressed is True and out.current_data == b"C:P1"
 
 
+def test_split_carries_applied_compression_per_page():
+    """An applied (uncommitted) compressed node splits with its compression carried
+    verbatim into each part — parts are pre-compressed AND keep their source."""
+    a = Node(name="a", id="a", pdf_length=2, original_data=b"S1|S2",
+             current_data=b"C1|C2", is_compressed=True, compression_method="jpg",
+             dpi_current=150)
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    d1 = apply(doc, Split("a"), ENGINE)
+    parts = d1.root.children
+    assert [p.original_data for p in parts] == [b"S1", b"S2"]
+    assert [p.current_data for p in parts] == [b"C1", b"C2"]
+    assert all(p.is_compressed and p.compression_method == "jpg" and p.dpi_current == 150
+               for p in parts)
+
+
+def test_split_pikepdf_compression_not_carried():
+    """pikepdf-structural compression is NOT carried (parts recompute from source)."""
+    a = Node(name="a", id="a", pdf_length=2, original_data=b"S1|S2",
+             current_data=b"C1|C2", is_compressed=True, compression_method="pikepdf")
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    parts = apply(doc, Split("a"), ENGINE).root.children
+    assert [p.original_data for p in parts] == [b"S1", b"S2"]
+    assert all(p.current_data is None and not p.is_compressed for p in parts)
+
+
 def test_split_single_page_is_noop():
     d0 = Document(Node(name="root", id="root", is_folder=True,
                        children=(Node(name="a", id="a", original_data=b"ONLYONE"),)))

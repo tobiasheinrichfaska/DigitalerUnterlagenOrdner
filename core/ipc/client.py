@@ -1,6 +1,6 @@
 """Thin client for the core service (used by the CLI and tests)."""
 
-from core.pipe import connect, default_pipe_name
+from core.ipc.pipe import connect, default_pipe_name
 
 
 class CoreClient:

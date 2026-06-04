@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from core.client import CoreClient
-from core.pipe import default_pipe_name
-from core.server import CoreServer
+from core.ipc.client import CoreClient
+from core.ipc.pipe import default_pipe_name
+from core.ipc.server import CoreServer
 from formats.pdf_node import PDFNode
 from formats.pdf_storage import PDFStorage
 from helpers import create_valid_pdf

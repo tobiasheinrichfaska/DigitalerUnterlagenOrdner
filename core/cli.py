@@ -9,8 +9,8 @@ Examples:
 import argparse
 import json
 
-from core.client import CoreClient
-from core.pipe import default_pipe_name
+from core.ipc.client import CoreClient
+from core.ipc.pipe import default_pipe_name
 
 
 def main():

@@ -9,7 +9,7 @@ Ops:
   - ``dispatch`` {session, command} -> new document JSON (+ undo/redo flags)
   - ``undo`` / ``redo`` {session}   -> document JSON
 
-Request/response are JSON objects framed by core.protocol. Every response carries
+Request/response are JSON objects framed by core.ipc.protocol. Every response carries
 ``ok: bool``; on failure also ``error: str``.
 """
 
@@ -19,7 +19,7 @@ import win32file
 import pywintypes
 
 from core.api import CoreApi
-from core.pipe import PipeConnection, connect, create_server_instance, default_pipe_name
+from core.ipc.pipe import PipeConnection, connect, create_server_instance, default_pipe_name
 from infra.log_config import logger
 
 

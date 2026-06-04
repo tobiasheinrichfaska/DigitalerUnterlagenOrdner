@@ -52,7 +52,7 @@ def test_public_entry_points_import(module, names):
 def test_headless_entry_points_import():
     # the GUI host and the CLI server entry import cleanly (no UI needed)
     importlib.import_module("host")
-    importlib.import_module("core.server")
+    importlib.import_module("core.ipc.server")
     importlib.import_module("core.cli")
 
 

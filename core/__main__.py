@@ -7,8 +7,8 @@ import argparse
 import time
 
 from core import CORE_VERSION
-from core.pipe import default_pipe_name
-from core.server import CoreServer
+from core.ipc.pipe import default_pipe_name
+from core.ipc.server import CoreServer
 
 
 def main():

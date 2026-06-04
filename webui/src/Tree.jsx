@@ -8,17 +8,9 @@
 // re-renders from the core's returned state (no optimistic local mutation).
 import { useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
+import { findNode } from './lib/tree'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
-
-function findNode(n, id) {
-  if (n.id === id) return n
-  for (const c of n.children ?? []) {
-    const r = findNode(c, id)
-    if (r) return r
-  }
-  return null
-}
 
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
 

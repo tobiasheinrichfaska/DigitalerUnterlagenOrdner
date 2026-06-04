@@ -8,6 +8,7 @@ import { SaveDialog } from './SaveDialog'
 import { TagEditor } from './TagEditor'
 import { StatusBar } from './StatusBar'
 import { allTags } from './lib/tags'
+import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
@@ -21,74 +22,6 @@ function readAsDataURL(file) {
     r.onerror = () => reject(r.error)
     r.readAsDataURL(file)
   })
-}
-
-function findNode(node, id) {
-  if (node.id === id) return node
-  for (const c of node.children ?? []) {
-    const r = findNode(c, id)
-    if (r) return r
-  }
-  return null
-}
-
-function findParent(node, id, parent = null) {
-  if (node.id === id) return parent
-  for (const c of node.children ?? []) {
-    const r = findParent(c, id, node)
-    if (r) return r
-  }
-  return null
-}
-
-// visible pre-order list of ids (excludes the implicit root) — for shift-range
-function flattenIds(root) {
-  const out = []
-  const walk = (n) => { for (const c of n.children ?? []) { out.push(c.id); walk(c) } }
-  walk(root)
-  return out
-}
-
-// depth of a node (root's children = 0)
-function depthOf(root, id, d = -1) {
-  if (root.id === id) return d
-  for (const c of root.children ?? []) {
-    const r = depthOf(c, id, d + 1)
-    if (r !== null) return r
-  }
-  return null
-}
-
-// is `ancestorId` an ancestor of `descId` in the tree?
-function isAncestorOf(root, ancestorId, descId) {
-  let p = findParent(root, descId)
-  while (p) {
-    if (p.id === ancestorId) return true
-    p = findParent(root, p.id)
-  }
-  return false
-}
-
-// Drop levels for the gap AFTER `id`: deepest first (insert right after the row,
-// at its own level), then — only while the row is the *last child* of its parent —
-// each shallower ancestor level, up to the root. Lets a bottom drop choose how far
-// to "pop out". Each entry = { parentId, index, depth }.
-function afterLevels(root, id) {
-  const levels = []
-  let curId = id
-  let depth = depthOf(root, id)
-  while (true) {
-    const parent = findParent(root, curId)
-    if (!parent) break
-    const idx = (parent.children ?? []).findIndex((c) => c.id === curId)
-    if (idx === -1) break
-    levels.push({ parentId: parent.id, index: idx + 1, depth, parentName: parent.id === root.id ? null : parent.name })
-    const isLast = idx === parent.children.length - 1
-    if (!isLast || parent.id === root.id) break
-    curId = parent.id
-    depth -= 1
-  }
-  return levels
 }
 
 export default function App() {

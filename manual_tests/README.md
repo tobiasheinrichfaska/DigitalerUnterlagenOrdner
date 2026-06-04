@@ -43,6 +43,8 @@ dialogs, export results).
 | [03_preview_and_compression.md](03_preview_and_compression.md) | Preview, DPI slider, compression, commit/reset, status colours |
 | [04_export_persistence_and_testmode.md](04_export_persistence_and_testmode.md) | Export (TOC), save/reload `.belegtool`, committed-compression drop, **Testmodus** |
 | [05_react_ui.md](05_react_ui.md) | **React UI** (`host.py`): import/drop, tree edit, compression preview, multi-window, guards, export, shortcuts |
+| [06_status_cache_compression.md](06_status_cache_compression.md) | **Status bar**, render-cache gauge & ＋/− buttons, prefetch warming, default-to-smallest compression, apply, split-carries-compression, cancel-on-remove |
+| [07_keyboard_delete_language.md](07_keyboard_delete_language.md) | **Keyboard** structuring (Insert carry), collapse, **multi-delete + parent/child resolver**, inline rename, **language switcher**, layout (resizable pane, page indicator) |
 
 > Keep these files current: whenever a user-facing flow changes, update the
 > matching test case. (Workspace convention — see the global CLAUDE.md.)

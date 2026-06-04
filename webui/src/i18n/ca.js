@@ -1,0 +1,108 @@
+// Catalan translations: German source text → Catalan.
+export const ca = {
+  'Verbinde mit Core…': 'Connectant amb el nucli…',
+  'Arbeite…': 'Processant…',
+  'Sprache': 'Idioma',
+
+  'Bereit': 'A punt',
+  'Komprimiere {n}': 'Comprimint {n}',
+  'Vorschau lädt {n}': 'Carregant la previsualització {n}',
+  'Cache füllt': 'Omplint la memòria cau',
+  'Vorschau-Cache · {free} MB frei': 'Memòria cau · {free} MB lliures',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Cau {used}/{total} MB · {pages}/{doc} pàgines',
+  'Cache vergrößern (+50 MB)': 'Amplia la memòria cau (+50 MB)',
+  'Cache verkleinern (−50 MB)': 'Redueix la memòria cau (−50 MB)',
+
+  'Öffnen': 'Obre',
+  'Neues Fenster': 'Finestra nova',
+  'Weiteres Dokument in neuem Fenster': 'Un altre document en una finestra nova',
+  'Importieren': 'Importa',
+  'Speichern': 'Desa',
+  'Speichern unter…': 'Anomena i desa…',
+  'Export PDF': 'Exporta a PDF',
+  'Komprimierungs-Alternativen speichern?': 'Voleu desar les alternatives de compressió?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n} document(s) tenen alternatives de compressió calculades.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '«Tal com estava previst» conserva les alternatives al fitxer (més gran, disponibles immediatament en reobrir). «Original» només desa la versió de base (més petit; les alternatives es recalculen en obrir).',
+  'Wie geplant speichern': 'Desa tal com estava previst',
+  'Original speichern': 'Desa l’original',
+  'Abbrechen': 'Cancel·la',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Exporta a PDF amb taula de continguts (selecció; si no, tot el document)',
+  'Auswahl': 'Selecció',
+  'Ordner': 'Carpeta',
+  'Rückgängig': 'Desfés',
+  'Wiederholen': 'Refés',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    'Voleu obrir un altre fitxer i descartar els canvis no desats?',
+  'Gespeichert': 'Desat',
+  'PDF exportiert ({count} {entries})': 'PDF exportat ({count} {entries})',
+  'Eintrag': 'entrada',
+  'Einträge': 'entrades',
+
+  'Breite der Baumansicht ziehen': 'Arrossegueu per canviar l’amplada de l’arbre',
+
+  'Knoten auswählen für die Vorschau': 'Seleccioneu un node per previsualitzar',
+  'Keine Vorschau (Ordner oder leer)': 'Sense previsualització (carpeta o buit)',
+  'Seite {page} / {total}': 'Pàgina {page} / {total}',
+  '{total} Seiten': '{total} pàgines',
+  'Seite {n}': 'Pàgina {n}',
+  'kleiner': 'més petit',
+  'größer': 'més gran',
+  'zurücksetzen': 'restableix',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Deixeu anar els fitxers — sobre una posició de l’arbre (dins/entre) per a un destí precís; si no, a {target}',
+  'oberste Ebene': 'nivell superior',
+
+  'Neuer Ordner': 'Carpeta nova',
+  'Umbenennen': 'Canvia el nom',
+  'Neuer Name': 'Nom nou',
+  'Splitten': 'Divideix',
+  'pro Seite': 'per pàgina',
+  'N Seiten pro Knoten…': 'N pàgines per node…',
+  'pro Seite → neuer Ordner': 'per pàgina → carpeta nova',
+  'N Seiten → neuer Ordner…': 'N pàgines → carpeta nova…',
+  'Seiten pro Knoten:': 'Pàgines per node:',
+  'Ordner anlegen': 'Crea una carpeta',
+  'Aufklappen': 'Desplega',
+  'Zuklappen': 'Replega',
+  'Alle aufklappen': 'Desplega-ho tot',
+  'Alle zuklappen': 'Replega-ho tot',
+  'Status': 'Estat',
+  'Als PDF exportieren': 'Exporta a PDF',
+  'Auswahl als PDF exportieren ({count})': 'Exporta la selecció a PDF ({count})',
+  'Löschen': 'Suprimeix',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'La carpeta «{name}» conté elements no seleccionats que s’hi inclouran. Voleu continuar?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '«{name}»: voleu incloure tota la carpeta? (Cancel·la = només els elements seleccionats, exclou la carpeta)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Voleu utilitzar només els elements seleccionats i excloure «{name}»? (Cancel·la = cancel·la l’operació)',
+  'Zusammenführen → 1 PDF ({count})': 'Combina → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'A una carpeta nova ({count})',
+  'Name des neuen Ordners': 'Nom de la carpeta nova',
+  'Neue Gruppe': 'Grup nou',
+
+  'Erfasst': 'Registrat',
+  'Zu erfassen': 'Per registrar',
+  'Vorjahr': 'Any anterior',
+
+  'JPEG (Graustufen)': 'JPEG (escala de grisos)',
+  'JPEG (Farbe)': 'JPEG (color)',
+  'PNG (Graustufen)': 'PNG (escala de grisos)',
+  'Struktur (Farbe erhalten)': 'Estructural (color conservat)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Mida de la selecció actual amb aquest DPI',
+  'Kompressions-DPI': 'DPI de compressió',
+  'unkomprimierte Fassung': 'versió sense comprimir',
+  'Kompression läuft …': 'Comprimint …',
+  'bereits komprimiert (keine Quelle)': 'ja comprimit (sense origen)',
+  'beste': 'millor',
+  'Lesbarkeit geprüft': 'Llegibilitat verificada',
+  'übernommen': 'aplicat',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Aplica la compressió mostrada actualment',
+  'rechts drehen': 'gira a la dreta',
+  'links drehen': 'gira a l’esquerra',
+}

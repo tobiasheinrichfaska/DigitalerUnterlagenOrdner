@@ -5,9 +5,15 @@ Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
 archives into one foldered tree, then compresses, previews and exports the whole
 thing as a single bookmarked PDF with a table of contents.
 
-> 🇩🇪 **Deutsch geht auch!** The app's UI is bilingual (German is the default,
-> English via the language switcher), and you are welcome to write all of your
-> feedback in German.
+> 🌍 **Many languages — and you can help polish them!** The language switcher
+> (top-right) offers 19 languages. Some are **full** (German [default], English,
+> Français, Español, Català, Русский, Українська, Hrvatski, 한국어); others are
+> **best-effort / partial**, where untranslated bits fall back to German — these
+> would genuinely benefit from a native eye: **Latina, ייִדיש (Yiddish), Gàidhlig
+> (Scottish Gaelic), Gaeilge (Irish), Cymraeg (Welsh)**, and the dialects
+> **Boarisch, Plattdüütsch, Weanerisch**. A couple are just for fun (**tlhIngan
+> Hol** / Klingon, **Minionese** 🍌). If you speak one of the partial ones, please
+> send corrections (see *Translations* below). Feedback in German is always welcome. 🇩🇪
 
 **Requirements:** Windows **10 or 11**. For Word/Excel/PowerPoint import you also
 need **Microsoft Office installed** — without it, importing PDFs, images, archives
@@ -90,6 +96,7 @@ contents and bookmarks), and **save & reload** a `.belegtool` file.
 | 🐞 **Bugs** — something broken/wrong | New issue | *Bug report* |
 | 🧪 **Impressions & UX** — confusion, gut feel, "would you use it?" | New issue | *Beta feedback* |
 | 💡 **Feature ideas** | New issue | *Feature request* |
+| 🌐 **Translations** — wrong/missing UI text in a language (esp. the partial ones above) | New issue or Discussions | *Beta feedback* |
 | 💬 **Questions / not-sure-if-a-bug / general chat** | [Discussions](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/discussions) | — |
 
 Open an issue at the project's **Issues** tab and pick the matching form, or start

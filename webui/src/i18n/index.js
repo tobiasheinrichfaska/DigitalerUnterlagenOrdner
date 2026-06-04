@@ -16,8 +16,15 @@ import { uk } from './uk'
 import { hr } from './hr'
 import { yi } from './yi'
 import { mnn } from './mnn'
+import { ca } from './ca'
+import { bar } from './bar'
+import { nds } from './nds'
+import { vie } from './vie'
+import { gd } from './gd'
+import { ga } from './ga'
+import { cy } from './cy'
 
-export const TRANSLATIONS = { en, fr, es, la, ko, tlh, ru, uk, hr, yi, mnn } // code -> { '<German source>': '<translation>' }
+export const TRANSLATIONS = { en, fr, es, la, ko, tlh, ru, uk, hr, yi, mnn, ca, bar, nds, vie, gd, ga, cy } // code -> { '<German source>': '<translation>' }
 export const DEFAULT_LANG = 'de'
 export const SUPPORTED = ['de', ...Object.keys(TRANSLATIONS)]
 export const LANGUAGE_NAMES = {
@@ -25,6 +32,8 @@ export const LANGUAGE_NAMES = {
   la: 'Latina', ko: '한국어', tlh: 'tlhIngan Hol',
   ru: 'Русский', uk: 'Українська', hr: 'Hrvatski',
   yi: 'ייִדיש', mnn: 'Minionese 🍌',
+  ca: 'Català', bar: 'Boarisch', nds: 'Plattdüütsch', vie: 'Weanerisch',
+  gd: 'Gàidhlig', ga: 'Gaeilge', cy: 'Cymraeg',
 }
 
 /** Translate German `text` into `lang`, interpolating `{name}` from `vars`.

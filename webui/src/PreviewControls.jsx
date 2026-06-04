@@ -17,6 +17,11 @@ const METHOD_DE = {
   png: 'PNG (Graustufen)', pikepdf: 'Struktur (Farbe erhalten)',
 }
 
+// Remember the compression method the user last picked for each node, so
+// re-selecting that node restores the choice instead of resetting to "original".
+// Session-only (cleared on reload); keyed by node id.
+const methodMemory = new Map()
+
 export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi = 150 }) {
   const { t } = useT()
   // backend method key → German display text, which t() then translates.
@@ -51,13 +56,40 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
     })
   }
 
+  // On displaying a (compressible, not-yet-committed) node: eagerly compute its
+  // options and default to the previously chosen method, else the smallest one —
+  // so a node shows its best compression by default. Non-blocking + cancellable;
+  // the component is keyed by node id, so this runs once per displayed node.
+  /* eslint-disable react-hooks/set-state-in-effect -- async result drives the controls */
+  useEffect(() => {
+    if (off || node.is_compressed) return
+    let alive = true
+    const d = node.dpi_current ?? defaultDpi
+    setLoading(true)
+    core.compressOptions(session, node.id, d)
+      .then((r) => {
+        if (!alive) return
+        const opts = r?.ok ? r.options : []
+        setOptions(opts)
+        setOrigSize(r?.ok ? r.original_size : null)
+        setLoading(false)
+        const remembered = methodMemory.get(node.id)
+        const valid = remembered === 'original' || opts.some((o) => o.method === remembered)
+        const pick = valid ? remembered : opts[0]?.method // options are smallest-first
+        if (pick && pick !== 'original') { setMethod(pick); preview(d, pick) }
+      })
+      .catch(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [node.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const onDpi = (d) => {
     setDpi(d)
     if (off || method === 'original') return
     loadOptions(d)       // sizes depend on DPI → refresh
     preview(d, method)
   }
-  const onMethod = (m) => { setMethod(m); preview(dpi, m) }
+  const onMethod = (m) => { setMethod(m); methodMemory.set(node.id, m); preview(dpi, m) }
 
   const applied = node.is_compressed
     ? node.compression_method === method && node.dpi_current === dpi

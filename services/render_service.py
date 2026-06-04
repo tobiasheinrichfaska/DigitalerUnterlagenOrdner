@@ -128,7 +128,11 @@ class RenderService:
         self._pool = None               # lazy N-worker render pool
         self._prefetch = {"prefetch_active": False, "prefetch_warmed": 0}
 
-    # --- stats (for the UI status bar) ------------------------------------
+    # --- stats / config (for the UI status bar) ---------------------------
+    def set_budget(self, budget_bytes: int) -> None:
+        """Grow/shrink the cache byte budget at runtime (user can enlarge it)."""
+        self.cache.budget = max(0, int(budget_bytes))
+
     def stats(self) -> dict:
         """Cache occupancy + whether a background prefetch is currently running."""
         with self._lock:

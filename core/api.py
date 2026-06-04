@@ -257,6 +257,11 @@ class CoreApi:
         stats = self._renderer().stats()
         return {"ok": True, **stats}
 
+    def set_render_budget(self, mb: int) -> dict:
+        """Set the render-cache budget (MB). Returns the refreshed stats."""
+        self._renderer().set_budget(max(0, int(mb)) * 1024 * 1024)
+        return {"ok": True, **self._renderer().stats()}
+
     def page_count(self, session: str, node_id: str) -> dict:
         node, data, err = self._leaf_data(session, node_id)
         if err:

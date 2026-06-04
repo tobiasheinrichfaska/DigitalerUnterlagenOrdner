@@ -63,6 +63,7 @@ export const core = {
   pageCount: (session, nodeId) => call('page_count', session, nodeId),
   pageDims: (session, nodeId) => call('page_dims', session, nodeId),
   renderStats: () => call('render_stats'),
+  setCacheBudget: (mb) => call('set_render_budget', mb),
   renderWindow: (session, nodeId, first = 0, count = 10, dpi = 100) =>
     call('render_window', session, nodeId, first, count, dpi),
   renderCompressedWindow: (session, nodeId, dpi, method, first = 0, count = 10) =>

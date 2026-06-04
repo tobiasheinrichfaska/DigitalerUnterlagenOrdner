@@ -138,6 +138,14 @@ def test_stats_reports_cache_occupancy():
     assert s1["cache_pages"] == 2 and s1["cache_used"] == 2000 and s1["cache_free"] == 2000
 
 
+def test_set_budget_changes_free_space():
+    svc = RenderService(FakeRenderer(), budget_bytes=1000, cpu_load=lambda: 0.0)
+    assert svc.stats()["cache_budget"] == 1000
+    svc.set_budget(50_000)
+    s = svc.stats()
+    assert s["cache_budget"] == 50_000 and s["cache_free"] == 50_000
+
+
 def test_seed_warms_around_focus_in_background():
     fake = FakeRenderer()
     svc = RenderService(fake, budget_bytes=10**7, cpu_load=lambda: 0.0, seed_steps=8)

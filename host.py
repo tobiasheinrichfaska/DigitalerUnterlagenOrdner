@@ -178,6 +178,9 @@ class HostApi:
     def render_stats(self):
         return self._core.render_stats()
 
+    def set_render_budget(self, mb):
+        return self._core.set_render_budget(mb)
+
     def page_count(self, session, node_id):
         return self._core.page_count(session, node_id)
 

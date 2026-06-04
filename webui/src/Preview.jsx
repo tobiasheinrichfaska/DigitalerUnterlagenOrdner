@@ -156,14 +156,17 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     raf.current = requestAnimationFrame(() => { raf.current = 0; update() })
   }, [nodeId, update])
 
-  // restore scroll position + fetch the visible window on node/variant/count change
+  // restore scroll position + fetch the visible window on node/variant/count change.
+  // Keyed on the node OBJECT (not its id) so a same-id content change — commit
+  // ("Lesbarkeit geprüft"), rotate, reset — also refetches, matching the clear effect
+  // above (which is what made those need a manual scroll before).
   useEffect(() => {
     const root = scrollRef.current
     if (!root || count === 0) return
     root.scrollTop = scrollMemory.get(nodeId) || 0
     const id = requestAnimationFrame(() => update())
     return () => cancelAnimationFrame(id)
-  }, [count, nodeId, reqKey, update])
+  }, [count, node, reqKey, update]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!nodeId) return null
   if (count === 0) return <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>

@@ -260,10 +260,19 @@ class CoreApi:
                 ev.set()
         resp = self._mutate(session, lambda s: s.dispatch(cmd))
         if resp.get("ok"):
-            for nid in removed:
-                self._renderer().invalidate(nid)  # free their cached renders
+            self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
+
+    def _all_live_node_ids(self):
+        """Every node id across all open documents (the cache is shared) — anything not
+        in this set is stale and can be dropped from the render cache."""
+        ids = set()
+        with self._lock:
+            for s in self._sessions.values():
+                for n in s.document.root.iter():
+                    ids.add(n.id)
+        return ids
 
     def undo(self, session: str) -> dict:
         return self._mutate(session, lambda s: s.undo())

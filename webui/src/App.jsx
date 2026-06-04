@@ -6,13 +6,13 @@ import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
 import { TagEditor } from './TagEditor'
+import { Toolbar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { allTags } from './lib/tags'
 import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
-import { LANGUAGE_NAMES } from './i18n/index'
 import './App.css'
 
 function readAsDataURL(file) {
@@ -504,35 +504,20 @@ export default function App() {
     <div className={`app${busy ? ' busy' : ''}${tagsOn ? '' : ' tags-off'}`}>
       <header>
         <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
-        <div className="toolbar">
-          <button onClick={openFile}>📂 {t('Öffnen')}</button>
-          <button onClick={() => core.newWindow()} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
-          <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 {t('Importieren')}</button>
-          <button onClick={saveFile}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
-          <button onClick={saveFileAs} title={t('Speichern unter…')}>💾…</button>
-          <button onClick={() => exportPdf(selectedIds.length ? selectedIds : null)} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>⬇ {t('Export PDF')}{selectedIds.length ? ` (${t('Auswahl')} ${selectedIds.length})` : ''}</button>
-          <span className="sep" />
-          <button
-            onClick={() =>
-              dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })
-            }
-          >
-            ＋ {t('Ordner')}
-          </button>
-          <button onClick={undo} disabled={!state?.can_undo} title={t('Rückgängig')}>↶</button>
-          <button onClick={redo} disabled={!state?.can_redo} title={t('Wiederholen')}>↷</button>
-          <span className="sep" />
-          <button className={tagsOn ? 'tag-toggle on' : 'tag-toggle'} aria-pressed={tagsOn}
-            onClick={toggleTags} title={t('Tags ein-/ausschalten')}>🏷️ {t('Tags')}</button>
-          <span className="sep" />
-          <select className="lang-select" value={lang} title={t('Sprache')} aria-label={t('Sprache')}
-            onChange={(e) => setLang(e.target.value)}>
-            {Object.entries(LANGUAGE_NAMES).map(([code, name]) => (
-              <option key={code} value={code}>🌐 {name}</option>
-            ))}
-          </select>
-          {busy ? <span className="spinner" title={t('Arbeite…')} /> : null}
-        </div>
+        <Toolbar
+          onOpen={openFile}
+          onNewWindow={() => core.newWindow()}
+          onImport={() => handleImport(core.importDialog(session, importTarget()))}
+          onSave={saveFile}
+          onSaveAs={saveFileAs}
+          onExport={() => exportPdf(selectedIds.length ? selectedIds : null)}
+          onAddFolder={() => dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })}
+          onUndo={undo} onRedo={redo} onToggleTags={toggleTags}
+          lang={lang} setLang={setLang}
+          dirty={dirty} selectedCount={selectedIds.length}
+          canUndo={state?.can_undo} canRedo={state?.can_redo}
+          tagsOn={tagsOn} busy={busy}
+        />
       </header>
 
 

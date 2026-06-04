@@ -140,8 +140,10 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   // neighbours so a single-page scroll lands on a ready page. The broader window
   // (and neighbouring nodes) is warmed by the middleware — see CoreApi._seed_around.
   const update = useCallback(() => {
-    const vr = visibleRange()
-    if (!vr) return
+    // Before the page boxes are laid out (right after selecting a node), visibleRange
+    // is null — fall back to the top so the first page loads immediately instead of
+    // waiting for the first scroll.
+    const vr = visibleRange() || [0, 0]
     fetchMissing(vr[0], vr[1])          // visible — highest priority
     fetchMissing(vr[1] + 1, vr[1] + 1)  // one ahead
     fetchMissing(vr[0] - 1, vr[0] - 1)  // one behind

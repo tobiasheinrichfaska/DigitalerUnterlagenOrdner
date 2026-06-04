@@ -60,6 +60,7 @@ class CoreApi:
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
         self._vcache = OrderedDict()  # id(bytes) -> (bytes, crc32), memoised versions (LRU)
         self._compress_active = 0  # >0 while a compression runs → background prefetch yields the CPU
+        self._last_seed = None  # (session, focus_id, focus_page, dpi) of the last prefetch, to resume
 
     def _renderer(self):
         if self._render_service is None:
@@ -88,6 +89,9 @@ class CoreApi:
         finally:
             with self._lock:
                 self._compress_active -= 1
+                resume = self._last_seed if self._compress_active == 0 else None
+            if resume is not None:
+                self._seed_around(*resume)  # the prefetch paused for us → resume warming
 
     def _version_of(self, data):
         """Memoised crc32 of bytes, keyed by object identity (the model is immutable,
@@ -116,6 +120,8 @@ class CoreApi:
         """Warm the focus node from the viewport outward, then the nearest
         neighbouring leaves (tree order), filling the cache until it's full. The
         whole enumeration/hashing runs on the background worker (via prefetch)."""
+        self._last_seed = (session, focus_id, focus_page, dpi)  # to resume after a pause
+
         def build(neighbours=8):
             with self._lock:
                 s = self._sessions.get(session)
@@ -178,7 +184,22 @@ class CoreApi:
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
             else:
                 sid = self._new_locked(document)
-            return self._doc_response_locked(sid)
+            resp = self._doc_response_locked(sid)
+        self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
+        return resp
+
+    def _prewarm_cache(self, session):
+        """Kick off the background prefetch around the first leaf, so the render cache
+        starts warming as soon as a document is open (before any node is selected)."""
+        with self._lock:
+            s = self._sessions.get(session)
+            root = s.document.root if s else None
+        if root is None:
+            return
+        leaf = next((n for n in root.iter()
+                     if not n.is_folder and (n.current_data or n.original_data)), None)
+        if leaf is not None:
+            self._seed_around(session, leaf.id, 0, 100)
 
     def document_name(self, session: str) -> str:
         with self._lock:

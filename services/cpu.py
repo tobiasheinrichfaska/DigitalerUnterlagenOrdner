@@ -140,3 +140,52 @@ class SystemCpuSampler:
 
 # process-wide default sampler (the render service uses this unless injected)
 default_sampler = SystemCpuSampler()
+
+
+# --- render-cache budget sizing -------------------------------------------- #
+# The render cache budget defaults to a fraction of installed RAM (clamped),
+# instead of a fixed 200 MiB, so it scales with the machine. The user can still
+# grow/shrink it with the ＋/－ controls (CoreApi.set_render_budget).
+_CACHE_RAM_FRACTION = 1 / 32          # ~3% of RAM
+_CACHE_BUDGET_FLOOR = 128 * 1024 * 1024   # never below 128 MiB
+_CACHE_BUDGET_CEIL = 1024 * 1024 * 1024   # never above 1 GiB by default
+
+
+def default_budget_for_ram(total_bytes: int) -> int:
+    """Render-cache budget (bytes) for a machine with ``total_bytes`` of RAM.
+
+    Pure + injectable so it's unit-testable. Examples (fraction 1/32, clamped):
+    4 GB→128 MiB (floor), 8 GB→256 MiB, 16 GB→512 MiB, 32 GB→1 GiB (ceil).
+    Unknown/zero RAM falls back to the floor.
+    """
+    if total_bytes <= 0:
+        return _CACHE_BUDGET_FLOOR
+    return max(_CACHE_BUDGET_FLOOR, min(_CACHE_BUDGET_CEIL, int(total_bytes * _CACHE_RAM_FRACTION)))
+
+
+def total_physical_ram() -> int:
+    """Installed physical RAM in bytes (Windows ``GlobalMemoryStatusEx``); 0 on failure."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", wintypes.DWORD),
+                ("dwMemoryLoad", wintypes.DWORD),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            return int(stat.ullTotalPhys)
+    except Exception:
+        pass
+    return 0

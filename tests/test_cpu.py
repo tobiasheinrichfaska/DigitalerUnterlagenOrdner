@@ -3,13 +3,35 @@
 All OS calls are injected/forced, so these run deterministically on any host.
 """
 
+import pytest
+
 from services.cpu import (
     CAP_LOCAL,
     CAP_REMOTE,
     SystemCpuSampler,
+    default_budget_for_ram,
     is_remote_session,
     worker_count,
 )
+
+GiB = 1024 ** 3
+MiB = 1024 ** 2
+
+
+@pytest.mark.parametrize("ram_gb, expected_mib", [
+    (4, 128),    # floor
+    (8, 256),
+    (16, 512),
+    (32, 1024),  # ceil
+    (64, 1024),  # stays at ceil
+])
+def test_default_budget_for_ram_scales_and_clamps(ram_gb, expected_mib):
+    assert default_budget_for_ram(ram_gb * GiB) == expected_mib * MiB
+
+
+def test_default_budget_for_ram_unknown_falls_back_to_floor():
+    assert default_budget_for_ram(0) == 128 * MiB
+    assert default_budget_for_ram(-1) == 128 * MiB
 
 
 # --- worker_count ----------------------------------------------------------

@@ -108,6 +108,7 @@ export const en = {
   'PNG (Graustufen)': 'PNG (grayscale)',
   'Struktur (Farbe erhalten)': 'Structural (color preserved)',
   'Kompressions-DPI': 'Compression DPI',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Size of the current choice at this DPI',
   'unkomprimierte Fassung': 'uncompressed version',
   'Kompression läuft …': 'Compressing …',
   'bereits komprimiert (keine Quelle)': 'already compressed (no source)',

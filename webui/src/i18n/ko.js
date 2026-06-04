@@ -94,6 +94,7 @@ export const ko = {
   'JPEG (Farbe)': 'JPEG (컬러)',
   'PNG (Graustufen)': 'PNG (회색조)',
   'Struktur (Farbe erhalten)': '구조 (색상 유지)',
+  'Größe der aktuellen Auswahl bei diesem DPI': '이 DPI에서 현재 선택의 크기',
   'Kompressions-DPI': '압축 DPI',
   'unkomprimierte Fassung': '비압축 버전',
   'Kompression läuft …': '압축 중 …',

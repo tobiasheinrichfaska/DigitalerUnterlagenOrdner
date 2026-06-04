@@ -94,6 +94,7 @@ export const es = {
   'JPEG (Farbe)': 'JPEG (color)',
   'PNG (Graustufen)': 'PNG (escala de grises)',
   'Struktur (Farbe erhalten)': 'Estructural (color conservado)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Tamaño de la opción actual con este DPI',
   'Kompressions-DPI': 'PPP de compresión',
   'unkomprimierte Fassung': 'versión sin comprimir',
   'Kompression läuft …': 'Comprimiendo …',

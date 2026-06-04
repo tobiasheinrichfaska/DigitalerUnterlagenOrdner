@@ -98,6 +98,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
     ? node.compression_method === method && node.dpi_current === dpi
     : method === 'original'
 
+  // Live size of the current pick (updates when DPI/method change reloads options),
+  // shown next to the controls so the size/"beste" is visible without opening the list.
+  const currentOpt = options?.find((o) => o.method === method)
+  const sizeNow = method === 'original' ? origSize : currentOpt?.size
+  const isBest = !!options && options.length > 0 && method !== 'original' && options[0].method === method
+
   const applyChoice = () => {
     if (method === 'original') {
       if (node.is_compressed) dispatch({ type: 'Reset', node_id: node.id })
@@ -135,6 +141,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
           </option>
         ))}
       </select>
+
+      {sizeNow != null && !off && (
+        <span className="csize" title={t('Größe der aktuellen Auswahl bei diesem DPI')}>
+          {loading ? '…' : kb(sizeNow)}{isBest ? ` · ${t('beste')}` : ''}
+        </span>
+      )}
 
       <button onClick={applyChoice} disabled={off || applied}
         title={t('Die aktuell angezeigte Komprimierung übernehmen')}>

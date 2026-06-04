@@ -72,6 +72,12 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   useEffect(() => {
     token.current += 1
     inflight.current = new Set()
+    // Reset the "already loaded" mirror SYNCHRONOUSLY (not via the [pages] effect,
+    // which lags one render): the scroll-restore effect below fires update() right
+    // away, and fetchMissing reads pagesRef — if it still held the previous variant's
+    // pages it would conclude "nothing to fetch" and you'd have to scroll to load the
+    // new (compressed) preview. Clearing it here makes the variant switch refresh in place.
+    pagesRef.current = {}
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: drop rendered pages when the node/variant changes
     setPages({})
   }, [node, reqKey])

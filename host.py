@@ -17,7 +17,7 @@ import sys
 import webview
 
 from core.api import CoreApi
-from log_config import logger
+from infra.log_config import logger
 from version_info import APP_NAME
 
 

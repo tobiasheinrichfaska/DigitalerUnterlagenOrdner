@@ -20,7 +20,7 @@ import pywintypes
 
 from core.api import CoreApi
 from core.pipe import PipeConnection, connect, create_server_instance, default_pipe_name
-from log_config import logger
+from infra.log_config import logger
 
 
 class CoreServer:

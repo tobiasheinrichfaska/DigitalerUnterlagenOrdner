@@ -27,7 +27,7 @@ from core.commands import (
 from core.engine import RealEngine
 from core.model import Document, STATUSES
 from core.session import DocumentSession
-from log_config import logger
+from infra.log_config import logger
 from version_info import APP_NAME
 
 

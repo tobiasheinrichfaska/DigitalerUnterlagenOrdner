@@ -17,7 +17,7 @@ from typing import List, Optional, Union
 import fitz
 from PIL import Image
 
-from log_config import logger
+from infra.log_config import logger
 
 DEFAULT_PREVIEW_DPI = 100
 

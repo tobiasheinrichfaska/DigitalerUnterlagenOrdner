@@ -18,7 +18,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
-from log_config import logger
+from infra.log_config import logger
 
 
 @dataclass

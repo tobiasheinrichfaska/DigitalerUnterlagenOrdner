@@ -42,8 +42,9 @@ a = Analysis(
         'universal_importer.importer',
         'universal_importer.archives',
         'version_info',
-        'log_config',
-        'tools',
+        'infra.log_config',
+        'infra.tools',
+        'infra.tasks',
         # React/pywebview GUI
         'host',
         'clr',

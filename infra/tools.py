@@ -2,7 +2,7 @@ import io
 import pikepdf
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from log_config import logger
+from infra.log_config import logger
 
 def sanitize_pdf(data: bytes) -> bytes:
     """

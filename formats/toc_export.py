@@ -7,7 +7,7 @@ PDF-Export mit gedrucktem Inhaltsverzeichnis und optionaler Aufteilung.
 """
 import io
 import os
-from log_config import logger
+from infra.log_config import logger
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 

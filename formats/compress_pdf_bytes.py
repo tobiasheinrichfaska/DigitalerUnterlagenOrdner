@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Tuple
 from pypdf import PdfReader, PdfWriter
 import pikepdf
-from log_config import logger
+from infra.log_config import logger
 from services import cpu
 
 

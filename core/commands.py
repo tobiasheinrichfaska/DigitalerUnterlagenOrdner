@@ -491,6 +491,24 @@ def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
                            compression_method=None)
 
 
+def _carries_compression(node) -> bool:
+    """Whether to slice the node's already-applied compression into the split parts
+    (a verbatim, lossless page-copy → no recompute, same quality). Skipped for
+    pikepdf-structural, whose cross-page shared resources would be duplicated per part
+    (so those parts recompute from source instead)."""
+    return bool(node.is_compressed and node.current_data
+                and node.compression_method != "pikepdf")
+
+
+def _split_part(node, name, pdf_length, src_part, comp_part):
+    """Build one split-part node, inheriting the compressed slice when carried."""
+    kw = dict(name=name, pdf_length=pdf_length, original_data=src_part)
+    if comp_part is not None:
+        kw.update(current_data=comp_part, is_compressed=True,
+                  compression_method=node.compression_method, dpi_current=node.dpi_current)
+    return Node(**kw)
+
+
 @_handler(Split)
 def _split(doc: Document, cmd: Split, engine=None) -> Document:
     node = _require_leaf(doc, cmd.node_id)
@@ -503,9 +521,11 @@ def _split(doc: Document, cmd: Split, engine=None) -> Document:
     parts = engine.split(node.original_data)
     if len(parts) < 2:
         return doc  # single page → nothing to split
-    # Split parts carry the source (original_data) pages → still compressible.
+    # carry the applied compression (verbatim slice, same page boundaries) so parts
+    # arrive pre-compressed AND editable; else parts are plain source pages.
+    comp = engine.split(node.current_data) if _carries_compression(node) else None
     new_leaves = [
-        Node(name=f"{node.name}_{i + 1}", pdf_length=1, original_data=part)
+        _split_part(node, f"{node.name}_{i + 1}", 1, part, comp[i] if comp else None)
         for i, part in enumerate(parts)
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)
@@ -528,8 +548,9 @@ def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
     chunks = engine.split_chunks(node.original_data, size)  # direct range copy (fast)
     if not cmd.into_folder and len(chunks) < 2:
         return doc  # nothing to split in place (single chunk)
+    comp = engine.split_chunks(node.current_data, size) if _carries_compression(node) else None
     new_leaves = [
-        Node(name=f"{node.name}_{i + 1}", pdf_length=cnt, original_data=data)
+        _split_part(node, f"{node.name}_{i + 1}", cnt, data, comp[i][0] if comp else None)
         for i, (data, cnt) in enumerate(chunks)
     ]
     index = [c.id for c in parent.children].index(cmd.node_id)

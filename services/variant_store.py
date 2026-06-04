@@ -18,6 +18,23 @@ _PREFIX = "variant_"
 DEFAULT_BUDGET = 300 * 1024 * 1024  # cap embedded-variant bytes per file
 
 
+def pending_variant_count(doc, engine) -> int:
+    """How many nodes have computed compression alternatives a save *would* embed
+    (dry run — no write). Mirrors embed_variants' node predicate: a non-folder node
+    with a source whose engine memo holds variants. A committed ("Lesbarkeit
+    geprüft") node has no source, so it's never counted — it's its own one version.
+    """
+    if not hasattr(engine, "variants_for"):
+        return 0
+    count = 0
+    for n in doc.root.iter():
+        if n.is_folder or not n.original_data:
+            continue
+        if engine.variants_for(n.original_data):
+            count += 1
+    return count
+
+
 def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int:
     """Attach every node's variants to the .belegtool at ``path``. Returns the count
     of nodes whose variants were embedded."""

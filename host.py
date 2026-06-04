@@ -226,14 +226,18 @@ class HostApi:
             return {"ok": False, "error": "cancelled"}
         return self._core.open(session, result[0])
 
-    def save_file(self, session):
-        """Save in place if this document already has a path; otherwise prompt once."""
+    def save_info(self, session):
+        return self._core.save_info(session)
+
+    def save_file(self, session, store_alternatives=True):
+        """Save in place if this document already has a path; otherwise prompt once.
+        ``store_alternatives`` False → 'Original speichern' (don't embed variants)."""
         path = self._core.document_path(session)
         if path:
-            return self._core.save(session, path)
-        return self.save_file_as(session)
+            return self._core.save(session, path, store_alternatives)
+        return self.save_file_as(session, store_alternatives)
 
-    def save_file_as(self, session):
+    def save_file_as(self, session, store_alternatives=True):
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
@@ -245,7 +249,7 @@ class HostApi:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
-        return self._core.save(session, path)
+        return self._core.save(session, path, store_alternatives)
 
 
 def _safe_http_port():

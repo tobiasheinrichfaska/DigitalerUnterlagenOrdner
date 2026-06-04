@@ -11,6 +11,7 @@ import os
 # (and the headless core's startup) fast.
 from pikepdf import open as pike_open
 import pikepdf
+from tools import sanitize_pdf
 from log_config import logger
 
 def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
@@ -142,6 +143,11 @@ class PDFStorage:
             # node_from_pdfnode snapshots only the bytes, so any eager render or
             # compression here would be pure wasted CPU (it dominated import time
             # on large color PDFs).
+            #
+            # Repair malformed PDFs first (broken xref/object streams): a no-op
+            # when the file already reads cleanly, so .belegtool/structured PDFs
+            # (handled above) never reach this and valid plain PDFs are untouched.
+            data = sanitize_pdf(data)
             self.root = PDFNode(name="root", is_folder=True)
             name = os.path.splitext(os.path.basename(self.filename))[0] if self.filename else "importiert"
             node = PDFNode(name=name)

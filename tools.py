@@ -35,11 +35,3 @@ def sanitize_pdf(data: bytes) -> bytes:
     except Exception as e:
         logger.warning("sanitize_pdf: Reparatur gescheitert – Original wird verwendet: %s", e)
         return data
-
-from PIL import Image, ImageDraw
-
-# Statischer Platzhalter (einmalig erzeugt)
-PLACEHOLDER_PREVIEW = Image.new("RGB", (400, 300), (240, 240, 240))
-draw = ImageDraw.Draw(PLACEHOLDER_PREVIEW)
-draw.text((20, 140), "Vorschau wird berechnet...", fill="gray")
-PLACEHOLDER_PREVIEW._is_placeholder = True

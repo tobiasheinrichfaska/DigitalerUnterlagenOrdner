@@ -252,3 +252,5 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 .modal .muted { color: var(--muted); font-size: 0.9em; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
 .modal-actions .primary { font-weight: 600; }
+
+.preview-controls .csize { color: var(--muted); font-size: 0.85em; white-space: nowrap; }

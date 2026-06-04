@@ -95,6 +95,7 @@ export const la = {
   'JPEG (Farbe)': 'JPEG (color)',
   'PNG (Graustufen)': 'PNG (gradus cani)',
   'Struktur (Farbe erhalten)': 'Structura (color servatus)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Magnitudo electionis currentis ad hoc DPI',
   'Kompressions-DPI': 'DPI compressionis',
   'unkomprimierte Fassung': 'forma non compressa',
   'Kompression läuft …': 'Compressio currit …',

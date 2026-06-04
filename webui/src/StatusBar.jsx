@@ -8,7 +8,7 @@ import { useT } from './i18n/LanguageProvider'
 
 const mb = (b) => Math.round((b || 0) / (1024 * 1024))
 
-export function StatusBar() {
+export function StatusBar({ docPages = 0 }) {
   const { t } = useT()
   const [act, setAct] = useState({ compress: 0, render: 0 })
   const [stats, setStats] = useState(null)
@@ -40,10 +40,10 @@ export function StatusBar() {
         {busy ? `⚙ ${parts.join(' · ')}` : t('Bereit')}
       </span>
       {stats && (
-        <span className="sb-cache" title={t('Vorschau-Cache')}>
-          📦 {t('Cache {used} / {total} MB · {pages} S. ({free} frei)', {
+        <span className="sb-cache" title={t('Vorschau-Cache · {free} MB frei', { free: mb(stats.cache_free) })}>
+          📦 {t('Cache {used}/{total} MB · {pages}/{doc} Seiten', {
             used: mb(stats.cache_used), total: mb(stats.cache_budget),
-            pages: stats.cache_pages, free: mb(stats.cache_free),
+            pages: stats.cache_pages, doc: docPages,
           })}
           <button className="sb-plus" title={t('Cache vergrößern (+50 MB)')} onClick={enlarge}>＋</button>
         </span>

@@ -18,14 +18,18 @@ function waitForApi() {
 }
 
 // --- background-activity tracking (for the status bar) ---------------------
-// Count in-flight heavy calls per category so the UI can show what's running.
-const activity = { compress: 0, render: 0 }
+// Compression is counted by DISTINCT NODE (not per call): selecting one node fires
+// both compress_options AND render_compressed_window, so a per-call count would read
+// "2" for one node. Rendering is a simple in-flight count.
+const compressing = new Map() // nodeId -> in-flight compress calls
+let renderInflight = 0
 const activityListeners = new Set()
-const notifyActivity = () => { const s = { ...activity }; activityListeners.forEach((l) => l(s)) }
+const snapshot = () => ({ compress: compressing.size, render: renderInflight })
+const notifyActivity = () => { const s = snapshot(); activityListeners.forEach((l) => l(s)) }
 
 export function onActivity(fn) {
   activityListeners.add(fn)
-  fn({ ...activity })
+  fn(snapshot())
   return () => activityListeners.delete(fn)
 }
 
@@ -38,11 +42,17 @@ function categoryOf(method) {
 async function call(method, ...args) {
   const api = await waitForApi()
   const cat = categoryOf(method)
-  if (cat) { activity[cat] += 1; notifyActivity() }
+  const nodeId = args[1] // tracked calls are (session, nodeId, …)
+  if (cat === 'compress') { compressing.set(nodeId, (compressing.get(nodeId) || 0) + 1); notifyActivity() }
+  else if (cat === 'render') { renderInflight += 1; notifyActivity() }
   try {
     return await api[method](...args)
   } finally {
-    if (cat) { activity[cat] -= 1; notifyActivity() }
+    if (cat === 'compress') {
+      const c = (compressing.get(nodeId) || 1) - 1
+      if (c <= 0) compressing.delete(nodeId); else compressing.set(nodeId, c)
+      notifyActivity()
+    } else if (cat === 'render') { renderInflight -= 1; notifyActivity() }
   }
 }
 

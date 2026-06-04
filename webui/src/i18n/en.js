@@ -12,8 +12,8 @@ export const en = {
   'Komprimiere {n}': 'Compressing {n}',
   'Vorschau lädt {n}': 'Loading preview {n}',
   'Cache füllt': 'Filling cache',
-  'Vorschau-Cache': 'Preview cache',
-  'Cache {used} / {total} MB · {pages} S. ({free} frei)': 'Cache {used} / {total} MB · {pages} pp. ({free} free)',
+  'Vorschau-Cache · {free} MB frei': 'Preview cache · {free} MB free',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Cache {used}/{total} MB · {pages}/{doc} pages',
   'Cache vergrößern (+50 MB)': 'Enlarge cache (+50 MB)',
 
   // toolbar

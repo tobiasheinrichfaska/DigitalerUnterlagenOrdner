@@ -25,6 +25,15 @@ export const en = {
   'Speichern': 'Save',
   'Speichern unter…': 'Save as…',
   'Export PDF': 'Export PDF',
+  // save dialog (compression alternatives)
+  'Komprimierungs-Alternativen speichern?': 'Save compression alternatives?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n} document(s) have computed compression alternatives.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '"As planned" keeps the alternatives in the file (larger, instantly available on reopen). "Original" saves only the base version (smaller; alternatives are recomputed on reopen).',
+  'Wie geplant speichern': 'Save as planned',
+  'Original speichern': 'Save original',
+  'Abbrechen': 'Cancel',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Export as a PDF with table of contents (selection, otherwise the whole document)',
   'Auswahl': 'Selection',

@@ -7,6 +7,7 @@
 // folder → … → root). The drop only dispatches a Move/MoveMany — the tree
 // re-renders from the core's returned state (no optimistic local mutation).
 import { useRef, useState } from 'react'
+import { useT } from './i18n/LanguageProvider'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
 
@@ -52,6 +53,7 @@ function dropZone(e, isFolder) {
 
 function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, editing, setEditing, onRename, renameTimer, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
+  const { t } = useT()
 
   const handleDragOver = (e) => {
     const files = hasFiles(e)
@@ -126,7 +128,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
         {node.is_folder ? (
-          <button className="tw-chevron" title={node.collapsed ? 'Aufklappen' : 'Zuklappen'}
+          <button className="tw-chevron" title={node.collapsed ? t('Aufklappen') : t('Zuklappen')}
             onClick={(e) => { e.stopPropagation(); onToggleCollapse(node.id) }}>
             {node.collapsed ? '▸' : '▾'}
           </button>

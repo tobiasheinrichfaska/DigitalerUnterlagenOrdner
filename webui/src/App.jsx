@@ -6,6 +6,8 @@ import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { TestMode } from './TestMode'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './treeNav'
+import { useT } from './i18n/LanguageProvider'
+import { LANGUAGE_NAMES } from './i18n/index'
 import './App.css'
 
 function readAsDataURL(file) {
@@ -76,6 +78,7 @@ function afterLevels(root, id) {
 }
 
 export default function App() {
+  const { t, lang, setLang } = useT()
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null) // transient success message (e.g. export)
@@ -346,7 +349,7 @@ export default function App() {
   })()
 
   const openFile = () => {
-    if (dirty && !window.confirm('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?')) return
+    if (dirty && !window.confirm(t('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?'))) return
     run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false) }
@@ -354,7 +357,7 @@ export default function App() {
   }
 
   const saveFile = () =>
-    run(core.saveFile(session)).then((resp) => { if (resp?.ok) { setDirty(false); setNotice('Gespeichert') } })
+    run(core.saveFile(session)).then((resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } })
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
   // the context menu passes specific ids for an explicit selection export.
@@ -362,7 +365,8 @@ export default function App() {
     run(core.exportPdf(session, nodeIds)).then((resp) => {
       if (resp?.ok) {
         setError(null)
-        const base = `PDF exportiert (${resp.count} ${resp.count === 1 ? 'Eintrag' : 'Einträge'})`
+        const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
+        const base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
         setNotice(resp.warning ? `${base} — ${resp.warning}` : base)
       }
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
@@ -446,7 +450,7 @@ export default function App() {
     return (
       <div className="app loading">
         <div className="spinner big" />
-        <p className="status">Verbinde mit Core…</p>
+        <p className="status">{t('Verbinde mit Core…')}</p>
       </div>
     )
   }
@@ -456,24 +460,31 @@ export default function App() {
       <header>
         <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <div className="toolbar">
-          <button onClick={openFile}>📂 Öffnen</button>
-          <button onClick={() => core.newWindow()} title="Weiteres Dokument in neuem Fenster">🗗 Neues Fenster</button>
-          <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 Importieren</button>
-          <button onClick={saveFile}>💾 Speichern{dirty ? ' •' : ''}</button>
-          <button onClick={() => exportPdf(selectedIds.length ? selectedIds : null)} title="Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)">⬇ Export PDF{selectedIds.length ? ` (Auswahl ${selectedIds.length})` : ''}</button>
+          <button onClick={openFile}>📂 {t('Öffnen')}</button>
+          <button onClick={() => core.newWindow()} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
+          <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 {t('Importieren')}</button>
+          <button onClick={saveFile}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
+          <button onClick={() => exportPdf(selectedIds.length ? selectedIds : null)} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>⬇ {t('Export PDF')}{selectedIds.length ? ` (${t('Auswahl')} ${selectedIds.length})` : ''}</button>
           <span className="sep" />
           <button
             onClick={() =>
-              dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: 'Neuer Ordner', index: null, new_id: null })
+              dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })
             }
           >
-            ＋ Ordner
+            ＋ {t('Ordner')}
           </button>
-          <button onClick={undo} disabled={!state?.can_undo} title="Rückgängig">↶</button>
-          <button onClick={redo} disabled={!state?.can_redo} title="Wiederholen">↷</button>
+          <button onClick={undo} disabled={!state?.can_undo} title={t('Rückgängig')}>↶</button>
+          <button onClick={redo} disabled={!state?.can_redo} title={t('Wiederholen')}>↷</button>
+          <span className="sep" />
+          <select className="lang-select" value={lang} title={t('Sprache')} aria-label={t('Sprache')}
+            onChange={(e) => setLang(e.target.value)}>
+            {Object.entries(LANGUAGE_NAMES).map(([code, name]) => (
+              <option key={code} value={code}>🌐 {name}</option>
+            ))}
+          </select>
           {config?.dev && <span className="sep" />}
-          {config?.dev && <button onClick={() => setTestMode((v) => !v)} title="Testmodus: Golden-Master-Vergleich (Entwickler/QA)">🧪 Testmodus</button>}
-          {busy ? <span className="spinner" title="Arbeite…" /> : null}
+          {config?.dev && <button onClick={() => setTestMode((v) => !v)} title={t('Testmodus: Golden-Master-Vergleich (Entwickler/QA)')}>🧪 {t('Testmodus')}</button>}
+          {busy ? <span className="spinner" title={t('Arbeite…')} /> : null}
         </div>
       </header>
 
@@ -506,7 +517,7 @@ export default function App() {
             />
           )}
         </div>
-        <div className="splitter" onMouseDown={startResize} title="Breite der Baumansicht ziehen" />
+        <div className="splitter" onMouseDown={startResize} title={t('Breite der Baumansicht ziehen')} />
         <div className="pane preview-pane" ref={previewRef}>
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && (windowed || pages?.length > 0) && (
@@ -514,22 +525,22 @@ export default function App() {
               {(() => {
                 const total = pageInfo?.total ?? selected.pdf_length
                 if (!total) return null
-                return <span className="page-info">{pageInfo ? `Seite ${pageInfo.page} / ${total}` : `${total} Seiten`}</span>
+                return <span className="page-info">{pageInfo ? t('Seite {page} / {total}', { page: pageInfo.page, total }) : t('{total} Seiten', { total })}</span>
               })()}
-              <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="kleiner">−</button>
+              <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title={t('kleiner')}>−</button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title="größer">＋</button>
-              <button onClick={() => setZoom(1)} title="zurücksetzen">100%</button>
+              <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title={t('größer')}>＋</button>
+              <button onClick={() => setZoom(1)} title={t('zurücksetzen')}>100%</button>
             </div>
           )}
-          {!selected && <p className="status">Knoten auswählen für die Vorschau</p>}
+          {!selected && <p className="status">{t('Knoten auswählen für die Vorschau')}</p>}
           {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} onPage={(page, total) => setPageInfo({ page, total })} />}
           {!windowed && selected && busy > 0 && pages === null && <div className="spinner big" />}
           {!windowed && selected && busy === 0 && pages?.length === 0 && (
-            <p className="status">Keine Vorschau (Ordner oder leer)</p>
+            <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>
           )}
           {!windowed && selected && pages?.map((src, i) => (
-            <img key={i} src={src} alt={`Seite ${i + 1}`} className="preview-page" style={{ width: `${zoom * 100}%` }} />
+            <img key={i} src={src} alt={t('Seite {n}', { n: i + 1 })} className="preview-page" style={{ width: `${zoom * 100}%` }} />
           ))}
         </div>
       </div>
@@ -540,7 +551,7 @@ export default function App() {
       {dropActive && (
         <div className="drop-overlay">
           <div className="drop-overlay-badge">
-            📥 Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {selected?.is_folder ? selected.name : 'oberste Ebene'}
+            📥 {t('Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}', { target: selected?.is_folder ? selected.name : t('oberste Ebene') })}
           </div>
         </div>
       )}

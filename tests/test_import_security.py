@@ -47,3 +47,35 @@ def test_not_importable_includes_reason():
     assert node["children"] == []
     assert "nicht importierbar" in node["name"]
     assert "unerwarteter Typ" in node["name"]
+
+
+# --- HTML/email link policy (xhtml2pdf link_callback) ---------------------
+block = UniversalImporter._block_remote_link
+
+
+@pytest.mark.parametrize("uri", [
+    "http://evil.example/pixel.png",         # remote → tracking/SSRF
+    "https://evil.example/x.png",
+    "//evil.example/x.png",                  # protocol-relative
+    "file:///C:/Windows/win.ini",            # local file → LFI
+    "file:///etc/passwd",
+    "C:\\Users\\me\\secret.pdf",             # absolute local path
+    "/etc/shadow",                           # absolute posix path
+    "../../secret.pdf",                       # relative path traversal
+    "secret.pdf",                             # bare relative
+    "ftp://host/x",                           # other scheme
+])
+def test_html_link_blocks_remote_and_local(uri):
+    # Only self-contained inline content may load; everything else is dropped,
+    # so a malicious HTML/.eml/.msg cannot embed a local file or call out.
+    assert block(uri, "") is None
+
+
+@pytest.mark.parametrize("uri", [
+    "data:image/png;base64,iVBORw0KGgo=",    # inline base64 image
+    "DATA:image/png;base64,iVBORw0KGgo=",    # case-insensitive
+    "cid:logo@mail",                          # MIME content-id (no FS/network)
+    "  data:image/gif;base64,R0lGOD  ",      # surrounding whitespace tolerated
+])
+def test_html_link_allows_inline_only(uri):
+    assert block(uri, "") == uri

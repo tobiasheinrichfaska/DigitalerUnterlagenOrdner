@@ -13,7 +13,6 @@ import pythoncom
 import win32com.client
 from pillow_heif import register_heif_opener
 import pikepdf
-# import cairosvg
 import threading
 import tasks
 from reportlab.lib.pagesizes import A4
@@ -33,7 +32,6 @@ class UniversalImporter:
     IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]
     CUSTOM_EXTENSIONS = [".dbeleg"]
     MODERN_IMAGE_EXTENSIONS = [".webp", ".heic"]
-    # VECTOR_EXTENSIONS = [".svg"] 
     ARCHIVE_AND_EMAIL_EXTENSIONS = [".zip", ".tar", ".tgz", ".eml", ".msg"]
     TEXT_EXTENSIONS = [".txt", ".rtf", ".md"]
     HTML_EXTENSIONS = [".html"]
@@ -198,8 +196,6 @@ class UniversalImporter:
             result = cls._convert_standard_image(path)
         elif ext in cls.MODERN_IMAGE_EXTENSIONS:
             result = cls._convert_modern_image(path)
-        # elif ext in getattr(cls, 'VECTOR_EXTENSIONS', []):  # falls SVG deaktiviert
-        #     result = cls._convert_svg(path)
         elif ext in cls.TEXT_EXTENSIONS:
             with open(path, "rb") as f:
                 content = f.read()
@@ -248,14 +244,6 @@ class UniversalImporter:
         buffer.seek(0)
         return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
 
-    # @staticmethod
-    # def _convert_svg(path: str) -> ConvertedPDF:
-    #     buffer = io.BytesIO()
-    #     cairosvg.svg2pdf(url=path, write_to=buffer)
-    #     buffer.seek(0)
-    #     return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
-
-
     @staticmethod
     def _convert_txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
         from reportlab.lib.pagesizes import A4
@@ -283,15 +271,22 @@ class UniversalImporter:
 
     @staticmethod
     def _block_remote_link(uri: str, rel: str):
-        """link_callback für xhtml2pdf: blockiert alle Remote-URLs.
+        """link_callback für xhtml2pdf: erlaubt NUR selbst-enthaltene Inline-
+        Ressourcen (``data:`` / ``cid:``) und blockiert alles andere.
 
-        Verhindert, dass HTML-Mails mit eingebetteten <img src="http://...">
-        beim Import eine Netzwerkverbindung aufbauen und die IP-Adresse des
-        Nutzers an den Absender weiterleiten (Tracking-Pixel).
+        Blockiert damit zwei Klassen von Angriffen aus einer importierten
+        HTML-/E-Mail-Datei:
+          1. Remote-URLs (``http(s)://``, ``//``) → kein Netzwerkaufruf, keine
+             Tracking-Pixel / SSRF.
+          2. **Lokale Pfade** (``file://``, absolute/relative Pfade) → eine
+             bösartige Mail mit ``<img src="file:///C:/.../geheim.pdf">`` kann
+             keine lokale Datei laden und in das erzeugte PDF einbetten
+             (Local File Inclusion / Datenabfluss beim Teilen des Exports).
         """
-        if uri.startswith(("http://", "https://", "//")):
-            return None  # Remote-Ressource verweigern
-        return uri
+        u = (uri or "").strip().lower()
+        if u.startswith(("data:", "cid:")):
+            return uri  # self-contained inline content only
+        return None  # block remote + local/file/relative
 
     @staticmethod
     def _convert_html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:

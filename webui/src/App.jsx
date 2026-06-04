@@ -10,7 +10,8 @@ import { allTags } from './lib/tags'
 import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
-import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
+import { useKeyboard } from './hooks/useKeyboard'
+import { visibleOrder } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
 import './App.css'
@@ -379,79 +380,13 @@ export default function App() {
     })
   }
 
-  // keyboard shortcuts (ignored while typing in a field)
-  useEffect(() => {
-    if (!session) return undefined
-    const onKey = (e) => {
-      const tag = e.target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      const mod = e.ctrlKey || e.metaKey
-      const k = e.key.toLowerCase()
-      const tree = state?.tree
-
-      // Insert = grab / drop (carry-move). The carry is optical (grab.tree) until
-      // dropped; dropping commits a single Move only if the position changed.
-      if (e.key === 'Insert') {
-        e.preventDefault()
-        if (grab) {
-          const from = locate(tree, grab.id)
-          const to = locate(grab.tree, grab.id)
-          if (to && (!from || from.parentId !== to.parentId || from.index !== to.index)) {
-            dispatch({ type: 'Move', node_id: grab.id, new_parent_id: to.parentId, index: to.index })
-          }
-          setGrab(null)
-        } else if (selected && tree) {
-          setGrab({ id: selected.id, tree })
-        }
-        return
-      }
-      // While carrying: arrows move optically; Esc cancels (reverts); swallow the rest.
-      if (grab) {
-        if (e.key === 'Escape') { e.preventDefault(); setGrab(null); return }
-        const dir = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }[e.key]
-        if (dir) {
-          e.preventDefault()
-          const t = moveTarget(grab.tree, grab.id, dir)
-          if (t) setGrab({ id: grab.id, tree: applyMove(grab.tree, grab.id, t.new_parent_id, t.index) })
-        }
-        return
-      }
-      // Navigation (not carrying)
-      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && tree) {
-        e.preventDefault()
-        const order = visibleOrder(tree)
-        const nextId = selected ? navStep(order, selected.id, e.key === 'ArrowUp' ? 'up' : 'down') : order[0]?.id
-        const nn = nextId && findNode(tree, nextId)
-        if (nn) select(nn)
-        return
-      }
-      if (e.key === 'ArrowRight' && selected?.is_folder && tree) {
-        e.preventDefault()
-        const n = findNode(tree, selected.id)
-        if (n?.collapsed) setCollapsedFor(selected.id, false)
-        else { const first = n?.children?.[0]; if (first) select(first) }
-        return
-      }
-      if (e.key === 'ArrowLeft' && tree) {
-        e.preventDefault()
-        const n = selected && findNode(tree, selected.id)
-        if (n?.is_folder && !n.collapsed) { setCollapsedFor(selected.id, true); return }
-        const p = selected && findParent(tree, selected.id)
-        if (p && p.id !== tree.id) select(p)
-        return
-      }
-      if (mod && k === 's') { e.preventDefault(); saveFile() }
-      else if (mod && k === 'o') { e.preventDefault(); openFile() }
-      else if (mod && k === 'e') { e.preventDefault(); exportPdf() }
-      else if (mod && k === 'n') { e.preventDefault(); core.newWindow() }
-      else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (state?.can_redo) redo() }
-      else if (mod && k === 'y') { e.preventDefault(); if (state?.can_redo) redo() }
-      else if (mod && k === 'z') { e.preventDefault(); if (state?.can_undo) undo() }
-      else if (k === 'delete' && (selectedIds.length || selected)) { e.preventDefault(); deleteSelection() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }) // re-binds each render to close over current handlers/state
+  // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing)
+  useKeyboard({
+    enabled: !!session, tree: state?.tree, selected, selectedIds, grab, setGrab,
+    select, dispatch, setCollapsedFor, saveFile, openFile, exportPdf,
+    newWindow: () => core.newWindow(), undo, redo, deleteSelection,
+    canUndo: state?.can_undo, canRedo: state?.can_redo,
+  })
 
   if (!state && !error) {
     return (

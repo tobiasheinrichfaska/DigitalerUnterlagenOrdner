@@ -22,9 +22,10 @@ describe('resolveSelection', () => {
     expect(resolveSelection(tree, ['a', 'b'], never).sort()).toEqual(['a', 'b'])
   })
 
-  it('folder with NONE of its children selected → warn; proceed keeps the folder', () => {
-    expect(resolveSelection(tree, ['f'], (k) => { expect(k).toBe('none'); return 'proceed' })).toEqual(['f'])
-    expect(resolveSelection(tree, ['f'], () => 'abort')).toBeNull()
+  it('folder alone: silent by default, warns only with warnNone', () => {
+    expect(resolveSelection(tree, ['f'], never)).toEqual(['f']) // move/group/export: no prompt
+    expect(resolveSelection(tree, ['f'], (k) => { expect(k).toBe('none'); return 'proceed' }, { warnNone: true })).toEqual(['f'])
+    expect(resolveSelection(tree, ['f'], () => 'abort', { warnNone: true })).toBeNull()
   })
 
   it('folder with ALL children selected → fine, folder covers them (no ask)', () => {

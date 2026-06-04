@@ -38,7 +38,7 @@ export function isAncestor(root, ancestorId, descId) {
   return a ? descendantIds(a).includes(descId) : false
 }
 
-export function resolveSelection(root, ids, ask) {
+export function resolveSelection(root, ids, ask, { warnNone = false } = {}) {
   const set = new Set(ids)
   const folders = ids.filter((id) => { const n = find(root, id); return n && n.is_folder })
   for (const fid of folders) {
@@ -48,8 +48,11 @@ export function resolveSelection(root, ids, ask) {
     if (desc.length === 0) continue // empty folder — nothing to reconcile
     const sel = desc.filter((d) => set.has(d))
     if (sel.length === 0) {
-      if (ask('none', node.name) !== 'proceed') return null
-      // proceed: keep the folder (it covers all its contents)
+      // a folder whose contents aren't individually selected. For destructive ops
+      // (delete) warn that they'll be affected; for move/group/export just include
+      // them silently (a folder naturally carries its contents).
+      if (warnNone && ask('none', node.name) !== 'proceed') return null
+      // keep the folder (it covers all its contents)
     } else if (sel.length === desc.length) {
       sel.forEach((d) => set.delete(d)) // all selected → the folder already covers them
     } else {

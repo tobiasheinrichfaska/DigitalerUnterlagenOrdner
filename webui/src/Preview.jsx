@@ -104,7 +104,8 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     return [firstV, lastV]
   }, [count])
 
-  // fetch exactly the visible page(s); the middleware seeds the surrounding pages.
+  // fetch exactly the visible page(s); the middleware warms the surrounding pages
+  // (and neighbouring nodes) in the background — see CoreApi._seed_around.
   const update = useCallback(() => {
     const vr = visibleRange()
     if (!vr) return

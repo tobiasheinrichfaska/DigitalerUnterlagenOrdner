@@ -312,3 +312,29 @@ class RenderService:
                     self._prefetch = {"prefetch_active": False, "prefetch_warmed": warmed}
 
         self._exec().submit(job)
+
+    def prefetch(self, build: Callable[[], tuple], dpi: int) -> None:
+        """Like ``seed``, but ``build()`` (run on the background worker, so its
+        possibly-heavy enumeration/hashing never blocks the foreground) returns
+        ``(node_specs, data_for, focus_node, focus_page)``, and we then warm the
+        cache **until it is full** (not a fixed step count) — current node from the
+        focus outward, then neighbouring nodes — yielding to the CPU and abandoning
+        as soon as a newer foreground request bumps the generation."""
+        gen = self.generation
+
+        def job():
+            with self._lock:
+                self._prefetch = {"prefetch_active": True, "prefetch_warmed": 0}
+            warmed = 0
+            try:
+                specs, data_for, fnode, fpage = build()
+                if specs:
+                    warmed = self.fill_until_idle(specs, fnode, fpage, data_for, dpi,
+                                                  max_steps=10 ** 9, since_gen=gen)
+            except Exception:  # background; never crash the worker
+                pass
+            finally:
+                with self._lock:
+                    self._prefetch = {"prefetch_active": False, "prefetch_warmed": warmed}
+
+        self._exec().submit(job)

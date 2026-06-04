@@ -311,6 +311,12 @@ export default function App() {
   const expandAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: false }), [dispatch])
   const collapseAll = useCallback(() => dispatch({ type: 'SetAllCollapsed', collapsed: true }), [dispatch])
 
+  // Stable callback + no-op guard: an inline onPage was recreated every render,
+  // churning <Preview>'s fetch effect into a loop (constant "Vorschau lädt").
+  const onPageInfo = useCallback((page, total) => {
+    setPageInfo((p) => (p && p.page === page && p.total === total ? p : { page, total }))
+  }, [])
+
   // drag the splitter to resize the tree pane (persisted to localStorage)
   useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
   const startResize = useCallback((e) => {
@@ -535,7 +541,7 @@ export default function App() {
             </div>
           )}
           {!selected && <p className="status">{t('Knoten auswählen für die Vorschau')}</p>}
-          {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} onPage={(page, total) => setPageInfo({ page, total })} />}
+          {windowed && <Preview session={session} node={selected} zoom={zoom} previewReq={previewReq} onPage={onPageInfo} />}
           {!windowed && selected && busy > 0 && pages === null && <div className="spinner big" />}
           {!windowed && selected && busy === 0 && pages?.length === 0 && (
             <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>

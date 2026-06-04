@@ -146,6 +146,17 @@ def test_fill_pauses_when_pause_if_true():
     assert warmed == 0 and fake.calls == []  # warmed nothing while paused
 
 
+def test_prune_drops_vanished_nodes():
+    fake = FakeRenderer(size=1000)
+    svc = RenderService(fake, budget_bytes=10**7, cpu_load=lambda: 0.0)
+    svc.render_window("a", 1, b"da", 0, 2, 100)  # cache 2 pages of 'a'
+    svc.render_window("b", 1, b"db", 0, 1, 100)  # cache 1 page of 'b'
+    assert len(svc.cache) == 3
+    svc.prune({"a"})  # 'b' no longer exists
+    assert len(svc.cache) == 2
+    assert ("a", 1, 0, 100) in svc.cache and ("b", 1, 0, 100) not in svc.cache
+
+
 def test_set_budget_changes_free_space():
     svc = RenderService(FakeRenderer(), budget_bytes=1000, cpu_load=lambda: 0.0)
     assert svc.stats()["cache_budget"] == 1000

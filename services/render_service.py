@@ -102,6 +102,13 @@ class RenderCache:
                 _, old = self._store.popitem(last=False)  # drop LRU until within budget
                 self._size -= len(old)
 
+    def keep_only(self, live_node_ids) -> None:
+        """Drop every cached page whose node_id is not in ``live_node_ids`` — used to
+        prune the cache to the documents that still exist (after delete/split/merge)."""
+        with self._lock:
+            for k in [k for k in self._store if k[0] not in live_node_ids]:
+                self._size -= len(self._store.pop(k))
+
 
 class RenderService:
     def __init__(
@@ -140,6 +147,10 @@ class RenderService:
     def set_budget(self, budget_bytes: int) -> None:
         """Grow/shrink the cache byte budget at runtime (evicts down when shrunk)."""
         self.cache.set_budget(budget_bytes)
+
+    def prune(self, live_node_ids) -> None:
+        """Drop cached pages of nodes that no longer exist."""
+        self.cache.keep_only(set(live_node_ids))
 
     def stats(self) -> dict:
         """Cache occupancy + whether a background prefetch is currently running."""

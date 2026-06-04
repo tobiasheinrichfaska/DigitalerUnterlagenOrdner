@@ -67,3 +67,32 @@ dropped, and a reloaded committed node can no longer be re-compressed or reset.
   save. This is by design and **irreversible**: the only copy is the compressed one.
 - A node you did **not** compress before saving keeps its source and remains fully
   compressible after reload.
+
+---
+
+## MT-19: Save dialog — store compression alternatives or not
+
+Verifies the save-time choice that appears only when there are **computed-but-unapplied**
+compression alternatives to embed.
+
+**Preconditions:** the app running; a multi-page color PDF imported as a node.
+
+**Steps:**
+1. Import the node but **do not** click "Lesbarkeit geprüft". Select it and open the
+   **compression dropdown** so the methods compute (you'll see method sizes appear).
+2. Press **Speichern** (Ctrl+S) and choose a path.
+3. Observe the dialog, then click **Wie geplant speichern**. Note the file size.
+4. Repeat the save (Speichern unter…) but this time click **Original speichern**;
+   save to a second file. Compare sizes.
+
+**Expected:**
+- A dialog **„Komprimierungs-Alternativen speichern?"** appears with three buttons:
+  **Wie geplant speichern · Original speichern · Abbrechen**.
+- *Not obvious:* the dialog appears **only** when alternatives exist. If you never
+  opened the compression dropdown (nothing computed), or every node is committed
+  ("Lesbarkeit geprüft"), Save proceeds **without** the dialog.
+- **Wie geplant** → larger file; reopening shows the compression options instantly
+  (no "Kompression läuft …").
+- **Original speichern** → noticeably smaller file; reopening recomputes the options
+  on demand when you open the dropdown.
+- **Abbrechen** → nothing is saved; the title bar still shows unsaved changes (•).

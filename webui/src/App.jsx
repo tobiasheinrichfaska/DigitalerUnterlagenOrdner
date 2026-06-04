@@ -4,6 +4,7 @@ import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
 import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
+import { SaveDialog } from './SaveDialog'
 import { StatusBar } from './StatusBar'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
@@ -99,6 +100,7 @@ export default function App() {
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
+  const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
@@ -443,8 +445,15 @@ export default function App() {
   }
 
   const onSaved = (resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } }
-  const saveFile = () => run(core.saveFile(session)).then(onSaved)
-  const saveFileAs = () => run(core.saveFileAs(session)).then(onSaved)
+  const doSave = (mode, store) =>
+    run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store)).then(onSaved)
+  // Preflight: only ask about alternatives when there are some to embed; else save straight.
+  const preflightSave = (mode) => run(core.saveInfo(session)).then((info) => {
+    if (info?.ok && info.has_alternatives) setSaveAsk({ mode, count: info.count })
+    else doSave(mode, true)
+  })
+  const saveFile = () => preflightSave('in')
+  const saveFileAs = () => preflightSave('as')
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
   // the context menu passes specific ids for an explicit selection export.
@@ -638,6 +647,12 @@ export default function App() {
 
       <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} selectedIds={selectedIds}
         onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} />
+
+      {saveAsk && (
+        <SaveDialog count={saveAsk.count}
+          onCancel={() => setSaveAsk(null)}
+          onChoose={(store) => { const m = saveAsk.mode; setSaveAsk(null); doSave(m, store) }} />
+      )}
 
       {dropActive && (
         <div className="drop-overlay">

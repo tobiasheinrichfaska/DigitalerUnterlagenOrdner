@@ -48,6 +48,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   // Restore from a small geometry cache instantly, then refresh in the background —
   // so a switch-back doesn't wait on a page_dims round-trip.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset page geometry when the node changes (then refresh from cache/backend)
     if (!session || !nodeId) { setCount(0); setDims([]); return }
     const cached = geomCache.get(nodeId)
     if (cached) { setCount(cached.count); setDims(cached.dims) }
@@ -71,6 +72,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   useEffect(() => {
     token.current += 1
     inflight.current = new Set()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: drop rendered pages when the node/variant changes
     setPages({})
   }, [node, reqKey])
 

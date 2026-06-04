@@ -133,7 +133,9 @@ export default function App() {
     return promise.finally(() => setBusy((n) => Math.max(0, n - 1)))
   }, [])
 
-  const apply = (resp) => {
+  // stable identity (only stable state setters inside) so callbacks that depend
+  // on it don't get re-created every render.
+  const apply = useCallback((resp) => {
     if (!resp) return
     if (resp.ok === false) {
       if (resp.error !== 'cancelled') setError(resp.error)
@@ -142,7 +144,7 @@ export default function App() {
     setError(null)
     setNotice(null)
     setState(resp)
-  }
+  }, [])
 
   const session = state?.session
 
@@ -152,8 +154,8 @@ export default function App() {
   // stored bytes. Re-fires when `selected` identity changes (every edit replaces
   // it) or the request changes, so edits and method/DPI browsing both refresh.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset the page indicator when the selected node / preview request changes
     setPageInfo(null) // stale page indicator until the new node reports its viewport
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the preview is intended
     if (!session || !selected) { setPages(null); return }
     if (selected.is_folder) {
       run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
@@ -194,7 +196,7 @@ export default function App() {
         if (selected) setSelected(findNode(resp.tree, selected.id))
       }
     },
-    [selected],
+    [apply, selected],
   )
 
   const dispatch = useCallback(

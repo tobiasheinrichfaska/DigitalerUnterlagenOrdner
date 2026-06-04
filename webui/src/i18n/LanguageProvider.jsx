@@ -1,3 +1,7 @@
+/* eslint-disable react-refresh/only-export-components --
+   Deliberately co-locates the LanguageProvider component with its useT() hook
+   (a context+hook pair imported by 6 components). Splitting the hook into its
+   own file just to satisfy fast-refresh adds indirection for no runtime gain. */
 // React binding for the i18n core: a context holding { lang, setLang, t } and a
 // useT() hook. The context DEFAULT is a working German `t`, so components rendered
 // without a provider (e.g. in unit tests) still translate (to the default language)

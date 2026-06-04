@@ -18,4 +18,9 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Vitest test files run under Node — allow process/__dirname/etc.
+    files: ['**/*.test.{js,jsx}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ])

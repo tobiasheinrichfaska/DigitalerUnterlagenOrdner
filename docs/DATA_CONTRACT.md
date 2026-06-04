@@ -27,6 +27,7 @@ Each node serialises to this object (see `pdf_node.py::to_dict`):
 | `dpi_current` | int \| null | DPI of the current (compressed) data; null if uncompressed / conflict |
 | `no_compression` | bool | node must not be (re-)compressed (e.g. split parts) |
 | `compression_method` | string \| null | method that produced `current_data` (`"jpg"`, `"png"`, `"pikepdf"`); null if uncompressed / merge conflict |
+| `tags` | array of string | free-form labels (folders & leaves); set via `SetTags`. Stored per-node (own tags only). For search/group, *effective* tags = own ∪ ancestor-folder tags (computed in the view, never duplicated into children). |
 | `children` | array of node | nested nodes (folders and leaves) |
 
 Invariants worth preserving (already enforced / tested):

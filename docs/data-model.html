@@ -67,6 +67,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>no_compression</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Node must not be (re-)compressed (e.g. split parts).</td></tr>
 <tr><td><code>collapsed</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder is collapsed in the tree view. Persisted; set via <code>SetCollapsed</code>/<code>SetAllCollapsed</code>.</td></tr>
 <tr><td><code>compression_method</code></td><td>str | None</td><td class="opt">opt</td><td>None</td><td>Method that produced <code>current_data</code> (<code>jpg</code>/<code>png</code>/<code>pikepdf</code>); None if uncompressed.</td></tr>
+<tr><td><code>tags</code></td><td>tuple[str]</td><td class="opt">opt</td><td>()</td><td>Free-form labels (folders &amp; leaves); set via <code>SetTags</code>. Stored per-node; for search/group, <em>effective</em> tags = own ∪ ancestor-folder tags (computed in the view).</td></tr>
 <tr><td><code>children</code></td><td>tuple[Node, …]</td><td class="opt">opt</td><td>()</td><td>Ordered child nodes (order = position).</td></tr>
 <tr><td><code>original_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Canonical page bytes. <b>Not serialised</b> to JSON.</td></tr>
 <tr><td><code>current_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Compressed variant bytes, if any. <b>Not serialised</b>.</td></tr>

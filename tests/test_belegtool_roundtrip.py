@@ -20,14 +20,14 @@ def _pdf(n):
 
 def _build_doc():
     plain = Node(name="plain", original_data=_pdf(3), pdf_length=3,
-                 status="zu erfassen", vz_start=2023, vz_end=2024)
+                 status="zu erfassen", vz_start=2023, vz_end=2024, tags=("Steuer", "2023"))
     comp = Node(name="comp", original_data=_pdf(1), current_data=_pdf(1),
                 is_compressed=True, compression_method="jpg", dpi_current=150,
                 dpi_original=300, pdf_length=1, status="erfasst")
     nocomp = Node(name="nocomp", original_data=_pdf(2), pdf_length=2,
                   no_compression=True, status="vorjahreswert")
     sub = Node(name="sub", is_folder=True, collapsed=True, children=(comp, nocomp))
-    folder = Node(name="folder", is_folder=True, children=(plain, sub))
+    folder = Node(name="folder", is_folder=True, children=(plain, sub), tags=("Belege",))
     return Document(Node(name="root", is_folder=True, children=(folder,)))
 
 
@@ -57,6 +57,10 @@ def test_belegtool_roundtrip_fidelity(tmp_path):
 
     nc = by_name["nocomp"]
     assert nc.no_compression is True and nc.status == "vorjahreswert" and nc.pdf_length == 2
+
+    # tags persist on both a leaf and a folder
+    assert by_name["plain"].tags == ("Steuer", "2023")
+    assert by_name["folder"].tags == ("Belege",)
 
     cm = by_name["comp"]
     assert cm.is_compressed is True and cm.compression_method == "jpg"

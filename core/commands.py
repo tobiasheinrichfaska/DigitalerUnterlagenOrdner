@@ -69,6 +69,12 @@ class SetPeriod:
 
 
 @dataclass(frozen=True)
+class SetTags:
+    node_id: str
+    tags: Tuple[str, ...]  # replaces the node's whole tag set (free-form labels)
+
+
+@dataclass(frozen=True)
 class Delete:
     node_id: str
 
@@ -184,14 +190,14 @@ class Merge:
             object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
-Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod,
+Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
                 Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
                 Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, Delete, DeleteMany,
+    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, Delete, DeleteMany,
     Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
@@ -328,6 +334,16 @@ def _set_all_collapsed(doc: Document, cmd: SetAllCollapsed, engine=None) -> Docu
 def _set_period(doc: Document, cmd: SetPeriod, engine=None) -> Document:
     _require(doc, cmd.node_id)
     return doc.update_node(cmd.node_id, vz_start=cmd.vz_start, vz_end=cmd.vz_end)
+
+
+@_handler(SetTags)
+def _set_tags(doc: Document, cmd: SetTags, engine=None) -> Document:
+    """Replace a node's tag set. Tags are normalised: trimmed, empties dropped,
+    deduplicated preserving first-seen order. Works on folders and leaves alike."""
+    _require(doc, cmd.node_id)
+    clean = tuple(dict.fromkeys(
+        t.strip() for t in cmd.tags if isinstance(t, str) and t.strip()))
+    return doc.update_node(cmd.node_id, tags=clean)
 
 
 @_handler(Delete)

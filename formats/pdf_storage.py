@@ -339,6 +339,7 @@ class PDFStorage:
             node.vz_start = node_data.get("vz_start")
             node.vz_end = node_data.get("vz_end")
             node.collapsed = bool(node_data.get("collapsed", False))
+            node.tags = list(node_data.get("tags") or [])
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages)
                 if child_node:
@@ -367,6 +368,7 @@ class PDFStorage:
         node.status = node_data.get("status", "zu erfassen")  # ✅ Hier ergänzen!
         node.vz_start = node_data.get("vz_start")  # Veranlagungszeitraum (was dropped on reload)
         node.vz_end = node_data.get("vz_end")
+        node.tags = list(node_data.get("tags") or [])
         is_compressed = bool(node_data.get("is_compressed", False))
 
         node.set_original_and_current_data(

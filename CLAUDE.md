@@ -47,7 +47,6 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 | File | Role |
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
-| `testmode.py` | **Testmodus** headless data layer: runs the golden-master ops (compression/split/merge) and returns INPUT/LIVE/EXPECTED PDF bytes + status. Pure; `CoreApi.test_mode` renders thumbnails, the React `TestMode` view displays them (toolbar 🧪). |
 | `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.0) |
 | `log_config.py` | Logging setup |
 | `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |
@@ -157,9 +156,6 @@ reverts. (Ctrl is multi-select, so it can't be the move modifier.)
 / `SetAllCollapsed` commands — undoable, marks dirty, round-trips in `.belegtool`).
 Chevron in the tree, ←/→ keys, and context-menu **Aufklappen/Zuklappen** + **Alle
 auf-/zuklappen**. Cuts scrolling on large trees.
-
-**Testmodus is dev-only:** the 🧪 button shows only when `BELEG_DEV` is set
-(`HostApi.config().dev`); the production exe never sets it.
 
 ### Preview & compression
 - Lazy-generated, cached; DPI slider 50–300 DPI
@@ -299,16 +295,19 @@ Current stable tag: **v3.7.0**
 - **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
   removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
   against the React UI. The features themselves are unchanged.
-- **Dead Tk-preview path in the data model** — `PDFNode` still carries the eager
-  PIL-preview / `compress_lazy` / `PreviewPage` machinery (the `generate_previews=True`
-  branch) that only the removed Tk GUI used. The headless React path never calls it; the
-  app imports/saves via `PDFStorage` with `generate_previews=False` and compresses through
-  `core/engine` → `compress_pdf_bytes`. The **dead-machinery tests were removed** (13 files,
-  e.g. `test_pdf_node_compression`/`_split`/`_merge`/`_rotate`/`_copy`, the `*preview*`
-  tests) — `PDFNode`'s remaining use by the dev-only Testmodus is covered end-to-end by
-  `test_testmode`, and split/merge/rotate/compress by the `core/` tests. Remaining cleanup:
-  delete the dead `PDFNode` preview/compress code itself + `preview_page.py` (rebasing
-  Testmodus onto the core engine first).
+- **Dead `PDFNode` preview/operation machinery — ready to delete (next focused task).**
+  The **Testmodus subsystem was removed** (testmode.py, TestMode.jsx + 🧪 button,
+  CoreApi/HostApi `test_mode`, the `tests/data/expected/` goldens, `test_testmode.py`),
+  so nothing user-facing keeps `PDFNode`'s legacy machinery alive. `PDFNode` is now used
+  **only as the `.belegtool` I/O carrier** (`PDFStorage` load/save, always
+  `generate_previews=False`) — the app does split/merge/rotate/compress via `core/engine`.
+  Still-present dead-at-runtime code in `pdf_node.py`: `preview_lazy`/`preview_folder`/
+  `update_preview`/`_create_previews`/`compress_lazy`/`compress_multi_lazy`/
+  `select_compression_method`/`compress`/`rotate`/`split`/`merge`/the `_*_preview_pages`
+  attrs + background-compress threads, plus `preview_page.py` and the `generate_previews=True`
+  branches in `PDFStorage`. Removal is ~15 interdependent edits in a load-bearing file; do it
+  as a focused pass with [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) +
+  the full suite as the net (it just caught 3 real I/O bugs there).
 - **Headless import is now bytes-only end to end** — plain-PDF *and* archive/email
   paths honor `generate_previews=False` (`from_recursive_array`/`_from_structure_entry`
   thread the flag); page count uses `fitz.page_count`; the `/JSONStructure` metadata

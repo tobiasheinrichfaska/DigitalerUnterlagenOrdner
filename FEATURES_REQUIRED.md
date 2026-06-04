@@ -63,9 +63,3 @@ hit the right pages.
   the budget (shrink evicts immediately).
 - **Multiple windows**: a second window opens and starts cleanly (the bridge waits for each
   method to be callable, not just for the API object to exist).
-
----
-
-## Test / QA mode
-Dev-only **Testmodus** (🧪, shown only when `BELEG_DEV` is set) compares input/live/expected
-for golden-master ops. Needs `tests/data/input/` (regenerate with `python tests/make_fixtures.py`).

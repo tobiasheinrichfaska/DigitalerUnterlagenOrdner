@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { core } from './core'
 import { Tree } from './Tree'
 import { PreviewControls } from './PreviewControls'
@@ -317,6 +317,18 @@ export default function App() {
     setPageInfo((p) => (p && p.page === page && p.total === total ? p : { page, total }))
   }, [])
 
+  // total pages in this document (sum of leaf page counts) — for the cache "n / m"
+  const docPages = useMemo(() => {
+    let n = 0
+    const walk = (node) => {
+      if (!node) return
+      if (!node.is_folder) n += node.pdf_length || 0
+      ;(node.children || []).forEach(walk)
+    }
+    walk(state?.tree)
+    return n
+  }, [state?.tree])
+
   // drag the splitter to resize the tree pane (persisted to localStorage)
   useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
   const startResize = useCallback((e) => {
@@ -563,7 +575,7 @@ export default function App() {
         </div>
       )}
 
-      <StatusBar />
+      <StatusBar docPages={docPages} />
     </div>
   )
 }

@@ -138,6 +138,14 @@ def test_stats_reports_cache_occupancy():
     assert s1["cache_pages"] == 2 and s1["cache_used"] == 2000 and s1["cache_free"] == 2000
 
 
+def test_fill_pauses_when_pause_if_true():
+    fake = FakeRenderer()
+    svc = RenderService(fake, budget_bytes=10**7, cpu_load=lambda: 0.0)
+    warmed = svc.fill_until_idle([("a", 1, 50)], "a", 0, lambda nid: nid.encode(), 100,
+                                 pause_if=lambda: True)  # e.g. a compression wants the CPU
+    assert warmed == 0 and fake.calls == []  # warmed nothing while paused
+
+
 def test_set_budget_changes_free_space():
     svc = RenderService(FakeRenderer(), budget_bytes=1000, cpu_load=lambda: 0.0)
     assert svc.stats()["cache_budget"] == 1000

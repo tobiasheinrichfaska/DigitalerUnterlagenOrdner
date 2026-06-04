@@ -15,6 +15,7 @@ import threading
 import uuid
 import zlib
 from collections import OrderedDict
+from contextlib import contextmanager
 
 from core import CORE_VERSION
 from core.bridge import load_belegtool
@@ -58,6 +59,7 @@ class CoreApi:
         self._render_service = None  # lazy windowed render cache (shared across windows)
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
         self._vcache = OrderedDict()  # id(bytes) -> (bytes, crc32), memoised versions (LRU)
+        self._compress_active = 0  # >0 while a compression runs → background prefetch yields the CPU
 
     def _renderer(self):
         if self._render_service is None:
@@ -74,6 +76,18 @@ class CoreApi:
             c = page_count(data)
             self._pcount[key] = c
         return c
+
+    @contextmanager
+    def _compressing(self):
+        """Mark a compression in progress so the background prefetch pauses and
+        leaves the CPU to the (user-visible) compression."""
+        with self._lock:
+            self._compress_active += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._compress_active -= 1
 
     def _version_of(self, data):
         """Memoised crc32 of bytes, keyed by object identity (the model is immutable,
@@ -131,7 +145,8 @@ class CoreApi:
                     data_map[n.id] = data
             return specs, data_map.get, focus_id, focus_page
 
-        self._renderer().prefetch(build, dpi)
+        # pause warming while a compression runs, so it gets the CPU
+        self._renderer().prefetch(build, dpi, pause_if=lambda: self._compress_active > 0)
 
     def _next_untitled_name(self) -> str:
         with self._lock:
@@ -327,7 +342,8 @@ class CoreApi:
         if no_comp or not method or method == "original":
             variant = data
         else:
-            variant = self._engine.compress(data, dpi, method) or data
+            with self._compressing():
+                variant = self._engine.compress(data, dpi, method) or data
         import zlib
         version = zlib.crc32(variant)  # variant bytes → its own cache identity
         from base64 import b64encode
@@ -417,7 +433,8 @@ class CoreApi:
         if not data:
             return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                     "original_size": 0, "options": []}
-        sizes = self._engine.compress_methods(data, dpi)
+        with self._compressing():
+            sizes = self._engine.compress_methods(data, dpi)
         options = sorted(
             ({"method": m, "size": sz} for m, sz in sizes.items()),
             key=lambda o: o["size"],

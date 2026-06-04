@@ -233,7 +233,8 @@ class RenderService:
 
     def fill_until_idle(self, node_specs: Sequence[NodeSpec], focus_node: str,
                         focus_page: int, data_for: Callable[[str], bytes], dpi: int,
-                        *, max_steps: int = 1_000_000, since_gen: Optional[int] = None) -> int:
+                        *, max_steps: int = 1_000_000, since_gen: Optional[int] = None,
+                        pause_if: Optional[Callable[[], bool]] = None) -> int:
         """Warm pages in priority order (current node from the focus outward, then
         neighbours) into FREE budget, **rendering up to ``max_workers`` pages at once**,
         until ``max_steps`` are warmed, the budget is full, the CPU is busy, or a newer
@@ -248,6 +249,8 @@ class RenderService:
         warmed, i, n = 0, 0, len(order)
         while i < n and warmed < max_steps:
             if self.generation != gen:        # superseded by a newer request → abandon
+                break
+            if pause_if is not None and pause_if():  # e.g. a compression wants the CPU
                 break
             if self.cache.free() <= 0:
                 break
@@ -317,13 +320,15 @@ class RenderService:
 
         self._exec().submit(job)
 
-    def prefetch(self, build: Callable[[], tuple], dpi: int) -> None:
+    def prefetch(self, build: Callable[[], tuple], dpi: int,
+                 pause_if: Optional[Callable[[], bool]] = None) -> None:
         """Like ``seed``, but ``build()`` (run on the background worker, so its
         possibly-heavy enumeration/hashing never blocks the foreground) returns
         ``(node_specs, data_for, focus_node, focus_page)``, and we then warm the
         cache **until it is full** (not a fixed step count) — current node from the
-        focus outward, then neighbouring nodes — yielding to the CPU and abandoning
-        as soon as a newer foreground request bumps the generation."""
+        focus outward, then neighbouring nodes — yielding to the CPU, pausing while
+        ``pause_if()`` is true (e.g. a compression is running), and abandoning as
+        soon as a newer foreground request bumps the generation."""
         gen = self.generation
 
         def job():
@@ -334,7 +339,8 @@ class RenderService:
                 specs, data_for, fnode, fpage = build()
                 if specs:
                     warmed = self.fill_until_idle(specs, fnode, fpage, data_for, dpi,
-                                                  max_steps=10 ** 9, since_gen=gen)
+                                                  max_steps=10 ** 9, since_gen=gen,
+                                                  pause_if=pause_if)
             except Exception:  # background; never crash the worker
                 pass
             finally:

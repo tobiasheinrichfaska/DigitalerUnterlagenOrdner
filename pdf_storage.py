@@ -394,6 +394,8 @@ class PDFStorage:
 
         if is_folder:
             node = PDFNode(name=name, is_folder=True)
+            if node_data.get("uid"):
+                node.uid = node_data["uid"]  # restore persisted id
             node.collapsed = bool(node_data.get("collapsed", False))
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages)
@@ -418,6 +420,8 @@ class PDFStorage:
 
 
         node = PDFNode(name=name)
+        if node_data.get("uid"):
+            node.uid = node_data["uid"]  # restore persisted id
         node.status = node_data.get("status", "zu erfassen")  # ✅ Hier ergänzen!
         is_compressed = bool(node_data.get("is_compressed", False))
 

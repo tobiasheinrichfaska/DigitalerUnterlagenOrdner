@@ -54,9 +54,38 @@ class RealEngine:
         self._mcache: "OrderedDict[tuple, dict]" = OrderedDict()
         self._mcache_max = 16
         self._mcache_lock = threading.Lock()
+        # variants loaded from a .belegtool (persisted): NOT LRU-bounded, so every
+        # node's saved variants stay available after reopening. Keyed like _mcache.
+        self._persisted: dict = {}
+
+    def variants_for(self, pdf_bytes: bytes) -> dict:
+        """All known variants for this source as ``{dpi: {method: bytes}}`` — both
+        freshly computed (hot cache) and loaded from file — for persistence on save."""
+        digest = hashlib.sha1(pdf_bytes).digest()
+        out: dict = {}
+        with self._mcache_lock:
+            items = list(self._mcache.items())
+        for (d, dpi), result in items:
+            if d == digest and result:
+                out.setdefault(dpi, {}).update(result)
+        for (d, dpi), result in self._persisted.items():
+            if d == digest and result:
+                out.setdefault(dpi, {}).update(result)
+        return out
+
+    def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
+        """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
+        node is instant — no recompute. Goes into the unbounded persisted layer."""
+        digest = hashlib.sha1(pdf_bytes).digest()
+        for dpi, methods in (variants or {}).items():
+            if methods:
+                self._persisted[(digest, int(dpi))] = dict(methods)
 
     def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
         key = (hashlib.sha1(pdf_bytes).digest(), dpi)
+        persisted = self._persisted.get(key)
+        if persisted is not None:
+            return persisted
         with self._mcache_lock:
             hit = self._mcache.get(key)
             if hit is not None:

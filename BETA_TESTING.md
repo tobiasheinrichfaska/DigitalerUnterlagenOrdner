@@ -1,6 +1,6 @@
 # Beta Testing BelegTool 🧪
 
-Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.7.0** — a
+Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.7.2** — a
 Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
 archives into one foldered tree, then compresses, previews and exports the whole
 thing as a single bookmarked PDF with a table of contents.
@@ -17,14 +17,13 @@ and e-mails still works fine.
 
 ## 1. Get & run the app
 
-There is **no published GitHub Release yet**, so you'll receive the app one of two
-ways:
-
-### Path A — Prebuilt folder (easiest, no Python/Node)
-1. You'll get a **`BelegTool` folder** (zipped) from the maintainer.
+### Path A — Prebuilt download (easiest, no Python/Node)
+1. Download **`BelegTool-v3.7.2-win64.zip`** from the
+   [**latest release**](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/releases/latest).
 2. Unzip it anywhere.
-3. Double-click **`BelegTool.exe`**. That's it — no installation.
+3. Double-click **`BelegTool\BelegTool.exe`**. That's it — no installation.
    - To open a saved file directly: `BelegTool.exe yourfile.belegtool`.
+   - *Windows SmartScreen* may warn on first run (unsigned app) → **More info → Run anyway**.
 
 ### Path B — From source
 1. Install **Python 3.12** (on PATH) and **Node.js**.

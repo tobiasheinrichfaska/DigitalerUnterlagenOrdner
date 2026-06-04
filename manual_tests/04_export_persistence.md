@@ -1,7 +1,6 @@
-# 04 — Export, persistence, Test mode
+# 04 — Export & persistence
 
-Covers exporting to PDF, saving/reloading the `.belegtool` format, and the
-built-in Test mode.
+Covers exporting to PDF and saving/reloading the `.belegtool` format.
 
 ---
 
@@ -68,41 +67,3 @@ dropped, and a reloaded committed node can no longer be re-compressed or reset.
   save. This is by design and **irreversible**: the only copy is the compressed one.
 - A node you did **not** compress before saving keeps its source and remains fully
   compressible after reload.
-
-
----
-
-## MT-18: Testmodus (React UI) — input vs live vs expected
-
-Re-introduced in the React UI (v3.6.0+). A developer/QA view that runs the
-golden-master operations and shows the results side by side. Needs the fixtures.
-
-**Preconditions:** the app is running (`python host.py`); `tests/data/input/`
-exists (if not, a developer runs `python tests/make_fixtures.py`).
-
-**Steps:**
-1. In the toolbar, click **🧪 Testmodus**.
-2. Wait a moment ("Operationen laufen …" shows while the operations run).
-3. Scroll through the overlay.
-4. Click **Schließen**.
-
-**Expected:**
-- A full-window overlay appears with sections **Kompression**, **Splitten**,
-  **Zusammenführen**.
-- Each item shows three columns — **Eingabe**, **Live** (the operation run right
-  now), **Referenz** — as page thumbnails (up to ~12 pages per item, so multi-page
-  results are visible in full).
-- **Splitten:** each row is one page of the source — **Eingabe** shows the
-  *original* page *i*, **Live** the split piece *i*, **Referenz** the golden piece.
-  You can verify by eye that piece *i* really is page *i* of the source.
-- **Zusammenführen:** the two **Quelle** rows show `merge1_a`/`merge1_b` and their
-  pages; the **Ergebnis** row shows the full merged document (a's page, then b's
-  pages) in **Live** and **Referenz**, so you can confirm the concatenation order.
-- Each item carries a badge: **✓ stimmt mit Referenz überein** (live matches the
-  golden master), **✗ weicht ab**, or **⚠ keine Referenz** / **⚠ kein Ergebnis**.
-- *Not obvious:* with unchanged code every item that has a reference should be
-  green (✓). A red ✗ means a live operation drifted from its golden master.
-- *Not obvious:* if the fixtures are missing, the overlay shows a clear message
-  telling you to run `python tests/make_fixtures.py` instead of empty columns.
-- **Schließen** restores the normal editor; the open document is untouched
-  (Testmodus is read-only).

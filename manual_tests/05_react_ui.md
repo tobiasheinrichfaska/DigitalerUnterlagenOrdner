@@ -177,10 +177,10 @@ PDF (ideally 100+ pages; a colour scan is a good stress test).
 
 ---
 
-## MT-40: Keyboard tree-structuring, folder collapse, dev-only Testmodus
+## MT-40: Keyboard tree-structuring + folder collapse
 
 Covers the keyboard restructuring + folder collapse (persisted) added for large
-trees, and confirms Testmodus is dev-only.
+trees.
 
 **Preconditions:** dev app running (`python host.py`); a document with a few
 folders and nested nodes.
@@ -215,7 +215,3 @@ folders and nested nodes.
   but **nothing is committed yet**. **Insert** drops it — a single **undoable** move
   (Ctrl+Z reverts it in one step). **Esc** cancels and the node snaps back with **no
   change** to the document.
-
-**D — Testmodus is dev-only:**
-9. In the dev app the **🧪 Testmodus** button is present. In the built
-   `dist\BelegTool\BelegTool.exe`, it is **absent**.

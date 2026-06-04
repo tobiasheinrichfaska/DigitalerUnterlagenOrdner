@@ -1,17 +1,14 @@
-"""Regression: headless import of a plain PDF must do no rendering/compression.
+"""Regression: importing through the PDFStorage carrier must do no rendering.
 
-The plain-PDF import branch in PDFStorage._load_pdf used to ignore
-generate_previews=False — it built the node via the eager PDFNode constructor
-(full-document PIL render) and fired two background compressions. In the core /
-React path node_from_pdfnode snapshots only the bytes, so all of that work was
-discarded; on large color PDFs it dominated import time (~100x overhead).
-
-These tests lock the fix: generate_previews=False stores bytes only.
+The plain-PDF / archive import branches build PDFNode carriers that store bytes
+only — the headless core renders on demand and node_from_pdfnode snapshots just
+the bytes, so any eager render here is pure wasted work (it dominated import time
+on large colour PDFs, ~100x overhead). These tests lock that: the import path
+calls services.render zero times.
 """
 
 import pytest
 
-import pdf_node
 import services.render as render_mod
 from helpers import create_valid_pdf
 from pdf_node import PDFNode
@@ -21,9 +18,9 @@ from pdf_node import PDFNode
 def count_renders(monkeypatch):
     """Count render_pdf_to_images calls made *synchronously on the import thread*.
 
-    Only main-thread renders count: a background compression daemon left running
-    by another test must not poison this counter (the headless import path never
-    renders on any thread, sync or async — that is exactly what we assert)."""
+    Only main-thread renders count: a background daemon left running by another
+    test must not poison this counter (the carrier import path never renders on
+    any thread, sync or async — that is exactly what we assert)."""
     import threading
     main = threading.main_thread()
     calls = {"n": 0, "pages": 0}
@@ -36,9 +33,7 @@ def count_renders(monkeypatch):
             calls["pages"] += len(out)
         return out
 
-    # patch both the source module and the name imported into pdf_node
     monkeypatch.setattr(render_mod, "render_pdf_to_images", counting)
-    monkeypatch.setattr(pdf_node, "render_pdf_to_images", counting)
     return calls
 
 
@@ -53,23 +48,20 @@ def test_headless_import_renders_nothing(tmp_path, count_renders):
     from pdf_storage import PDFStorage
 
     path = _write_plain_pdf(tmp_path, pages=3)
-    storage = PDFStorage(path, generate_previews=False)
+    storage = PDFStorage(path)
 
-    # no page was rendered during the headless import
+    # no page was rendered during the import
     assert count_renders["n"] == 0, f"unexpected renders: {count_renders}"
 
     node = storage.root.children[0]
-    assert node._original_preview_pages == []      # no eager preview kept
-    assert node._current_preview_pages == []
     assert not node.is_compressed                  # no throwaway compression committed
-    assert not node._compression_task_running      # no background compression spawned
     # bytes and page count still load correctly
     assert node.original_pdf_data
     assert node.pdf_length == 3
 
 
 def test_headless_archive_import_renders_nothing(tmp_path, count_renders):
-    """ZIP/email import must also honor generate_previews=False (E)."""
+    """ZIP/email import stores bytes only — no eager render either."""
     import zipfile
 
     from pdf_storage import PDFStorage
@@ -79,7 +71,7 @@ def test_headless_archive_import_renders_nothing(tmp_path, count_renders):
         z.writestr("a.pdf", create_valid_pdf(pages=2))
         z.writestr("b.pdf", create_valid_pdf(pages=1))
 
-    storage = PDFStorage(str(zpath), generate_previews=False)
+    storage = PDFStorage(str(zpath))
 
     assert count_renders["n"] == 0, f"archive import rendered: {count_renders}"
 
@@ -95,16 +87,14 @@ def test_headless_archive_import_renders_nothing(tmp_path, count_renders):
     walk(storage.root)
     assert leaves, "no leaf nodes imported from the zip"
     for leaf in leaves:
-        assert leaf._original_preview_pages == []   # bytes only, no eager render
-        assert leaf.original_pdf_data
-
+        assert leaf.original_pdf_data               # bytes carried, no render
 
 def test_structured_pdf_import_honors_json(tmp_path, count_renders):
     """The /JSONStructure byte-gate must NOT flatten structured imports.
 
     A saved .belegtool/PDF carries its tree in /JSONStructure (through pikepdf's
     compress+linearize). Re-import must restore the folders, and still render
-    nothing in headless mode.
+    nothing.
     """
     from pdf_storage import PDFStorage
 
@@ -124,22 +114,10 @@ def test_structured_pdf_import_honors_json(tmp_path, count_renders):
     assert b"/JSONStructure" in (tmp_path / "structured.belegtool").read_bytes()
 
     count_renders["n"] = 0  # ignore any renders from building the fixture above
-    re = PDFStorage(path, generate_previews=False)
+    re = PDFStorage(path)
 
-    assert count_renders["n"] == 0                       # headless: no render
+    assert count_renders["n"] == 0                       # no render
     names = [c.name for c in re.root.children]
     assert "Ordner A" in names and "doc3" in names       # structure honored, not flattened
     folder_back = next(c for c in re.root.children if c.is_folder)
     assert [c.name for c in folder_back.children] == ["doc1", "doc2"]
-
-
-def test_tk_import_still_renders(tmp_path, count_renders):
-    """The legacy Tk path (generate_previews=True) must keep eager previews."""
-    from pdf_storage import PDFStorage
-
-    path = _write_plain_pdf(tmp_path, pages=2)
-    storage = PDFStorage(path, generate_previews=True)
-
-    assert count_renders["n"] >= 1                 # eager render happened
-    node = storage.root.children[0]
-    assert node._original_preview_pages            # previews kept for the canvas

@@ -21,6 +21,14 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 
 ## Architecture
 
+**Top-level layout (Python):** `core/` = pure data-driven domain (model, commands,
+engine, bridge, session, api, render_policy) with `core/ipc/` for the named-pipe
+transport; `services/` = stateful infra (render cache, CPU fairness, variants);
+`formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
+compress_pdf_bytes); `universal_importer/` = multi-format import package;
+`infra/` = ports (tasks, log_config, tools); `host.py`/`version_info.py` =
+entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
+
 ### Entry point & host
 
 | File | Role |
@@ -31,24 +39,24 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 
 | File | Role |
 |---|---|
-| `pdf_node.py` | `PDFNode`: serialization carrier for the `.belegtool` I/O path only (bytes + metadata, `to_dict`/`from_recursive_array`/`copy`). **No rendering, no operations** — split/merge/rotate/compress live in `core/engine` |
-| `pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
+| `formats/pdf_node.py` | `PDFNode`: serialization carrier for the `.belegtool` I/O path only (bytes + metadata, `to_dict`/`from_recursive_array`/`copy`). **No rendering, no operations** — split/merge/rotate/compress live in `core/engine` |
+| `formats/pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
 
 ### Import & Export
 
 | File | Role |
 |---|---|
 | `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (ZIP/TAR/email extraction + bomb guards). `__init__` re-exports the public surface. |
-| `toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
-| `compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
+| `formats/toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
+| `formats/compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
 
 ### Utilities
 
 | File | Role |
 |---|---|
-| `tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
+| `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
 | `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.2) |
-| `log_config.py` | Logging setup |
+| `infra/log_config.py` | Logging setup |
 | `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -63,7 +71,7 @@ migration that this decoupling enabled is effectively complete.
 | `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
 | `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler that warms **up to `max_workers` pages at once** on a below-normal-priority thread pool. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
 | `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ Thread parallelism is **GIL-limited** for PyMuPDF rasterization (~1.2× on 4 workers); its real value is fairness + foreground preemption, not raw throughput (true multicore would need processes — see Open items). |
-| `tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). Used by `universal_importer`. |
+| `infra/tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). Used by `universal_importer`. |
 
 Ports default to a no-op reporter and a daemon-thread executor; the host can
 install its own implementations (`progress.set_reporter`, `tasks.set_ui_dispatcher`)
@@ -82,7 +90,7 @@ for the core service + React UI. **Reference: [`docs/data-model.html`](docs/data
 | `core/engine.py` | `Engine` port (compress/rotate/split/merge/page_count) + `RealEngine` |
 | `core/session.py` | `DocumentSession`: undo/redo + event log (replay invariant) |
 | `core/bridge.py` | Convert ↔ `PDFStorage`/`.belegtool` (load/save real files into the model) |
-| `core/server.py`, `pipe.py`, `protocol.py`, `client.py`, `cli.py` | Per-user named-pipe **core service** (Step 0a): multi-client handshake/open |
+| `core/ipc/{server,pipe,protocol,client}.py` + `core/cli.py`, `core/__main__.py` | Per-user named-pipe **core service** (Step 0a): IPC transport (`core/ipc/`) + CLI entry points (`core/cli`, `python -m core`) |
 
 Covered by `tests/test_model.py`, `test_commands.py`, `test_engine_commands.py`,
 `test_split_merge.py`, `test_session.py`, `test_bridge.py`, `test_core_*.py`.

@@ -74,6 +74,15 @@ class Delete:
 
 
 @dataclass(frozen=True)
+class DeleteMany:
+    node_ids: Tuple[str, ...]  # delete several at once (one undo step)
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
 class Move:
     node_id: str
     new_parent_id: str
@@ -176,14 +185,14 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod,
-                Delete, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress, Commit,
-                Reset, Rotate, Split, SplitInto, Merge]
+                Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
+                Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, Delete, Move,
-    MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
+    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, Delete, DeleteMany,
+    Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
 _ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
@@ -326,6 +335,30 @@ def _delete(doc: Document, cmd: Delete, engine=None) -> Document:
     _require(doc, cmd.node_id)
     _reject_root(doc, cmd.node_id, "delete")
     return doc.remove_node(cmd.node_id)
+
+
+def _is_descendant(doc: Document, child_id: str, ancestor_id: str) -> bool:
+    cur = doc.parent_of(child_id)
+    while cur is not None:
+        if cur.id == ancestor_id:
+            return True
+        cur = doc.parent_of(cur.id)
+    return False
+
+
+@_handler(DeleteMany)
+def _delete_many(doc: Document, cmd: DeleteMany, engine=None) -> Document:
+    ids = [i for i in dict.fromkeys(cmd.node_ids)
+           if doc.find(i) is not None and doc.parent_of(i) is not None]
+    # The UI must resolve parent/child overlaps to a clean set first; a "mixed"
+    # selection (a folder AND an item inside it) is rejected, never guessed.
+    for i in ids:
+        for j in ids:
+            if i != j and _is_descendant(doc, j, i):  # j is inside i
+                raise CommandError("mixed selection: a folder and an item inside it are both selected")
+    for i in ids:
+        doc = doc.remove_node(i)
+    return doc
 
 
 @_handler(Move)

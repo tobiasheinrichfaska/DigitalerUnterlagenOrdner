@@ -23,10 +23,9 @@ export function StatusBar({ docPages = 0 }) {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
-  const enlarge = () => {
-    if (!stats) return
-    core.setCacheBudget(mb(stats.cache_budget) + 50).then((r) => { if (r?.ok) setStats(r) }).catch(() => {})
-  }
+  const setBudget = (newMb) => core.setCacheBudget(newMb).then((r) => { if (r?.ok) setStats(r) }).catch(() => {})
+  const enlarge = () => { if (stats) setBudget(mb(stats.cache_budget) + 50) }
+  const shrink = () => { if (stats) setBudget(Math.max(50, mb(stats.cache_budget) - 50)) }
 
   const parts = []
   if (act.compress > 0) parts.push(t('Komprimiere {n}', { n: act.compress }))
@@ -45,6 +44,7 @@ export function StatusBar({ docPages = 0 }) {
             used: mb(stats.cache_used), total: mb(stats.cache_budget),
             pages: stats.cache_pages, doc: docPages,
           })}
+          <button className="sb-plus" title={t('Cache verkleinern (−50 MB)')} onClick={shrink}>−</button>
           <button className="sb-plus" title={t('Cache vergrößern (+50 MB)')} onClick={enlarge}>＋</button>
         </span>
       )}

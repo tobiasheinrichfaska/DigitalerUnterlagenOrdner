@@ -8,7 +8,7 @@ import { useT } from './i18n/LanguageProvider'
 const STATUS_DE = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 export const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
@@ -112,7 +112,10 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           {exportIds.length > 1 ? t('Auswahl als PDF exportieren ({count})', { count: exportIds.length }) : t('Als PDF exportieren')}
         </button>
         <div className="cm-sep" />
-        <button className="danger" onClick={() => run({ type: 'Delete' })}>{t('Löschen')}</button>
+        <button className="danger" onClick={() => {
+          if (onDelete && selectedIds?.includes(node.id) && selectedIds.length > 1) { onDelete(); onClose() }
+          else run({ type: 'Delete' })
+        }}>{t('Löschen')}{selectedIds?.includes(node.id) && selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}</button>
       </div>
     </>
   )

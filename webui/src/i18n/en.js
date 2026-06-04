@@ -15,6 +15,7 @@ export const en = {
   'Vorschau-Cache · {free} MB frei': 'Preview cache · {free} MB free',
   'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Cache {used}/{total} MB · {pages}/{doc} pages',
   'Cache vergrößern (+50 MB)': 'Enlarge cache (+50 MB)',
+  'Cache verkleinern (−50 MB)': 'Shrink cache (−50 MB)',
 
   // toolbar
   'Öffnen': 'Open',
@@ -77,6 +78,12 @@ export const en = {
   'Als PDF exportieren': 'Export as PDF',
   'Auswahl als PDF exportieren ({count})': 'Export selection as PDF ({count})',
   'Löschen': 'Delete',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mitgelöscht werden. Fortfahren?':
+    'Folder “{name}” contains unselected items that will be deleted too. Continue?',
+  '„{name}“: alle Elemente des Ordners löschen? (Abbrechen = nur die ausgewählten Elemente, Ordner behalten)':
+    '“{name}”: delete all items in the folder? (Cancel = only the selected items, keep the folder)',
+  'Nur die ausgewählten Elemente löschen und „{name}“ behalten? (Abbrechen = nichts löschen)':
+    'Delete only the selected items and keep “{name}”? (Cancel = delete nothing)',
   'Zusammenführen → 1 PDF ({count})': 'Merge → 1 PDF ({count})',
   'In neuen Ordner ({count})': 'Into a new folder ({count})',
   'Name des neuen Ordners': 'Name of the new folder',

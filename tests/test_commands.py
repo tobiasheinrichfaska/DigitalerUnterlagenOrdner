@@ -14,6 +14,7 @@ from core.commands import (
     Rename,
     SetPeriod,
     SetStatus,
+    SetTags,
     apply,
     apply_all,
     command_from_dict,
@@ -208,6 +209,32 @@ def test_unknown_command_raises():
         apply(doc(), Bogus())
 
 
+# --- SetTags ---------------------------------------------------------------
+
+def test_set_tags_on_leaf_and_folder():
+    d1 = apply(doc(), SetTags(node_id="a", tags=("Steuer", "2023")))
+    assert d1.find("a").tags == ("Steuer", "2023")
+    d2 = apply(d1, SetTags(node_id="f", tags=("Belege",)))      # folders too
+    assert d2.find("f").tags == ("Belege",)
+    assert d2.find("a").tags == ("Steuer", "2023")             # unchanged
+
+
+def test_set_tags_normalises_trim_dedup_empty():
+    d1 = apply(doc(), SetTags(node_id="a", tags=("  Steuer ", "", "Steuer", "  ", "2023")))
+    assert d1.find("a").tags == ("Steuer", "2023")             # trimmed, deduped, empties dropped
+
+
+def test_set_tags_replaces_and_can_clear():
+    d1 = apply(doc(), SetTags(node_id="a", tags=("x", "y")))
+    d2 = apply(d1, SetTags(node_id="a", tags=()))              # clear
+    assert d2.find("a").tags == ()
+
+
+def test_set_tags_missing_node_raises():
+    with pytest.raises(CommandError):
+        apply(doc(), SetTags(node_id="nope", tags=("x",)))
+
+
 # --- command serialisation -------------------------------------------------
 
 @pytest.mark.parametrize("cmd", [
@@ -215,6 +242,7 @@ def test_unknown_command_raises():
     Rename(node_id="b", name="B"),
     SetStatus(node_id="a", status=STATUS_DONE),
     SetPeriod(node_id="a", vz_start=2023, vz_end=None),
+    SetTags(node_id="a", tags=("Steuer", "2023")),
     Delete(node_id="b"),
     Move(node_id="a", new_parent_id="f", index=0),
     MoveMany(node_ids=("a", "b"), new_parent_id="f", index=1),

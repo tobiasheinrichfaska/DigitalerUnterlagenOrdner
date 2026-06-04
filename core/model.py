@@ -43,6 +43,7 @@ class Node:
     dpi_current: Optional[int] = None
     no_compression: bool = False
     collapsed: bool = False  # folder collapsed in the tree view (persisted)
+    tags: Tuple[str, ...] = ()  # free-form labels for search / sort / group (persisted)
     children: Tuple["Node", ...] = ()
     original_data: Optional[bytes] = None
     current_data: Optional[bytes] = None
@@ -65,6 +66,7 @@ class Node:
             "no_compression": self.no_compression,
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
+            "tags": list(self.tags),
             # UI hint: a committed node reloaded from disk has no source bytes
             # (the original was dropped on save), so it can't be re-compressed/reset.
             "has_source": self.original_data is not None,
@@ -87,6 +89,7 @@ class Node:
             no_compression=d.get("no_compression", False),
             collapsed=d.get("collapsed", False),
             compression_method=d.get("compression_method"),
+            tags=tuple(d.get("tags") or ()),
             children=tuple(Node.from_dict(c) for c in d.get("children", [])),
         )
 

@@ -38,6 +38,7 @@ class PDFNode:
         self.no_compression: bool = False
         self.collapsed: bool = False  # folder collapsed in the tree view (persisted)
         self.compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data
+        self.tags: List[str] = []  # free-form labels (persisted)
 
         if pdf_data and not is_folder:
             self.set_original_and_current_data(
@@ -81,6 +82,7 @@ class PDFNode:
             "no_compression": self.no_compression,
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
+            "tags": list(self.tags),
             "children": [child.to_dict() for child in self.children],
         }
 

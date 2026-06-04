@@ -97,6 +97,15 @@ export const en = {
   'Name des neuen Ordners': 'Name of the new folder',
   'Neue Gruppe': 'New group',
 
+  // tags
+  'Tags': 'Tags',
+  'Tags ein-/ausschalten': 'Toggle tags on/off',
+  '+ Tag': '+ Tag',
+  'Tag entfernen': 'Remove tag',
+  'Zu Favoriten': 'Add to favourites',
+  'Aus Favoriten entfernen': 'Remove from favourites',
+  'Favorit hinzufügen': 'Add favourite',
+
   // status labels (German display → English; the data keys stay erfasst/…)
   'Erfasst': 'Recorded',
   'Zu erfassen': 'To record',

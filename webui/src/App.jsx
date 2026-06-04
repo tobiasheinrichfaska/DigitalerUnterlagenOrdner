@@ -5,7 +5,9 @@ import { PreviewControls } from './PreviewControls'
 import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
+import { TagEditor } from './TagEditor'
 import { StatusBar } from './StatusBar'
+import { allTags } from './lib/tags'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
@@ -101,6 +103,8 @@ export default function App() {
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
+  const [tagsOn, setTagsOn] = useState(false) // tagging off by default; auto-on when a loaded file has tags
+  const toggleTags = () => setTagsOn((v) => !v)
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
@@ -183,7 +187,10 @@ export default function App() {
     core.config()
       .then((r) => { if (r?.ok) setConfig(r); return r })
       .catch(() => null)
-      .then((r) => run(core.open(null, r?.startup_path || null)).then(apply))
+      .then((r) => run(core.open(null, r?.startup_path || null)).then((resp) => {
+        apply(resp)
+        if (resp?.ok && allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
+      }))
       .catch((e) => setError(String(e.message || e)))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -440,7 +447,10 @@ export default function App() {
     if (dirty && !window.confirm(t('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?'))) return
     run(core.openFile(session)).then((resp) => {
       apply(resp)
-      if (resp?.ok) { setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false) }
+      if (resp?.ok) {
+        setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
+        if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
+      }
     })
   }
 
@@ -558,7 +568,7 @@ export default function App() {
   }
 
   return (
-    <div className={busy ? 'app busy' : 'app'}>
+    <div className={`app${busy ? ' busy' : ''}${tagsOn ? '' : ' tags-off'}`}>
       <header>
         <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <div className="toolbar">
@@ -578,6 +588,9 @@ export default function App() {
           </button>
           <button onClick={undo} disabled={!state?.can_undo} title={t('Rückgängig')}>↶</button>
           <button onClick={redo} disabled={!state?.can_redo} title={t('Wiederholen')}>↷</button>
+          <span className="sep" />
+          <button className={tagsOn ? 'tag-toggle on' : 'tag-toggle'} aria-pressed={tagsOn}
+            onClick={toggleTags} title={t('Tags ein-/ausschalten')}>🏷️ {t('Tags')}</button>
           <span className="sep" />
           <select className="lang-select" value={lang} title={t('Sprache')} aria-label={t('Sprache')}
             onChange={(e) => setLang(e.target.value)}>
@@ -619,6 +632,7 @@ export default function App() {
         </div>
         <div className="splitter" onMouseDown={startResize} title={t('Breite der Baumansicht ziehen')} />
         <div className="pane preview-pane" ref={previewRef}>
+          {tagsOn && selected && <TagEditor node={selected} docTags={allTags(state?.tree)} dispatch={dispatch} />}
           {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150} />}
           {selected && (windowed || pages?.length > 0) && (
             <div className="zoom-bar">

@@ -150,6 +150,11 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
             {node.is_folder ? '📁' : '📄'} {node.name}
           </span>
         )}
+        {node.tags?.length > 0 && (
+          <span className="tw-tags">
+            {node.tags.map((tg) => <span key={tg} className="tw-tag">{tg}</span>)}
+          </span>
+        )}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (

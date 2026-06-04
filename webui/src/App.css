@@ -254,3 +254,37 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 .modal-actions .primary { font-weight: 600; }
 
 .preview-controls .csize { color: var(--muted); font-size: 0.85em; white-space: nowrap; }
+
+/* tags: row chips, toolbar toggle, and the tag editor */
+.tw-tags { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.tw-tag {
+  font-size: 0.72em; line-height: 1.4; padding: 0 6px; border-radius: 999px;
+  background: var(--accent, #2b6cb0); color: #fff; white-space: nowrap;
+}
+.tags-off .tw-tags { display: none; }           /* tagging off → no chips shown */
+
+.tag-toggle { opacity: 0.7; }
+.tag-toggle.on { opacity: 1; box-shadow: inset 0 -2px 0 0 var(--accent, #2b6cb0); font-weight: 600; }
+
+.tag-editor {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 6px 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px;
+}
+.tag-editor .te-label { opacity: 0.7; }
+.te-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--accent, #2b6cb0); color: #fff;
+  border-radius: 999px; padding: 1px 4px 1px 9px; font-size: 0.85em;
+}
+.te-chip .te-star, .te-chip .te-x {
+  background: none; border: none; color: #fff; cursor: pointer;
+  padding: 0 3px; font-size: 0.95em; line-height: 1;
+}
+.te-chip .te-x { font-size: 1.1em; }
+.te-input { min-width: 90px; flex: 0 1 140px; padding: 2px 6px; }
+.te-favs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.te-fav {
+  font-size: 0.8em; padding: 1px 8px; border-radius: 999px;
+  border: 1px dashed var(--line); background: transparent; cursor: pointer; opacity: 0.8;
+}
+.te-fav:hover { opacity: 1; }

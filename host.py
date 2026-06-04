@@ -171,9 +171,6 @@ class HostApi:
     def compress_options(self, session, node_id, dpi=150):
         return self._core.compress_options(session, node_id, dpi)
 
-    def test_mode(self, dpi=60, max_pages=3):
-        return self._core.test_mode(dpi, max_pages)
-
     # windowed render cache
     def render_stats(self):
         return self._core.render_stats()

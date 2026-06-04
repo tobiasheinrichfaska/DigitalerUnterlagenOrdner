@@ -31,8 +31,6 @@ export const en = {
   'Ordner': 'Folder',
   'Rückgängig': 'Undo',
   'Wiederholen': 'Redo',
-  'Testmodus': 'Test mode',
-  'Testmodus: Golden-Master-Vergleich (Entwickler/QA)': 'Test mode: golden-master comparison (developer/QA)',
 
   // dialogs / notices (frontend)
   'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':

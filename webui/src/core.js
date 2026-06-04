@@ -83,7 +83,6 @@ export const core = {
   render: (session, nodeId) => call('render', session, nodeId),
   renderCompressed: (session, nodeId, dpi, method) => call('render_compressed', session, nodeId, dpi, method),
   compressOptions: (session, nodeId, dpi) => call('compress_options', session, nodeId, dpi),
-  testMode: (dpi = 72, maxPages = 12) => call('test_mode', dpi, maxPages),
   pageCount: (session, nodeId) => call('page_count', session, nodeId),
   pageDims: (session, nodeId) => call('page_dims', session, nodeId),
   renderStats: () => call('render_stats'),

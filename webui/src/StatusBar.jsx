@@ -23,6 +23,11 @@ export function StatusBar() {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
+  const enlarge = () => {
+    if (!stats) return
+    core.setCacheBudget(mb(stats.cache_budget) + 50).then((r) => { if (r?.ok) setStats(r) }).catch(() => {})
+  }
+
   const parts = []
   if (act.compress > 0) parts.push(t('Komprimiere {n}', { n: act.compress }))
   if (act.render > 0) parts.push(t('Vorschau lädt {n}', { n: act.render }))
@@ -36,9 +41,11 @@ export function StatusBar() {
       </span>
       {stats && (
         <span className="sb-cache" title={t('Vorschau-Cache')}>
-          📦 {t('Cache {used} / {total} MB ({free} frei)', {
-            used: mb(stats.cache_used), total: mb(stats.cache_budget), free: mb(stats.cache_free),
+          📦 {t('Cache {used} / {total} MB · {pages} S. ({free} frei)', {
+            used: mb(stats.cache_used), total: mb(stats.cache_budget),
+            pages: stats.cache_pages, free: mb(stats.cache_free),
           })}
+          <button className="sb-plus" title={t('Cache vergrößern (+50 MB)')} onClick={enlarge}>＋</button>
         </span>
       )}
     </footer>

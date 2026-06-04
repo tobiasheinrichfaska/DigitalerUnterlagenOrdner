@@ -13,7 +13,8 @@ export const en = {
   'Vorschau lädt {n}': 'Loading preview {n}',
   'Cache füllt': 'Filling cache',
   'Vorschau-Cache': 'Preview cache',
-  'Cache {used} / {total} MB ({free} frei)': 'Cache {used} / {total} MB ({free} free)',
+  'Cache {used} / {total} MB · {pages} S. ({free} frei)': 'Cache {used} / {total} MB · {pages} pp. ({free} free)',
+  'Cache vergrößern (+50 MB)': 'Enlarge cache (+50 MB)',
 
   // toolbar
   'Öffnen': 'Open',

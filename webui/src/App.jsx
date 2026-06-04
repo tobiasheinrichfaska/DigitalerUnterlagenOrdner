@@ -262,6 +262,24 @@ export default function App() {
     }
   }) // re-binds each render so it closes over the current session/selected
 
+  // Resolve a multi-selection to a clean (non-mixed) set, asking the user how to
+  // handle any folder that overlaps with its own selected items. Reused by delete,
+  // move, group and export. `warnNone` adds the destructive "this also affects the
+  // folder's unselected contents" prompt (delete only). Returns ids[] or null (abort).
+  const resolveSel = useCallback((ids, { warnNone = false } = {}) => {
+    const tree = state?.tree
+    if (!tree) return null
+    const ask = (kind, name) => {
+      if (kind === 'none') {
+        return window.confirm(t('Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?', { name })) ? 'proceed' : 'abort'
+      }
+      if (window.confirm(t('„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)', { name }))) return 'all'
+      if (window.confirm(t('Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)', { name }))) return 'exclude'
+      return 'abort'
+    }
+    return resolveSelection(tree, ids, ask, { warnNone })
+  }, [state, t])
+
   // drag-drop move: dispatch a Move command (the core is the source of truth).
   // Adjust the index for the core's remove-then-insert when reordering within the
   // same parent to a later slot (the source's removal shifts everything down one).
@@ -278,8 +296,10 @@ export default function App() {
   // drag a multi-selection → move all of them at the drop position (the core
   // discounts the moved-out siblings before the slot). index null = append/into.
   const onMoveMany = useCallback((ids, newParentId, index = null) => {
-    dispatch({ type: 'MoveMany', node_ids: ids, new_parent_id: newParentId, index })
-  }, [dispatch])
+    const clean = resolveSel(ids)  // resolve folder/child overlaps (no destructive warn)
+    if (!clean || !clean.length) return
+    dispatch({ type: 'MoveMany', node_ids: clean, new_parent_id: newParentId, index })
+  }, [dispatch, resolveSel])
 
   // pop-out drop levels for the gap after a row (for the slide-to-choose-level UX)
   const levelsFor = useCallback((id) => (state?.tree ? afterLevels(state.tree, id) : []), [state])
@@ -340,23 +360,13 @@ export default function App() {
     return n
   }, [state?.tree])
 
-  // Delete the whole selection (one undo). If it mixes a folder with items inside it
-  // (an ancestor + a descendant are both selected), warn and — on confirm — delete only
-  // the selected children, keeping the folders. Then focus the next remaining node.
+  // Delete the whole selection (one undo), resolving folder/child overlaps first,
+  // then focus the next remaining node.
   const deleteSelection = useCallback(() => {
     const tree = state?.tree
     const ids = selectedIds.length ? selectedIds : (selected ? [selected.id] : [])
     if (!ids.length || !tree) return
-    // resolve parent/child overlaps before dispatching (the data layer rejects mixed)
-    const ask = (kind, name) => {
-      if (kind === 'none') {
-        return window.confirm(t('Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mitgelöscht werden. Fortfahren?', { name })) ? 'proceed' : 'abort'
-      }
-      if (window.confirm(t('„{name}“: alle Elemente des Ordners löschen? (Abbrechen = nur die ausgewählten Elemente, Ordner behalten)', { name }))) return 'all'
-      if (window.confirm(t('Nur die ausgewählten Elemente löschen und „{name}“ behalten? (Abbrechen = nichts löschen)', { name }))) return 'exclude'
-      return 'abort'
-    }
-    const toDelete = resolveSelection(tree, ids, ask)
+    const toDelete = resolveSel(ids, { warnNone: true })  // data layer rejects mixed
     if (!toDelete || !toDelete.length) return
     // pick the next node to focus: first still-present row after the deletion, else before
     const order = visibleOrder(tree)
@@ -374,7 +384,7 @@ export default function App() {
         setPreviewReq(null)
       }
     })
-  }, [selectedIds, selected, state, session, run, apply, t])
+  }, [selectedIds, selected, state, session, run, apply, resolveSel])
 
   // drag the splitter to resize the tree pane (persisted to localStorage)
   useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
@@ -414,6 +424,16 @@ export default function App() {
     return { ids: selectedIds, parentId }
   })()
 
+  // group the selection into a new folder, resolving folder/child overlaps first
+  const groupSelection = (name) => {
+    if (!name || !groupable || !state?.tree) return
+    const ids = resolveSel(groupable.ids)
+    if (!ids || !ids.length) return
+    const parents = ids.map((id) => findParent(state.tree, id)?.id)
+    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : state.tree.id
+    dispatch({ type: 'GroupIntoFolder', node_ids: ids, parent_id: parentId, name, new_id: null, index: null })
+  }
+
   const openFile = () => {
     if (dirty && !window.confirm(t('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?'))) return
     run(core.openFile(session)).then((resp) => {
@@ -428,8 +448,13 @@ export default function App() {
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
   // the context menu passes specific ids for an explicit selection export.
-  const exportPdf = (nodeIds = null) =>
-    run(core.exportPdf(session, nodeIds)).then((resp) => {
+  const exportPdf = (nodeIds = null) => {
+    let ids = nodeIds
+    if (Array.isArray(nodeIds)) {  // a selection → resolve folder/child overlaps first
+      ids = resolveSel(nodeIds)
+      if (!ids || !ids.length) return undefined
+    }
+    return run(core.exportPdf(session, ids)).then((resp) => {
       if (resp?.ok) {
         setError(null)
         const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
@@ -438,6 +463,7 @@ export default function App() {
       }
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
     })
+  }
 
   // keyboard shortcuts (ignored while typing in a field)
   useEffect(() => {
@@ -613,7 +639,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} selectedIds={selectedIds}
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} selectedIds={selectedIds}
         onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} />
 
       {dropActive && (

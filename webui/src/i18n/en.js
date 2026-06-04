@@ -79,12 +79,12 @@ export const en = {
   'Als PDF exportieren': 'Export as PDF',
   'Auswahl als PDF exportieren ({count})': 'Export selection as PDF ({count})',
   'Löschen': 'Delete',
-  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mitgelöscht werden. Fortfahren?':
-    'Folder “{name}” contains unselected items that will be deleted too. Continue?',
-  '„{name}“: alle Elemente des Ordners löschen? (Abbrechen = nur die ausgewählten Elemente, Ordner behalten)':
-    '“{name}”: delete all items in the folder? (Cancel = only the selected items, keep the folder)',
-  'Nur die ausgewählten Elemente löschen und „{name}“ behalten? (Abbrechen = nichts löschen)':
-    'Delete only the selected items and keep “{name}”? (Cancel = delete nothing)',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'Folder “{name}” contains unselected items that will be included. Continue?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '“{name}”: include the whole folder? (Cancel = only the selected items, exclude the folder)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Use only the selected items and exclude “{name}”? (Cancel = cancel the operation)',
   'Zusammenführen → 1 PDF ({count})': 'Merge → 1 PDF ({count})',
   'In neuen Ordner ({count})': 'Into a new folder ({count})',
   'Name des neuen Ordners': 'Name of the new folder',

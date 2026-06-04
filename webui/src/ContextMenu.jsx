@@ -8,7 +8,7 @@ import { useT } from './i18n/LanguageProvider'
 const STATUS_DE = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 export const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [] }) {
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
@@ -46,7 +46,11 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
   }
   const groupInto = () => {
     const name = window.prompt(t('Name des neuen Ordners'), t('Neue Gruppe'))
-    if (name) dispatch({ type: 'GroupIntoFolder', node_ids: group.ids, parent_id: group.parentId, name, new_id: null, index: null })
+    if (name) {
+      // App resolves folder/child overlaps; fall back to a direct dispatch if not wired
+      if (onGroup) onGroup(name)
+      else dispatch({ type: 'GroupIntoFolder', node_ids: group.ids, parent_id: group.parentId, name, new_id: null, index: null })
+    }
     onClose()
   }
 

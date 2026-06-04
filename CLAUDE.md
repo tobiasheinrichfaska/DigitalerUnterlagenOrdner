@@ -38,7 +38,7 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 
 | File | Role |
 |---|---|
-| `universal_importer.py` | Multi-format import: PDF, images (jpg/png/webp/heic), Office (Word/Excel/PPT via COM), archives (ZIP/TAR), email (eml/msg) |
+| `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (ZIP/TAR/email extraction + bomb guards). `__init__` re-exports the public surface. |
 | `toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
 | `compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
 
@@ -101,11 +101,11 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
 | `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
-| `webui/src/ContextMenu.jsx`, `core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner); thin `window.pywebview.api` wrapper |
+| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js`, `treeNav.js`). |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
-&& npm test` (Vitest + jsdom; `src/core.test.js` smoke-tests the `core.js` bridge —
+&& npm test` (Vitest + jsdom; `src/lib/core.test.js` smoke-tests the `core.js` bridge —
 method-name mapping and the `pywebviewready` wait/fail-fast). **Manual tests:**
 [`manual_tests/05_react_ui.md`](manual_tests/05_react_ui.md).
 
@@ -144,7 +144,7 @@ render/compress path at startup.
 ### Tree operations
 Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop.
 
-**Keyboard structuring** (`webui/src/treeNav.js` pure helpers + `App.jsx` `onKey`):
+**Keyboard structuring** (`webui/src/lib/treeNav.js` pure helpers + `App.jsx` `onKey`):
 ↑/↓ navigate the visible rows; ←/→ collapse/expand a folder (or step out/in).
 **Insert** grabs the selected node (dashed outline); while grabbed, arrows move it
 **optically** (↑/↓ reorder, → nest into the folder above, ← out a level) — nothing is

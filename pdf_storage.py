@@ -1,7 +1,7 @@
 import io
 import json
 import datetime
-from typing import Optional, List, Union, Dict, Any
+from typing import Optional, List, Union
 from pypdf import PdfReader, PdfWriter
 from pdf_node import PDFNode
 import os
@@ -163,25 +163,6 @@ class PDFStorage:
         except Exception as e:
             raise ValueError(f"Fehler beim Laden des PDFs: {e}")
 
-    @staticmethod
-    def extract_pages(data: bytes, start: int, end: int) -> bytes:
-        if start is None or end is None:
-            logger.warning("Kein gültiger Seitenbereich angegeben.")
-            return b""
-
-        reader = PdfReader(io.BytesIO(data))
-        writer = PdfWriter()
-
-        for i in range(start, end + 1):
-            if 0 <= i < len(reader.pages):
-                writer.add_page(reader.pages[i])
-            else:
-                logger.warning("Seite %d liegt außerhalb des gültigen Bereichs (%d Seiten)", i, len(reader.pages))
-
-        buffer = io.BytesIO()
-        writer.write(buffer)
-        return buffer.getvalue()
-
 
 
 
@@ -326,26 +307,6 @@ class PDFStorage:
             temp_storage.root.add_child(c)
         temp_storage.save(path)
 
-    # def export_as_bytes(self) -> bytes:
-    #     buffer = io.BytesIO()
-    #     writer = PdfWriter()
-
-    #     def append_pages(node: PDFNode):
-    #         if not node.is_folder and node.current_pdf_data:
-    #             reader = PdfReader(io.BytesIO(node.current_pdf_data))
-    #             for page in reader.pages:
-    #                 writer.add_page(page)
-    #         for child in node.children:
-    #             append_pages(child)
-
-    #     append_pages(self.root)
-    #     writer.write(buffer)
-    #     return buffer.getvalue()
-
-    def get_structure_json(self) -> str:
-        """Gibt die JSON-Struktur der PDF-Nodes zurück – inklusive automatisch gesetzter Seitenbereiche."""
-        return json.dumps(self.root.to_dict(), indent=2)
-
     def get_all_nodes(self) -> List[PDFNode]:
         def collect_nodes(node: PDFNode) -> List[PDFNode]:
             result = [node]
@@ -438,35 +399,6 @@ class PDFStorage:
         return node
 
 
-    def perform_move(self, nodes: List[PDFNode], target_node: PDFNode) -> List[Dict[str, Any]]:
-        """
-        Führt bereinigte Verschiebung durch. Gibt GUI-Umbauplan für gesamte Struktur zurück.
-        """
-        self._move_nodes_to_parent(nodes, target_node)  # ✅ korrekt, interne Methode
-        self.mark_dirty()
-        return self.get_full_gui_plan()
-
-    def get_full_gui_plan(self) -> List[Dict[str, Any]]:
-        """
-        Gibt die komplette Struktur als UID-Zuordnung für den TreeView zurück,
-        sortiert nach Tiefe und Index.
-        """
-        result = []
-
-        def recurse(node: PDFNode, depth: int = 0):
-            for i, child in enumerate(node.children):
-                result.append({
-                    "uid": child.uid,
-                    "parent_uid": node.uid,
-                    "index": i,
-                    "depth": depth
-                })
-                recurse(child, depth + 1)
-
-        recurse(self.root)
-        return sorted(result, key=lambda e: (e["depth"], e["index"]))
-
-
     @staticmethod
     def has_parent_child_conflict(nodes: List[PDFNode]) -> bool:
         """Returns True if any node in the list is an ancestor of another node in the list."""
@@ -492,46 +424,5 @@ class PDFStorage:
             node for node in nodes
             if not any(other._is_descendant_of(node) for other in nodes if other is not node)
         ]
-
-    def _get_clean_selection(self, nodes: List[PDFNode], target_parent: PDFNode) -> List[PDFNode]:
-        """Entfernt Nachfahren aus der Selektion (behält Vorfahren)."""
-        return self.filter_keep_ancestors(nodes)
-
-    def _move_nodes_to_parent(self, nodes: List[PDFNode], target_node: PDFNode):
-        """
-        Führt die Verschiebung der Nodes im Baum durch.
-        - Wenn target_node Ordner: → Einfügen ans Ende
-        - Wenn PDF: → Einfügen direkt unterhalb (im selben Parent)
-        """
-        if not target_node:
-            # print("[ABBRUCH] Kein Zielknoten angegeben.")
-            return
-
-        if target_node.is_folder:
-            new_parent = target_node
-            insert_pos = len(new_parent.children)
-        else:
-            new_parent = target_node.parent
-            if not new_parent:
-                return
-            insert_pos = new_parent.children.index(target_node) + 1
-        clean = self._get_clean_selection(nodes, new_parent)
-        insert_offset = 0
-        for i, node in enumerate(clean):
-            if node.parent:
-                try:
-                    # innerhalb gleichen Parents und nach unten? → Index korrigieren
-                    if node.parent == new_parent and node.position is not None and node.position < insert_pos:
-                        insert_offset -= 1
-                    node.parent.children.remove(node)
-                except ValueError:
-                    logger.warning("Knoten '%s' war nicht in Parent '%s' enthalten.", node.name, node.parent.name)
-
-            node.parent = new_parent
-            new_index = insert_pos + i + insert_offset
-            new_parent.children.insert(new_index, node)
-
-        for idx, child in enumerate(new_parent.children):
-            child.position = idx
 
 

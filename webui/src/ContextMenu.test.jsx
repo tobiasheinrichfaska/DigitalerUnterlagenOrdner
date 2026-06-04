@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { ContextMenu, STATUS_LABELS } from './ContextMenu'
+import { ContextMenu } from './ContextMenu'
 
-// derive the status keys/labels from the component's own source (not a re-typed
-// copy). The keys themselves come from the core at runtime via config().statuses
-// — that core↔config contract is asserted in tests/test_status_config.py.
-const STATUS_KEYS = Object.keys(STATUS_LABELS)
+// The status keys come from the core at runtime via config().statuses (that
+// core↔config contract is asserted in tests/test_status_config.py); their UI labels
+// are German display text run through t() (see statusLabel/STATUS_DE in ContextMenu).
+// Components render without a LanguageProvider here, so t() yields the default
+// language (German) — the assertions below expect the German labels.
+const STATUS_KEYS = ['erfasst', 'zu erfassen', 'vorjahreswert']
 
 function setup(node, extra = {}) {
   const spies = {

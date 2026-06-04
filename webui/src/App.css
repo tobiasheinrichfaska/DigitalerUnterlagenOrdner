@@ -163,6 +163,8 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
 }
 .compress-select { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.lang-select { font: inherit; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9fb; cursor: pointer; }
+.lang-select:hover { border-color: var(--accent); }
 
 /* right-click context menu */
 .cm-backdrop { position: fixed; inset: 0; z-index: 20; }

@@ -7,19 +7,20 @@
 // deliberate apply ("❓ Lesbarkeit geprüft" → Compress, "Original" → Reset).
 import { useState, useEffect } from 'react'
 import { core } from './core'
+import { useT } from './i18n/LanguageProvider'
 
 const kb = (n) => `${Math.round(n / 1024)} KB`
 
-// Readable labels for the backend compression method keys.
-const METHOD_LABELS = {
-  jpg: 'JPEG (Graustufen)',
-  jpg_color: 'JPEG (Farbe)',
-  png: 'PNG (Graustufen)',
-  pikepdf: 'Struktur (Farbe erhalten)',
+// backend compression method key → German display text (translated by t()).
+const METHOD_DE = {
+  jpg: 'JPEG (Graustufen)', jpg_color: 'JPEG (Farbe)',
+  png: 'PNG (Graustufen)', pikepdf: 'Struktur (Farbe erhalten)',
 }
-const methodLabel = (m) => METHOD_LABELS[m] ?? m
 
 export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi = 150 }) {
+  const { t } = useT()
+  // backend method key → German display text, which t() then translates.
+  const methodLabel = (m) => t(METHOD_DE[m] ?? m)
   // A committed node reloaded from disk has no source bytes (original dropped on
   // save) → it can't be re-compressed or reset; lock the controls.
   const noSource = node.has_source === false
@@ -73,7 +74,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
 
   return (
     <div className="preview-controls">
-      <label className="dpi" title="Kompressions-DPI">
+      <label className="dpi" title={t('Kompressions-DPI')}>
         DPI <b>{dpi}</b>
         <input
           type="range" min="50" max="300" step="10" value={dpi} disabled={off}
@@ -87,26 +88,26 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         onFocus={() => { if (!options) loadOptions(dpi) }}
         onChange={(e) => onMethod(e.target.value)}>
         <option value="original">{
-          noSource ? 'bereits komprimiert (keine Quelle)'
-            : loading ? 'Kompression läuft …'
-              : `unkomprimierte Fassung${origSize != null ? ` — ${kb(origSize)}` : ''}`
+          noSource ? t('bereits komprimiert (keine Quelle)')
+            : loading ? t('Kompression läuft …')
+              : `${t('unkomprimierte Fassung')}${origSize != null ? ` — ${kb(origSize)}` : ''}`
         }</option>
         {/* before the list loads, keep the saved method selectable */}
         {!options && method !== 'original' && <option value={method}>{methodLabel(method)}</option>}
         {options?.map((o, i) => (
           <option key={o.method} value={o.method}>
-            {methodLabel(o.method)} — {kb(o.size)}{i === 0 ? ' · beste' : ''}
+            {methodLabel(o.method)} — {kb(o.size)}{i === 0 ? ` · ${t('beste')}` : ''}
           </option>
         ))}
       </select>
 
       <button onClick={applyChoice} disabled={off || applied}
-        title="Die aktuell angezeigte Komprimierung übernehmen">
-        {applied ? '✓ übernommen' : '❓ Lesbarkeit geprüft'}
+        title={t('Die aktuell angezeigte Komprimierung übernehmen')}>
+        {applied ? `✓ ${t('übernommen')}` : `❓ ${t('Lesbarkeit geprüft')}`}
       </button>
       <span className="sep" />
-      <button title="rechts drehen" onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
-      <button title="links drehen" onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'left' })}>↺</button>
+      <button title={t('rechts drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
+      <button title={t('links drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'left' })}>↺</button>
     </div>
   )
 }

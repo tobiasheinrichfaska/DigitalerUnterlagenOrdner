@@ -16,10 +16,12 @@
 // same RenderService cache. Scroll position is remembered per node.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { core } from './core'
+import { useT } from './i18n/LanguageProvider'
 
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)
 
 export function Preview({ session, node, zoom = 1, previewReq = null, onPage = null }) {
+  const { t } = useT()
   const nodeId = node?.id
   const reqKey = previewReq ? `${previewReq.dpi}:${previewReq.method}` : 'orig'
 
@@ -126,7 +128,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   }, [count, nodeId, reqKey, update])
 
   if (!nodeId) return null
-  if (count === 0) return <p className="status">Keine Vorschau (Ordner oder leer)</p>
+  if (count === 0) return <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>
 
   const width = Math.round(560 * zoom)
   return (
@@ -143,8 +145,8 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
             style={{ width: `${width}px`, aspectRatio: `${w} / ${h}` }}
           >
             {url
-              ? <img src={url} alt={`Seite ${i + 1}`} />
-              : <div className="win-skeleton">Seite {i + 1}</div>}
+              ? <img src={url} alt={t('Seite {n}', { n: i + 1 })} />
+              : <div className="win-skeleton">{t('Seite {n}', { n: i + 1 })}</div>}
           </div>
         )
       })}

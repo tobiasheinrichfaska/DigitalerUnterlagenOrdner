@@ -422,8 +422,9 @@ export default function App() {
     })
   }
 
-  const saveFile = () =>
-    run(core.saveFile(session)).then((resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } })
+  const onSaved = (resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } }
+  const saveFile = () => run(core.saveFile(session)).then(onSaved)
+  const saveFileAs = () => run(core.saveFileAs(session)).then(onSaved)
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
   // the context menu passes specific ids for an explicit selection export.
@@ -530,6 +531,7 @@ export default function App() {
           <button onClick={() => core.newWindow()} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
           <button onClick={() => handleImport(core.importDialog(session, importTarget()))}>📥 {t('Importieren')}</button>
           <button onClick={saveFile}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
+          <button onClick={saveFileAs} title={t('Speichern unter…')}>💾…</button>
           <button onClick={() => exportPdf(selectedIds.length ? selectedIds : null)} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>⬇ {t('Export PDF')}{selectedIds.length ? ` (${t('Auswahl')} ${selectedIds.length})` : ''}</button>
           <span className="sep" />
           <button

@@ -230,6 +230,13 @@ class HostApi:
         return self._core.open(session, result[0])
 
     def save_file(self, session):
+        """Save in place if this document already has a path; otherwise prompt once."""
+        path = self._core.document_path(session)
+        if path:
+            return self._core.save(session, path)
+        return self.save_file_as(session)
+
+    def save_file_as(self, session):
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}

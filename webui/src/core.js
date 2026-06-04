@@ -63,6 +63,7 @@ export const core = {
   open: (session = null, path = null) => call('open', session, path),
   openFile: (session = null) => call('open_file', session),
   saveFile: (session) => call('save_file', session),
+  saveFileAs: (session) => call('save_file_as', session),
   dispatch: (session, command) => call('dispatch', session, command),
   undo: (session) => call('undo', session),
   redo: (session) => call('redo', session),

@@ -66,6 +66,18 @@ def test_save_reload_persists_variants(tmp_path):
     assert got == {150: {"jpg": b"VARIANT-JPG", "pikepdf": b"VARIANT-PK"}}
 
 
+def test_document_path_is_remembered(tmp_path):
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    assert api.document_path(sid) is None       # a fresh doc has no path → Save prompts
+    api.save(sid, bel)
+    assert api.document_path(sid) == bel         # after a save, Speichern saves in place
+    api2 = CoreApi()
+    sid2 = api2.open(path=bel)["session"]
+    assert api2.document_path(sid2) == bel        # opening binds the path too
+
+
 def test_node_id_survives_save_reload(tmp_path):
     pdf_path = tmp_path / "src.pdf"
     pdf_path.write_bytes(_make_pdf(1))

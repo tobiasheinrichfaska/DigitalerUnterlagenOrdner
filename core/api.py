@@ -54,6 +54,7 @@ class CoreApi:
     def __init__(self, engine=None):
         self._engine = engine or RealEngine()
         self._sessions = {}
+        self._paths = {}  # session -> on-disk path (so Speichern saves in place, not Save-As)
         self._lock = threading.Lock()
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
@@ -234,9 +235,14 @@ class CoreApi:
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
             else:
                 sid = self._new_locked(document)
+            self._paths[sid] = path if path else None  # remember where it came from
             resp = self._doc_response_locked(sid)
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
         return resp
+
+    def document_path(self, session: str):
+        """The on-disk path this session is bound to (None if never saved/opened)."""
+        return self._paths.get(session)
 
     def _prewarm_cache(self, session):
         """Kick off the background prefetch around the first leaf, so the render cache
@@ -467,6 +473,7 @@ class CoreApi:
             s = self._sessions.get(session)
             if s is not None:
                 s.mark_saved()
+            self._paths[session] = path  # bind the session to this file for in-place saves
         return {"ok": True, "session": session, "path": path}
 
     def export(self, session: str, path: str, node_ids=None) -> dict:

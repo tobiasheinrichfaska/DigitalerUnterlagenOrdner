@@ -1,0 +1,107 @@
+// French translations: German source text → French.
+export const fr = {
+  'Verbinde mit Core…': 'Connexion au cœur…',
+  'Arbeite…': 'Traitement…',
+  'Sprache': 'Langue',
+
+  'Bereit': 'Prêt',
+  'Komprimiere {n}': 'Compression {n}',
+  'Vorschau lädt {n}': 'Chargement de l’aperçu {n}',
+  'Cache füllt': 'Remplissage du cache',
+  'Vorschau-Cache · {free} MB frei': 'Cache d’aperçu · {free} Mo libres',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Cache {used}/{total} Mo · {pages}/{doc} pages',
+  'Cache vergrößern (+50 MB)': 'Agrandir le cache (+50 Mo)',
+  'Cache verkleinern (−50 MB)': 'Réduire le cache (−50 Mo)',
+
+  'Öffnen': 'Ouvrir',
+  'Neues Fenster': 'Nouvelle fenêtre',
+  'Weiteres Dokument in neuem Fenster': 'Un autre document dans une nouvelle fenêtre',
+  'Importieren': 'Importer',
+  'Speichern': 'Enregistrer',
+  'Speichern unter…': 'Enregistrer sous…',
+  'Export PDF': 'Exporter en PDF',
+  'Komprimierungs-Alternativen speichern?': 'Enregistrer les variantes de compression ?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n} document(s) possèdent des variantes de compression calculées.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '« Comme prévu » conserve les variantes dans le fichier (plus volumineux, disponibles immédiatement à la réouverture). « Original » n’enregistre que la version de base (plus petit ; les variantes sont recalculées à la réouverture).',
+  'Wie geplant speichern': 'Enregistrer comme prévu',
+  'Original speichern': 'Enregistrer l’original',
+  'Abbrechen': 'Annuler',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Exporter en PDF avec table des matières (sélection, sinon tout le document)',
+  'Auswahl': 'Sélection',
+  'Ordner': 'Dossier',
+  'Rückgängig': 'Défaire',
+  'Wiederholen': 'Rétablir',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    'Ouvrir un autre fichier et abandonner les modifications non enregistrées ?',
+  'Gespeichert': 'Enregistré',
+  'PDF exportiert ({count} {entries})': 'PDF exporté ({count} {entries})',
+  'Eintrag': 'entrée',
+  'Einträge': 'entrées',
+
+  'Breite der Baumansicht ziehen': 'Glisser pour redimensionner le volet de l’arborescence',
+
+  'Knoten auswählen für die Vorschau': 'Sélectionnez un nœud pour l’aperçu',
+  'Keine Vorschau (Ordner oder leer)': 'Aucun aperçu (dossier ou vide)',
+  'Seite {page} / {total}': 'Page {page} / {total}',
+  '{total} Seiten': '{total} pages',
+  'Seite {n}': 'Page {n}',
+  'kleiner': 'plus petit',
+  'größer': 'plus grand',
+  'zurücksetzen': 'réinitialiser',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Déposez les fichiers — sur une position dans l’arborescence (dans/entre) pour une cible précise, sinon dans {target}',
+  'oberste Ebene': 'niveau supérieur',
+
+  'Neuer Ordner': 'Nouveau dossier',
+  'Umbenennen': 'Renommer',
+  'Neuer Name': 'Nouveau nom',
+  'Splitten': 'Diviser',
+  'pro Seite': 'par page',
+  'N Seiten pro Knoten…': 'N pages par nœud…',
+  'pro Seite → neuer Ordner': 'par page → nouveau dossier',
+  'N Seiten → neuer Ordner…': 'N pages → nouveau dossier…',
+  'Seiten pro Knoten:': 'Pages par nœud :',
+  'Ordner anlegen': 'Créer un dossier',
+  'Aufklappen': 'Développer',
+  'Zuklappen': 'Réduire',
+  'Alle aufklappen': 'Tout développer',
+  'Alle zuklappen': 'Tout réduire',
+  'Status': 'Statut',
+  'Als PDF exportieren': 'Exporter en PDF',
+  'Auswahl als PDF exportieren ({count})': 'Exporter la sélection en PDF ({count})',
+  'Löschen': 'Supprimer',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'Le dossier « {name} » contient des éléments non sélectionnés qui seront inclus. Continuer ?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '« {name} » : inclure tout le dossier ? (Annuler = uniquement les éléments sélectionnés, exclure le dossier)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Utiliser uniquement les éléments sélectionnés et exclure « {name} » ? (Annuler = abandonner l’opération)',
+  'Zusammenführen → 1 PDF ({count})': 'Fusionner → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'Dans un nouveau dossier ({count})',
+  'Name des neuen Ordners': 'Nom du nouveau dossier',
+  'Neue Gruppe': 'Nouveau groupe',
+
+  'Erfasst': 'Saisi',
+  'Zu erfassen': 'À saisir',
+  'Vorjahr': 'Année précédente',
+
+  'JPEG (Graustufen)': 'JPEG (niveaux de gris)',
+  'JPEG (Farbe)': 'JPEG (couleur)',
+  'PNG (Graustufen)': 'PNG (niveaux de gris)',
+  'Struktur (Farbe erhalten)': 'Structure (couleur préservée)',
+  'Kompressions-DPI': 'DPI de compression',
+  'unkomprimierte Fassung': 'version non compressée',
+  'Kompression läuft …': 'Compression en cours …',
+  'bereits komprimiert (keine Quelle)': 'déjà compressé (pas de source)',
+  'beste': 'meilleure',
+  'Lesbarkeit geprüft': 'Lisibilité vérifiée',
+  'übernommen': 'appliqué',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Appliquer la compression actuellement affichée',
+  'rechts drehen': 'pivoter à droite',
+  'links drehen': 'pivoter à gauche',
+}

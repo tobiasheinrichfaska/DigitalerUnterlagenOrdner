@@ -1,0 +1,107 @@
+// Korean translations: German source text → Korean.
+export const ko = {
+  'Verbinde mit Core…': '코어에 연결 중…',
+  'Arbeite…': '처리 중…',
+  'Sprache': '언어',
+
+  'Bereit': '준비됨',
+  'Komprimiere {n}': '압축 중 {n}',
+  'Vorschau lädt {n}': '미리 보기 불러오는 중 {n}',
+  'Cache füllt': '캐시 채우는 중',
+  'Vorschau-Cache · {free} MB frei': '미리 보기 캐시 · {free} MB 여유',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': '캐시 {used}/{total} MB · {pages}/{doc} 페이지',
+  'Cache vergrößern (+50 MB)': '캐시 늘리기 (+50 MB)',
+  'Cache verkleinern (−50 MB)': '캐시 줄이기 (−50 MB)',
+
+  'Öffnen': '열기',
+  'Neues Fenster': '새 창',
+  'Weiteres Dokument in neuem Fenster': '새 창에서 다른 문서',
+  'Importieren': '가져오기',
+  'Speichern': '저장',
+  'Speichern unter…': '다른 이름으로 저장…',
+  'Export PDF': 'PDF 내보내기',
+  'Komprimierungs-Alternativen speichern?': '압축 대안을 저장할까요?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n}개 문서에 계산된 압축 대안이 있습니다.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '"계획대로"는 대안을 파일에 보관합니다(용량이 크지만 다시 열 때 즉시 사용 가능). "원본"은 기본 버전만 저장합니다(용량이 작지만 다시 열 때 대안을 다시 계산함).',
+  'Wie geplant speichern': '계획대로 저장',
+  'Original speichern': '원본 저장',
+  'Abbrechen': '취소',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    '목차가 있는 PDF로 내보내기 (선택 항목, 없으면 전체 문서)',
+  'Auswahl': '선택',
+  'Ordner': '폴더',
+  'Rückgängig': '실행 취소',
+  'Wiederholen': '다시 실행',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    '다른 파일을 열고 저장하지 않은 변경 사항을 버릴까요?',
+  'Gespeichert': '저장됨',
+  'PDF exportiert ({count} {entries})': 'PDF 내보냄 ({count} {entries})',
+  'Eintrag': '항목',
+  'Einträge': '항목',
+
+  'Breite der Baumansicht ziehen': '드래그하여 트리 창 너비 조절',
+
+  'Knoten auswählen für die Vorschau': '미리 보려면 노드를 선택하세요',
+  'Keine Vorschau (Ordner oder leer)': '미리 보기 없음 (폴더이거나 비어 있음)',
+  'Seite {page} / {total}': '페이지 {page} / {total}',
+  '{total} Seiten': '{total} 페이지',
+  'Seite {n}': '페이지 {n}',
+  'kleiner': '축소',
+  'größer': '확대',
+  'zurücksetzen': '초기화',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    '파일을 놓으세요 — 정확한 위치를 원하면 트리의 위치(안/사이)에, 아니면 {target}에',
+  'oberste Ebene': '최상위',
+
+  'Neuer Ordner': '새 폴더',
+  'Umbenennen': '이름 바꾸기',
+  'Neuer Name': '새 이름',
+  'Splitten': '분할',
+  'pro Seite': '페이지당',
+  'N Seiten pro Knoten…': '노드당 N페이지…',
+  'pro Seite → neuer Ordner': '페이지당 → 새 폴더',
+  'N Seiten → neuer Ordner…': 'N페이지 → 새 폴더…',
+  'Seiten pro Knoten:': '노드당 페이지:',
+  'Ordner anlegen': '폴더 만들기',
+  'Aufklappen': '펼치기',
+  'Zuklappen': '접기',
+  'Alle aufklappen': '모두 펼치기',
+  'Alle zuklappen': '모두 접기',
+  'Status': '상태',
+  'Als PDF exportieren': 'PDF로 내보내기',
+  'Auswahl als PDF exportieren ({count})': '선택 항목을 PDF로 내보내기 ({count})',
+  'Löschen': '삭제',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    '폴더 "{name}"에 포함될 선택되지 않은 항목이 있습니다. 계속할까요?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '"{name}": 폴더 전체를 포함할까요? (취소 = 선택한 항목만, 폴더 제외)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    '선택한 항목만 사용하고 "{name}"을(를) 제외할까요? (취소 = 작업 취소)',
+  'Zusammenführen → 1 PDF ({count})': '병합 → PDF 1개 ({count})',
+  'In neuen Ordner ({count})': '새 폴더로 ({count})',
+  'Name des neuen Ordners': '새 폴더 이름',
+  'Neue Gruppe': '새 그룹',
+
+  'Erfasst': '기록됨',
+  'Zu erfassen': '기록 필요',
+  'Vorjahr': '전년도',
+
+  'JPEG (Graustufen)': 'JPEG (회색조)',
+  'JPEG (Farbe)': 'JPEG (컬러)',
+  'PNG (Graustufen)': 'PNG (회색조)',
+  'Struktur (Farbe erhalten)': '구조 (색상 유지)',
+  'Kompressions-DPI': '압축 DPI',
+  'unkomprimierte Fassung': '비압축 버전',
+  'Kompression läuft …': '압축 중 …',
+  'bereits komprimiert (keine Quelle)': '이미 압축됨 (원본 없음)',
+  'beste': '최적',
+  'Lesbarkeit geprüft': '가독성 확인됨',
+  'übernommen': '적용됨',
+  'Die aktuell angezeigte Komprimierung übernehmen': '현재 표시된 압축 적용',
+  'rechts drehen': '오른쪽으로 회전',
+  'links drehen': '왼쪽으로 회전',
+}

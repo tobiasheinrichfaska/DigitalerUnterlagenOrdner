@@ -12,8 +12,8 @@ from typing import Callable, List, Optional, Union
 import pythoncom
 import win32com.client
 
-import tasks
-from log_config import logger
+from infra import tasks
+from infra.log_config import logger
 
 from . import converters
 from .converters import ConvertedPDF

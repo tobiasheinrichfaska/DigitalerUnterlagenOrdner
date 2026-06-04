@@ -11,8 +11,8 @@ import os
 # (and the headless core's startup) fast.
 from pikepdf import open as pike_open
 import pikepdf
-from tools import sanitize_pdf
-from log_config import logger
+from infra.tools import sanitize_pdf
+from infra.log_config import logger
 
 def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     """

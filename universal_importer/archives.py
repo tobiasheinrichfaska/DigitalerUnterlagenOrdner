@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import extract_msg
 
-from log_config import logger
+from infra.log_config import logger
 
 from .importer import UniversalImporter
 

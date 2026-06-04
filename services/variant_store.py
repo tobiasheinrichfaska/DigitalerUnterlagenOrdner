@@ -11,7 +11,7 @@ node dropped its source on save and IS its compressed result, so it needs none.
 from __future__ import annotations
 
 import pikepdf
-from log_config import logger
+from infra.log_config import logger
 from services import variant_blobs
 
 _PREFIX = "variant_"

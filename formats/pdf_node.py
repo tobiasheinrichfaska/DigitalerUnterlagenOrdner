@@ -3,7 +3,7 @@ import uuid
 from typing import Optional, List, Dict, Any
 import fitz
 from pypdf import PdfReader, PdfWriter
-from log_config import logger
+from infra.log_config import logger
 
 
 class PDFNode:

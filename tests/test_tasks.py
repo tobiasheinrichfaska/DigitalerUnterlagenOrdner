@@ -2,7 +2,7 @@
 
 import threading
 
-import tasks
+from infra import tasks
 
 
 def test_default_executor_runs_the_fn():

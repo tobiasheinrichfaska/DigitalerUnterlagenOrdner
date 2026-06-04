@@ -44,6 +44,36 @@ describe('resolveSelection', () => {
     expect(resolveSelection(tree, ['f', 'c1'], () => 'abort')).toBeNull()
   })
 
+  // nested: root > A(folder) > [ B(folder) > [c1,c2], d ]
+  const nested = {
+    id: 'root', is_folder: true, name: 'root', children: [
+      { id: 'A', is_folder: true, name: 'A', children: [
+        { id: 'B', is_folder: true, name: 'B', children: [
+          { id: 'c1', is_folder: false, name: 'c1' },
+          { id: 'c2', is_folder: false, name: 'c2' },
+        ] },
+        { id: 'd', is_folder: false, name: 'd' },
+      ] },
+    ],
+  }
+
+  it('nested: deep descendant selected with ancestor folder → exclude keeps the leaf', () => {
+    // A selected + c1 (two levels down) → exclude A → only c1 remains
+    expect(resolveSelection(nested, ['A', 'c1'], () => 'exclude')).toEqual(['c1'])
+    // include all → keep A (covers everything)
+    expect(resolveSelection(nested, ['A', 'c1'], () => 'all')).toEqual(['A'])
+  })
+
+  it('nested: inner folder fully selected collapses to that folder, outer left alone', () => {
+    // B + all of B's children → B covers them; d not selected, A not selected → [B, d]? no:
+    // only B and its children are selected → result is just B
+    expect(resolveSelection(nested, ['B', 'c1', 'c2'], never)).toEqual(['B'])
+  })
+
+  it('nested: two leaves under the same unselected folder need no resolution', () => {
+    expect(resolveSelection(nested, ['c1', 'd'], never).sort()).toEqual(['c1', 'd'])
+  })
+
   it('isAncestor works', () => {
     expect(isAncestor(tree, 'f', 'c1')).toBe(true)
     expect(isAncestor(tree, 'c1', 'f')).toBe(false)

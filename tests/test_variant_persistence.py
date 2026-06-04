@@ -66,6 +66,27 @@ def test_save_reload_persists_variants(tmp_path):
     assert got == {150: {"jpg": b"VARIANT-JPG", "pikepdf": b"VARIANT-PK"}}
 
 
+def test_no_variants_means_no_attachment(tmp_path):
+    import pikepdf
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(2))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_path)])  # no compression browsed → no variants
+    api.save(sid, bel)
+    with pikepdf.open(bel) as pdf:
+        assert not any(str(n).startswith("variant_") for n in pdf.attachments)
+
+
+def test_engine_variants_auto_invalidate_on_content_change():
+    eng = RealEngine()
+    src = _make_pdf(2)
+    eng.seed_variants(src, {150: {"jpg": b"X"}})
+    assert eng.variants_for(src)                 # present for the seeded source
+    assert eng.variants_for(_make_pdf(3)) == {}  # different bytes (an edit) → no stale hit
+
+
 def test_document_path_is_remembered(tmp_path):
     bel = str(tmp_path / "doc.belegtool")
     api = CoreApi()

@@ -90,21 +90,41 @@ class CoreApi:
                 self._cancel_tokens[node_id] = ev
             return ev
 
-    def _cancel_compression_for(self, cmd):
-        """Trip the cancel token of any node a command removes, so its in-flight
-        compression stops instead of burning CPU on a node that's about to vanish."""
+    def _removed_node_ids(self, session, cmd):
+        """All node ids a command removes (incl. descendants of a deleted folder),
+        computed against the CURRENT document (before the command is applied)."""
         name = type(cmd).__name__
         if name in ("Split", "SplitInto", "Delete"):
-            ids = [cmd.node_id]
-        elif name == "Merge":
-            ids = list(cmd.node_ids)
+            roots = [cmd.node_id]
+        elif name in ("DeleteMany", "Merge"):
+            roots = list(cmd.node_ids)
         else:
-            return
+            return []
         with self._lock:
-            for nid in ids:
-                ev = self._cancel_tokens.get(nid)
-                if ev is not None:
-                    ev.set()
+            s = self._sessions.get(session)
+            doc = s.document if s else None
+        if doc is None:
+            return []
+        ids = []
+        for rid in roots:
+            n = doc.find(rid)
+            if n is not None:
+                ids.extend(d.id for d in n.iter())  # self + descendants
+        return ids
+
+    def _kick_prewarm(self, session):
+        """(Re)start the background warming around the last focus (if it still exists)
+        else the first leaf — used after any change so the cache keeps filling."""
+        seed = self._last_seed
+        if seed and seed[0] == session:
+            _, fid, fpage, dpi = seed
+            with self._lock:
+                s = self._sessions.get(session)
+                doc = s.document if s else None
+            if doc is not None and doc.find(fid) is not None:
+                self._seed_around(session, fid, fpage, dpi)
+                return
+        self._prewarm_cache(session)
 
     @contextmanager
     def _compressing(self):
@@ -233,8 +253,17 @@ class CoreApi:
 
     def dispatch(self, session: str, command: dict) -> dict:
         cmd = command_from_dict(command)
-        self._cancel_compression_for(cmd)  # abort compressions of nodes this command removes
-        return self._mutate(session, lambda s: s.dispatch(cmd))
+        removed = self._removed_node_ids(session, cmd)
+        for nid in removed:  # abort in-flight compressions of nodes about to vanish
+            ev = self._cancel_tokens.get(nid)
+            if ev is not None:
+                ev.set()
+        resp = self._mutate(session, lambda s: s.dispatch(cmd))
+        if resp.get("ok"):
+            for nid in removed:
+                self._renderer().invalidate(nid)  # free their cached renders
+            self._kick_prewarm(session)  # keep the cache warming around the new state
+        return resp
 
     def undo(self, session: str) -> dict:
         return self._mutate(session, lambda s: s.undo())
@@ -323,6 +352,8 @@ class CoreApi:
     def set_render_budget(self, mb: int) -> dict:
         """Set the render-cache budget (MB). Returns the refreshed stats."""
         self._renderer().set_budget(max(0, int(mb)) * 1024 * 1024)
+        if self._last_seed:  # fill the new headroom right away
+            self._kick_prewarm(self._last_seed[0])
         return {"ok": True, **self._renderer().stats()}
 
     def page_count(self, session: str, node_id: str) -> dict:
@@ -571,6 +602,7 @@ class CoreApi:
             except CommandError as e:
                 return {"ok": False, "error": str(e)}
             resp = self._doc_response_locked(session)
+        self._kick_prewarm(session)  # warm the freshly imported pages without a click
         if errors:
             resp["warning"] = "; ".join(errors)
         return resp

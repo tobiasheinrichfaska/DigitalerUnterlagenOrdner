@@ -94,6 +94,14 @@ class RenderCache:
             for k in [k for k in self._store if k[0] == node_id]:
                 self._size -= len(self._store.pop(k))
 
+    def set_budget(self, budget_bytes: int) -> None:
+        """Change the byte budget, evicting LRU entries to fit if it shrank."""
+        with self._lock:
+            self.budget = max(0, int(budget_bytes))
+            while self._size > self.budget and self._store:
+                _, old = self._store.popitem(last=False)  # drop LRU until within budget
+                self._size -= len(old)
+
 
 class RenderService:
     def __init__(
@@ -130,8 +138,8 @@ class RenderService:
 
     # --- stats / config (for the UI status bar) ---------------------------
     def set_budget(self, budget_bytes: int) -> None:
-        """Grow/shrink the cache byte budget at runtime (user can enlarge it)."""
-        self.cache.budget = max(0, int(budget_bytes))
+        """Grow/shrink the cache byte budget at runtime (evicts down when shrunk)."""
+        self.cache.set_budget(budget_bytes)
 
     def stats(self) -> dict:
         """Cache occupancy + whether a background prefetch is currently running."""

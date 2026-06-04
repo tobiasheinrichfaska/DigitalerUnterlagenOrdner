@@ -7,6 +7,7 @@ import { ContextMenu } from './ContextMenu'
 import { TestMode } from './TestMode'
 import { StatusBar } from './StatusBar'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './treeNav'
+import { resolveSelection } from './selection'
 import { useT } from './i18n/LanguageProvider'
 import { LANGUAGE_NAMES } from './i18n/index'
 import './App.css'
@@ -54,6 +55,16 @@ function depthOf(root, id, d = -1) {
     if (r !== null) return r
   }
   return null
+}
+
+// is `ancestorId` an ancestor of `descId` in the tree?
+function isAncestorOf(root, ancestorId, descId) {
+  let p = findParent(root, descId)
+  while (p) {
+    if (p.id === ancestorId) return true
+    p = findParent(root, p.id)
+  }
+  return false
 }
 
 // Drop levels for the gap AFTER `id`: deepest first (insert right after the row,
@@ -329,6 +340,42 @@ export default function App() {
     return n
   }, [state?.tree])
 
+  // Delete the whole selection (one undo). If it mixes a folder with items inside it
+  // (an ancestor + a descendant are both selected), warn and — on confirm — delete only
+  // the selected children, keeping the folders. Then focus the next remaining node.
+  const deleteSelection = useCallback(() => {
+    const tree = state?.tree
+    const ids = selectedIds.length ? selectedIds : (selected ? [selected.id] : [])
+    if (!ids.length || !tree) return
+    // resolve parent/child overlaps before dispatching (the data layer rejects mixed)
+    const ask = (kind, name) => {
+      if (kind === 'none') {
+        return window.confirm(t('Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mitgelöscht werden. Fortfahren?', { name })) ? 'proceed' : 'abort'
+      }
+      if (window.confirm(t('„{name}“: alle Elemente des Ordners löschen? (Abbrechen = nur die ausgewählten Elemente, Ordner behalten)', { name }))) return 'all'
+      if (window.confirm(t('Nur die ausgewählten Elemente löschen und „{name}“ behalten? (Abbrechen = nichts löschen)', { name }))) return 'exclude'
+      return 'abort'
+    }
+    const toDelete = resolveSelection(tree, ids, ask)
+    if (!toDelete || !toDelete.length) return
+    // pick the next node to focus: first still-present row after the deletion, else before
+    const order = visibleOrder(tree)
+    const gone = (id) => toDelete.includes(id) || toDelete.some((d) => isAncestorOf(tree, d, id))
+    const firstIdx = order.findIndex((e) => gone(e.id))
+    const nextId = (order.slice(firstIdx + 1).find((e) => !gone(e.id))
+      || order.slice(0, Math.max(0, firstIdx)).reverse().find((e) => !gone(e.id)))?.id || null
+    run(core.dispatch(session, { type: 'DeleteMany', node_ids: toDelete })).then((resp) => {
+      apply(resp)
+      if (resp?.ok) {
+        setDirty(true)
+        setSelectedIds(nextId ? [nextId] : [])
+        setSelected(nextId ? findNode(resp.tree, nextId) : null)
+        setPages(null)
+        setPreviewReq(null)
+      }
+    })
+  }, [selectedIds, selected, state, session, run, apply, t])
+
   // drag the splitter to resize the tree pane (persisted to localStorage)
   useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
   const startResize = useCallback((e) => {
@@ -459,7 +506,7 @@ export default function App() {
       else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (state?.can_redo) redo() }
       else if (mod && k === 'y') { e.preventDefault(); if (state?.can_redo) redo() }
       else if (mod && k === 'z') { e.preventDefault(); if (state?.can_undo) undo() }
-      else if (k === 'delete' && selected) { e.preventDefault(); dispatch({ type: 'Delete', node_id: selected.id }) }
+      else if (k === 'delete' && (selectedIds.length || selected)) { e.preventDefault(); deleteSelection() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -564,7 +611,7 @@ export default function App() {
         </div>
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} selectedIds={selectedIds}
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} selectedIds={selectedIds}
         onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} />
 
       {dropActive && (

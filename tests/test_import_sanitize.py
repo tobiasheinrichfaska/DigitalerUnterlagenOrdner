@@ -3,8 +3,8 @@ but must never touch the /JSONStructure (.belegtool) path."""
 
 import pytest
 
-import pdf_storage
-from pdf_storage import PDFStorage
+from formats import pdf_storage
+from formats.pdf_storage import PDFStorage
 from core.bridge import save_belegtool, load_belegtool
 from core.model import Document, Node
 from helpers import create_valid_pdf

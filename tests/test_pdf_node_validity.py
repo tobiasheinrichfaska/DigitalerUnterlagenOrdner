@@ -1,5 +1,5 @@
 import pytest
-from pdf_node import PDFNode
+from formats.pdf_node import PDFNode
 
 def test_is_valid_true_with_current_data():
     # Realistisch darstellbares PDF mit leerer Seite

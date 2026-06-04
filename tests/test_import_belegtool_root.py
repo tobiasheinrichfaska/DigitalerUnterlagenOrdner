@@ -6,8 +6,8 @@ create_wrapper_node (which operates on root.children), independent of how the
 tree is rendered.
 """
 
-from pdf_storage import PDFStorage, create_wrapper_node
-from pdf_node import PDFNode
+from formats.pdf_storage import PDFStorage, create_wrapper_node
+from formats.pdf_node import PDFNode
 from helpers import create_valid_pdf
 
 

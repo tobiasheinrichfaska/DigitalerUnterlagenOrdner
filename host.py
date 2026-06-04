@@ -35,11 +35,11 @@ def _prewarm():
         import os
         import tempfile
         from pypdf import PdfWriter
-        import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
+        from formats import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
         from core.bridge import save_belegtool, load_belegtool
         from core.model import Document, Node
         from services.render import render_pdf_to_pngs   # PyMuPDF/fitz
-        from compress_pdf_bytes import compress_all_methods  # PIL/pikepdf
+        from formats.compress_pdf_bytes import compress_all_methods  # PIL/pikepdf
 
         writer = PdfWriter()
         writer.add_blank_page(width=72, height=72)

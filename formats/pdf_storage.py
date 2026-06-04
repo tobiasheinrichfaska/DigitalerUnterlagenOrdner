@@ -3,7 +3,7 @@ import json
 import datetime
 from typing import Optional, List, Union
 from pypdf import PdfReader, PdfWriter
-from pdf_node import PDFNode
+from formats.pdf_node import PDFNode
 import os
 # NOTE: universal_importer is imported lazily inside the archive/e-mail branches
 # below — it pulls in win32com/COM, extract-msg, pillow-heif (~2.6 s) which a plain

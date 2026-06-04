@@ -1,9 +1,9 @@
 import io
 import pytest
 from pypdf import PdfReader
-from pdf_storage import PDFStorage
-from pdf_node import PDFNode
-from toc_export import empty_leaf_names
+from formats.pdf_storage import PDFStorage
+from formats.pdf_node import PDFNode
+from formats.toc_export import empty_leaf_names
 from helpers import create_valid_pdf
 
 

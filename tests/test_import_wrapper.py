@@ -1,7 +1,7 @@
 """A plain PDF must import as a single leaf node, not folder -> pdf."""
 
-from pdf_storage import PDFStorage, create_wrapper_node
-from pdf_node import PDFNode
+from formats.pdf_storage import PDFStorage, create_wrapper_node
+from formats.pdf_node import PDFNode
 from helpers import create_valid_pdf
 
 

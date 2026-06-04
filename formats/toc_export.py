@@ -17,8 +17,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.units import cm
 
-from pdf_node import PDFNode
-from pdf_storage import PDFStorage
+from formats.pdf_node import PDFNode
+from formats.pdf_storage import PDFStorage
 
 # Seitenabmessungen A4 in Punkten
 _A4_W, _A4_H = A4

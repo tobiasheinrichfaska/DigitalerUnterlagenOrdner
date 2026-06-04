@@ -91,7 +91,7 @@ class RealEngine:
             if hit is not None:
                 self._mcache.move_to_end(key)
                 return hit
-        from compress_pdf_bytes import compress_all_methods, CompressionCancelled
+        from formats.compress_pdf_bytes import compress_all_methods, CompressionCancelled
         try:
             result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
         except CompressionCancelled:

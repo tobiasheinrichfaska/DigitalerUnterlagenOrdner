@@ -7,8 +7,8 @@ import pytest
 from core.client import CoreClient
 from core.pipe import default_pipe_name
 from core.server import CoreServer
-from pdf_node import PDFNode
-from pdf_storage import PDFStorage
+from formats.pdf_node import PDFNode
+from formats.pdf_storage import PDFStorage
 from helpers import create_valid_pdf
 
 

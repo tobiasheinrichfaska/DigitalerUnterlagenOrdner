@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.6.0**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.7.0**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -48,7 +48,7 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 |---|---|
 | `tools.py` | PDF sanitization (repair broken objects) |
 | `testmode.py` | **Testmodus** headless data layer: runs the golden-master ops (compression/split/merge) and returns INPUT/LIVE/EXPECTED PDF bytes + status. Pure; `CoreApi.test_mode` renders thumbnails, the React `TestMode` view displays them (toolbar 🧪). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.6.0) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.0) |
 | `log_config.py` | Logging setup |
 | `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |
 
@@ -291,7 +291,7 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.6.0**
+Current stable tag: **v3.7.0**
 
 ---
 

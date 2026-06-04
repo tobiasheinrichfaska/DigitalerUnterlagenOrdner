@@ -46,7 +46,7 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 
 | File | Role |
 |---|---|
-| `tools.py` | PDF sanitization (repair broken objects) |
+| `tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
 | `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.0) |
 | `log_config.py` | Logging setup |
 | `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |

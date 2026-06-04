@@ -7,6 +7,7 @@ import hashlib
 import threading
 
 import fitz
+import pytest
 
 import compress_pdf_bytes as C
 
@@ -83,3 +84,25 @@ def test_small_pdf_stays_sequential(monkeypatch):
     monkeypatch.setattr(C, "_render_one_page", spy)
     C._render_pdf_as_images(data, dpi=100, method="jpg")
     assert all("compress-pool" not in n for n in seen)  # never touched the pool
+
+
+def test_compression_cancels_mid_run():
+    """cancel() going True mid-run raises CompressionCancelled out of the page loop."""
+    data = _make_pdf(6)
+    state = {"n": 0}
+
+    def cancel():
+        state["n"] += 1
+        return state["n"] >= 3  # let it start, then cancel
+
+    with pytest.raises(C.CompressionCancelled):
+        C.compress_all_methods(data, dpi=100, cancel=cancel)
+
+
+def test_engine_does_not_memoise_cancelled():
+    """A cancelled compress returns None and doesn't poison the memo."""
+    from core.engine import RealEngine
+    eng = RealEngine()
+    data = _make_pdf(6)
+    assert eng.compress(data, 100, cancel=lambda: True) is None  # cancelled immediately
+    eng.compress(data, 100)  # uncancelled run must still work (memo wasn't poisoned)

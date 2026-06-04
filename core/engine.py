@@ -55,15 +55,18 @@ class RealEngine:
         self._mcache_max = 16
         self._mcache_lock = threading.Lock()
 
-    def _all_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
+    def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
         key = (hashlib.sha1(pdf_bytes).digest(), dpi)
         with self._mcache_lock:
             hit = self._mcache.get(key)
             if hit is not None:
                 self._mcache.move_to_end(key)
                 return hit
-        from compress_pdf_bytes import compress_all_methods
-        result = compress_all_methods(pdf_bytes, dpi=dpi)  # only smaller-than-original
+        from compress_pdf_bytes import compress_all_methods, CompressionCancelled
+        try:
+            result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
+        except CompressionCancelled:
+            return {}  # node was removed mid-compress → don't memoise a partial/empty result
         with self._mcache_lock:
             self._mcache[key] = result
             if len(self._mcache) > self._mcache_max:
@@ -73,16 +76,16 @@ class RealEngine:
     def page_count(self, pdf_bytes: bytes) -> int:
         return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
 
-    def compress(self, pdf_bytes: bytes, dpi: int, method=None) -> Optional[bytes]:
-        results = self._all_methods(pdf_bytes, dpi)
+    def compress(self, pdf_bytes: bytes, dpi: int, method=None, cancel=None) -> Optional[bytes]:
+        results = self._all_methods(pdf_bytes, dpi, cancel)
         if not results:
             return None
         if method is not None:
             return results.get(method)  # None if that method wasn't smaller
         return min(results.values(), key=len)  # best (smallest)
 
-    def compress_methods(self, pdf_bytes: bytes, dpi: int) -> dict:
-        return {m: len(b) for m, b in self._all_methods(pdf_bytes, dpi).items()}
+    def compress_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
+        return {m: len(b) for m, b in self._all_methods(pdf_bytes, dpi, cancel).items()}
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
         reader = PdfReader(io.BytesIO(pdf_bytes))

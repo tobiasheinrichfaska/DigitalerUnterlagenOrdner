@@ -24,7 +24,7 @@ def test_real_engine_caches_compression(monkeypatch):
     calls = []
     orig = compress_pdf_bytes.compress_all_methods
     monkeypatch.setattr(compress_pdf_bytes, "compress_all_methods",
-                        lambda b, dpi: (calls.append(1), orig(b, dpi=dpi))[1])
+                        lambda b, dpi, cancel=None: (calls.append(1), orig(b, dpi=dpi, cancel=cancel))[1])
     eng = RealEngine()
     data = create_valid_pdf(pages=2)
     eng.compress_methods(data, 150)

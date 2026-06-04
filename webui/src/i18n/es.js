@@ -1,0 +1,107 @@
+// Spanish translations: German source text → Spanish.
+export const es = {
+  'Verbinde mit Core…': 'Conectando con el núcleo…',
+  'Arbeite…': 'Procesando…',
+  'Sprache': 'Idioma',
+
+  'Bereit': 'Listo',
+  'Komprimiere {n}': 'Comprimiendo {n}',
+  'Vorschau lädt {n}': 'Cargando vista previa {n}',
+  'Cache füllt': 'Llenando caché',
+  'Vorschau-Cache · {free} MB frei': 'Caché de vista previa · {free} MB libres',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Caché {used}/{total} MB · {pages}/{doc} páginas',
+  'Cache vergrößern (+50 MB)': 'Ampliar caché (+50 MB)',
+  'Cache verkleinern (−50 MB)': 'Reducir caché (−50 MB)',
+
+  'Öffnen': 'Abrir',
+  'Neues Fenster': 'Nueva ventana',
+  'Weiteres Dokument in neuem Fenster': 'Otro documento en una nueva ventana',
+  'Importieren': 'Importar',
+  'Speichern': 'Guardar',
+  'Speichern unter…': 'Guardar como…',
+  'Export PDF': 'Exportar PDF',
+  'Komprimierungs-Alternativen speichern?': '¿Guardar las alternativas de compresión?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n} documento(s) tienen alternativas de compresión calculadas.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '«Como estaba previsto» conserva las alternativas en el archivo (más grande, disponibles de inmediato al reabrir). «Original» guarda solo la versión base (más pequeño; las alternativas se recalculan al reabrir).',
+  'Wie geplant speichern': 'Guardar como estaba previsto',
+  'Original speichern': 'Guardar el original',
+  'Abbrechen': 'Cancelar',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Exportar como PDF con índice (selección; si no, todo el documento)',
+  'Auswahl': 'Selección',
+  'Ordner': 'Carpeta',
+  'Rückgängig': 'Deshacer',
+  'Wiederholen': 'Rehacer',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    '¿Abrir otro archivo y descartar los cambios sin guardar?',
+  'Gespeichert': 'Guardado',
+  'PDF exportiert ({count} {entries})': 'PDF exportado ({count} {entries})',
+  'Eintrag': 'entrada',
+  'Einträge': 'entradas',
+
+  'Breite der Baumansicht ziehen': 'Arrastre para redimensionar el panel del árbol',
+
+  'Knoten auswählen für die Vorschau': 'Seleccione un nodo para la vista previa',
+  'Keine Vorschau (Ordner oder leer)': 'Sin vista previa (carpeta o vacío)',
+  'Seite {page} / {total}': 'Página {page} / {total}',
+  '{total} Seiten': '{total} páginas',
+  'Seite {n}': 'Página {n}',
+  'kleiner': 'más pequeño',
+  'größer': 'más grande',
+  'zurücksetzen': 'restablecer',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Suelte los archivos — sobre una posición del árbol (dentro/entre) para un destino preciso; si no, en {target}',
+  'oberste Ebene': 'nivel superior',
+
+  'Neuer Ordner': 'Nueva carpeta',
+  'Umbenennen': 'Cambiar nombre',
+  'Neuer Name': 'Nuevo nombre',
+  'Splitten': 'Dividir',
+  'pro Seite': 'por página',
+  'N Seiten pro Knoten…': 'N páginas por nodo…',
+  'pro Seite → neuer Ordner': 'por página → nueva carpeta',
+  'N Seiten → neuer Ordner…': 'N páginas → nueva carpeta…',
+  'Seiten pro Knoten:': 'Páginas por nodo:',
+  'Ordner anlegen': 'Crear carpeta',
+  'Aufklappen': 'Expandir',
+  'Zuklappen': 'Contraer',
+  'Alle aufklappen': 'Expandir todo',
+  'Alle zuklappen': 'Contraer todo',
+  'Status': 'Estado',
+  'Als PDF exportieren': 'Exportar como PDF',
+  'Auswahl als PDF exportieren ({count})': 'Exportar la selección como PDF ({count})',
+  'Löschen': 'Eliminar',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'La carpeta «{name}» contiene elementos no seleccionados que se incluirán. ¿Continuar?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '«{name}»: ¿incluir toda la carpeta? (Cancelar = solo los elementos seleccionados, excluir la carpeta)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    '¿Usar solo los elementos seleccionados y excluir «{name}»? (Cancelar = cancelar la operación)',
+  'Zusammenführen → 1 PDF ({count})': 'Combinar → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'En una nueva carpeta ({count})',
+  'Name des neuen Ordners': 'Nombre de la nueva carpeta',
+  'Neue Gruppe': 'Nuevo grupo',
+
+  'Erfasst': 'Registrado',
+  'Zu erfassen': 'Por registrar',
+  'Vorjahr': 'Año anterior',
+
+  'JPEG (Graustufen)': 'JPEG (escala de grises)',
+  'JPEG (Farbe)': 'JPEG (color)',
+  'PNG (Graustufen)': 'PNG (escala de grises)',
+  'Struktur (Farbe erhalten)': 'Estructural (color conservado)',
+  'Kompressions-DPI': 'PPP de compresión',
+  'unkomprimierte Fassung': 'versión sin comprimir',
+  'Kompression läuft …': 'Comprimiendo …',
+  'bereits komprimiert (keine Quelle)': 'ya comprimido (sin origen)',
+  'beste': 'mejor',
+  'Lesbarkeit geprüft': 'Legibilidad comprobada',
+  'übernommen': 'aplicado',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Aplicar la compresión mostrada actualmente',
+  'rechts drehen': 'girar a la derecha',
+  'links drehen': 'girar a la izquierda',
+}

@@ -71,5 +71,5 @@ describe('resolveInitialLang', () => {
     expect(resolveInitialLang(null, 'en-US')).toBe('en')
     expect(resolveInitialLang('xx', 'de-AT')).toBe('de')
   })
-  it('defaults when nothing matches', () => expect(resolveInitialLang(null, 'fr-FR')).toBe(DEFAULT_LANG))
+  it('defaults when nothing matches', () => expect(resolveInitialLang(null, 'it-IT')).toBe(DEFAULT_LANG))
 })

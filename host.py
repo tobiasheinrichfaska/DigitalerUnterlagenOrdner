@@ -241,12 +241,27 @@ class HostApi:
         return self._core.save(session, path)
 
 
+def _safe_http_port():
+    """An OS-assigned free ephemeral port (>=49152) for pywebview's internal file
+    server. Chromium/WebView2 hard-blocks a set of "unsafe" ports (1719, 1720, …);
+    if pywebview's random pick lands on one the page fails with ERR_UNSAFE_PORT.
+    Ephemeral ports are never on that block list, so we hand one in explicitly."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
+
+
 def main(startup_path=None):
     core = CoreApi()  # shared across all windows; sessions are per window
     _open_window(core, startup_path)
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
-    webview.start(_prewarm)
+    # Pin a safe http port so the file server never lands on a Chromium-blocked one.
+    webview.start(_prewarm, http_port=_safe_http_port())
 
 
 if __name__ == "__main__":

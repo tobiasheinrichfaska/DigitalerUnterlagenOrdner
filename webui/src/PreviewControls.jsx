@@ -60,9 +60,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   // options and default to the previously chosen method, else the smallest one —
   // so a node shows its best compression by default. Non-blocking + cancellable;
   // the component is keyed by node id, so this runs once per displayed node.
+  // Only auto-compute for small nodes — on a big node the all-methods compute is
+  // expensive, so >5 pages just shows the original (compress manually via the dropdown).
+  const AUTO_MAX_PAGES = 5
   /* eslint-disable react-hooks/set-state-in-effect -- async result drives the controls */
   useEffect(() => {
-    if (off || node.is_compressed) return
+    if (off || node.is_compressed || node.pdf_length > AUTO_MAX_PAGES) return
     let alive = true
     const d = node.dpi_current ?? defaultDpi
     setLoading(true)

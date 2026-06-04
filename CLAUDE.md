@@ -352,3 +352,44 @@ Current stable tag: **v3.7.0**
 - Toolbar: open/import/save/export/new-window/undo/redo ([`App.jsx`](webui/src/App.jsx))
 - Tree + drag-and-drop in [`Tree.jsx`](webui/src/Tree.jsx); right-click ops in [`ContextMenu.jsx`](webui/src/ContextMenu.jsx)
 - Compression controls (method dropdown incl. `jpg_color`, DPI, apply/reset) in [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
+
+---
+
+## Beta-tester feedback infrastructure
+
+GitHub issue forms + docs onboard beta testers and route feedback. **Treat this as
+part of *definition of done*:** when any of the baked-in facts below change, update
+the matching files in the **same session** — stale tester docs cause noise (people
+report known gaps, give the wrong version, etc.).
+
+| File | What it is |
+|---|---|
+| [`.github/ISSUE_TEMPLATE/bug_report.yml`](.github/ISSUE_TEMPLATE/bug_report.yml) | Bug form: version, install method, Windows ver, Office y/n + apps, workflow/manual-test, repro, expected/actual, evidence, **required "not a known gap" checkbox** |
+| [`.github/ISSUE_TEMPLATE/feature_request.yml`](.github/ISSUE_TEMPLATE/feature_request.yml) | Problem → solution → workflow → alternatives |
+| [`.github/ISSUE_TEMPLATE/beta_feedback.yml`](.github/ISSUE_TEMPLATE/beta_feedback.yml) | Soft UX form: impressions, confusion, would-you-use (yes/maybe/no), one change |
+| [`.github/ISSUE_TEMPLATE/config.yml`](.github/ISSUE_TEMPLATE/config.yml) | Disables blank issues; routes questions to Discussions + links `BETA_TESTING.md` |
+| [`BETA_TESTING.md`](BETA_TESTING.md) | One-page tester onboarding (get/run both paths, test path, known gaps, feedback routing) |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
+
+**Facts baked into these files — keep them in sync with the source of truth:**
+- **Version `3.7.0`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
+- **Two known gaps that must NOT be reported as bugs** (the bug form's required
+  checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired
+  into the UI; (2) compression irreversible after save ("bereits komprimiert (keine
+  Quelle)"). **If either gap is fixed, remove it from the checkbox, BETA_TESTING.md
+  §4, and CONTRIBUTING.md** — otherwise testers are told a working feature is broken.
+- **Manual tests `05`–`07` are current; `01`–`04` are stale (removed Tk GUI).** When
+  01–04 are rewritten against the React UI, drop the "stale" wording everywhere it
+  appears (BETA_TESTING.md §3, CONTRIBUTING.md, `manual_tests/README.md`).
+- **Two run paths** (prebuilt onedir folder; from source: Python 3.12 + Node, `pip
+  install -r requirements.txt`, `cd webui && npm install && npm run build`, `python
+  host.py`) and **no published Release yet** — update BETA_TESTING.md §1 once a
+  Release/installer exists.
+- **Fixtures in `tests/data/input/`** (regen `python tests/make_fixtures.py`).
+- The `config.yml` and template links hardcode the repo URL
+  `tobiasheinrichfaska/DigitalerUnterlagenOrdner` and the `master` branch.
+
+⚠️ **Manual GitHub steps (not in the repo):** Discussions must be enabled in repo
+**Settings → Features**, and a Release published (or the build folder zipped) for
+the prebuilt download path to work.

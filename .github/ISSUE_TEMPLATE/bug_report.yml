@@ -1,0 +1,134 @@
+name: "🐞 Bug report"
+description: "Report something that is broken or behaves incorrectly in BelegTool."
+title: "[Bug]: "
+labels: ["bug", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner)!
+
+        Please fill this in as completely as you can — concrete steps and a
+        screenshot help enormously.
+
+        🇩🇪 *Berichte auf Deutsch sind ebenfalls willkommen — Du musst dieses
+        Formular nicht auf Englisch ausfüllen.*
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: "Shown in the window title bar (e.g. \"DigitalerUnterlagenOrdner 3.7.0\")."
+      value: "3.7.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install / run it?
+      options:
+        - "Prebuilt folder (BelegTool.exe — no Python/Node)"
+        - "From source (Python 3.12 + Node.js, python host.py)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: "BelegTool is Windows 10/11 only."
+      options:
+        - "Windows 11"
+        - "Windows 10"
+        - "Other / not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: office-installed
+    attributes:
+      label: Is Microsoft Office installed on this machine?
+      description: >
+        Word/Excel/PowerPoint import needs MS Office installed locally (via COM).
+        Without it, only PDF / image / archive / e-mail import works — so this
+        matters for any import-related bug.
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: input
+    id: office-apps
+    attributes:
+      label: Which Office apps? (if applicable)
+      description: "Only if you answered Yes above — e.g. Word + Excel, or the full suite."
+      placeholder: "Word, Excel, PowerPoint"
+    validations:
+      required: false
+
+  - type: input
+    id: workflow
+    attributes:
+      label: Which workflow or manual test does this concern?
+      description: >
+        E.g. import, tree edit, split/merge, compression, export/TOC, save & reload,
+        or a manual-test ID (see manual_tests/05_react_ui.md, 06_, 07_).
+      placeholder: "Compression — applying a JPG color variant"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: "Numbered, concrete steps. Mention the sample/fixture file you used if relevant."
+      placeholder: |
+        1. Open BelegTool
+        2. Import tests/data/input/compress_sample.pdf
+        3. Select the node, open the compression dropdown
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: "What you thought would happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      placeholder: "What actually happened (error text, blank screen, wrong output, ...)."
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots / logs
+      description: >
+        Paste screenshots directly here. Logs: a log file is written next to the
+        app (e.g. pdf_tool.log) — attach it if you can.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: not-a-known-gap
+    attributes:
+      label: Confirm this is not a known limitation
+      description: "These two are documented, accepted behaviour — not bugs."
+      options:
+        - label: >
+            I confirm this is NOT one of the two known limitations:
+            (1) exporting more than 100 pages produces a single PDF — auto-split is
+            not wired into the UI; or
+            (2) compression is irreversible after a node is saved — the source is
+            dropped and the option shows "bereits komprimiert (keine Quelle)".
+          required: true

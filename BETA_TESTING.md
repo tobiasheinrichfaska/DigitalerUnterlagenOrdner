@@ -1,0 +1,101 @@
+# Beta Testing BelegTool 🧪
+
+Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.7.0** — a
+Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
+archives into one foldered tree, then compresses, previews and exports the whole
+thing as a single bookmarked PDF with a table of contents.
+
+> 🇩🇪 **Deutsch geht auch!** The app's UI is bilingual (German is the default,
+> English via the language switcher), and you are welcome to write all of your
+> feedback in German.
+
+**Requirements:** Windows **10 or 11**. For Word/Excel/PowerPoint import you also
+need **Microsoft Office installed** — without it, importing PDFs, images, archives
+and e-mails still works fine.
+
+---
+
+## 1. Get & run the app
+
+There is **no published GitHub Release yet**, so you'll receive the app one of two
+ways:
+
+### Path A — Prebuilt folder (easiest, no Python/Node)
+1. You'll get a **`BelegTool` folder** (zipped) from the maintainer.
+2. Unzip it anywhere.
+3. Double-click **`BelegTool.exe`**. That's it — no installation.
+   - To open a saved file directly: `BelegTool.exe yourfile.belegtool`.
+
+### Path B — From source
+1. Install **Python 3.12** (on PATH) and **Node.js**.
+2. In the project folder:
+   ```powershell
+   pip install -r requirements.txt
+   cd webui
+   npm install
+   npm run build
+   cd ..
+   python host.py
+   ```
+
+---
+
+## 2. Sample files to test with
+
+The repo ships ready-made PDFs in **`tests/data/input/`**:
+`sample.pdf`, `split_sample.pdf`, `compress_sample.pdf`, `merge1_a.pdf`,
+`merge1_b.pdf`. If they're missing, regenerate with
+`python tests/make_fixtures.py`. Bring your own files too — a JPG/PNG/HEIC image,
+a `.zip`, an `.eml`/`.msg` e-mail with an attachment, and (if you have Office) a
+Word/Excel file.
+
+---
+
+## 3. Recommended test path
+
+Walk through the manual-test guides in [`manual_tests/`](manual_tests/README.md).
+Use these three — they match the current app:
+
+- **[`05_react_ui.md`](manual_tests/05_react_ui.md)** — import & drag-drop, tree
+  editing, compression preview, multi-window, export, shortcuts.
+- **[`06_status_cache_compression.md`](manual_tests/06_status_cache_compression.md)**
+  — status bar, render-cache gauge, compression default-to-smallest, apply.
+- **[`07_keyboard_delete_language.md`](manual_tests/07_keyboard_delete_language.md)**
+  — keyboard structuring, multi-delete, inline rename, language switcher.
+
+> ⚠️ Files **`01`–`04` are stale** — they describe an older interface (a removed
+> Tk GUI) with different menus/toolbars. The *features* still exist, so just
+> perform the **equivalent action** in the current React UI.
+
+Core workflows to make sure you exercise: **import** (several formats),
+**tree view** (folders, move, rename), **split / merge / compress**,
+**TOC export** (export a multi-folder tree, open the PDF, check the table of
+contents and bookmarks), and **save & reload** a `.belegtool` file.
+
+---
+
+## 4. Two known gaps — please DON'T report these as bugs
+
+1. **Large export = one PDF.** Exporting more than 100 pages produces a *single*
+   PDF; the auto-split-into-multiple-files feature is not wired into the UI yet.
+2. **Compression is irreversible after saving.** Once you apply compression to a
+   node and save, the original source is dropped — you can't undo it later, and
+   the option shows *"bereits komprimiert (keine Quelle)"*. This is by design.
+
+---
+
+## 5. What feedback we want, and where it goes
+
+| What | How | Template |
+|---|---|---|
+| 🐞 **Bugs** — something broken/wrong | New issue | *Bug report* |
+| 🧪 **Impressions & UX** — confusion, gut feel, "would you use it?" | New issue | *Beta feedback* |
+| 💡 **Feature ideas** | New issue | *Feature request* |
+| 💬 **Questions / not-sure-if-a-bug / general chat** | [Discussions](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/discussions) | — |
+
+Open an issue at the project's **Issues** tab and pick the matching form, or start
+a thread under **Discussions**. The forms ask for your app version, install method
+(prebuilt vs. source), Windows version, and whether Office is installed — having
+those up front saves a round-trip.
+
+**Thank you — every report genuinely helps.** 🙏

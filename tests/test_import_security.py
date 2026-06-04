@@ -50,7 +50,7 @@ def test_not_importable_includes_reason():
 
 
 # --- HTML/email link policy (xhtml2pdf link_callback) ---------------------
-block = UniversalImporter._block_remote_link
+from universal_importer.converters import block_remote_link as block
 
 
 @pytest.mark.parametrize("uri", [

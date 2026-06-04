@@ -10,6 +10,8 @@ import { Toolbar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { allTags } from './lib/tags'
 import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
+import { useResizablePane } from './hooks/useResizablePane'
+import { useOsFileDrop } from './hooks/useOsFileDrop'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
@@ -46,10 +48,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
-  const [treeWidth, setTreeWidth] = useState(() => {
-    const v = parseInt(localStorage.getItem('beleg.treeWidth'), 10)
-    return v >= 220 && v <= 800 ? v : 340 // px; remembered across sessions (UI prefs, not the document)
-  })
+  const { width: treeWidth, startResize } = useResizablePane()
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -184,25 +183,7 @@ export default function App() {
 
   // OS file drag onto the window: tree rows handle precise targeting (drop onto a
   // folder); this is the fallback for drops elsewhere → the selected folder/root.
-  useEffect(() => {
-    if (!session) return undefined
-    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
-    const onOver = (e) => { if (hasFiles(e)) { e.preventDefault(); setDropActive(true) } }
-    const onLeave = (e) => { if (!e.relatedTarget) setDropActive(false) }
-    const onDrop = (e) => {
-      if (!hasFiles(e)) return
-      e.preventDefault()
-      onDropFiles(e.dataTransfer.files, importTarget())
-    }
-    window.addEventListener('dragover', onOver)
-    window.addEventListener('dragleave', onLeave)
-    window.addEventListener('drop', onDrop)
-    return () => {
-      window.removeEventListener('dragover', onOver)
-      window.removeEventListener('dragleave', onLeave)
-      window.removeEventListener('drop', onDrop)
-    }
-  }) // re-binds each render so it closes over the current session/selected
+  useOsFileDrop((files) => onDropFiles(files, importTarget()), setDropActive, !!session)
 
   // Resolve a multi-selection to a clean (non-mixed) set, asking the user how to
   // handle any folder that overlaps with its own selected items. Reused by delete,
@@ -328,23 +309,6 @@ export default function App() {
     })
   }, [selectedIds, selected, state, session, run, apply, resolveSel])
 
-  // drag the splitter to resize the tree pane (persisted to localStorage)
-  useEffect(() => { localStorage.setItem('beleg.treeWidth', String(treeWidth)) }, [treeWidth])
-  const startResize = useCallback((e) => {
-    e.preventDefault()
-    const startX = e.clientX, startW = treeWidth
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    const onMove = (ev) => setTreeWidth(Math.max(220, Math.min(800, startW + ev.clientX - startX)))
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [treeWidth])
 
   // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
   const mergeable = (() => {

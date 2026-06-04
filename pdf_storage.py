@@ -215,6 +215,10 @@ class PDFStorage:
 
     def _parse_json_structure(self, structure, data):
         self.root = PDFNode(name="root", is_folder=True)
+        if structure.get("uid"):
+            self.root.uid = structure["uid"]  # restore the root's id too (not just children)
+        if structure.get("collapsed"):
+            self.root.collapsed = bool(structure["collapsed"])
         current_start = [0]  # mutable Seitenzähler
 
         try:
@@ -396,6 +400,9 @@ class PDFStorage:
             node = PDFNode(name=name, is_folder=True)
             if node_data.get("uid"):
                 node.uid = node_data["uid"]  # restore persisted id
+            node.status = node_data.get("status", "zu erfassen")
+            node.vz_start = node_data.get("vz_start")
+            node.vz_end = node_data.get("vz_end")
             node.collapsed = bool(node_data.get("collapsed", False))
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages)
@@ -423,6 +430,8 @@ class PDFStorage:
         if node_data.get("uid"):
             node.uid = node_data["uid"]  # restore persisted id
         node.status = node_data.get("status", "zu erfassen")  # ✅ Hier ergänzen!
+        node.vz_start = node_data.get("vz_start")  # Veranlagungszeitraum (was dropped on reload)
+        node.vz_end = node_data.get("vz_end")
         is_compressed = bool(node_data.get("is_compressed", False))
 
         node.set_original_and_current_data(
@@ -439,6 +448,8 @@ class PDFStorage:
         # flag back from the serialised structure explicitly.
         node.is_compressed = is_compressed
         node.compression_method = node_data.get("compression_method")
+        node.dpi_current = node_data.get("dpi_current")    # was lost when current_data=None
+        node.dpi_original = node_data.get("dpi_original")
 
         # Reload coherence (headless/core path): a committed ("Lesbarkeit geprüft")
         # node's persisted pages ARE the chosen compression — its source was dropped

@@ -61,6 +61,7 @@ class CoreApi:
         self._vcache = OrderedDict()  # id(bytes) -> (bytes, crc32), memoised versions (LRU)
         self._compress_active = 0  # >0 while a compression runs → background prefetch yields the CPU
         self._last_seed = None  # (session, focus_id, focus_page, dpi) of the last prefetch, to resume
+        self._cancel_tokens = {}  # node_id -> threading.Event, to abort an in-flight compression
 
     def _renderer(self):
         if self._render_service is None:
@@ -77,6 +78,33 @@ class CoreApi:
             c = page_count(data)
             self._pcount[key] = c
         return c
+
+    def _cancel_token(self, node_id):
+        """The cancellation Event for compressions of ``node_id`` (created on demand,
+        reused across that node's compress calls). Node ids are unique, so a token set
+        when a node is removed never wrongly cancels a different node."""
+        with self._lock:
+            ev = self._cancel_tokens.get(node_id)
+            if ev is None:
+                ev = threading.Event()
+                self._cancel_tokens[node_id] = ev
+            return ev
+
+    def _cancel_compression_for(self, cmd):
+        """Trip the cancel token of any node a command removes, so its in-flight
+        compression stops instead of burning CPU on a node that's about to vanish."""
+        name = type(cmd).__name__
+        if name in ("Split", "SplitInto", "Delete"):
+            ids = [cmd.node_id]
+        elif name == "Merge":
+            ids = list(cmd.node_ids)
+        else:
+            return
+        with self._lock:
+            for nid in ids:
+                ev = self._cancel_tokens.get(nid)
+                if ev is not None:
+                    ev.set()
 
     @contextmanager
     def _compressing(self):
@@ -122,7 +150,7 @@ class CoreApi:
         whole enumeration/hashing runs on the background worker (via prefetch)."""
         self._last_seed = (session, focus_id, focus_page, dpi)  # to resume after a pause
 
-        def build(neighbours=8):
+        def build():
             with self._lock:
                 s = self._sessions.get(session)
                 root = s.document.root if s else None
@@ -134,12 +162,9 @@ class CoreApi:
             if focus_id not in ids:
                 return [], (lambda _i: b""), focus_id, focus_page
             fi = ids.index(focus_id)
-            order = [fi]  # focus first, then alternating neighbours outward (closest first)
-            for d in range(1, neighbours + 1):
-                if fi - d >= 0:
-                    order.append(fi - d)
-                if fi + d < len(leaves):
-                    order.append(fi + d)
+            # ALL leaves, ordered by distance from the focus (closest first) — so the
+            # prefetch keeps warming the whole document (the fill stops at cache-full).
+            order = sorted(range(len(leaves)), key=lambda j: (abs(j - fi), j))
             specs, data_map = [], {}
             for idx in order:
                 n = leaves[idx]
@@ -207,7 +232,9 @@ class CoreApi:
             return s.document.root.name if s else None
 
     def dispatch(self, session: str, command: dict) -> dict:
-        return self._mutate(session, lambda s: s.dispatch(command_from_dict(command)))
+        cmd = command_from_dict(command)
+        self._cancel_compression_for(cmd)  # abort compressions of nodes this command removes
+        return self._mutate(session, lambda s: s.dispatch(cmd))
 
     def undo(self, session: str) -> dict:
         return self._mutate(session, lambda s: s.undo())
@@ -364,12 +391,14 @@ class CoreApi:
             variant = data
         else:
             with self._compressing():
-                variant = self._engine.compress(data, dpi, method) or data
+                variant = self._engine.compress(data, dpi, method,
+                                                cancel=self._cancel_token(node_id).is_set) or data
         import zlib
         version = zlib.crc32(variant)  # variant bytes → its own cache identity
         from base64 import b64encode
         pages = self._renderer().render_window(node_id, version, variant, first, count, 100)
-        self._seed_single(node_id, version, variant, first, 100)  # warm just the variant
+        self._seed_single(node_id, version, variant, first, 100)  # warm this variant's pages
+        self._seed_around(session, node_id, first, 100)  # keep warming the whole document
         urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first,
@@ -455,7 +484,7 @@ class CoreApi:
             return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                     "original_size": 0, "options": []}
         with self._compressing():
-            sizes = self._engine.compress_methods(data, dpi)
+            sizes = self._engine.compress_methods(data, dpi, cancel=self._cancel_token(node_id).is_set)
         options = sorted(
             ({"method": m, "size": sz} for m, sz in sizes.items()),
             key=lambda o: o["size"],

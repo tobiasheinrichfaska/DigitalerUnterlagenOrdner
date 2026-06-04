@@ -60,10 +60,16 @@ def compress_pdf_bytes(input_bytes: bytes, dpi: int = 150, method: str = "jpg") 
     return reencoded if len(reencoded) < len(input_bytes) else input_bytes
 
 
+class CompressionCancelled(Exception):
+    """Raised through the page loop when the node being compressed is removed
+    (split/deleted/merged), so the (wasted) work stops instead of running on."""
+
+
 def compress_all_methods(
     input_bytes: bytes,
     dpi: int = DEFAULT_CONFIG.dpi,
     config: CompressionConfig = DEFAULT_CONFIG,
+    cancel=None,
 ) -> dict:
     """Run every available compression method and return {method_name: bytes}.
 
@@ -71,19 +77,25 @@ def compress_all_methods(
     smallest-first so callers can pick dict[next(iter(...))] for the best result.
 
     The set of methods tried is taken from ``config.methods``; defaults are
-    ("jpg", "png", "pikepdf").
+    ("jpg", "png", "pikepdf"). ``cancel`` is an optional predicate checked between
+    methods and per page; if it returns True, ``CompressionCancelled`` is raised.
     """
     candidates = {}
 
     for method in config.methods:
+        if cancel is not None and cancel():
+            raise CompressionCancelled()
         try:
             if method == "pikepdf":
                 result = recompress_with_pikepdf(input_bytes)
             else:
-                result = _render_pdf_as_images(input_bytes, dpi=dpi, method=method, config=config)
+                result = _render_pdf_as_images(input_bytes, dpi=dpi, method=method,
+                                               config=config, cancel=cancel)
                 result = reencode_pdf_structure(result)
             if len(result) < len(input_bytes):
                 candidates[method] = result
+        except CompressionCancelled:
+            raise
         except Exception as e:
             logger.warning("Kompression '%s' fehlgeschlagen: %s", method, e)
 
@@ -152,15 +164,20 @@ def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
     return buf.getvalue(), target_width, target_height
 
 
-def _render_chunk(input_bytes, indices, dpi, method, config, cs, pil_mode):
-    """Render a contiguous range of pages on one worker, each on its OWN doc."""
+def _render_chunk(input_bytes, indices, dpi, method, config, cs, pil_mode, cancel=None):
+    """Render a contiguous range of pages on one worker, each on its OWN doc.
+    Checks ``cancel`` per page so a removed node's compression stops promptly."""
     doc = fitz.open(stream=input_bytes, filetype="pdf")
     out = []
     try:
         for page_index in indices:
+            if cancel is not None and cancel():
+                raise CompressionCancelled()
             try:
                 img, w, h = _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode)
                 out.append((page_index, img, w, h))
+            except CompressionCancelled:
+                raise
             except Exception as e:
                 logger.warning("Fehler bei Seite %d: %s", page_index, e)
     finally:
@@ -173,6 +190,7 @@ def _render_pdf_as_images(
     dpi: int = DEFAULT_CONFIG.dpi,
     method: str = "jpg",
     config: CompressionConfig = DEFAULT_CONFIG,
+    cancel=None,
 ) -> bytes:
     """Renders every page as a greyscale image.  Broken pages are skipped.
 
@@ -194,14 +212,14 @@ def _render_pdf_as_images(
     # rasterize+encode every page (the slow part) — across workers when it pays off
     workers = min(cpu.worker_count(), max(1, n_pages))
     if workers <= 1 or n_pages < _PARALLEL_MIN_PAGES:
-        rendered = _render_chunk(input_bytes, range(n_pages), dpi, method, config, cs, pil_mode)
+        rendered = _render_chunk(input_bytes, range(n_pages), dpi, method, config, cs, pil_mode, cancel)
     else:
         pool = _get_compress_pool()
         chunks = _contiguous_chunks(n_pages, workers)
         rendered = []
-        for fut in [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode)
+        for fut in [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode, cancel)
                     for ch in chunks]:
-            rendered.extend(fut.result())
+            rendered.extend(fut.result())  # CompressionCancelled propagates here
 
     # assemble sequentially in page order → byte-identical to the old serial path
     rendered.sort(key=lambda t: t[0])

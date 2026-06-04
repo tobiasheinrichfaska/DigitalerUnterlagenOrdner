@@ -3,7 +3,7 @@
 // counts come from core.js (in-flight heavy calls); cache stats are polled from
 // the core (cheap render_stats).
 import { useEffect, useState } from 'react'
-import { core, onActivity } from './core'
+import { core, onActivity } from './lib/core'
 import { useT } from './i18n/LanguageProvider'
 
 const mb = (b) => Math.round((b || 0) / (1024 * 1024))

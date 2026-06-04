@@ -15,7 +15,7 @@
 // → a transient compressed variant (renderCompressedWindow). Both go through the
 // same RenderService cache. Scroll position is remembered per node.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { core } from './core'
+import { core } from './lib/core'
 import { useT } from './i18n/LanguageProvider'
 
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)

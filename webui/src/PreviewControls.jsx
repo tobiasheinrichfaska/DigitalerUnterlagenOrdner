@@ -6,7 +6,7 @@
 // they pick a method or move the DPI slider. The document changes only on a
 // deliberate apply ("❓ Lesbarkeit geprüft" → Compress, "Original" → Reset).
 import { useState, useEffect } from 'react'
-import { core } from './core'
+import { core } from './lib/core'
 import { useT } from './i18n/LanguageProvider'
 
 const kb = (n) => `${Math.round(n / 1024)} KB`

@@ -1,5 +1,0 @@
-;!@Install@!UTF-8!
-Title="PDF-Storage Installer"
-BeginPrompt="Möchten Sie PDF-Storage installieren?"
-RunProgram="install_pdf_storage.bat"
-;!@InstallEnd@!

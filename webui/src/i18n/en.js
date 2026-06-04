@@ -7,6 +7,14 @@ export const en = {
   'Arbeite…': 'Working…',
   'Sprache': 'Language',
 
+  // status bar (background activity + cache)
+  'Bereit': 'Ready',
+  'Komprimiere {n}': 'Compressing {n}',
+  'Vorschau lädt {n}': 'Loading preview {n}',
+  'Cache füllt': 'Filling cache',
+  'Vorschau-Cache': 'Preview cache',
+  'Cache {used} / {total} MB ({free} frei)': 'Cache {used} / {total} MB ({free} free)',
+
   // toolbar
   'Öffnen': 'Open',
   'Neues Fenster': 'New window',

@@ -127,6 +127,17 @@ def test_fill_until_idle_respects_budget():
     assert len(svc.cache) == 2
 
 
+def test_stats_reports_cache_occupancy():
+    fake = FakeRenderer(size=1000)
+    svc = RenderService(fake, budget_bytes=4000, cpu_load=lambda: 0.0)
+    s0 = svc.stats()
+    assert s0["cache_used"] == 0 and s0["cache_budget"] == 4000 and s0["cache_free"] == 4000
+    assert s0["prefetch_active"] is False and s0["cache_pages"] == 0
+    svc.render_window("a", 1, b"data", first=0, count=2, dpi=100)  # caches 2 pages
+    s1 = svc.stats()
+    assert s1["cache_pages"] == 2 and s1["cache_used"] == 2000 and s1["cache_free"] == 2000
+
+
 def test_seed_warms_around_focus_in_background():
     fake = FakeRenderer()
     svc = RenderService(fake, budget_bytes=10**7, cpu_load=lambda: 0.0, seed_steps=8)

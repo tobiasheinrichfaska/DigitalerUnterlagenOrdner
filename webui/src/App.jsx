@@ -5,6 +5,7 @@ import { PreviewControls } from './PreviewControls'
 import { Preview } from './Preview'
 import { ContextMenu } from './ContextMenu'
 import { TestMode } from './TestMode'
+import { StatusBar } from './StatusBar'
 import { visibleOrder, navStep, moveTarget, applyMove, locate } from './treeNav'
 import { useT } from './i18n/LanguageProvider'
 import { LANGUAGE_NAMES } from './i18n/index'
@@ -555,6 +556,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <StatusBar />
     </div>
   )
 }

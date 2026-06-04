@@ -17,9 +17,33 @@ function waitForApi() {
   })
 }
 
+// --- background-activity tracking (for the status bar) ---------------------
+// Count in-flight heavy calls per category so the UI can show what's running.
+const activity = { compress: 0, render: 0 }
+const activityListeners = new Set()
+const notifyActivity = () => { const s = { ...activity }; activityListeners.forEach((l) => l(s)) }
+
+export function onActivity(fn) {
+  activityListeners.add(fn)
+  fn({ ...activity })
+  return () => activityListeners.delete(fn)
+}
+
+function categoryOf(method) {
+  if (method === 'compress_options' || method === 'render_compressed_window') return 'compress'
+  if (method === 'render_window' || method === 'render' || method === 'render_compressed') return 'render'
+  return null // metadata / IO calls aren't shown as background activity
+}
+
 async function call(method, ...args) {
   const api = await waitForApi()
-  return api[method](...args)
+  const cat = categoryOf(method)
+  if (cat) { activity[cat] += 1; notifyActivity() }
+  try {
+    return await api[method](...args)
+  } finally {
+    if (cat) { activity[cat] -= 1; notifyActivity() }
+  }
 }
 
 export const core = {
@@ -38,6 +62,7 @@ export const core = {
   testMode: (dpi = 72, maxPages = 12) => call('test_mode', dpi, maxPages),
   pageCount: (session, nodeId) => call('page_count', session, nodeId),
   pageDims: (session, nodeId) => call('page_dims', session, nodeId),
+  renderStats: () => call('render_stats'),
   renderWindow: (session, nodeId, first = 0, count = 10, dpi = 100) =>
     call('render_window', session, nodeId, first, count, dpi),
   renderCompressedWindow: (session, nodeId, dpi, method, first = 0, count = 10) =>

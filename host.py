@@ -175,6 +175,9 @@ class HostApi:
         return self._core.test_mode(dpi, max_pages)
 
     # windowed render cache
+    def render_stats(self):
+        return self._core.render_stats()
+
     def page_count(self, session, node_id):
         return self._core.page_count(session, node_id)
 

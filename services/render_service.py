@@ -126,6 +126,21 @@ class RenderService:
         self.max_workers = max_workers if max_workers is not None else cpu.worker_count()
         self._executor = None           # lazy single seed-dispatcher worker
         self._pool = None               # lazy N-worker render pool
+        self._prefetch = {"prefetch_active": False, "prefetch_warmed": 0}
+
+    # --- stats (for the UI status bar) ------------------------------------
+    def stats(self) -> dict:
+        """Cache occupancy + whether a background prefetch is currently running."""
+        with self._lock:
+            pf = dict(self._prefetch)
+        return {
+            "cache_used": self.cache.size,
+            "cache_budget": self.cache.budget,
+            "cache_free": self.cache.free(),
+            "cache_pages": len(self.cache),
+            "workers": self.max_workers,
+            **pf,  # prefetch_active, prefetch_warmed
+        }
 
     # --- generation / access history --------------------------------------
     @property
@@ -284,10 +299,16 @@ class RenderService:
         specs = list(node_specs)
 
         def job():
+            with self._lock:
+                self._prefetch = {"prefetch_active": True, "prefetch_warmed": 0}
+            warmed = 0
             try:
-                self.fill_until_idle(specs, focus_node, focus_page, data_for, dpi,
-                                     max_steps=self.seed_steps, since_gen=gen)
+                warmed = self.fill_until_idle(specs, focus_node, focus_page, data_for, dpi,
+                                              max_steps=self.seed_steps, since_gen=gen)
             except Exception:  # background; never crash the worker
                 pass
+            finally:
+                with self._lock:
+                    self._prefetch = {"prefetch_active": False, "prefetch_warmed": warmed}
 
         self._exec().submit(job)

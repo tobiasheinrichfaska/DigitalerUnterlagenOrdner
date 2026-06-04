@@ -197,6 +197,12 @@ class CoreApi:
                 return None, None, {"ok": False, "error": f"node not found: {node_id}"}
             return node, (node.current_data or node.original_data), None
 
+    def render_stats(self) -> dict:
+        """Render-cache occupancy + background prefetch state, for the UI status bar.
+        Cheap; safe to poll. The render service is shared across windows/sessions."""
+        stats = self._renderer().stats()
+        return {"ok": True, **stats}
+
     def page_count(self, session: str, node_id: str) -> dict:
         node, data, err = self._leaf_data(session, node_id)
         if err:

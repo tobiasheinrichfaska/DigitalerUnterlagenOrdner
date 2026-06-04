@@ -23,6 +23,7 @@ export const en = {
   'Weiteres Dokument in neuem Fenster': 'Another document in a new window',
   'Importieren': 'Import',
   'Speichern': 'Save',
+  'Speichern unter…': 'Save as…',
   'Export PDF': 'Export PDF',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Export as a PDF with table of contents (selection, otherwise the whole document)',

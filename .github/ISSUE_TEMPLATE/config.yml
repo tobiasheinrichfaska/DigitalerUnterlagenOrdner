@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & general discussion
+    url: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/discussions
+    about: >
+      Not sure if it's a bug? Have a usage question, or just want to chat about
+      BelegTool? Please open a Discussion instead of an issue. Deutsch ist
+      ebenfalls willkommen.
+  - name: 📓 How to test (beta onboarding)
+    url: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/blob/master/BETA_TESTING.md
+    about: New tester? Start here — how to get, run, and exercise the app.

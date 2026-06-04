@@ -1,0 +1,52 @@
+name: "💡 Feature request"
+description: "Suggest a new capability or improvement for BelegTool."
+title: "[Feature]: "
+labels: ["enhancement", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for **BelegTool** (DigitalerUnterlagenOrdner)? Tell us the
+        problem first — the best solution is often not the one we'd guess.
+
+        🇩🇪 *Vorschläge auf Deutsch sind ebenfalls willkommen.*
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: "The underlying need, not just the feature. What can't you do today, or what is painful?"
+      placeholder: "When I export a large folder I get one huge PDF and can't ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: "What you'd like BelegTool to do. A rough sketch is fine."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Which workflow does this touch?
+      options:
+        - "Import (PDF / image / Office / archive / e-mail)"
+        - "Tree editing (split / merge / folders / move)"
+        - "Preview & compression"
+        - "Export & TOC"
+        - "Save / .belegtool persistence"
+        - "Status / language / general UI"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: "Workarounds you use today, or other approaches you thought about."
+    validations:
+      required: false

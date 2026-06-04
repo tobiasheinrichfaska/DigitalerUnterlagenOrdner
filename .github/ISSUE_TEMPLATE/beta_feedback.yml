@@ -1,0 +1,55 @@
+name: "🧪 Beta feedback (impressions & UX)"
+description: "Tell us how it felt to use BelegTool — no bug or feature needed."
+title: "[Feedback]: "
+labels: ["feedback", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the soft one — first impressions, confusion, gut reactions.
+        There are no wrong answers, and you don't need a reproducible bug.
+
+        🇩🇪 *Antworten auf Deutsch sind ebenfalls willkommen.*
+
+  - type: textarea
+    id: first-impressions
+    attributes:
+      label: First impressions
+      description: "What did you think in the first few minutes? Did it do what you expected?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: confusing
+    attributes:
+      label: What was confusing or harder than it should be?
+      description: "Anything you had to guess at, hunt for, or that surprised you."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: would-use
+    attributes:
+      label: Would you actually use this?
+      options:
+        - "Yes"
+        - "Maybe"
+        - "No"
+    validations:
+      required: true
+
+  - type: textarea
+    id: would-use-why
+    attributes:
+      label: Why / why not?
+      description: "What would make it a yes — or what's the dealbreaker?"
+    validations:
+      required: true
+
+  - type: input
+    id: one-change
+    attributes:
+      label: The one thing you'd change first
+      placeholder: "If you could fix or add exactly one thing..."
+    validations:
+      required: true

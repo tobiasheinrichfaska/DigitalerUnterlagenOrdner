@@ -1,0 +1,108 @@
+// Croatian translations: German source text → Croatian.
+export const hr = {
+  'Verbinde mit Core…': 'Povezivanje s jezgrom…',
+  'Arbeite…': 'Obrada…',
+  'Sprache': 'Jezik',
+
+  'Bereit': 'Spremno',
+  'Komprimiere {n}': 'Sažimanje {n}',
+  'Vorschau lädt {n}': 'Učitavanje pretpregleda {n}',
+  'Cache füllt': 'Punjenje predmemorije',
+  'Vorschau-Cache · {free} MB frei': 'Predmemorija pretpregleda · {free} MB slobodno',
+  'Cache {used}/{total} MB · {pages}/{doc} Seiten': 'Predmemorija {used}/{total} MB · {pages}/{doc} stranica',
+  'Cache vergrößern (+50 MB)': 'Povećaj predmemoriju (+50 MB)',
+  'Cache verkleinern (−50 MB)': 'Smanji predmemoriju (−50 MB)',
+
+  'Öffnen': 'Otvori',
+  'Neues Fenster': 'Novi prozor',
+  'Weiteres Dokument in neuem Fenster': 'Drugi dokument u novom prozoru',
+  'Importieren': 'Uvezi',
+  'Speichern': 'Spremi',
+  'Speichern unter…': 'Spremi kao…',
+  'Export PDF': 'Izvezi PDF',
+  'Komprimierungs-Alternativen speichern?': 'Spremiti alternative sažimanja?',
+  '{n} Dokument(e) haben berechnete Komprimierungs-Alternativen.':
+    '{n} dokument(a) ima izračunate alternative sažimanja.',
+  '„Wie geplant" behält die Alternativen in der Datei (größer, beim Öffnen sofort verfügbar). „Original" speichert nur die Basis-Fassung (kleiner; Alternativen werden beim Öffnen neu berechnet).':
+    '„Kako je planirano” zadržava alternative u datoteci (veća datoteka, odmah dostupne pri ponovnom otvaranju). „Original” sprema samo osnovnu verziju (manja datoteka; alternative se ponovno izračunavaju pri otvaranju).',
+  'Wie geplant speichern': 'Spremi kako je planirano',
+  'Original speichern': 'Spremi original',
+  'Abbrechen': 'Odustani',
+  'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
+    'Izvezi kao PDF sa sadržajem (odabir, inače cijeli dokument)',
+  'Auswahl': 'Odabir',
+  'Ordner': 'Mapa',
+  'Rückgängig': 'Poništi',
+  'Wiederholen': 'Ponovi',
+
+  'Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?':
+    'Otvoriti drugu datoteku i odbaciti nespremljene promjene?',
+  'Gespeichert': 'Spremljeno',
+  'PDF exportiert ({count} {entries})': 'PDF izvezen ({count} {entries})',
+  'Eintrag': 'unos',
+  'Einträge': 'unosa',
+
+  'Breite der Baumansicht ziehen': 'Povucite za promjenu širine prikaza stabla',
+
+  'Knoten auswählen für die Vorschau': 'Odaberite čvor za pretpregled',
+  'Keine Vorschau (Ordner oder leer)': 'Nema pretpregleda (mapa ili prazno)',
+  'Seite {page} / {total}': 'Stranica {page} / {total}',
+  '{total} Seiten': '{total} stranica',
+  'Seite {n}': 'Stranica {n}',
+  'kleiner': 'manje',
+  'größer': 'veće',
+  'zurücksetzen': 'vrati',
+
+  'Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}':
+    'Ispustite datoteke — na poziciju u stablu (unutar/između) za točan cilj, inače u {target}',
+  'oberste Ebene': 'najviša razina',
+
+  'Neuer Ordner': 'Nova mapa',
+  'Umbenennen': 'Preimenuj',
+  'Neuer Name': 'Novo ime',
+  'Splitten': 'Podijeli',
+  'pro Seite': 'po stranici',
+  'N Seiten pro Knoten…': 'N stranica po čvoru…',
+  'pro Seite → neuer Ordner': 'po stranici → nova mapa',
+  'N Seiten → neuer Ordner…': 'N stranica → nova mapa…',
+  'Seiten pro Knoten:': 'Stranica po čvoru:',
+  'Ordner anlegen': 'Stvori mapu',
+  'Aufklappen': 'Proširi',
+  'Zuklappen': 'Sažmi',
+  'Alle aufklappen': 'Proširi sve',
+  'Alle zuklappen': 'Sažmi sve',
+  'Status': 'Status',
+  'Als PDF exportieren': 'Izvezi kao PDF',
+  'Auswahl als PDF exportieren ({count})': 'Izvezi odabir kao PDF ({count})',
+  'Löschen': 'Izbriši',
+  'Der Ordner „{name}“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?':
+    'Mapa „{name}” sadrži neodabrane stavke koje će biti uključene. Nastaviti?',
+  '„{name}“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)':
+    '„{name}”: uključiti cijelu mapu? (Odustani = samo odabrane stavke, isključi mapu)',
+  'Nur die ausgewählten Elemente verwenden und „{name}“ ausschließen? (Abbrechen = Vorgang abbrechen)':
+    'Koristiti samo odabrane stavke i isključiti „{name}”? (Odustani = prekini operaciju)',
+  'Zusammenführen → 1 PDF ({count})': 'Spoji → 1 PDF ({count})',
+  'In neuen Ordner ({count})': 'U novu mapu ({count})',
+  'Name des neuen Ordners': 'Ime nove mape',
+  'Neue Gruppe': 'Nova grupa',
+
+  'Erfasst': 'Evidentirano',
+  'Zu erfassen': 'Za evidentirati',
+  'Vorjahr': 'Prethodna godina',
+
+  'JPEG (Graustufen)': 'JPEG (sivi tonovi)',
+  'JPEG (Farbe)': 'JPEG (boja)',
+  'PNG (Graustufen)': 'PNG (sivi tonovi)',
+  'Struktur (Farbe erhalten)': 'Strukturno (boja zadržana)',
+  'Größe der aktuellen Auswahl bei diesem DPI': 'Veličina trenutnog odabira pri ovom DPI-u',
+  'Kompressions-DPI': 'DPI sažimanja',
+  'unkomprimierte Fassung': 'nesažeta verzija',
+  'Kompression läuft …': 'Sažimanje …',
+  'bereits komprimiert (keine Quelle)': 'već sažeto (bez izvora)',
+  'beste': 'najbolje',
+  'Lesbarkeit geprüft': 'Čitljivost provjerena',
+  'übernommen': 'primijenjeno',
+  'Die aktuell angezeigte Komprimierung übernehmen': 'Primijeni trenutno prikazano sažimanje',
+  'rechts drehen': 'okreni desno',
+  'links drehen': 'okreni lijevo',
+}

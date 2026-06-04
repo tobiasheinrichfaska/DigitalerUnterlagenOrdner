@@ -557,14 +557,14 @@ class CoreApi:
             return list(load_belegtool(path).root.children)
         if low.endswith((".pdf", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
             from pdf_storage import PDFStorage, create_wrapper_node
-            storage = PDFStorage(path, generate_previews=False)
+            storage = PDFStorage(path)
             return [node_from_pdfnode(create_wrapper_node(storage, path))]
         from pdf_node import PDFNode
         from universal_importer import UniversalImporter
         result = UniversalImporter.convert(path)  # images / Office / …
         data = result.data.getvalue() if hasattr(result.data, "getvalue") else result.data
         pn = PDFNode(name=result.name)
-        pn.set_original_and_current_data(data, None, None, None, False, generate_preview=False)
+        pn.set_original_and_current_data(data, None, None, None, False)
         return [node_from_pdfnode(pn)]
 
     def import_paths(self, session: str, paths, parent_id: str = None, index: int = None) -> dict:

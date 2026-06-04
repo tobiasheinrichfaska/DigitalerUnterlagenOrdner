@@ -31,7 +31,7 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 
 | File | Role |
 |---|---|
-| `pdf_node.py` | `PDFNode`: tree node (file/folder), compression, preview (rendering delegated to `services/render`), split/merge/copy/delete. **No Tk** — uses the `progress`/`tasks` ports |
+| `pdf_node.py` | `PDFNode`: serialization carrier for the `.belegtool` I/O path only (bytes + metadata, `to_dict`/`from_recursive_array`/`copy`). **No rendering, no operations** — split/merge/rotate/compress live in `core/engine` |
 | `pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
 
 ### Import & Export
@@ -250,7 +250,7 @@ python host.py file.belegtool   # …opening a file
 
 ## Tests
 
-Framework: `pytest`. Tests in `tests/` cover the data model (`pdf_node`, `pdf_storage`), compression/import (incl. `test_compress_parallel` — content+order match of the multi-worker path), the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, the CPU-fairness primitives (`test_cpu`), and the pywebview host glue (`test_host.py`). The Tk-era eager-preview/background-compress unit tests were removed (dead code; see Open items). Run `pytest` for the current pass count.
+Framework: `pytest`. Tests in `tests/` cover the `.belegtool` carrier (`pdf_storage`, the `pdf_node` round-trip), compression/import (incl. `test_compress_parallel` — content+order match of the multi-worker path), the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, the CPU-fairness primitives (`test_cpu`), and the pywebview host glue (`test_host.py`). The legacy PDFNode-operation/eager-preview unit tests were removed — those operations now live in and are tested through `core/engine`/`core/commands` (`test_split_merge`, `test_engine_commands`, …). Run `pytest` for the current pass count.
 
 ```powershell
 pytest
@@ -295,22 +295,20 @@ Current stable tag: **v3.7.0**
 - **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
   removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
   against the React UI. The features themselves are unchanged.
-- **Dead `PDFNode` preview/operation machinery — ready to delete (next focused task).**
-  The **Testmodus subsystem was removed** (testmode.py, TestMode.jsx + 🧪 button,
-  CoreApi/HostApi `test_mode`, the `tests/data/expected/` goldens, `test_testmode.py`),
-  so nothing user-facing keeps `PDFNode`'s legacy machinery alive. `PDFNode` is now used
-  **only as the `.belegtool` I/O carrier** (`PDFStorage` load/save, always
-  `generate_previews=False`) — the app does split/merge/rotate/compress via `core/engine`.
-  Still-present dead-at-runtime code in `pdf_node.py`: `preview_lazy`/`preview_folder`/
-  `update_preview`/`_create_previews`/`compress_lazy`/`compress_multi_lazy`/
-  `select_compression_method`/`compress`/`rotate`/`split`/`merge`/the `_*_preview_pages`
-  attrs + background-compress threads, plus `preview_page.py` and the `generate_previews=True`
-  branches in `PDFStorage`. Removal is ~15 interdependent edits in a load-bearing file; do it
-  as a focused pass with [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) +
-  the full suite as the net (it just caught 3 real I/O bugs there).
-- **Headless import is now bytes-only end to end** — plain-PDF *and* archive/email
-  paths honor `generate_previews=False` (`from_recursive_array`/`_from_structure_entry`
-  thread the flag); page count uses `fitz.page_count`; the `/JSONStructure` metadata
+- **`PDFNode` is now a pure `.belegtool` I/O carrier — DONE.** The dead preview/
+  operation machinery was removed: `pdf_node.py` no longer carries `preview_lazy`/
+  `preview_folder`/`update_preview`/`_create_previews`/`compress*`/`select_compression_method`/
+  `rotate`/`split`/`merge`/`from_pdf`/`commit_changes`/`reset_compression`/`move` or the
+  `_*_preview_pages` + background-compress threads; `preview_page.py` is deleted and the
+  `generate_previews` flag is gone from `PDFStorage` (load is always bytes-only). What
+  remains is the carrier surface (constructor, `set_original_and_current_data`, `to_dict`,
+  `from_recursive_array`, `copy`, the data properties, `_concat_children_data`, `is_valid`).
+  The redundant PDFNode-op unit tests were dropped (the operations live in and are tested
+  through `core/engine`/`core/commands` — `test_split_merge`, `test_engine_commands`, …);
+  [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) guards the carrier.
+- **Headless import is bytes-only end to end** — plain-PDF *and* archive/email
+  paths store bytes only (the carrier never renders); page count uses `fitz.page_count`;
+  the `/JSONStructure` metadata
   parse is gated on a cheap `b"/JSONStructure" in data` byte check (the marker
   survives pikepdf's compress+linearize, so `.belegtool`/structured-PDF imports are
   still honored — locked by `test_structured_pdf_import_honors_json`). Warm import is

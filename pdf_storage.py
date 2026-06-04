@@ -42,15 +42,10 @@ def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     return wrapper
 
 class PDFStorage:
-    def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None,
-                 generate_previews: bool = True):
+    def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):
         self.filename: Optional[str] = None
         self.import_time = datetime.datetime.now()
         self.is_dirty: bool = False
-        # The Tk app needs PIL previews eagerly; the headless core renders on
-        # demand, so it loads with generate_previews=False (skips the per-node
-        # PyMuPDF render that dominates load time).
-        self._generate_previews = generate_previews
         self.root = PDFNode(name="root", is_folder=True)
         if source:
             self._load_pdf(source)
@@ -83,7 +78,7 @@ class PDFStorage:
             if filename.endswith(".zip"):
                 from universal_importer import extract_zip_to_structure
                 struktur = extract_zip_to_structure(data)
-                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur, generate_preview=self._generate_previews)
+                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "ZIP-Datei erfolgreich geladen"
                 self.root = PDFNode(name="root", is_folder=True)
                 self.root.add_child(node)
@@ -92,7 +87,7 @@ class PDFStorage:
             if filename.endswith((".tar", ".tar.gz", ".tgz")):
                 from universal_importer import extract_tar_to_structure
                 struktur = extract_tar_to_structure(data)
-                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur, generate_preview=self._generate_previews)
+                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "TAR-Archiv erfolgreich geladen"
                 self.root = PDFNode(name="root", is_folder=True)
                 self.root.add_child(node)
@@ -101,7 +96,7 @@ class PDFStorage:
             if filename.endswith((".eml", ".msg")):
                 from universal_importer import extract_email_to_structure
                 struktur = extract_email_to_structure(data)
-                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur, generate_preview=self._generate_previews)
+                node = PDFNode.from_recursive_array(name=os.path.basename(filename), structure=struktur)
                 node.konstruktor_ergebnis = "E-Mail erfolgreich geladen"
                 self.root = PDFNode(name="root", is_folder=True)
                 self.root.add_child(node)
@@ -142,52 +137,25 @@ class PDFStorage:
                 except Exception as e:
                     logger.warning("JSON-Struktur ungültig oder nicht lesbar: %s", e)
 
-            # Kein oder ungültiges JSON → einfacher Import als ein Knoten
+            # Kein oder ungültiges JSON → einfacher Import als ein Knoten.
+            # Bytes only — the headless core renders/compresses on demand, and
+            # node_from_pdfnode snapshots only the bytes, so any eager render or
+            # compression here would be pure wasted CPU (it dominated import time
+            # on large color PDFs).
             self.root = PDFNode(name="root", is_folder=True)
             name = os.path.splitext(os.path.basename(self.filename))[0] if self.filename else "importiert"
-            if self._generate_previews:
-                # Legacy/Tk path — eager PIL preview + lazy compression (unchanged).
-                node = PDFNode(name=name, pdf_data=data)
-                if (
-                    node.original_pdf_data and
-                    node.current_pdf_data == node.original_pdf_data and
-                    node.dpi_original is None and
-                    node.dpi_current is None and
-                    not node.no_compression
-                ):
-                    node.compress_lazy(dpi=150)
-            else:
-                # Headless/new GUI — store bytes only. No eager full-document render
-                # and no lazy compression: both are discarded by node_from_pdfnode
-                # (which snapshots bytes), so doing them here is pure wasted CPU and
-                # dominates import time on large color PDFs.
-                node = PDFNode(name=name)
-                node.set_original_and_current_data(
-                    original_data=data,
-                    current_data=None,
-                    dpi_original=None,
-                    dpi_current=None,
-                    no_compression=False,
-                    generate_preview=False,
-                )
-
+            node = PDFNode(name=name)
+            node.set_original_and_current_data(
+                original_data=data,
+                current_data=None,
+                dpi_original=None,
+                dpi_current=None,
+                no_compression=False,
+            )
             self.root.add_child(node)
 
         except Exception as e:
             raise ValueError(f"Fehler beim Laden des PDFs: {e}")
-
-    def compress(self):
-        """Komprimiert alle nicht-komprimierten Blatt-Nodes im Speicher.
-
-        Nodes mit gesetztem no_compression-Flag werden übersprungen.
-        """
-        for node in self.get_all_nodes():
-            if not node.is_folder and not node.is_compressed and not node.no_compression:
-                try:
-                    node.compress()
-                except Exception as e:
-                    logger.warning("Komprimierung fehlgeschlagen für '%s': %s", node.name, e)
-
 
     @staticmethod
     def extract_pages(data: bytes, start: int, end: int) -> bytes:
@@ -440,7 +408,6 @@ class PDFStorage:
             dpi_original=node_data.get("dpi_original"),
             dpi_current=node_data.get("dpi_current"),
             no_compression=node_data.get("no_compression", False),
-            generate_preview=self._generate_previews,
         )
         # Restore the persisted is_compressed flag instead of unconditionally resetting it.
         # set_original_and_current_data only sets is_compressed=True when current_data is
@@ -451,19 +418,16 @@ class PDFStorage:
         node.dpi_current = node_data.get("dpi_current")    # was lost when current_data=None
         node.dpi_original = node_data.get("dpi_original")
 
-        # Reload coherence (headless/core path): a committed ("Lesbarkeit geprüft")
-        # node's persisted pages ARE the chosen compression — its source was dropped
-        # on save. Expose them as current_data with NO original, so the model is
-        # honest: the Compress handler's `original_data` guard then blocks
-        # re-compressing (double compression) and Reset has nothing to revert to.
-        # The Tk path (generate_previews=True) keeps its eager-preview behavior.
-        if is_compressed and not self._generate_previews:
+        # Reload coherence: a committed ("Lesbarkeit geprüft") node's persisted
+        # pages ARE the chosen compression — its source was dropped on save.
+        # Expose them as current_data with NO original, so the model is honest:
+        # the Compress handler's `original_data` guard then blocks re-compressing
+        # (double compression) and Reset has nothing to revert to.
+        if is_compressed:
             node.current_pdf_data = pages
             node.original_pdf_data = None
         node.pdf_length = length
 
-        if self._generate_previews:
-            node.update_preview()
         current_start[0] = end + 1  # Seitenzähler fortschreiben
         return node
 

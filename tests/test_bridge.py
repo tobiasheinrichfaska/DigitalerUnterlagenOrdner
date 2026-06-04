@@ -14,8 +14,8 @@ from core.model import Document, Node
 from helpers import create_valid_pdf
 
 
-def test_core_load_skips_eager_previews(tmp_path):
-    # the headless core load path must not render per-node previews (the slow part)
+def test_core_load_reads_bytes_without_rendering(tmp_path):
+    # The carrier load path stores bytes only (no render); structure/bytes load.
     from pdf_storage import PDFStorage
     src = Document(Node(name="root", is_folder=True, children=(
         Node(name="doc1", pdf_length=1, original_data=create_valid_pdf(pages=1)),
@@ -23,11 +23,9 @@ def test_core_load_skips_eager_previews(tmp_path):
     path = tmp_path / "s.belegtool"
     save_belegtool(src, path)
 
-    eager = PDFStorage(str(path))                          # Tk app default
-    lazy = PDFStorage(str(path), generate_previews=False)  # core path
-    assert eager.root.children[0]._original_preview_pages        # rendered
-    assert lazy.root.children[0]._original_preview_pages == []   # skipped
-    # structure/bytes still load identically
+    storage = PDFStorage(str(path))
+    leaf = storage.root.children[0]
+    assert leaf.original_pdf_data.startswith(b"%PDF")   # bytes carried
     assert load_belegtool(path).root.children[0].name == "doc1"
 
 

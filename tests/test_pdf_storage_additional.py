@@ -15,13 +15,6 @@ def test_mark_and_clear_dirty():
     storage.clear_dirty()
     assert not storage.is_dirty
 
-def test_compress_all():
-    storage = PDFStorage()
-    node = PDFNode("compress_me", pdf_data=create_valid_pdf(pages=1))
-    storage.root.add_child(node)
-    storage.compress()
-    assert node.is_compressed
-
 def test_extract_pages():
     # Erzeuge ein valides PDF mit mindestens einer Seite
     pdf_data = create_valid_pdf(pages=2)

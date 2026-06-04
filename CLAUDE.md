@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.7.1**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.7.2**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -47,7 +47,7 @@ the GUI; `python host.py <file.belegtool>` opens that file on startup.
 | File | Role |
 |---|---|
 | `tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.1) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.7.2) |
 | `log_config.py` | Logging setup |
 | `preview_page.py` | Preview page holder (PIL only). Now used only by the data model's eager-preview path — a candidate for removal in a future data-model cleanup. |
 
@@ -286,7 +286,7 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current stable tag: **v3.7.1**
+Current stable tag: **v3.7.2**
 
 ---
 
@@ -368,7 +368,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.7.1`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.7.2`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **Two known gaps that must NOT be reported as bugs** (the bug form's required
   checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired

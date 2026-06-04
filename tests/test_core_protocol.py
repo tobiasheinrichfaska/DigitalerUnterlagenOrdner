@@ -1,6 +1,6 @@
 """Unit tests for the core IPC framing (no pipe needed)."""
 
-from core import protocol
+from core.ipc import protocol
 
 
 def test_encode_decode_roundtrip():

@@ -16,7 +16,7 @@ import win32pipe
 import pywintypes
 import winerror
 
-from core import protocol
+from core.ipc import protocol
 
 _BUFSIZE = 65536
 

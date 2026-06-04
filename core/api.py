@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+import zlib
+from collections import OrderedDict
 
 from core import CORE_VERSION
 from core.bridge import load_belegtool
@@ -55,6 +57,7 @@ class CoreApi:
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
+        self._vcache = OrderedDict()  # id(bytes) -> (bytes, crc32), memoised versions (LRU)
 
     def _renderer(self):
         if self._render_service is None:
@@ -72,12 +75,63 @@ class CoreApi:
             self._pcount[key] = c
         return c
 
-    def _seed_around(self, node_id, version, data, focus_page, dpi):
-        """Ask the middleware to warm the cache around this request (background)."""
+    def _version_of(self, data):
+        """Memoised crc32 of bytes, keyed by object identity (the model is immutable,
+        so a given bytes object is stable). The bytes are held in the cache value, so
+        its id can't be reused for different bytes while cached. LRU-bounded."""
+        key = id(data)
+        ent = self._vcache.get(key)
+        if ent is not None and ent[0] is data:
+            self._vcache.move_to_end(key)
+            return ent[1]
+        v = zlib.crc32(data)
+        self._vcache[key] = (data, v)
+        if len(self._vcache) > 64:
+            self._vcache.popitem(last=False)
+        return v
+
+    def _seed_single(self, node_id, version, data, focus_page, dpi):
+        """Warm just this node's window (used for transient compressed variants,
+        which have no neighbours to warm)."""
         count = self._count_for(node_id, version, data)
         if count > 0:
             self._renderer().seed([(node_id, version, count)], node_id, focus_page,
                                   lambda _nid: data, dpi)
+
+    def _seed_around(self, session, focus_id, focus_page, dpi):
+        """Warm the focus node from the viewport outward, then the nearest
+        neighbouring leaves (tree order), filling the cache until it's full. The
+        whole enumeration/hashing runs on the background worker (via prefetch)."""
+        def build(neighbours=8):
+            with self._lock:
+                s = self._sessions.get(session)
+                root = s.document.root if s else None
+            if root is None:
+                return [], (lambda _i: b""), focus_id, focus_page
+            leaves = [n for n in root.iter()
+                      if not n.is_folder and (n.current_data or n.original_data)]
+            ids = [n.id for n in leaves]
+            if focus_id not in ids:
+                return [], (lambda _i: b""), focus_id, focus_page
+            fi = ids.index(focus_id)
+            order = [fi]  # focus first, then alternating neighbours outward (closest first)
+            for d in range(1, neighbours + 1):
+                if fi - d >= 0:
+                    order.append(fi - d)
+                if fi + d < len(leaves):
+                    order.append(fi + d)
+            specs, data_map = [], {}
+            for idx in order:
+                n = leaves[idx]
+                data = n.current_data or n.original_data
+                ver = self._version_of(data)
+                cnt = self._count_for(n.id, ver, data)
+                if cnt > 0:
+                    specs.append((n.id, ver, cnt))
+                    data_map[n.id] = data
+            return specs, data_map.get, focus_id, focus_page
+
+        self._renderer().prefetch(build, dpi)
 
     def _next_untitled_name(self) -> str:
         with self._lock:
@@ -237,7 +291,7 @@ class CoreApi:
         # render the requested (small) window now — foreground priority — then ask
         # the middleware to warm the cache around it in the background.
         pages = self._renderer().render_window(node_id, version, data, first, count, dpi)
-        self._seed_around(node_id, version, data, first, dpi)
+        self._seed_around(session, node_id, first, dpi)  # warm this node + neighbours
         urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first, "pages": urls}
@@ -273,7 +327,7 @@ class CoreApi:
         version = zlib.crc32(variant)  # variant bytes → its own cache identity
         from base64 import b64encode
         pages = self._renderer().render_window(node_id, version, variant, first, count, 100)
-        self._seed_around(node_id, version, variant, first, 100)
+        self._seed_single(node_id, version, variant, first, 100)  # warm just the variant
         urls = ["data:image/png;base64," + b64encode(p).decode("ascii") if p else None
                 for p in pages]
         return {"ok": True, "session": session, "node": node_id, "first": first,

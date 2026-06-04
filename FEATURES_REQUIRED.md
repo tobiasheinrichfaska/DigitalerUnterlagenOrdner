@@ -1,80 +1,71 @@
 # FEATURES_REQUIRED — DigitalerUnterlagenOrdner (BelegTool)
 
-Critical user paths the application must support. Each flow lists the steps and
-the observable acceptance criteria an audit (or a manual smoke test) can check.
-Keep this in sync with the feature set in `CLAUDE.md`.
+Critical user paths the app must support (React/pywebview front end, `host.py`).
+Each lists the observable acceptance an audit or manual smoke test can check.
+Keep in sync with `CLAUDE.md` and the `manual_tests/` files.
 
 ---
 
 ## 1. Import → tree
-
-- **PDF / .belegtool**: importing a PDF adds it as a leaf node under the current
-  storage root; a `.belegtool` file restores its full tree.
-- **Images** (jpg, png, webp, heic): converted to a single-page PDF node.
-- **Office** (Word, Excel, PPT): converted to PDF via COM, added as a node.
-- **Archives** (ZIP, TAR): folder structure preserved as nested folder nodes;
-  member-count and uncompressed-size limits enforced (zip-bomb guard).
-- **Email** (eml, msg): body + attachments extracted into a folder subtree.
-
-Acceptance: after import the new node(s) appear in the TreeView and a preview is
-generated (lazily); the file is marked dirty so Save is offered.
+- **PDF / .belegtool**: a PDF becomes a leaf under the drop target / selected folder;
+  a `.belegtool` restores its full tree. **Images / Office / Archives / Email** convert
+  as before (image→PDF, COM→PDF, archive→nested folders with a zip-bomb guard,
+  email→body+attachments subtree).
+- Acceptance: new nodes appear; the document is **dirty** (Save offered); the render
+  cache **starts warming on its own** (no node click needed).
 
 ## 2. Tree editing
-
-- **Split** a multi-page leaf into one node per page.
-- **Merge** sibling nodes / folders (with DPI-conflict handling — see §3).
-- **Create folder** inside / below the selection.
-- **Rename** (F2), **Delete** (Entf), **deep copy**.
-- **Drag-and-drop** move (Ctrl = copy), **keyboard move** (Ctrl+arrows).
-
-Acceptance: the model and the TreeView stay consistent after every operation;
-node↔tree-item lookups remain valid (see `register_node`/`unregister_node`).
+- **Split** (per page / N pages / into a folder), **Merge** (sibling leaves, DPI-conflict
+  handled), **Create folder**, **inline Rename** (click a selected name again), **deep copy**,
+  **drag-and-drop** move.
+- **Keyboard structuring**: ↑/↓ navigate visible rows, ←/→ collapse/expand, **Insert**
+  grabs a node and arrows move it *optically* until **Insert** drops it (one undo) or **Esc**
+  reverts. Folder **collapse is persisted** in the file.
+- **Multi-delete (Entf / context menu)**: deletes the *whole selection* in one undo, then
+  focuses the next node. A selection mixing a folder with items inside it is **resolved in
+  the UI first** (include all / exclude folder / abort); the data layer **rejects** a mixed
+  set. The same resolver applies to **move / group / export**.
+- Acceptance: model and tree stay consistent; deleted nodes' cached renders are freed.
 
 ## 3. Preview & compression
-
-- Preview is lazy-generated and cached; a placeholder shows until ready.
-- DPI slider 50–300; multi-method compression (JPG / PNG / pikepdf) picks the
-  smallest result; methods larger than the original are hidden.
-- **Commit** replaces the original with the compressed version; **Reset**
-  restores the original.
-- A node flagged `no_compression` is never re-compressed.
-- **DPI conflict on merge**: if two nodes were compressed at different DPI, the
-  compressed data is discarded, `dpi_current` is cleared, `no_compression`
-  becomes True and `is_compressed` becomes False (no contradictory state).
-
-Acceptance: `is_compressed` / `dpi_current` reflect the actual state; a folder's
-data aggregates every child's effective data (uncompressed leaves,
-`no_compression` nodes and sub-folders included).
+- Virtualized windowed preview; the middleware warms the cache (current node, then
+  neighbours, until full) and yields to compression. First page loads on select (no scroll).
+- Compression: DPI 50–300; methods JPG/JPG-color/PNG/pikepdf, smallest offered, larger
+  hidden; the source size is shown. Nodes **≤ 5 pages default to the smallest variant** on
+  display; the chosen method is **remembered** per node. **Lesbarkeit geprüft** applies it.
+- **Split carries** an applied compression into the parts (verbatim, no recompute; pikepdf
+  recomputes). **Splitting/deleting/merging** a node **cancels** its in-flight compression.
+- **Variants persist**: computed-but-unapplied variants are embedded in the `.belegtool`
+  (hidden per-node attachments) and rehydrated on reopen → **no recompute**.
+- Acceptance: `is_compressed`/`dpi_current` are coherent; a committed node has no source
+  ("bereits komprimiert (keine Quelle)") and re-compress/reset are blocked.
 
 ## 4. Status system
-
-Each node carries a status — `erfasst` (green), `zu erfassen` (blue,
-highlighted), `vorjahreswert` (red, highlighted) — settable from the menu /
-context menu and reflected in the TreeView colours.
+Each node has a status — `erfasst` / `zu erfassen` / `vorjahreswert` — set from the context
+menu; the vocabulary comes from the core (`config().statuses`), labels via i18n.
 
 ## 5. Export
-
-- Export selection to a **single PDF with a printed table of contents**,
-  clickable TOC links and sidebar bookmarks; auto-split above 100 pages with
-  cross-references.
-- Export / save in the **.belegtool** format (metadata + ZIP) and reload it
-  losslessly.
-
-Acceptance: the exported PDF opens, contains every selected node's pages, and
-the TOC entries link to the correct pages.
+Export the selection (resolved) to a single PDF with a printed TOC, clickable links and
+sidebar bookmarks; auto-split above 100 pages. Acceptance: the PDF opens and the TOC links
+hit the right pages.
 
 ## 6. Persistence
+- **Speichern saves in place** once the document has a path (no dialog), clearing the dirty
+  "•"; **Speichern unter…** prompts. Node **ids round-trip** (persisted in `/JSONStructure`).
+- Re-opening a `.belegtool` restores the schema losslessly; a committed node returns
+  coherently (`current_data` set, `original_data` None) and drop-source-on-save is unchanged.
 
-- **Save** / **Save as** write the current tree to `.belegtool`.
-- Re-opening a `.belegtool` round-trips the node schema (name, is_folder,
-  status, vz_start/end, pdf_length, is_compressed, dpi_original, dpi_current,
-  no_compression, children).
+## 7. Language, status bar & windows
+- **Language switcher** (Deutsch/English) translates all UI text live and persists the choice;
+  document content/names are not translated.
+- **Status bar**: background activity (Komprimiere N by node / Vorschau lädt / Cache füllt) and
+  the render-cache gauge (used/budget MB · cached/total pages) with **＋ / −** to grow/shrink
+  the budget (shrink evicts immediately).
+- **Multiple windows**: a second window opens and starts cleanly (the bridge waits for each
+  method to be callable, not just for the API object to exist).
 
 ---
 
 ## Test / QA mode
-
-`Ansicht → Testmodus` shows, per golden-master operation (compression, split,
-merge), the input fixture next to the live result and the committed expected
-reference. It expects `tests/data/input/` to be present (regenerate with
-`python tests/make_fixtures.py`).
+Dev-only **Testmodus** (🧪, shown only when `BELEG_DEV` is set) compares input/live/expected
+for golden-master ops. Needs `tests/data/input/` (regenerate with `python tests/make_fixtures.py`).

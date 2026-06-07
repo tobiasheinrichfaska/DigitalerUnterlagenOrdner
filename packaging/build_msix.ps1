@@ -53,7 +53,7 @@ function Find-SdkTool([string]$name) {
   $hit = Get-ChildItem $base -Recurse -Filter $name -ErrorAction SilentlyContinue |
          Where-Object { $_.FullName -match '\\x64\\' } |
          Sort-Object FullName -Descending | Select-Object -First 1
-  if (-not $hit) { throw "$name not found — install the Windows 10/11 SDK (App Certification / Packaging tools)." }
+  if (-not $hit) { throw "$name not found - install the Windows 10/11 SDK (App Certification / Packaging tools)." }
   return $hit.FullName
 }
 $makeappx = Find-SdkTool "makeappx.exe"

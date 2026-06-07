@@ -98,6 +98,23 @@ export default function App() {
     setState(resp)
   }, [])
 
+  // Live-update a leaf's front "undecided" dot once compression options resolve:
+  // auto-compute/loadOptions run AFTER the tree response was built, so the engine now
+  // knows whether anything smaller exists. No options found → decided (no red dot); the
+  // verdict is persisted at save via compression_no_gain. Keeps the dot in sync without
+  // refetching the whole tree.
+  const setUndecided = useCallback((nodeId, undecided) => {
+    setState((prev) => {
+      if (!prev?.tree) return prev
+      const mark = (n) => (
+        n.id === nodeId
+          ? { ...n, compression_undecided: undecided }
+          : (n.children?.length ? { ...n, children: n.children.map(mark) } : n)
+      )
+      return { ...prev, tree: mark(prev.tree) }
+    })
+  }, [])
+
   const session = state?.session
 
   // Unified preview rendering for the selected node. Folders → []. For a leaf,
@@ -117,6 +134,33 @@ export default function App() {
       setPages(null)
     }
   }, [selected, session]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Proactive no-gain sweep: once per opened document, evaluate the CHEAP (≤5-page)
+  // undecided leaves in the background — reusing the same compressOptions call as
+  // auto-compute — so their front "undecided" dot resolves without needing a view.
+  // Sequential + cancellable so it yields to interaction; large nodes stay lazy. The
+  // verdict persists at save (these calls warm the engine memo _bake_no_gain reads).
+  useEffect(() => {
+    if (!session || !state?.tree) return undefined
+    const ids = []
+    const walk = (n) => {
+      if (!n.is_folder && n.has_source && !n.is_compressed && !n.no_compression
+          && n.compression_undecided && n.pdf_length > 0 && n.pdf_length <= 5) ids.push(n.id)
+      n.children?.forEach(walk)
+    }
+    walk(state.tree)
+    if (!ids.length) return undefined
+    let cancelled = false
+    const dpi = config?.default_dpi ?? 150
+    ;(async () => {
+      for (const id of ids) {
+        if (cancelled) return
+        const r = await core.compressOptions(session, id, dpi).catch(() => null)
+        if (!cancelled && r?.ok) setUndecided(id, r.options.length > 0)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [session]) // eslint-disable-line react-hooks/exhaustive-deps -- once per opened document
 
   // every leaf preview is virtualized; only folders use the `pages` path
   const windowed = !!(selected && !selected.is_folder)
@@ -503,6 +547,7 @@ export default function App() {
           previewRef={previewRef} tagsOn={tagsOn} selected={selected}
           docTags={allTags(state?.tree)} dispatch={dispatch} session={session}
           onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150}
+          onCompressionResolved={setUndecided}
           windowed={windowed} pages={pages} pageInfo={pageInfo}
           zoom={zoom} setZoom={setZoom} previewReq={previewReq}
           onPageInfo={onPageInfo} busy={busy}

@@ -226,6 +226,12 @@ Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (
   the decision is **baked at save** (`CoreApi._bake_no_gain`), round-trips in the `.belegtool`,
   and is **cleared on rotate**. So a "nothing smaller" node is not re-evaluated on load and
   shows no red dot. Auto-compute on view skips these.
+- **Proactive sweep:** after a document loads, [`App.jsx`](webui/src/App.jsx) evaluates the
+  **cheap (≤5-page) undecided leaves** in the background — sequential + cancellable, reusing the
+  same `compressOptions` call as auto-compute — so their front dot resolves **without needing a
+  view**. As each resolves, `setUndecided` updates the dot (no-gain → cleared); the viewed node
+  and manual/large-node checks update instantly via `PreviewControls onResolved`. Large nodes
+  stay lazy. The verdict persists at save (the sweep warms the memo `_bake_no_gain` reads).
 
 ### Rename & Help (v3.9.0)
 - **F2** renames the selected node inline ([`Tree.jsx`](webui/src/Tree.jsx)).

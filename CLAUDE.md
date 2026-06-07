@@ -466,6 +466,17 @@ Current tag: **v3.9.1** (beta)
   felt wait far more than threads do. Deferred per user decision (2026-06-03).
 - **Zammad integration** — deferred, not started yet
 
+### Probably won't be done (accepted limitations)
+- **Direct drag-and-drop from Outlook** — dragging a mail/attachment straight out of Outlook
+  into the window does **not** work and likely won't. Outlook hands items over as OLE
+  *virtual files* (`CF_FILEGROUPDESCRIPTOR` + `CF_FILECONTENTS`); the WebView2/HTML drop layer
+  only sees real files (`dataTransfer.files` is empty for Outlook drags), so
+  [`useOsFileDrop`](webui/src/hooks/useOsFileDrop.js) ignores them. Supported instead:
+  **Import (📥) a `.msg`/`.eml`**, or drag the Outlook item to a folder/desktop first (which
+  creates a `.msg`) and drag/import that. True support would need a native Win32 `IDropTarget`
+  reading the OLE formats and feeding `import_bytes` — Windows-only, fiddly to bolt onto the
+  WebView2-hosted window; not planned.
+
 ---
 
 ## UI conventions

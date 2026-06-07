@@ -1,11 +1,10 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { core } from './lib/core'
 import { Tree } from './Tree'
 import { PreviewPane } from './PreviewPane'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
 import { Toolbar } from './Toolbar'
-import { HelpModal } from './HelpModal'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
@@ -17,6 +16,10 @@ import { visibleOrder } from './lib/treeNav'
 import { resolveSelection } from './lib/selection'
 import { useT } from './i18n/LanguageProvider'
 import './App.css'
+
+// Lazy: the Help modal + its 19-language content load only when Help is first opened,
+// so the ~all-languages help text stays out of the startup bundle.
+const HelpModal = lazy(() => import('./HelpModal').then((m) => ({ default: m.HelpModal })))
 
 function readAsDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -515,7 +518,11 @@ export default function App() {
           onChoose={(store) => { const m = saveAsk.mode; setSaveAsk(null); doSave(m, store) }} />
       )}
 
-      {helpOpen && <HelpModal lang={lang} onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <Suspense fallback={null}>
+          <HelpModal lang={lang} onClose={() => setHelpOpen(false)} />
+        </Suspense>
+      )}
 
       {dropActive && (
         <div className="drop-overlay">

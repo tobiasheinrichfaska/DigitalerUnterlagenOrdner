@@ -318,6 +318,12 @@ the bloat. ⚠ Variants live in the file → it grows; not a separate sidecar.
 ### Prerequisites
 - Python 3.12 in PATH
 - Node.js (the build runs `npm run build` in `webui/` first)
+- **Edge WebView2 Runtime** on the *target* machine (Win11 has it in-box; Win10 / minimal
+  images / Windows Sandbox may not). Missing → the React UI renders **blank**. `host.py`
+  checks at startup (`_webview2_installed`) and shows a message + download link instead of a
+  blank window (`BELEG_SKIP_WEBVIEW2_CHECK=1` bypasses). Distribution should ensure it: MSIX
+  declares it as a dependency; the zip should bundle the Evergreen bootstrapper. See
+  [`docs/microsoft-store-plan.md`](docs/microsoft-store-plan.md).
 - App icon: source `assets/icon.svg`; the exe icon is `assets/icon.ico` (multi-size,
   generated from the SVG; `belegtool.spec` sets `EXE(icon=…)`). The same artwork is
   the web favicon (`webui/public/favicon.svg`). Regenerate the `.ico` from the SVG if

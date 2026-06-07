@@ -289,7 +289,58 @@ def _safe_http_port():
         s.close()
 
 
+_WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
+# Evergreen WebView2 Runtime registration GUID (also where the Win11 in-box runtime registers).
+_WEBVIEW2_GUID = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+
+
+def _webview2_installed() -> bool:
+    """True if the Edge WebView2 Runtime is present. Without it the React UI renders
+    blank (pywebview can't use the Chromium backend). Non-Windows: assume present."""
+    if sys.platform != "win32":
+        return True
+    import winreg
+    keys = [
+        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_GUID}"),
+        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_GUID}"),
+        (winreg.HKEY_CURRENT_USER, rf"Software\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_GUID}"),
+    ]
+    for root, path in keys:
+        try:
+            with winreg.OpenKey(root, path) as k:
+                pv = winreg.QueryValueEx(k, "pv")[0]
+                if pv and pv != "0.0.0.0":
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def _warn_missing_webview2():
+    """Tell the user plainly (native dialog + open the download page) instead of showing
+    a blank window when the WebView2 Runtime is missing."""
+    msg = ("Microsoft Edge WebView2 Runtime fehlt.\n\n"
+           "BelegTool benötigt die WebView2-Runtime — sonst bleibt das Fenster leer.\n"
+           "Bitte installieren und BelegTool neu starten:\n" + _WEBVIEW2_URL)
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, msg, "BelegTool – WebView2 erforderlich", 0x10)
+    except Exception:
+        print(msg)
+    try:
+        import webbrowser
+        webbrowser.open(_WEBVIEW2_URL)
+    except Exception:
+        pass
+
+
 def main(startup_path=None):
+    # Fail loudly, not blank: without the WebView2 Runtime the window renders empty.
+    # (BELEG_SKIP_WEBVIEW2_CHECK=1 bypasses, in case detection ever false-negatives.)
+    skip = os.environ.get("BELEG_SKIP_WEBVIEW2_CHECK", "").lower() not in ("", "0", "false", "no")
+    if not skip and not _webview2_installed():
+        _warn_missing_webview2()
+        return
     core = CoreApi()  # shared across all windows; sessions are per window
     _open_window(core, startup_path)
     # Warm up only AFTER the window is up (start's func runs on its own thread once

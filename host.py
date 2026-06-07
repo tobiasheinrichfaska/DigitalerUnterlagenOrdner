@@ -207,17 +207,18 @@ class HostApi:
     def import_bytes(self, session, name, data, parent_id=None, index=None):
         return self._core.import_bytes(session, name, data, parent_id, index)
 
-    def export_dialog(self, session, node_ids=None):
+    def export_dialog(self, session, node_ids=None, options=None):
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
+        name = (self._core.document_name(session) or "Export").strip() or "Export"
         path = win.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename="Export.pdf", file_types=("PDF (*.pdf)",))
+            webview.FileDialog.SAVE, save_filename=f"{name}.pdf", file_types=("PDF (*.pdf)",))
         if not path:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
-        return self._core.export(session, path, node_ids)
+        return self._core.export(session, path, node_ids, options)
 
     def import_dialog(self, session, parent_id=None):
         win = self._win()

@@ -79,3 +79,18 @@ Enter confirms, Esc cancels. Works in a tag/search view too (rename is a content
 language isn't translated yet). The flags switch the text to authoritative **English / German**.
 **▸ GitHub** opens a pre-filled new-issue page in the browser; **✉ E-Mail** opens a pre-filled
 mail draft. Esc or ✕ closes the modal.
+
+## MT-58: Export options (TOC / tag index / bookmarks)
+**Preconditions:** A document open; some documents carry **tags** (turn 🏷️ on and add a tag or two).
+**Steps:**
+1. Click **⬇ Export PDF**.
+2. In the dialog, note the checkboxes: **Inhaltsverzeichnis** (+ *mit anklickbaren Links*),
+   **Stichwortverzeichnis (nach Tags)** (+ links), **PDF-Lesezeichen (Seitenleiste)**.
+3. Leave all on → **Exportieren**. Save; open the PDF.
+4. Export again with **Stichwortverzeichnis** unchecked; compare.
+**Expected:** The save dialog's **default filename is the document name + `.pdf`** (not "Export.pdf").
+The first PDF has a table of contents **and** a „Stichwortverzeichnis" page listing each tag with its
+documents and page numbers; entries are clickable; the PDF has sidebar bookmarks. *Not obvious:* the
+index option is **disabled when the document has no tags**; with tags removed from the export it is
+absent in the second PDF. Unchecking links makes the TOC/index entries non-clickable; unchecking
+bookmarks removes the sidebar outline.

@@ -93,7 +93,7 @@ export const core = {
     call('render_window', session, nodeId, first, count, dpi),
   renderCompressedWindow: (session, nodeId, dpi, method, first = 0, count = 10) =>
     call('render_compressed_window', session, nodeId, dpi, method, first, count),
-  exportPdf: (session, nodeIds = null) => call('export_dialog', session, nodeIds),
+  exportPdf: (session, nodeIds = null, options = null) => call('export_dialog', session, nodeIds, options),
   importDialog: (session, parentId = null) => call('import_dialog', session, parentId),
   importBytes: (session, name, data, parentId = null, index = null) => call('import_bytes', session, name, data, parentId, index),
 }

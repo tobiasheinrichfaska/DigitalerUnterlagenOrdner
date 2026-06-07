@@ -242,6 +242,16 @@ Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (
 
 ### Export
 - Single PDF with table of contents (TOC), clickable links, sidebar bookmarks
+- **Export-options dialog (v3.9.0)** ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx), asked
+  before the native save dialog): toggle **TOC** (+clickable links), **tag index** (+links —
+  offered only when the document has tags), and **PDF bookmarks**. Options flow
+  `exportPdf → export_dialog → CoreApi.export(options) → toc_export.export_pdf`.
+- **Tag index (v3.9.0)** ([`toc_export._build_index_items`](formats/toc_export.py)): a
+  „Stichwortverzeichnis" of tags → documents (effective tags = own ∪ ancestor-folder tags),
+  alphabetical, with content page numbers and clickable links — rendered like the TOC, in the
+  front matter after it. `export_pdf(nodes, path, options)` builds `[TOC][index]` before the
+  content; page numbers/links/bookmarks account for the front-matter offset.
+- Export default filename = the **document name + `.pdf`** (was "Export.pdf").
 - Auto-split at >100 pages with cross-references
 - `.belegtool` format: a single PDF whose pages are the nodes' **effective bytes**
   (`current_pdf_data`), with the tree serialized into the `/JSONStructure` metadata

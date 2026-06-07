@@ -92,6 +92,25 @@ def test_argv_non_belegtool_is_ignored(tmp_path):
     assert host._startup_path_from_argv(["host.py", str(pdf)]) is None
 
 
+def test_export_dialog_default_filename_is_document_name(monkeypatch):
+    core = CoreApi()
+    api = host.HostApi(core, uid="w")
+    sid = api.open()["session"]
+    name = core.document_name(sid)
+    captured = {}
+
+    class _Win:
+        uid = "w"
+
+        def create_file_dialog(self, *a, **k):
+            captured.update(k)
+            return None  # cancel — we only care about the proposed filename
+
+    monkeypatch.setattr(host.webview, "windows", [_Win()])
+    api.export_dialog(sid)
+    assert captured.get("save_filename") == f"{name}.pdf"  # doc name, not "Export.pdf"
+
+
 def test_hostapi_delegates_core_ops():
     api = host.HostApi(CoreApi())
     assert api.config()["ok"] and "default_dpi" in api.config()

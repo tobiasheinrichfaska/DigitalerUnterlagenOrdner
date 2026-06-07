@@ -123,6 +123,14 @@ export const en = {
   'Erfasst': 'Recorded',
   'Zu erfassen': 'To record',
   'Vorjahr': 'Prior year',
+  'Kein Status': 'No status',
+  'Status (gesamter Inhalt)': 'Status (entire contents)',
+  'Komprimierung noch nicht entschieden': 'Compression not yet decided',
+
+  // help
+  'Hilfe': 'Help',
+  'Schließen': 'Close',
+  'Übersetzungsfehler melden:': 'Report a translation error:',
 
   // compression controls + method labels
   'JPEG (Graustufen)': 'JPEG (grayscale)',

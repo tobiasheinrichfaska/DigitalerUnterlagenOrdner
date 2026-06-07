@@ -6,9 +6,10 @@
 // slide the cursor left/right to choose the nesting LEVEL (child of the deepest
 // folder → … → root). The drop only dispatches a Move/MoveMany — the tree
 // re-renders from the core's returned state (no optimistic local mutation).
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { findNode } from './lib/tree'
+import { statusDots, hasUndecided } from './lib/status'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
 
@@ -97,6 +98,9 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
   if (over?.zone === 'after' && !over.ghost) cls.push('drop-after')
 
+  const dots = statusDots(node)             // trailing status dots (leaf: own; folder: aggregate)
+  const undecided = hasUndecided(node)      // front red dot: compression not yet decided
+
   return (
     <li>
       <div
@@ -120,6 +124,9 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         onDoubleClick={() => clearTimeout(renameTimerRef.current)}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
+        <span className="alt-slot">
+          {undecided && <span className="alt-dot" title={t('Komprimierung noch nicht entschieden')} />}
+        </span>
         {node.is_folder ? (
           <button className="tw-chevron" title={node.collapsed ? t('Aufklappen') : t('Zuklappen')}
             onClick={(e) => { e.stopPropagation(); onToggleCollapse(node.id) }}>
@@ -146,6 +153,11 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         {node.tags?.length > 0 && (
           <span className="tw-tags">
             {node.tags.map((tg) => <span key={tg} className="tw-tag">{tg}</span>)}
+          </span>
+        )}
+        {dots.length > 0 && (
+          <span className="status-dots">
+            {dots.map((c, i) => <span key={i} className={`sdot ${c}`} />)}
           </span>
         )}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
@@ -185,6 +197,19 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   const dragNode = drag ? findNode(node, drag) : null
   const dragLabel = many ? `${selectedIds.length} Elemente` : (dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
+
+  // F2 renames the primary-selected node inline (a content edit — allowed in views too).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'F2' || !primaryId) return
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      e.preventDefault()
+      setEditing(primaryId)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [primaryId])
 
   const dropOnRoot = (e) => {
     if (reorderDisabled) return // filtered view: no drops

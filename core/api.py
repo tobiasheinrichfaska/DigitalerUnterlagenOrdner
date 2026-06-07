@@ -479,6 +479,7 @@ class CoreApi:
             if s is None:
                 return {"ok": False, "error": "unknown session"}
             document = s.document
+        document = self._bake_no_gain(document)  # persist auto-confirmed no-gain leaves
         from core.bridge import save_belegtool
         try:
             save_belegtool(document, path)
@@ -698,12 +699,51 @@ class CoreApi:
                 return {"ok": False, "error": str(e)}
             return self._doc_response_locked(session)
 
+    def _compression_undecided(self, node) -> bool:
+        """Red-dot signal: a leaf whose compression has NOT been confirmed — neither
+        applied ('Lesbarkeit geprüft' = is_compressed) nor auto-confirmed (evaluated and
+        nothing smaller found) nor marked no_compression. A leaf with a smaller variant
+        available but not applied, or one never evaluated, is undecided."""
+        if node.is_folder or node.original_data is None:
+            return False
+        if node.is_compressed or node.no_compression or node.compression_no_gain:
+            return False  # applied, can't-compress, or auto-confirmed no-gain → decided
+        eng = self._engine
+        if bool(getattr(eng, "variants_for", lambda b: {})(node.original_data)):
+            return True  # smaller version available, not applied
+        return not getattr(eng, "evaluated", lambda b: False)(node.original_data)
+
+    def _bake_no_gain(self, document):
+        """Persist the auto-confirmed 'nothing smaller found' decision: any leaf the
+        engine evaluated with no smaller variant gets ``compression_no_gain=True`` so it
+        is neither re-evaluated nor shown as undecided after reload. Runs at save time
+        from current engine state (mirrors embed_variants). Returns a new Document."""
+        eng = self._engine
+        if not hasattr(eng, "evaluated"):
+            return document
+        for n in document.root.iter():
+            if (not n.is_folder and n.original_data is not None
+                    and not n.is_compressed and not n.no_compression
+                    and not n.compression_no_gain
+                    and eng.evaluated(n.original_data)
+                    and not eng.variants_for(n.original_data)):
+                document = document.update_node(n.id, compression_no_gain=True)
+        return document
+
     def _doc_response_locked(self, sid: str) -> dict:
         s = self._sessions[sid]
+        tree = s.document.to_dict()
+        undecided = {n.id: self._compression_undecided(n) for n in s.document.root.iter()}
+
+        def _mark(d):
+            d["compression_undecided"] = undecided.get(d["id"], False)
+            for c in d["children"]:
+                _mark(c)
+        _mark(tree)
         return {
             "ok": True,
             "session": sid,
-            "tree": s.document.to_dict(),
+            "tree": tree,
             "can_undo": s.can_undo(),
             "can_redo": s.can_redo(),
         }

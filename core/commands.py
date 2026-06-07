@@ -16,7 +16,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-from core.model import Document, Node, STATUSES
+from core.model import Document, Node, STATUSES, STATUS_NONE
 
 # Fixed core defaults (the model/logic layer owns these — not the UI).
 DEFAULT_COMPRESSION_DPI = 150
@@ -302,9 +302,16 @@ def _rename(doc: Document, cmd: Rename, engine=None) -> Document:
 
 @_handler(SetStatus)
 def _set_status(doc: Document, cmd: SetStatus, engine=None) -> Document:
-    _require(doc, cmd.node_id)
+    node = _require(doc, cmd.node_id)
     if cmd.status not in STATUSES:
         raise CommandError(f"invalid status: {cmd.status!r}")
+    if node.is_folder:
+        # Folders carry no own status dot — setting a status on a folder CASCADES to
+        # every descendant document (children, grandchildren, …). One undoable step.
+        for n in node.iter():
+            if not n.is_folder:
+                doc = doc.update_node(n.id, status=cmd.status)
+        return doc
     return doc.update_node(cmd.node_id, status=cmd.status)
 
 
@@ -534,10 +541,11 @@ def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
     if not node.original_data:
         raise CommandError("node has no data to rotate")
     rotated = engine.rotate(node.original_data, _ROTATE_ANGLES[cmd.direction])
-    # Rotating invalidates any compressed variant.
+    # Rotating changes the source bytes → invalidates any compressed variant AND any
+    # earlier "nothing smaller" verdict (must be re-evaluated for the new bytes).
     return doc.update_node(cmd.node_id, original_data=rotated,
                            current_data=None, is_compressed=False, dpi_current=None,
-                           compression_method=None)
+                           compression_method=None, compression_no_gain=False)
 
 
 def _carries_compression(node) -> bool:
@@ -551,7 +559,7 @@ def _carries_compression(node) -> bool:
 
 def _split_part(node, name, pdf_length, src_part, comp_part):
     """Build one split-part node, inheriting the compressed slice when carried."""
-    kw = dict(name=name, pdf_length=pdf_length, original_data=src_part)
+    kw = dict(name=name, pdf_length=pdf_length, original_data=src_part, status=node.status)
     if comp_part is not None:
         kw.update(current_data=comp_part, is_compressed=True,
                   compression_method=node.compression_method, dpi_current=node.dpi_current)
@@ -641,8 +649,13 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
         is_compressed = False
         compression_method = None
 
+    # Status rule: all inputs share one status -> keep it; any difference -> no status.
+    status_set = {n.status for n in nodes}
+    merged_status = next(iter(status_set)) if len(status_set) == 1 else STATUS_NONE
+
     merged = Node(
         name=nodes[0].name,
+        status=merged_status,
         pdf_length=sum(n.pdf_length for n in nodes),
         original_data=merged_original,
         current_data=current_data,

@@ -5,6 +5,7 @@ import { PreviewPane } from './PreviewPane'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
 import { Toolbar } from './Toolbar'
+import { HelpModal } from './HelpModal'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
@@ -38,6 +39,7 @@ export default function App() {
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
+  const [helpOpen, setHelpOpen] = useState(false)
   const [tagsOn, setTagsOn] = useState(false) // tagging off by default; auto-on when a loaded file has tags
   const toggleTags = () => setTagsOn((v) => !v)
   const [tagSearch, setTagSearch] = useState('') // view-only filter by name / effective tag
@@ -450,6 +452,7 @@ export default function App() {
           onExport={() => exportPdf(selectedIds.length ? selectedIds : null)}
           onAddFolder={() => dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })}
           onUndo={undo} onRedo={redo} onToggleTags={toggleTags}
+          onHelp={() => setHelpOpen(true)}
           lang={lang} setLang={setLang}
           dirty={dirty} selectedCount={selectedIds.length}
           canUndo={state?.can_undo} canRedo={state?.can_redo}
@@ -511,6 +514,8 @@ export default function App() {
           onCancel={() => setSaveAsk(null)}
           onChoose={(store) => { const m = saveAsk.mode; setSaveAsk(null); doSave(m, store) }} />
       )}
+
+      {helpOpen && <HelpModal lang={lang} onClose={() => setHelpOpen(false)} />}
 
       {dropActive && (
         <div className="drop-overlay">

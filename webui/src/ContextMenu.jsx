@@ -5,7 +5,7 @@ import { useT } from './i18n/LanguageProvider'
 
 // The status DATA keys (from config().statuses) → their German display text, which
 // t() then translates. Keys stay erfasst/zu erfassen/vorjahreswert (persisted data).
-const STATUS_DE = { erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
+const STATUS_DE = { '': 'Kein Status', erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)  // internal helper; not exported (keeps fast-refresh happy)
 
 export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
@@ -105,9 +105,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         <button onClick={() => { onExpandAll(); onClose() }}>{t('Alle aufklappen')}</button>
         <button onClick={() => { onCollapseAll(); onClose() }}>{t('Alle zuklappen')}</button>
         <div className="cm-sep" />
-        <div className="cm-label">{t('Status')}</div>
+        <div className="cm-label">{node.is_folder ? t('Status (gesamter Inhalt)') : t('Status')}</div>
         {statuses.map((key) => (
-          <button key={key} className={node.status === key ? 'active' : ''} onClick={() => run({ type: 'SetStatus', status: key })}>
+          <button key={key} className={!node.is_folder && node.status === key ? 'active' : ''} onClick={() => run({ type: 'SetStatus', status: key })}>
             {statusLabel(t, key)}
           </button>
         ))}

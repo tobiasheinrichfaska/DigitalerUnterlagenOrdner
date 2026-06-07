@@ -57,7 +57,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>name</code></td><td>str</td><td class="req">required</td><td>—</td><td>Display name.</td></tr>
 <tr><td><code>is_folder</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder vs. leaf document.</td></tr>
 <tr><td><code>id</code></td><td>str</td><td class="opt">opt</td><td>uuid4 hex</td><td>Stable identity; commands target nodes by this.</td></tr>
-<tr><td><code>status</code></td><td>str</td><td class="opt">opt</td><td>"zu erfassen"</td><td>One of <code>erfasst</code> · <code>zu erfassen</code> · <code>vorjahreswert</code>.</td></tr>
+<tr><td><code>status</code></td><td>str</td><td class="opt">opt</td><td>"" (no status)</td><td>One of <code>""</code> (no status — default, no dot) · <code>zu erfassen</code> (yellow) · <code>erfasst</code> (green) · <code>vorjahreswert</code> (red).</td></tr>
 <tr><td><code>vz_start</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>Accounting period start.</td></tr>
 <tr><td><code>vz_end</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>Accounting period end.</td></tr>
 <tr><td><code>pdf_length</code></td><td>int</td><td class="opt">opt</td><td>0</td><td>Page count of this node's own pages (0 for folders).</td></tr>
@@ -65,6 +65,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>dpi_original</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI the original was captured at.</td></tr>
 <tr><td><code>dpi_current</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI of the current/compressed data.</td></tr>
 <tr><td><code>no_compression</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Node must not be (re-)compressed (e.g. split parts).</td></tr>
+<tr><td><code>compression_no_gain</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Evaluated and nothing smaller found → compression decided (no red "undecided" dot). Baked at save from engine state; cleared on rotate.</td></tr>
 <tr><td><code>collapsed</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder is collapsed in the tree view. Persisted; set via <code>SetCollapsed</code>/<code>SetAllCollapsed</code>.</td></tr>
 <tr><td><code>compression_method</code></td><td>str | None</td><td class="opt">opt</td><td>None</td><td>Method that produced <code>current_data</code> (<code>jpg</code>/<code>png</code>/<code>pikepdf</code>); None if uncompressed.</td></tr>
 <tr><td><code>tags</code></td><td>tuple[str]</td><td class="opt">opt</td><td>()</td><td>Free-form labels (folders &amp; leaves); set via <code>SetTags</code>. Stored per-node; for search/group, <em>effective</em> tags = own ∪ ancestor-folder tags (computed in the view).</td></tr>
@@ -82,7 +83,7 @@ transforms return new nodes with structural sharing.</p>
 <h3>Persisted shape (the data contract)</h3>
 <p class="lead"><code>Document.to_dict()</code> serialises <b>structure only</b> (no bytes). Per node:
 <code>id, name, is_folder, status, position</code> (= sibling index), <code>vz_start, vz_end,
-pdf_length, is_compressed, dpi_original, dpi_current, no_compression, collapsed, compression_method, children[]</code>.
+pdf_length, is_compressed, dpi_original, dpi_current, no_compression, compression_no_gain, collapsed, compression_method, children[]</code>.
 On disk a <code>.belegtool</code> is a single PDF carrying the pages plus this JSON under the PDF
 metadata key <code>/JSONStructure</code> (see <span class="mono">docs/DATA_CONTRACT.md</span>;
 bridge in <span class="mono">core/bridge.py</span>).</p>
@@ -157,7 +158,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><th>Command</th><th>Fields</th><th>Effect / cascade</th></tr>
 <tr><td><code>AddFolder</code></td><td>parent_id, name, index?, new_id?</td><td>Insert a new folder under a folder parent.</td></tr>
 <tr><td><code>Rename</code></td><td>node_id, name</td><td>Set <code>name</code> (non-empty).</td></tr>
-<tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status).</td></tr>
+<tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status, incl. <code>""</code> = no status). On a <b>folder</b> it cascades to every descendant document.</td></tr>
 <tr><td><code>SetCollapsed</code></td><td>node_id, collapsed</td><td>Folder only → set <code>collapsed</code> (rejects leaves).</td></tr>
 <tr><td><code>SetAllCollapsed</code></td><td>collapsed</td><td>Set <code>collapsed</code> on every folder at once (one undo step).</td></tr>
 <tr><td><code>SetPeriod</code></td><td>node_id, vz_start, vz_end</td><td>Set the accounting period.</td></tr>
@@ -175,9 +176,9 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>Commit</code></td><td>node_id</td><td>Promote <code>current_data</code> → <code>original_data</code>; clear compression flags.</td></tr>
 <tr><td><code>Reset</code></td><td>node_id</td><td>Drop the compressed variant (clear <code>current_data</code> + flags).</td></tr>
 <tr><td><code>Rotate</code></td><td>node_id, direction</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
-<tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one <code>no_compression</code> page-leaf per page, in place (single page = no-op).</td></tr>
+<tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one page-leaf per page, in place (single page = no-op). Parts <b>inherit the original's status</b>.</td></tr>
 <tr><td><code>SplitInto</code></td><td>node_id, size=1, into_folder=False</td><td>Leaf → chunks of <code>size</code> pages (1 = per page). <code>into_folder</code> wraps the parts in a NEW folder named after the node; else in place. In-place single-chunk = no-op.</td></tr>
-<tr><td><code>Merge</code></td><td>node_ids</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>.</td></tr>
+<tr><td><code>Merge</code></td><td>node_ids</td><td>≥2 sibling leaves → one leaf. <b>DPI-conflict invariant:</b> same DPI keeps the merged compression; differing/mixed/no_compression drops it and sets <code>no_compression</code>. <b>Status:</b> all same → kept; any difference → no status.</td></tr>
 </table>
 
 <h3>Pure tree transforms <span class="src">— core/model.py (commands build on these)</span></h3>

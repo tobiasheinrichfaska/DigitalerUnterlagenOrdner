@@ -41,7 +41,18 @@ The interface is available in **German** and **English**.
 
 ## Installation
 
-### Option A — Prebuilt (recommended)
+### Microsoft Store (submitted — listing pending)
+
+BelegTool has been submitted to the Microsoft Store and is awaiting certification:
+
+**https://apps.microsoft.com/detail/9PL4D25N00XD**
+
+Once the listing is live, the Store install is the easiest path (automatic updates,
+no SmartScreen/antivirus warnings, the Edge WebView2 runtime is handled for you).
+Until certification completes the link may not yet resolve — use a prebuilt build
+below in the meantime.
+
+### Option A — Prebuilt (recommended for now)
 
 Download the latest build from the [Releases](../../releases) page, unzip it, and run `BelegTool.exe`. No Python or Node.js required. You can also open a file directly:
 

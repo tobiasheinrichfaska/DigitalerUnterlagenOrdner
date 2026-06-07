@@ -11,24 +11,32 @@ describe('translate (source-string keys)', () => {
   })
 
   it('translates into another language', () => {
-    expect(translate('en', 'Öffnen')).toBe('Open')
-    expect(translate('en', 'Seite {page} / {total}', { page: 2, total: 9 })).toBe('Page 2 / 9')
+    expect(translate('en-US', 'Öffnen')).toBe('Open')
+    expect(translate('en-US', 'Seite {page} / {total}', { page: 2, total: 9 })).toBe('Page 2 / 9')
+  })
+
+  it('uses the right regional English spelling', () => {
+    expect(translate('en-US', 'JPEG (Graustufen)')).toBe('JPEG (grayscale)')
+    expect(translate('en-GB', 'JPEG (Graustufen)')).toBe('JPEG (greyscale)')
+    expect(translate('en-US', 'Zu Favoriten')).toBe('Add to favorites')
+    expect(translate('en-GB', 'Zu Favoriten')).toBe('Add to favourites')
   })
 
   it('falls back to the German source when a translation is missing', () => {
-    expect(translate('en', 'Unübersetzt')).toBe('Unübersetzt')   // unknown key → source
-    expect(translate('xx', 'Öffnen')).toBe('Öffnen')             // unknown lang → source
+    expect(translate('en-US', 'Unübersetzt')).toBe('Unübersetzt') // unknown key → source
+    expect(translate('xx', 'Öffnen')).toBe('Öffnen')              // unknown lang → source
   })
 
   it('leaves unknown placeholders untouched', () => {
-    expect(translate('en', 'PDF exportiert ({count} {entries})', { count: 3 })).toContain('{entries}')
+    expect(translate('en-US', 'PDF exportiert ({count} {entries})', { count: 3 })).toContain('{entries}')
   })
 })
 
 describe('language registry', () => {
-  it('supports de + en with display names', () => {
+  it('supports de + regional English with display names', () => {
     expect(SUPPORTED).toContain('de')
-    expect(SUPPORTED).toContain('en')
+    expect(SUPPORTED).toContain('en-US')
+    expect(SUPPORTED).toContain('en-GB')
     for (const code of SUPPORTED) expect(typeof LANGUAGE_NAMES[code]).toBe('string')
   })
 
@@ -66,9 +74,14 @@ describe('translation coverage', () => {
 })
 
 describe('resolveInitialLang', () => {
-  it('prefers a valid stored choice', () => expect(resolveInitialLang('en', 'de-DE')).toBe('en'))
-  it('uses the browser 2-letter language', () => {
-    expect(resolveInitialLang(null, 'en-US')).toBe('en')
+  it('prefers a valid stored choice', () => expect(resolveInitialLang('en-GB', 'de-DE')).toBe('en-GB'))
+  it('maps a legacy/generic English choice to en-US', () => {
+    expect(resolveInitialLang('en', 'de-DE')).toBe('en-US')
+    expect(resolveInitialLang(null, 'en')).toBe('en-US')
+  })
+  it('matches the exact browser locale, else the 2-letter language', () => {
+    expect(resolveInitialLang(null, 'en-US')).toBe('en-US')
+    expect(resolveInitialLang(null, 'en-GB')).toBe('en-GB')
     expect(resolveInitialLang('xx', 'de-AT')).toBe('de')
   })
   it('defaults when nothing matches', () => expect(resolveInitialLang(null, 'it-IT')).toBe(DEFAULT_LANG))

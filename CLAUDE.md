@@ -502,6 +502,33 @@ Current tag: **v3.9.1** (beta)
 - Tree + drag-and-drop in [`Tree.jsx`](webui/src/Tree.jsx); right-click ops in [`ContextMenu.jsx`](webui/src/ContextMenu.jsx)
 - Compression controls (method dropdown incl. `jpg_color`, DPI, apply/reset) in [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
 
+### Internationalization (i18n)
+
+Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (121 keys,
+used by `i18n.test.js` coverage), every other language maps German→target and **falls back to
+the German source** for any missing key. `translate()`/`resolveInitialLang()` in
+[`index.js`](webui/src/i18n/index.js); the picker renders `LANGUAGE_NAMES`.
+
+- **Regional English (2026-06-07):** the generic `en` code was split into **`en-US`
+  ("English (US)")** and **`en-GB` ("English (UK)")**, each a thin spelling-override of the
+  `en` base ([`en-US.js`](webui/src/i18n/en-US.js) favorite/color/grayscale;
+  [`en-GB.js`](webui/src/i18n/en-GB.js) favourite/colour/greyscale). `resolveInitialLang`
+  maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
+  browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
+  reference — don't register it as a selectable language.**
+- **Completeness (2026-06-07):** **17 languages are now 100% (all 121 keys)** — de (source),
+  en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
+  joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
+  (**native review still welcome** — see each file's header). Only **tlh (Klingon, 48 keys)**
+  stays an intentional partial: only terms with a real Okrandian word are translated, the rest
+  falls back to German rather than inventing nonsense. For the Store listing, advertise
+  **de + en-US/en-GB** (verifiable as native-professional) — the rest ship as a best-effort
+  bonus that falls back gracefully.
+- The **Help modal** content ([`help/content.js`](webui/src/help/content.js)) is separate from
+  UI strings: DE + EN authored (🇩🇪/🇬🇧 flag toggle), others best-effort, unknown → EN fallback
+  (`helpFor()`), so `en-US`/`en-GB` UIs correctly show the English help.
+
 ---
 
 ## Beta-tester feedback infrastructure

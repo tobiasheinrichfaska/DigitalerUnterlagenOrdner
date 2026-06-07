@@ -20,15 +20,17 @@ DEFAULT_BUDGET = 300 * 1024 * 1024  # cap embedded-variant bytes per file
 
 def pending_variant_count(doc, engine) -> int:
     """How many nodes have computed compression alternatives a save *would* embed
-    (dry run — no write). Mirrors embed_variants' node predicate: a non-folder node
-    with a source whose engine memo holds variants. A committed ("Lesbarkeit
-    geprüft") node has no source, so it's never counted — it's its own one version.
+    (dry run — no write). Mirrors embed_variants' node predicate: a non-folder,
+    NOT-yet-compressed node with a source whose engine memo holds variants. A node
+    that already has a compression applied (``is_compressed``, "Lesbarkeit geprüft")
+    has chosen its one version — its other alternatives are dead (the source is
+    dropped on save, re-compress is blocked), so they're never offered or embedded.
     """
     if not hasattr(engine, "variants_for"):
         return 0
     count = 0
     for n in doc.root.iter():
-        if n.is_folder or not n.original_data:
+        if n.is_folder or n.is_compressed or not n.original_data:
             continue
         if engine.variants_for(n.original_data):
             count += 1
@@ -42,8 +44,8 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
         return 0
     blobs, total = {}, 0
     for n in doc.root.iter():
-        if n.is_folder or not n.original_data:
-            continue
+        if n.is_folder or n.is_compressed or not n.original_data:
+            continue  # applied-compression nodes drop their source on save → no live alternatives
         variants = engine.variants_for(n.original_data)
         if not variants:
             continue

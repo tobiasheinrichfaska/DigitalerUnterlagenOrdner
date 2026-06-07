@@ -97,6 +97,12 @@ By contributing, you accept these terms.
 5. Commit with clear messages
 6. Push to your fork and open a pull request
 
+## Help wanted
+
+- **macOS / Linux port** — BelegTool is Windows-only today; a port is feasible but not on
+  the maintainer's roadmap. See the draft RFC [`docs/cross-platform-port.md`](docs/cross-platform-port.md)
+  for the blockers, a suggested approach, and a definition of done. Contributions welcome.
+
 ## Code standards
 
 - Follow PEP 8 for Python code

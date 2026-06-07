@@ -36,3 +36,12 @@ Beta-Feedback/
 
 # Windows Sandbox configs (machine-specific host paths; local dev helper)
 *.wsb
+
+# MSIX packaging build artifacts (generated; manifest + scripts ARE tracked)
+packaging/Assets/
+packaging/msix_layout/
+packaging/out/
+*.msix
+*.msixupload
+*.pfx
+*.cer

@@ -19,8 +19,13 @@ describe('help content', () => {
     }
   })
 
-  it('falls back to English for an unauthored language', () => {
-    expect(helpFor('tlh')).toBe(HELP.en)
+  it('falls back to English for an unknown language code', () => {
+    expect(helpFor('xx')).toBe(HELP.en)
     expect(helpFor('de')).toBe(HELP.de)
+    expect(helpFor('tlh')).toBe(HELP.tlh) // now authored (best-effort)
+  })
+
+  it('has all 19 UI languages', () => {
+    expect(Object.keys(HELP)).toHaveLength(19)
   })
 })

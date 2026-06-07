@@ -121,6 +121,38 @@ def test_save_info_detects_alternatives(tmp_path):
     assert info["ok"] and info["has_alternatives"] is True and info["count"] == 1
 
 
+def test_applied_compression_offers_no_alternatives(tmp_path):
+    """Once a node's compression is applied ("Lesbarkeit geprüft" → Compress), its
+    other alternatives are dead (source dropped on save, re-compress blocked) → the
+    save dialog must NOT be offered and nothing is embedded for it. Regression: a
+    fully-committed document used to still prompt because the source is retained
+    in memory until save and the variant memo was keyed off it."""
+    import pikepdf
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(2))
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_path)])
+    leaf = next(n for n in api._sessions[sid].document.root.iter()
+                if not n.is_folder and n.original_data)
+    variant_pdf = _make_pdf(1)  # a real PDF so the applied bytes can be saved as a page
+    api._engine.seed_variants(leaf.original_data, {150: {"jpg": variant_pdf}})
+
+    # uncommitted node with a computed alternative → the dialog IS offered
+    assert api.save_info(sid)["has_alternatives"] is True
+
+    # apply the compression (uses the seeded variant deterministically) → is_compressed
+    assert api.dispatch(sid, {"type": "Compress", "node_id": leaf.id,
+                              "dpi": 150, "method": "jpg"})["ok"]
+
+    # now compressed → no live alternatives to offer or embed
+    assert api.save_info(sid) == {"ok": True, "has_alternatives": False, "count": 0}
+    bel = str(tmp_path / "out.belegtool")
+    assert api.save(sid, bel, store_alternatives=True)["ok"]
+    with pikepdf.open(bel) as pdf:
+        assert not any(str(n).startswith("variant_") for n in pdf.attachments)
+
+
 def test_save_without_alternatives_skips_embed(tmp_path):
     import pikepdf
     pdf_path = tmp_path / "src.pdf"

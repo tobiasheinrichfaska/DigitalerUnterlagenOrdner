@@ -63,6 +63,10 @@ class CoreApi:
         self._compress_active = 0  # >0 while a compression runs → background prefetch yields the CPU
         self._last_seed = None  # (session, focus_id, focus_page, dpi) of the last prefetch, to resume
         self._cancel_tokens = {}  # node_id -> threading.Event, to abort an in-flight compression
+        # Single-writer file lock (off by default; opt-in via BELEG_FILE_LOCK). When on,
+        # opening a .belegtool holds an exclusive handle for the session's lifetime.
+        self._file_lock_enabled = os.environ.get("BELEG_FILE_LOCK", "").lower() not in ("", "0", "false", "no")
+        self._locks = {}  # session -> FileLock (only while file-lock is enabled)
 
     def _renderer(self):
         if self._render_service is None:
@@ -218,27 +222,91 @@ class CoreApi:
             sid = self._new_locked(Document.empty())
         return {"ok": True, "session": sid, "core_version": CORE_VERSION}
 
+    def _should_lock(self, path) -> bool:
+        return bool(self._file_lock_enabled and path)
+
+    def _acquire_lock(self, path):
+        """Acquire the single-writer lock for ``path`` (after restoring from a leftover
+        .bak if the file was left truncated by an interrupted locked save). Returns a
+        FileLock, or raises FileInUseError. Non-Windows / unexpected errors → None
+        (best-effort: open without a lock rather than block the user)."""
+        from infra.file_lock import FileLock, FileInUseError
+        self._restore_from_bak(path)
+        try:
+            return FileLock(path).acquire()
+        except FileInUseError:
+            raise
+        except Exception:
+            logger.warning("[lock] acquire failed; opening without a lock", exc_info=True)
+            return None
+
+    def _restore_from_bak(self, path):
+        """If a locked save was interrupted, the file may be truncated/invalid while a
+        sibling .bak holds the previous good bytes — restore it before opening."""
+        bak = path + ".bak"
+        if not os.path.exists(bak):
+            return
+        try:
+            ok = os.path.getsize(path) > 0 and b"%PDF" in open(path, "rb").read(1024)
+        except Exception:
+            ok = False
+        if not ok:
+            try:
+                import shutil
+                shutil.copyfile(bak, path)
+                logger.warning("[lock] restored %s from .bak after an interrupted save", path)
+            except Exception:
+                logger.exception("[lock] .bak restore failed")
+        try:
+            os.remove(bak)
+        except OSError:
+            pass
+
+    def _release_lock(self, session):
+        lock = self._locks.pop(session, None)
+        if lock is not None:
+            lock.release()
+
     def open(self, session: str = None, path: str = None) -> dict:
         import dataclasses
-        if path:
-            document = load_belegtool(path)
-            name = os.path.splitext(os.path.basename(path))[0] or "Dokument"
-            document = Document(dataclasses.replace(document.root, name=name))
-            try:  # rehydrate persisted compression variants (instant, no recompute)
-                from services.variant_store import seed_variants_from_file
-                seed_variants_from_file(path, document, self._engine)
-            except Exception:
-                logger.warning("[variants] seed on open failed", exc_info=True)
-        else:
-            document = Document.empty(self._next_untitled_name())  # "Dokument N"
+        lock = None
+        if self._should_lock(path):
+            from infra.file_lock import FileInUseError
+            try:
+                lock = self._acquire_lock(path)
+            except FileInUseError:
+                return {"ok": False, "code": "in_use",
+                        "error": "Diese Datei wird bereits bearbeitet und kann nur von "
+                                 "einer Person gleichzeitig geöffnet werden."}
+        try:
+            if path:
+                document = load_belegtool(path)
+                name = os.path.splitext(os.path.basename(path))[0] or "Dokument"
+                document = Document(dataclasses.replace(document.root, name=name))
+                try:  # rehydrate persisted compression variants (instant, no recompute)
+                    from services.variant_store import seed_variants_from_file
+                    seed_variants_from_file(path, document, self._engine)
+                except Exception:
+                    logger.warning("[variants] seed on open failed", exc_info=True)
+            else:
+                document = Document.empty(self._next_untitled_name())  # "Dokument N"
+        except Exception:
+            if lock is not None:
+                lock.release()  # never leak the handle if the load fails
+            raise
         with self._lock:
             if session and session in self._sessions:
                 sid = session
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
             else:
                 sid = self._new_locked(document)
+            prev_lock = self._locks.pop(sid, None)  # reopening in the same session → drop old lock
             self._paths[sid] = path if path else None  # remember where it came from
+            if lock is not None:
+                self._locks[sid] = lock
             resp = self._doc_response_locked(sid)
+        if prev_lock is not None:
+            prev_lock.release()
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
         return resp
 
@@ -480,12 +548,18 @@ class CoreApi:
                 return {"ok": False, "error": "unknown session"}
             document = s.document
         document = self._bake_no_gain(document)  # persist auto-confirmed no-gain leaves
-        from core.bridge import save_belegtool
+        lock = self._locks.get(session)
+        in_place_locked = lock is not None and path == self._paths.get(session)
         try:
-            save_belegtool(document, path)
-            if store_alternatives:
-                from services.variant_store import embed_variants
-                embed_variants(path, document, self._engine)  # persist computed variants
+            if in_place_locked:
+                self._save_through_lock(lock, path, document, store_alternatives)
+            else:
+                from core.bridge import save_belegtool
+                save_belegtool(document, path)
+                if store_alternatives:
+                    from services.variant_store import embed_variants
+                    embed_variants(path, document, self._engine)  # persist computed variants
+                self._relock_after_save_as(session, path)  # save-as under lock → lock the new file
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}
@@ -495,6 +569,48 @@ class CoreApi:
                 s.mark_saved()
             self._paths[session] = path  # bind the session to this file for in-place saves
         return {"ok": True, "session": session, "path": path}
+
+    def _save_through_lock(self, lock, path, document, store_alternatives) -> None:
+        """Single-write save through the held handle (the lock denies our own open('wb')).
+        Guards the non-atomic in-place overwrite with a sibling .bak of the previous bytes,
+        removed only after a successful flush."""
+        from core.bridge import document_to_storage
+        data = document_to_storage(document).to_bytes()
+        if store_alternatives:
+            from services.variant_store import embed_variants_bytes
+            data, _ = embed_variants_bytes(data, document, self._engine)
+        bak = path + ".bak"
+        try:
+            prev = lock.read_all()
+        except Exception:
+            prev = b""
+        if prev:
+            with open(bak, "wb") as f:
+                f.write(prev)
+        lock.overwrite(data)
+        try:
+            os.remove(bak)
+        except OSError:
+            pass
+
+    def _relock_after_save_as(self, session, new_path) -> None:
+        """After a normal (unlocked) save to a NEW path while file-lock is on: release the
+        old lock and lock the just-written file so the session keeps its single-writer hold."""
+        if not self._file_lock_enabled or new_path == self._paths.get(session):
+            return
+        self._release_lock(session)
+        try:
+            lock = self._acquire_lock(new_path)
+            if lock is not None:
+                self._locks[session] = lock
+        except Exception:
+            logger.warning("[lock] could not lock the new file after save-as", exc_info=True)
+
+    def release(self, session: str) -> dict:
+        """Release the session's file lock — called when its window closes so another
+        person/window can open the file without quitting the app. Idempotent."""
+        self._release_lock(session)
+        return {"ok": True}
 
     def export(self, session: str, path: str, node_ids=None, options=None) -> dict:
         """Export to a single PDF. ``node_ids`` exports only those subtrees; otherwise

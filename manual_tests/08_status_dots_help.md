@@ -94,3 +94,20 @@ documents and page numbers; entries are clickable; the PDF has sidebar bookmarks
 index option is **disabled when the document has no tags**; with tags removed from the export it is
 absent in the second PDF. Unchecking links makes the TOC/index entries non-clickable; unchecking
 bookmarks removes the sidebar outline.
+
+## MT-59: File lock — single-writer (opt-in)
+**Preconditions:** Windows. Start the app with the lock enabled: set `BELEG_FILE_LOCK=1`
+before launching (`set BELEG_FILE_LOCK=1` then `python host.py`, or the exe from a shell
+with that variable). Have a saved `.belegtool` file, ideally on the shared/SMB store.
+**Steps:**
+1. Open the file in this instance.
+2. From a **second** instance (or another PC, also with `BELEG_FILE_LOCK=1`), try to open
+   the **same** file.
+3. While it's open in instance 1, try to **rename or delete** the file in Windows Explorer.
+4. Back in instance 1: rename a node and **Save** (Ctrl+S). Then close the window.
+5. After closing, open the file again from the second instance.
+**Expected:** (2) the second instance refuses with *„Diese Datei wird bereits bearbeitet …"*.
+(3) Explorer refuses to rename/delete (file in use). (4) Save succeeds in place; no `.bak`
+file remains afterwards. (5) Once instance 1's window is closed the file is free and the
+second instance opens it. *Not obvious:* with `BELEG_FILE_LOCK` unset (default) none of this
+applies — the file is not locked at all.

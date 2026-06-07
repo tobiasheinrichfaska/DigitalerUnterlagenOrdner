@@ -9,6 +9,7 @@ import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
 import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
+import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
 import { useKeyboard } from './hooks/useKeyboard'
@@ -142,13 +143,7 @@ export default function App() {
   // verdict persists at save (these calls warm the engine memo _bake_no_gain reads).
   useEffect(() => {
     if (!session || !state?.tree) return undefined
-    const ids = []
-    const walk = (n) => {
-      if (!n.is_folder && n.has_source && !n.is_compressed && !n.no_compression
-          && n.compression_undecided && n.pdf_length > 0 && n.pdf_length <= 5) ids.push(n.id)
-      n.children?.forEach(walk)
-    }
-    walk(state.tree)
+    const ids = sweepCandidates(state.tree)
     if (!ids.length) return undefined
     let cancelled = false
     const dpi = config?.default_dpi ?? 150

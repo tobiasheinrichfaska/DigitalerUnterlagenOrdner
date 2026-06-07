@@ -126,6 +126,7 @@ export const en = {
   'Kein Status': 'No status',
   'Status (gesamter Inhalt)': 'Status (entire contents)',
   'Komprimierung noch nicht entschieden': 'Compression not yet decided',
+  'Teils ohne Status': 'Some without status',
 
   // help
   'Hilfe': 'Help',

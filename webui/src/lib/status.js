@@ -37,3 +37,27 @@ export function hasUndecided(node) {
   if (!node.is_folder) return !!node.compression_undecided
   return leaves(node).some((l) => l.compression_undecided)
 }
+
+// Tooltip label key per dot colour (German source → t() translates). Black is the
+// folder "mixed with/without status" marker.
+export const DOT_LABEL = {
+  red: 'Vorjahr', yellow: 'Zu erfassen', green: 'Erfasst', black: 'Teils ohne Status',
+}
+
+// Leaves eligible for the proactive no-gain sweep: cheap (≤ maxPages) leaves that are
+// still undecided and actually compressible (have a source, not already applied/blocked).
+// Pure so the selection rule is unit-tested rather than buried in an effect.
+export const SWEEP_MAX_PAGES = 5
+export function sweepCandidates(tree, maxPages = SWEEP_MAX_PAGES) {
+  const ids = []
+  const walk = (n) => {
+    if (!n) return
+    if (!n.is_folder && n.has_source && !n.is_compressed && !n.no_compression
+        && n.compression_undecided && n.pdf_length > 0 && n.pdf_length <= maxPages) {
+      ids.push(n.id)
+    }
+    n.children?.forEach(walk)
+  }
+  walk(tree)
+  return ids
+}

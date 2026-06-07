@@ -33,3 +33,6 @@ merge_dpi_conflict*.pdf
 
 # Beta-tester feedback drop (tester screenshots / personal data — keep out of the repo)
 Beta-Feedback/
+
+# Windows Sandbox configs (machine-specific host paths; local dev helper)
+*.wsb

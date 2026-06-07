@@ -31,6 +31,23 @@ and e-mails still works fine.
    - To open a saved file directly: `BelegTool.exe yourfile.belegtool`.
    - *Windows SmartScreen* may warn on first run (unsigned app) → **More info → Run anyway**.
 
+#### ⚠️ App won't start / antivirus blocks it (Norton, etc.)
+The beta is **not code-signed yet**, so some antivirus tools (e.g. **Norton CyberCapture**)
+sandbox or quarantine parts of it — typically `Python.Runtime.dll` — and you'll see errors
+like *"Failed to resolve Python.Runtime.Loader.Initialize …"* or *"…Pfad/Datei kann nicht
+zugegriffen werden / Berechtigungen"*. It's a **false alarm**, not malware. To run it:
+1. **Unblock the ZIP before extracting:** right-click the `.zip` → **Properties** → tick
+   **Unblock** (de: *Zulassen*) → OK, then unzip again.
+2. **Extract to a normal local folder** like `C:\Users\<you>\BelegTool` — **not** under
+   `C:\Program Files` or a network/removable drive (those need extra permissions and cause
+   the "cannot access / permissions" error).
+3. **Allow it in your antivirus:** restore the quarantined files and add an **exclusion** for
+   the BelegTool folder (Norton → *Security History/Quarantine* → restore; *Settings →
+   Antivirus → Exclusions* → add the folder).
+
+A signed Microsoft Store version is planned, which will remove these warnings. **Please don't
+file this as a bug** — it's a known limitation of the unsigned beta.
+
 ### Path B — From source
 1. Install **Python 3.12** (on PATH) and **Node.js**.
 2. In the project folder:

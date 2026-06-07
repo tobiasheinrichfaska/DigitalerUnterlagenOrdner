@@ -467,6 +467,13 @@ Current tag: **v3.9.1** (beta)
 - **Zammad integration** — deferred, not started yet
 
 ### Probably won't be done (accepted limitations)
+- **Automatic DATEV check-in on close** — *not feasible* and won't be pursued. With the file
+  lock, DATEV now *detects* the file changed, but it does not auto re-import (check in) when
+  the document closes. Acrobat is single-instance, so DATEV keys on a **document-level** signal
+  (file-handle release and/or Acrobat's legacy **DDE** server) that a generic editor can't
+  reliably reproduce; `.belegtool` is also not a DATEV-configured editable type. Workaround:
+  check the document back in **manually** in DATEV after editing. Re-import via the
+  **DATEVconnect DMS API** would be a separate, heavyweight integration (not planned).
 - **macOS / Linux** — Windows-only (PyInstaller `win64`; Edge WebView2 GUI; hard `pywin32`/
   `pythonnet` deps; COM Office import). The PDF core is cross-platform, so a port is feasible
   but not maintainer-planned — opened up as a **community contribution** via the draft RFC

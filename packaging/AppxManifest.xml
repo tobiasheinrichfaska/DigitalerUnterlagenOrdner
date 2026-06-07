@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the Microsoft Store submission of BelegTool. Packed by build_msix.ps1
+  (which copies this to the package root as AppxManifest.xml and syncs the Version from
+  version_info.py). Identity MUST match Partner Center exactly (permanent).
+
+  Deliberate choices (see packaging/README.md):
+  - NO WebView2 <PackageDependency>: the Edge WebView2 Runtime is a system component, not an
+    MSIX framework package — there is nothing to reference. Win11 ships it in-box; host.py
+    checks at startup; optionally bundle a fixed-version runtime (README).
+  - NO desktop6/desktop2 extensions: a PyInstaller full-trust app only needs
+    EntryPoint="Windows.FullTrustApplication"; extra extensions aren't required.
+  - PackageIntegrity content enforcement is on → requires Windows 2004 (10.0.19041); hence
+    MinVersion 19041 (1903/1909 are end-of-life).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 rescap">
+
+  <Identity
+    Name="TobiasHeinrich.BelegTool"
+    Publisher="CN=2A87E267-9C96-4414-B440-06EB61A80222"
+    Version="3.9.1.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>BelegTool</DisplayName>
+    <PublisherDisplayName>Tobias Heinrich</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22631.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="de-DE" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="BelegTool" Executable="BelegTool\BelegTool.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="BelegTool"
+        Description="PDF- und Belegverwaltung: PDFs, Scans, Fotos, Office-Dateien und E-Mails in einen Ordnerbaum importieren, komprimieren und als ein PDF mit Inhaltsverzeichnis exportieren."
+        BackgroundColor="#1E293B"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- .belegtool file association (double-click / "Open with" → BelegTool.exe <file>) -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="belegtool">
+            <uap:DisplayName>BelegTool-Dokument</uap:DisplayName>
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.belegtool</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- runFullTrust: required for a Win32/PyInstaller desktop app.
+         broadFileSystemAccess: opens/saves files anywhere incl. network shares (restricted —
+         needs the justification in README; do NOT also add Documents/Pictures/Videos). -->
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="broadFileSystemAccess" />
+  </Capabilities>
+</Package>

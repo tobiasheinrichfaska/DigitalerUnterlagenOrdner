@@ -12,18 +12,22 @@
 
 ## Naming — decide the permanent identity first
 
-Only the **package identity / Package Family Name** (generated from the *first* reserved
-name) is **permanent**; you can reserve several names and the **display name is editable
-per submission**. So:
+Only the **package identity / Package Family Name** is **permanent**; you can reserve several
+names and the **display name is editable per submission**. **Decision (keep "BelegTool"):**
 
-- **Identity (permanent):** pick a **distinctive** string — *not* the generic, hard-to-own
-  "BelegTool". (Decision pending + a DPMA/EUIPO trademark check.)
-- **Display name (editable):** **"BelegTool"** — good German discoverability ("Beleg").
-- `DigitalerUnterlagenOrdner` stays the **repo name only** (weak consumer brand).
+- **Display name:** **"BelegTool"** — good German discoverability ("Beleg"), no conflicting
+  product/mark found. It's *descriptive* → not trademark-defensible, so treat it as a label,
+  not an asset.
+- **Permanent identity:** a **publisher-namespaced** string, e.g. `TobiasHeinrich.BelegTool`
+  — globally unique by construction, so permanence is harmless while we still show "BelegTool".
+- `DigitalerUnterlagenOrdner` stays the **repo name only**. Coined, defensible alternatives if
+  ever wanted: **Belegnis / Quittora / Ablago**.
 
-Availability (checked): no existing Store app uses "BelegTool" / "DigitalerUnterlagenOrdner".
-A feature competitor, **dokublick**, exists in the niche (not a name clash). "Belegtool" is
-generic/descriptive → weak/hard to defend; trademark check still owed.
+Checked (best-effort): no Store app uses "BelegTool" / "DigitalerUnterlagenOrdner"; a feature
+competitor **dokublick** exists in the niche (not a name clash); the "Beleg…" space is crowded
+(BelegFix, Beleger, Belegebox, Belegmanager) but "Belegtool" itself appears unclaimed.
+**Before reserving:** run a real **DPMA + EUIPO/TMview** search (Nice classes 9/42/35) and a
+direct Microsoft Store search — the automated check couldn't query the JS-only registers.
 
 ## Steps
 

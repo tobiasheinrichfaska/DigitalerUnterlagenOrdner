@@ -288,5 +288,18 @@ def main(startup_path=None):
     webview.start(_prewarm, http_port=_safe_http_port())
 
 
+def _startup_path_from_argv(argv):
+    """A .belegtool handed on the command line (file association / 'open with' /
+    BelegTool.exe <file>). Honor only an existing .belegtool — open() loads via
+    load_belegtool; other types belong on the import path, not startup. Returns
+    None when there's nothing valid to open."""
+    if len(argv) < 2:
+        return None
+    path = argv[1]
+    if path.lower().endswith(".belegtool") and os.path.isfile(path):
+        return path
+    return None
+
+
 if __name__ == "__main__":
-    main()
+    main(_startup_path_from_argv(sys.argv))

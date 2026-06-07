@@ -18,8 +18,8 @@ body:
     id: version
     attributes:
       label: App version
-      description: "Shown in the window title bar (e.g. \"DigitalerUnterlagenOrdner 3.8.0\")."
-      value: "3.8.0"
+      description: "Shown in the window title bar (e.g. \"DigitalerUnterlagenOrdner 3.8.1\")."
+      value: "3.8.1"
     validations:
       required: true
 

@@ -68,6 +68,28 @@ def test_startup_path_file_opens_via_host(tmp_path):
     opened = api.open(None, api.config()["startup_path"])
     assert opened["ok"]
     assert [c["name"] for c in opened["tree"]["children"]] == ["Übergabe"]
+    # The session is bound to the opened file → Save writes in place (no Save-As).
+    assert api._core.document_path(opened["session"]) == str(path)
+
+
+def test_argv_belegtool_becomes_startup_path(tmp_path):
+    # BelegTool.exe <file.belegtool> / file association: an existing .belegtool on
+    # the command line is opened on startup (was silently dropped before).
+    path = tmp_path / "doc.belegtool"
+    path.write_bytes(b"x")
+    assert host._startup_path_from_argv(["host.py", str(path)]) == str(path)
+
+
+def test_argv_no_file_is_no_startup_path():
+    assert host._startup_path_from_argv(["host.py"]) is None  # bare launch
+    assert host._startup_path_from_argv(["host.py", "C:\\nope.belegtool"]) is None  # missing file
+
+
+def test_argv_non_belegtool_is_ignored(tmp_path):
+    # A PDF (or anything else) belongs on the import path, not startup-open.
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    assert host._startup_path_from_argv(["host.py", str(pdf)]) is None
 
 
 def test_hostapi_delegates_core_ops():

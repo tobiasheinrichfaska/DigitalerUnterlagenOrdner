@@ -30,3 +30,6 @@ debug_*.pdf
 build_log.txt
 tests/data/output/
 merge_dpi_conflict*.pdf
+
+# Beta-tester feedback drop (tester screenshots / personal data — keep out of the repo)
+Beta-Feedback/

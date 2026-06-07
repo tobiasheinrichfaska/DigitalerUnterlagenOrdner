@@ -43,8 +43,8 @@ describe('core.js → window.pywebview.api mapping', () => {
     expect((await core.importBytes('s1', 'f.pdf', 'data', 'p1', 2)).args)
       .toEqual(['s1', 'f.pdf', 'data', 'p1', 2])
 
-    // export_dialog forwarded both args (session + node ids)
-    expect(api.calls.find((c) => c.method === 'export_dialog').args).toEqual(['s1', ['a', 'b']])
+    // export_dialog forwarded session + node ids + options (null by default)
+    expect(api.calls.find((c) => c.method === 'export_dialog').args).toEqual(['s1', ['a', 'b'], null])
   })
 
   it('resolves with the host method return value', async () => {

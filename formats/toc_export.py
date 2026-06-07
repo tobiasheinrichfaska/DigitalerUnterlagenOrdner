@@ -253,6 +253,113 @@ def _render_toc_pdf(items: List[_TocItem],
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Stichwortverzeichnis (Tag-Index) — Tags → Dokumente mit Seitenangabe
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class _IndexEntry:
+    is_header: bool      # True = Tag-Überschrift; False = Dokumenteintrag
+    text: str            # Tag-Name (Header) oder Dokumentname (Eintrag)
+    page: int = 0        # 1-basierte Inhaltsseite (nur Einträge)
+
+
+def _index_leaves(nodes: List[PDFNode]):
+    """Leaves in Inhaltsreihenfolge als (name, page_start, effective_tags), wobei die
+    effektiven Tags = eigene ∪ alle Tags der Eltern-/Vorfahren-Ordner sind (wie die
+    Tag-Ansicht). Leere Blätter werden übersprungen (wie im TOC)."""
+    counter = [1]
+    out = []
+
+    def walk(node: PDFNode, inherited: set):
+        eff = inherited | set(getattr(node, "tags", None) or [])
+        if node.is_folder:
+            for c in node.children:
+                walk(c, eff)
+        else:
+            n = count_node_pages(node)
+            if n == 0:
+                return
+            out.append((node.name, counter[0], eff))
+            counter[0] += n
+
+    for n in nodes:
+        walk(n, set())
+    return out
+
+
+def _build_index_items(nodes: List[PDFNode]) -> List[_IndexEntry]:
+    """Flache Liste für das Stichwortverzeichnis: pro Tag eine Überschrift, darunter die
+    zugehörigen Dokumente (in Inhaltsreihenfolge). Tags alphabetisch (case-insensitiv).
+    Leer, wenn keine Tags vergeben sind."""
+    tag_map: dict = {}
+    for name, page, tags in _index_leaves(nodes):
+        for tag in tags:
+            tag_map.setdefault(tag, []).append((name, page))
+    items: List[_IndexEntry] = []
+    for tag in sorted(tag_map, key=lambda s: s.lower()):
+        items.append(_IndexEntry(True, tag))
+        for name, page in tag_map[tag]:
+            items.append(_IndexEntry(False, name, page))
+    return items
+
+
+def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
+                      title: str = "Stichwortverzeichnis") -> Tuple[bytes, List[_LinkRecord]]:
+    """Rendert die Index-Seiten (Tags fett, Dokumente mit Seitenzahl + Punktlinie).
+    Gibt (PDF-Bytes, LinkRecords relativ zum Index-Abschnitt) zurück."""
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    link_records: List[_LinkRecord] = []
+    current_page = 0
+    y = _A4_H - _MT
+
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(_ML, y, title)
+    y -= 22
+    c.setLineWidth(0.6)
+    c.line(_ML, y, _A4_W - _MR, y)
+    y -= 14
+
+    for item in items:
+        if y < _MB + 15:
+            c.showPage()
+            current_page += 1
+            y = _A4_H - _MT
+
+        if item.is_header:
+            y -= 4
+            c.setFont("Helvetica-Bold", 11)
+            c.setFillColorRGB(0, 0, 0)
+            c.drawString(_ML, y, f"🏷 {item.text}" if False else item.text)
+            y -= _ROW
+            continue
+
+        name = item.text if len(item.text) <= 74 else item.text[:72] + "…"
+        c.setFont("Helvetica", 10)
+        page_text = f"S. {item.page + toc_offset}"
+        nw = c.stringWidth(name, "Helvetica", 10)
+        pw = c.stringWidth(page_text, "Helvetica", 10)
+        x = _ML + _INDENT
+        c.drawString(x, y, name)
+        dx1 = x + nw + 5
+        dx2 = _A4_W - _MR - pw - 6
+        if dx2 > dx1 + 8:
+            c.setDash([1, 3], 0)
+            c.setLineWidth(0.4)
+            c.setStrokeColorRGB(0.65, 0.65, 0.65)
+            c.line(dx1, y + 2.5, dx2, y + 2.5)
+            c.setDash([], 0)
+            c.setStrokeColorRGB(0, 0, 0)
+        c.drawRightString(_A4_W - _MR, y, page_text)
+        link_records.append(_LinkRecord(
+            toc_page_idx=current_page, y_baseline=y, content_page_0=item.page - 1))
+        y -= _ROW
+
+    c.save()
+    return buf.getvalue(), link_records
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PDF-Assembly: Merge + Annotierungen + Lesezeichen
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -260,21 +367,33 @@ def _assemble_pdf(toc_bytes: bytes, content_bytes: bytes,
                   link_records: List[_LinkRecord],
                   toc_items: List[_TocItem],
                   toc_page_count: int) -> bytes:
+    """Back-compat single-TOC assembly (used by the split path)."""
+    return _assemble([toc_bytes], content_bytes, link_records, toc_items,
+                     toc_page_count, with_bookmarks=True)
+
+
+def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
+              link_records: List[_LinkRecord],
+              toc_items: List[_TocItem],
+              prepend_count: int, with_bookmarks: bool = True) -> bytes:
     """
-    Merged TOC + Inhalt, fügt Link-Annotierungen und Sidebar-Lesezeichen ein.
+    Merged Vorspann-Seiten (TOC und/oder Index) + Inhalt, fügt Link-Annotierungen
+    (für alle ``link_records``, deren ``toc_page_idx`` absolut im Vorspann ist) und
+    optional Sidebar-Lesezeichen ein. ``prepend_count`` = Gesamtzahl der Vorspann-Seiten.
     """
     # 1. Merge
     with pikepdf.Pdf.new() as pdf:
-        with pikepdf.open(io.BytesIO(toc_bytes)) as toc_pdf:
-            pdf.pages.extend(toc_pdf.pages)
+        for b in prepend_pdfs:
+            with pikepdf.open(io.BytesIO(b)) as p:
+                pdf.pages.extend(p.pages)
         with pikepdf.open(io.BytesIO(content_bytes)) as content_pdf:
             pdf.pages.extend(content_pdf.pages)
 
-        # 2. Link-Annotierungen auf TOC-Seiten
+        # 2. Link-Annotierungen auf Vorspann-Seiten (TOC + Index)
         for rec in link_records:
             if rec.toc_page_idx >= len(pdf.pages):
                 continue
-            dest_page_abs = toc_page_count + rec.content_page_0
+            dest_page_abs = prepend_count + rec.content_page_0
             if dest_page_abs >= len(pdf.pages):
                 continue
 
@@ -302,35 +421,36 @@ def _assemble_pdf(toc_bytes: bytes, content_bytes: bytes,
             else:
                 toc_page["/Annots"] = pikepdf.Array([annot])
 
-        # 3. Sidebar-Lesezeichen (Outline)
+        # 3. Sidebar-Lesezeichen (Outline) — optional
         def _first_leaf_page(start_idx: int, folder_depth: int) -> int:
             for it in toc_items[start_idx:]:
                 if it.depth <= folder_depth:
                     break
                 if not it.is_folder and not it.other_file:
-                    return toc_page_count + it.page_start - 1
-            return toc_page_count
+                    return prepend_count + it.page_start - 1
+            return prepend_count
 
-        with pdf.open_outline() as outline:
-            outline.root.clear()
-            depth_parents: dict = {-1: outline.root}
+        if with_bookmarks and toc_items:
+            with pdf.open_outline() as outline:
+                outline.root.clear()
+                depth_parents: dict = {-1: outline.root}
 
-            for idx, item in enumerate(toc_items):
-                if item.other_file:
-                    continue
-                parent = depth_parents.get(item.depth - 1, outline.root)
+                for idx, item in enumerate(toc_items):
+                    if item.other_file:
+                        continue
+                    parent = depth_parents.get(item.depth - 1, outline.root)
 
-                if item.is_folder:
-                    dest = _first_leaf_page(idx + 1, item.depth)
-                    dest = min(dest, len(pdf.pages) - 1)
-                    oi = pikepdf.OutlineItem(item.name, dest)
-                    parent.append(oi)
-                    depth_parents[item.depth] = oi.children
-                else:
-                    dest = toc_page_count + item.page_start - 1
-                    if 0 <= dest < len(pdf.pages):
+                    if item.is_folder:
+                        dest = _first_leaf_page(idx + 1, item.depth)
+                        dest = min(dest, len(pdf.pages) - 1)
                         oi = pikepdf.OutlineItem(item.name, dest)
                         parent.append(oi)
+                        depth_parents[item.depth] = oi.children
+                    else:
+                        dest = prepend_count + item.page_start - 1
+                        if 0 <= dest < len(pdf.pages):
+                            oi = pikepdf.OutlineItem(item.name, dest)
+                            parent.append(oi)
 
         out = io.BytesIO()
         pdf.save(out)
@@ -341,22 +461,65 @@ def _assemble_pdf(toc_bytes: bytes, content_bytes: bytes,
 # Öffentliche Export-Funktionen
 # ─────────────────────────────────────────────────────────────────────────────
 
-def export_pdf_with_toc(nodes: List[PDFNode], path: str) -> None:
-    """Exportiert als einzelne PDF-Datei mit TOC-Seite, Links und Lesezeichen."""
+DEFAULT_EXPORT_OPTIONS = {
+    "toc": True,          # printed table of contents
+    "toc_links": True,    # clickable TOC entries
+    "index": True,        # printed tag index (only if tags exist)
+    "index_links": True,  # clickable index entries
+    "bookmarks": True,    # PDF sidebar bookmarks (outline)
+}
+
+
+def export_pdf(nodes: List[PDFNode], path: str, options: Optional[dict] = None) -> None:
+    """Single-file export. ``options`` (see DEFAULT_EXPORT_OPTIONS) toggles the printed
+    TOC (+links), the tag index (+links, only when tags exist) and the PDF bookmarks.
+    Front matter is [TOC][index] before the content; page numbers and links account for it."""
+    opts = {**DEFAULT_EXPORT_OPTIONS, **(options or {})}
     top = PDFStorage.filter_keep_ancestors(nodes)
-    items = _build_toc_items(top)
+    toc_items = _build_toc_items(top)
+    index_items = _build_index_items(top) if opts["index"] else []
+    want_toc = bool(opts["toc"])
+    want_index = bool(index_items)  # only if tags actually produced entries
 
-    # Erster Durchlauf: TOC-Seitenanzahl bestimmen
-    draft_toc, _ = _render_toc_pdf(items, toc_offset=0)
-    toc_page_count = _get_pdf_page_count(draft_toc)
+    # Pass 1: count front-matter pages (render drafts at offset 0).
+    prepend_count = 0
+    if want_toc:
+        prepend_count += _get_pdf_page_count(_render_toc_pdf(toc_items, toc_offset=0)[0])
+    if want_index:
+        prepend_count += _get_pdf_page_count(_render_index_pdf(index_items, toc_offset=0)[0])
 
-    # Zweiter Durchlauf: korrekte Seitennummern
-    final_toc, link_records = _render_toc_pdf(items, toc_offset=toc_page_count)
+    # Pass 2: render final front matter with correct page numbers; collect link records
+    # with absolute page indices within the front matter.
+    prepend_pdfs: List[bytes] = []
+    link_records: List[_LinkRecord] = []
+    page_cursor = 0
+    if want_toc:
+        toc_bytes, recs = _render_toc_pdf(toc_items, toc_offset=prepend_count)
+        prepend_pdfs.append(toc_bytes)
+        if opts["toc_links"]:
+            for r in recs:
+                r.toc_page_idx += page_cursor
+                link_records.append(r)
+        page_cursor += _get_pdf_page_count(toc_bytes)
+    if want_index:
+        idx_bytes, recs = _render_index_pdf(index_items, toc_offset=prepend_count)
+        prepend_pdfs.append(idx_bytes)
+        if opts["index_links"]:
+            for r in recs:
+                r.toc_page_idx += page_cursor
+                link_records.append(r)
+        page_cursor += _get_pdf_page_count(idx_bytes)
+
     content = _export_nodes_to_bytes(top)
-
-    result = _assemble_pdf(final_toc, content, link_records, items, toc_page_count)
+    result = _assemble(prepend_pdfs, content, link_records, toc_items,
+                       prepend_count, with_bookmarks=bool(opts["bookmarks"]))
     with open(path, "wb") as f:
         f.write(result)
+
+
+def export_pdf_with_toc(nodes: List[PDFNode], path: str) -> None:
+    """Back-compat: full export (TOC + index + links + bookmarks)."""
+    export_pdf(nodes, path)
 
 
 def _split_at_boundaries(nodes: List[PDFNode], max_pages: int) -> List[List[PDFNode]]:

@@ -496,10 +496,10 @@ class CoreApi:
             self._paths[session] = path  # bind the session to this file for in-place saves
         return {"ok": True, "session": session, "path": path}
 
-    def export(self, session: str, path: str, node_ids=None) -> dict:
-        """Export to a single PDF with a table of contents, clickable links and
-        bookmarks (toc_export). ``node_ids`` exports only those subtrees; otherwise
-        the whole document."""
+    def export(self, session: str, path: str, node_ids=None, options=None) -> dict:
+        """Export to a single PDF. ``node_ids`` exports only those subtrees; otherwise
+        the whole document. ``options`` (see toc_export.DEFAULT_EXPORT_OPTIONS) toggles
+        the printed TOC (+links), the tag index (+links), and the PDF bookmarks."""
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -524,13 +524,13 @@ class CoreApi:
             nodes = list(storage.root.children)
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
-        from formats.toc_export import export_pdf_with_toc, empty_leaf_names
+        from formats.toc_export import export_pdf, empty_leaf_names
 
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
         skipped = empty_leaf_names(nodes)
         try:
-            export_pdf_with_toc(nodes, path)
+            export_pdf(nodes, path, options)
         except Exception as e:
             logger.exception("export failed")
             return {"ok": False, "error": str(e)}

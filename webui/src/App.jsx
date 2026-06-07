@@ -4,6 +4,7 @@ import { Tree } from './Tree'
 import { PreviewPane } from './PreviewPane'
 import { ContextMenu } from './ContextMenu'
 import { SaveDialog } from './SaveDialog'
+import { ExportDialog } from './ExportDialog'
 import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
@@ -43,6 +44,7 @@ export default function App() {
   const [busy, setBusy] = useState(0) // active async core calls (counter)
   const [menu, setMenu] = useState(null) // context menu { x, y, node }
   const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
+  const [exportAsk, setExportAsk] = useState(null) // export options dialog { ids }
   const [helpOpen, setHelpOpen] = useState(false)
   const [tagsOn, setTagsOn] = useState(false) // tagging off by default; auto-on when a loaded file has tags
   const toggleTags = () => setTagsOn((v) => !v)
@@ -438,7 +440,13 @@ export default function App() {
       ids = resolveSel(nodeIds)
       if (!ids || !ids.length) return undefined
     }
-    return run(core.exportPdf(session, ids)).then((resp) => {
+    setExportAsk({ ids })  // ask TOC/index/bookmarks options, then the native save dialog
+    return undefined
+  }
+  const doExport = (options) => {
+    const ids = exportAsk?.ids ?? null
+    setExportAsk(null)
+    return run(core.exportPdf(session, ids, options)).then((resp) => {
       if (resp?.ok) {
         setError(null)
         const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
@@ -556,6 +564,11 @@ export default function App() {
         <SaveDialog count={saveAsk.count}
           onCancel={() => setSaveAsk(null)}
           onChoose={(store) => { const m = saveAsk.mode; setSaveAsk(null); doSave(m, store) }} />
+      )}
+
+      {exportAsk && (
+        <ExportDialog hasTags={allTags(state?.tree).length > 0}
+          onCancel={() => setExportAsk(null)} onChoose={doExport} />
       )}
 
       {helpOpen && (

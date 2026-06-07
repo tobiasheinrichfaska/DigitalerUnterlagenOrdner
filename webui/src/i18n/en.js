@@ -128,6 +128,15 @@ export const en = {
   'Komprimierung noch nicht entschieden': 'Compression not yet decided',
   'Teils ohne Status': 'Some without status',
 
+  // export dialog
+  'PDF exportieren': 'Export PDF',
+  'Inhaltsverzeichnis': 'Table of contents',
+  'mit anklickbaren Links': 'with clickable links',
+  'Stichwortverzeichnis (nach Tags)': 'Tag index',
+  'PDF-Lesezeichen (Seitenleiste)': 'PDF bookmarks (sidebar)',
+  'Exportieren': 'Export',
+  'Keine Tags im Dokument': 'No tags in the document',
+
   // help
   'Hilfe': 'Help',
   'Schließen': 'Close',

@@ -54,6 +54,16 @@ some don't". If you then set the no-status doc to a status, the **black dot disa
 made smaller, the dot also disappears (auto-decided) — and **stays gone after save + reopen**
 (it is not re-evaluated).
 
+## MT-55b: No-gain dots clear on their own (no view needed)
+**Preconditions:** Open a `.belegtool` with several **small (≤5-page)** documents, some of which
+can't be compressed smaller (e.g. already-optimised PDFs).
+**Steps:**
+1. Just after opening, watch the front dots **without** clicking the nodes.
+**Expected:** Within a short moment the front red dots on the **no-gain ≤5-page** documents
+clear by themselves (a background pass evaluates the cheap ones). Documents that *can* be made
+smaller keep their red dot until you apply a compression. **Large** documents keep the red dot
+until you open them (too costly to sweep). The status bar may briefly show compression activity.
+
 ## MT-56: F2 renames
 **Steps:**
 1. Select a node, press **F2**.

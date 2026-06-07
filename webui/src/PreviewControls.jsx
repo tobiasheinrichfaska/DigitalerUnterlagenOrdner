@@ -22,7 +22,7 @@ const METHOD_DE = {
 // Session-only (cleared on reload); keyed by node id.
 const methodMemory = new Map()
 
-export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi = 150 }) {
+export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi = 150, onResolved }) {
   const { t } = useT()
   // backend method key → German display text, which t() then translates.
   const methodLabel = (m) => t(METHOD_DE[m] ?? m)
@@ -50,9 +50,12 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
     if (off) return
     setLoading(true)
     core.compressOptions(session, node.id, d).then((r) => {
-      setOptions(r?.ok ? r.options : [])
+      const opts = r?.ok ? r.options : []
+      setOptions(opts)
       setOrigSize(r?.ok ? r.original_size : null)
       setLoading(false)
+      // refresh the front dot: no smaller option → decided; else still undecided.
+      if (!node.is_compressed) onResolved?.(node.id, opts.length > 0)
     })
   }
 
@@ -76,6 +79,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         setOptions(opts)
         setOrigSize(r?.ok ? r.original_size : null)
         setLoading(false)
+        onResolved?.(node.id, opts.length > 0)  // no gain → clear the front "undecided" dot
         const remembered = methodMemory.get(node.id)
         const valid = remembered === 'original' || opts.some((o) => o.method === remembered)
         const pick = valid ? remembered : opts[0]?.method // options are smallest-first

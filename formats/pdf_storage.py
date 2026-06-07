@@ -241,12 +241,11 @@ class PDFStorage:
         return current_page_index
 
 
-    def save(self, path: Optional[str] = None):
-        """
-        Speichert das PDF als Datei mit eingebetteter JSON-Struktur und vollständigem Outline.
-        Führt eine verlustfreie Re-Komprimierung mit pikepdf durch, wenn sinnvoll.
-        """
-
+    def to_bytes(self) -> bytes:
+        """Build the .belegtool PDF bytes (pages + /JSONStructure + lossless pikepdf
+        recompression) **without writing**. The single source of truth for the file
+        content; ``save`` just writes these bytes, and the locked save path writes them
+        through the held handle."""
         # 1. Struktur als JSON extrahieren
         structure_json = json.dumps(self.root.to_dict())
 
@@ -275,16 +274,17 @@ class PDFStorage:
         except Exception as e:
             logger.warning("[save] pikepdf-Komprimierung fehlgeschlagen: %s", e)
             final_pdf = raw_pdf
+        return final_pdf
 
-        # 4. PDF speichern
-        if path:
-            with open(path, 'wb') as f:
-                f.write(final_pdf)
-        elif self.filename:
-            with open(self.filename, 'wb') as f:
-                f.write(final_pdf)
-        else:
+    def save(self, path: Optional[str] = None):
+        """Speichert das PDF als Datei mit eingebetteter JSON-Struktur und vollständigem
+        Outline (verlustfreie Re-Komprimierung via pikepdf, wenn sinnvoll)."""
+        final_pdf = self.to_bytes()
+        target = path or self.filename
+        if not target:
             raise ValueError("No path specified and no original filename stored.")
+        with open(target, 'wb') as f:
+            f.write(final_pdf)
 
         self.clear_dirty()
         if path:

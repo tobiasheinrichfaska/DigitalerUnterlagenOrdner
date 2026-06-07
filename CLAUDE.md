@@ -258,6 +258,33 @@ Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (
   key. Import gates the (expensive) structure parse on a cheap `b"/JSONStructure"`
   byte check.
 
+### File lock — single-writer (v3.9.0, off by default)
+
+For a shared (SMB / client-server) store: when enabled, opening a `.belegtool` holds an
+**exclusive Win32 handle** ([`infra/file_lock.py`](infra/file_lock.py)) for the window's
+lifetime, so only one person edits at a time. Share mode `FILE_SHARE_READ` (deny write +
+delete, allow read) — bit-for-bit Acrobat's; the OS frees it on process death (no stale lock).
+
+- **Enable:** environment variable `BELEG_FILE_LOCK=1` (any of `1/true/yes`). **Off by default**
+  (a graphical setting is deferred). Windows-only; non-Windows / errors fall back to no lock.
+- **Lifecycle** ([`CoreApi`](core/api.py)): `open` acquires (→ `{ok:false, code:"in_use"}` with a
+  German message if already locked); each window's session keeps its lock in `_locks[sid]`;
+  the window-close guard ([`host.py`](host.py) `_bind_close`) calls `CoreApi.release`; save-as
+  re-locks the new file.
+- **Saving under the lock:** the handle denies our own `open('wb')`, so the locked save goes
+  **through the handle** in a single write — `PDFStorage.to_bytes()` + `embed_variants_bytes()`
+  built in memory, then `FileLock.overwrite`. In-place overwrite isn't atomic, so a sibling
+  **`.bak`** of the previous bytes is written first and removed only after a successful flush;
+  `open` **restores from `.bak`** if it finds the file truncated (interrupted save). Lock-off
+  saving is unchanged (the original two-write path).
+- **Tests:** [`tests/test_file_lock.py`](tests/test_file_lock.py) (14, primitive incl. OS
+  auto-release + thread race), [`test_save_bytes_pipeline.py`](tests/test_save_bytes_pipeline.py)
+  (bytes-pipeline parity with the path-based save/embed),
+  [`test_file_lock_integration.py`](tests/test_file_lock_integration.py) (in-use, locked
+  in-place save, save-as re-lock, `.bak` restore). Windows-only suites skip elsewhere.
+- **Deferred:** graphical on/off setting; Office-style autosave/recover of *unsaved* changes;
+  read-only fallback when a file is in use.
+
 ### Persistence / save policy (v3.6.0)
 The file stores **only `current_pdf_data` per node** — never a separate original.
 So a **committed** node ("Lesbarkeit geprüft" = a `Compress` was applied) saves only
@@ -384,24 +411,10 @@ Current tag: **v3.9.0** (beta)
      (no rate limit; phased rollout; `mandatory`/yanked flags). Production auto-download/
      install (WinSparkle/Inno/MSIX) is **gated on code signing** — not before.
 
-2. **Exclusive file lock (single-writer) — deferred, must be CONFIGURABLE.** Hold an OS
-   handle on the open `.belegtool` for the window's lifetime so only one person edits at a
-   time (client-server / **SMB** store; SMB enforces share-mode locks).
-   - **Configurable on/off** (setting) — locking must be switchable, off by default until
-     validated; do not hard-wire it on.
-   - Share mode = `GENERIC_READ|GENERIC_WRITE`, **`FILE_SHARE_READ`** (deny write + deny
-     delete) via pywin32 — verified bit-for-bit identical to Adobe Acrobat (READ allowed,
-     WRITE/RENAME denied). This is also the handle DATEV's check-in-on-close likely watches
-     for (probable bonus, unconfirmed).
-   - Implications: the save path must be **funneled through the held handle** — consolidate
-     today's two-write save ([`CoreApi.save`](core/api.py): `save_belegtool` **then**
-     `embed_variants` re-opens the file) into one in-memory bytes build (`PDFStorage.to_bytes`
-     + `embed_variants_bytes`) written once. In-place overwrite is **not atomic** → add
-     **crash recovery**: `.bak` integrity restore + Office-style local autosave/recover
-     sidecar (leftover sidecar on open = unclean shutdown → offer restore). Conflict on
-     acquire → clear "in use" message; **read-only fallback deferred**.
-   - Phases when started: (1) `FileLock` primitive + intensive tests; (2) save→bytes refactor
-     + parity tests; (3) crash recovery; (4) wire acquire/release into open/save/save-as/close.
+2. **Exclusive file lock (single-writer) — SHIPPED in v3.9.0 (off by default).** See the
+   **File lock** section below. (Built ahead of the updater after all.) Still deferred within
+   it: a graphical on/off setting (currently env-gated), the Office-style autosave/recover
+   sidecar, and the read-only fallback.
 
 - **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
   removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each

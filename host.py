@@ -87,10 +87,15 @@ def _bind_close(win, api):
     cancels the close."""
     def _on_closing():
         try:
-            if api._dirty:
-                return bool(win.create_confirmation_dialog(
+            if api._dirty and not win.create_confirmation_dialog(
                     "Ungespeicherte Änderungen",
-                    "Das Fenster schließen und die ungespeicherten Änderungen verwerfen?"))
+                    "Das Fenster schließen und die ungespeicherten Änderungen verwerfen?"):
+                return False  # user cancelled → keep the window open AND keep the lock
+        except Exception:
+            pass
+        try:
+            if api._session:
+                api._core.release(api._session)  # free the file lock for this window
         except Exception:
             pass
         return True
@@ -122,6 +127,7 @@ class HostApi:
         self._uid = uid
         self._dirty = False  # pushed from the React app for the close guard
         self._startup_path = None  # .belegtool to open on load (first window only)
+        self._session = None  # this window's session id (for the close-time lock release)
 
     def set_dirty(self, value):
         self._dirty = bool(value)
@@ -164,7 +170,10 @@ class HostApi:
         return cfg
 
     def open(self, session=None, path=None):
-        return self._core.open(session, path)
+        resp = self._core.open(session, path)
+        if resp.get("ok"):
+            self._session = resp.get("session")  # remember for the close-time lock release
+        return resp
 
     def dispatch(self, session, command):
         return self._core.dispatch(session, command)

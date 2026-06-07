@@ -51,6 +51,8 @@ export and the `.belegtool` format should work as-is.
 
 ## How to help
 
-Comment on the tracking issue (if open) or open a PR against a `feature/…` branch. Small,
-reviewable slices welcome — e.g. "dependency split + Linux launch" as a first PR, Office
-conversion as a second. See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+Comment on the tracking issue
+[#3 "Help wanted: macOS & Linux port"](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/issues/3)
+or open a PR against a `feature/…` branch. Small, reviewable slices welcome — e.g.
+"dependency split + Linux launch" as a first PR, Office conversion as a second. See
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).

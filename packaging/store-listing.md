@@ -106,5 +106,8 @@ Use real-looking but **non-personal** sample documents (the `tests/data/input/*.
 - [ ] **Pricing & availability:** Free; choose markets.
 - [ ] **Privacy policy URL:** link to `PRIVACY.md` (GitHub URL, or a GitHub Pages URL).
 - [ ] Submit → certification (broadFileSystemAccess → manual review; the justification carries it).
-- [ ] After publish: grab the Store link, add it to `BETA_TESTING.md` / homepage; uninstall any
+- [ ] After publish: the Store link is **https://apps.microsoft.com/detail/9PL4D25N00XD**.
+      It is already documented in `README.md` (marked "listing pending"). **Once the listing
+      actually resolves**, append it to `BETA_TESTING.md` §1 and the homepage (kept out of the
+      beta onboarding doc until then so testers aren't sent to a dead link). Uninstall any
       sideloaded test build before installing the Store version.

@@ -46,7 +46,7 @@ describe('LanguageProvider drives component language', () => {
       return (
         <div>
           <span data-testid="label">{t('Löschen')}</span>
-          <button onClick={() => setLang('en')}>to-en</button>
+          <button onClick={() => setLang('en-US')}>to-en</button>
           <span data-testid="lang">{lang}</span>
         </div>
       )
@@ -55,7 +55,7 @@ describe('LanguageProvider drives component language', () => {
     expect(screen.getByTestId('label').textContent).toBe('Löschen')
     fireEvent.click(screen.getByText('to-en'))
     expect(screen.getByTestId('label').textContent).toBe('Delete')
-    expect(screen.getByTestId('lang').textContent).toBe('en')
-    expect(localStorage.getItem('beleg.lang')).toBe('en')
+    expect(screen.getByTestId('lang').textContent).toBe('en-US')
+    expect(localStorage.getItem('beleg.lang')).toBe('en-US')
   })
 })

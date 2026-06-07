@@ -65,9 +65,21 @@ direct Microsoft Store search — the automated check couldn't query the JS-only
 13. Updates: bump version → repackage MSIX → submit → Store auto-updates users. Keep GitHub
     betas in parallel.
 
+## WebView2 runtime dependency (clean-machine finding)
+The Windows-Sandbox spike showed the app **renders blank on a machine without the Edge
+**WebView2 Runtime** (pywebview can't use the Chromium backend). Win11 ships it in-box, but
+Win10 / Sandbox / minimal images don't. Handling per channel:
+- **Startup check (done):** [`host.py`](../host.py) `_webview2_installed()` detects a missing
+  runtime and shows a native message + opens the download page instead of a blank window
+  (`BELEG_SKIP_WEBVIEW2_CHECK=1` bypasses). Helps every channel.
+- **MSIX / Store:** declare the **WebView2 Runtime as a package dependency** → installed
+  automatically. (Another point for the Store route.)
+- **Zip:** bundle the **Evergreen WebView2 Bootstrapper** (runs once if missing) or ship a
+  fixed-version runtime next to the exe.
+
 ## Risks to watch
 - `broadFileSystemAccess` review scrutiny.
-- WebView2 runtime handling inside the MSIX container.
+- WebView2 runtime handling inside the MSIX container (see above — declare the dependency).
 - **DATEV** "open for edit / check-in" may behave differently for a packaged app — test in the
   spike (file-association registration could help; see the open DATEV check-in question).
 - Open-source / AGPLv3 + commercial dual-license is fine on the Store.

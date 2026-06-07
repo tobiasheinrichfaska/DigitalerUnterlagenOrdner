@@ -111,6 +111,20 @@ def test_export_dialog_default_filename_is_document_name(monkeypatch):
     assert captured.get("save_filename") == f"{name}.pdf"  # doc name, not "Export.pdf"
 
 
+def test_webview2_installed_returns_bool():
+    assert isinstance(host._webview2_installed(), bool)
+
+
+def test_main_aborts_with_warning_when_webview2_missing(monkeypatch):
+    flags = {"warned": False, "started": False}
+    monkeypatch.setattr(host, "_webview2_installed", lambda: False)
+    monkeypatch.setattr(host, "_warn_missing_webview2", lambda: flags.__setitem__("warned", True))
+    monkeypatch.setattr(host.webview, "start", lambda *a, **k: flags.__setitem__("started", True))
+    monkeypatch.delenv("BELEG_SKIP_WEBVIEW2_CHECK", raising=False)
+    host.main()
+    assert flags["warned"] and not flags["started"]  # warned the user, never opened a blank window
+
+
 def test_hostapi_delegates_core_ops():
     api = host.HostApi(CoreApi())
     assert api.config()["ok"] and "default_dpi" in api.config()

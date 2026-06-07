@@ -105,12 +105,27 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         <button onClick={() => { onExpandAll(); onClose() }}>{t('Alle aufklappen')}</button>
         <button onClick={() => { onCollapseAll(); onClose() }}>{t('Alle zuklappen')}</button>
         <div className="cm-sep" />
-        <div className="cm-label">{node.is_folder ? t('Status (gesamter Inhalt)') : t('Status')}</div>
-        {statuses.map((key) => (
-          <button key={key} className={!node.is_folder && node.status === key ? 'active' : ''} onClick={() => run({ type: 'SetStatus', status: key })}>
-            {statusLabel(t, key)}
-          </button>
-        ))}
+        {(() => {
+          const multi = selectedIds?.includes(node.id) && selectedIds.length > 1
+          const setStatus = (key) => {
+            if (multi) { dispatch({ type: 'SetStatusMany', node_ids: selectedIds, status: key }); onClose() }
+            else run({ type: 'SetStatus', status: key })
+          }
+          return (
+            <>
+              <div className="cm-label">
+                {multi ? t('Status ({count})', { count: selectedIds.length })
+                  : node.is_folder ? t('Status (gesamter Inhalt)') : t('Status')}
+              </div>
+              {statuses.map((key) => (
+                <button key={key} className={!multi && !node.is_folder && node.status === key ? 'active' : ''}
+                  onClick={() => setStatus(key)}>
+                  {statusLabel(t, key)}
+                </button>
+              ))}
+            </>
+          )
+        })()}
         <div className="cm-sep" />
         <button onClick={() => { onExport(exportIds); onClose() }}>
           {exportIds.length > 1 ? t('Auswahl als PDF exportieren ({count})', { count: exportIds.length }) : t('Als PDF exportieren')}

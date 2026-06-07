@@ -94,6 +94,23 @@ def test_setstatus_leaf_sets_only_that_leaf():
     assert out.find("a").status == STATUS_TODO and out.find("b").status == STATUS_NONE
 
 
+def test_setstatus_many_sets_all_selected():
+    doc = _two_leaves(STATUS_NONE, STATUS_NONE)
+    out = _do(doc, {"type": "SetStatusMany", "node_ids": ["a", "b"], "status": STATUS_DONE})
+    assert out.find("a").status == STATUS_DONE and out.find("b").status == STATUS_DONE
+
+
+def test_setstatus_many_cascades_folders_and_skips_missing():
+    leaf1 = Node(name="l1", id="l1", pdf_length=1, original_data=_pdf())
+    leaf2 = Node(name="l2", id="l2", pdf_length=1, original_data=_pdf())
+    folder = Node(name="f", id="f", is_folder=True, children=(leaf2,))
+    doc = Document(Node(name="root", id="r", is_folder=True, children=(leaf1, folder)))
+    out = _do(doc, {"type": "SetStatusMany", "node_ids": ["l1", "f", "gone"], "status": STATUS_PRIOR_YEAR})
+    assert out.find("l1").status == STATUS_PRIOR_YEAR
+    assert out.find("l2").status == STATUS_PRIOR_YEAR   # folder cascaded
+    assert out.find("f").status == STATUS_NONE          # folder keeps no own status
+
+
 # --- compression-undecided overlay (red dot) -------------------------------
 
 def _tree_flat(tree):

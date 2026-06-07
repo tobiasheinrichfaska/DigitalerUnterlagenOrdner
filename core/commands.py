@@ -51,6 +51,16 @@ class SetStatus:
 
 
 @dataclass(frozen=True)
+class SetStatusMany:
+    node_ids: Tuple[str, ...]  # set status on several at once (one undo step)
+    status: str
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
 class SetCollapsed:
     node_id: str
     collapsed: bool
@@ -190,14 +200,14 @@ class Merge:
             object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
-Command = Union[AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
+Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
                 Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
                 Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, Delete, DeleteMany,
+    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, Delete, DeleteMany,
     Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
@@ -300,19 +310,35 @@ def _rename(doc: Document, cmd: Rename, engine=None) -> Document:
     return doc.update_node(cmd.node_id, name=cmd.name)
 
 
-@_handler(SetStatus)
-def _set_status(doc: Document, cmd: SetStatus, engine=None) -> Document:
-    node = _require(doc, cmd.node_id)
-    if cmd.status not in STATUSES:
-        raise CommandError(f"invalid status: {cmd.status!r}")
+def _apply_status(doc: Document, node_id: str, status: str) -> Document:
+    """Set status on one node. A folder CASCADES to every descendant document
+    (children, grandchildren, …); folders carry no own status dot."""
+    node = _require(doc, node_id)
     if node.is_folder:
-        # Folders carry no own status dot — setting a status on a folder CASCADES to
-        # every descendant document (children, grandchildren, …). One undoable step.
         for n in node.iter():
             if not n.is_folder:
-                doc = doc.update_node(n.id, status=cmd.status)
+                doc = doc.update_node(n.id, status=status)
         return doc
-    return doc.update_node(cmd.node_id, status=cmd.status)
+    return doc.update_node(node_id, status=status)
+
+
+@_handler(SetStatus)
+def _set_status(doc: Document, cmd: SetStatus, engine=None) -> Document:
+    if cmd.status not in STATUSES:
+        raise CommandError(f"invalid status: {cmd.status!r}")
+    return _apply_status(doc, cmd.node_id, cmd.status)
+
+
+@_handler(SetStatusMany)
+def _set_status_many(doc: Document, cmd: SetStatusMany, engine=None) -> Document:
+    if cmd.status not in STATUSES:
+        raise CommandError(f"invalid status: {cmd.status!r}")
+    # de-dupe; skip ids already gone (e.g. stale selection). One undoable step; a folder
+    # in the selection cascades to its contents.
+    for nid in dict.fromkeys(cmd.node_ids):
+        if doc.find(nid) is not None:
+            doc = _apply_status(doc, nid, cmd.status)
+    return doc
 
 
 @_handler(SetCollapsed)

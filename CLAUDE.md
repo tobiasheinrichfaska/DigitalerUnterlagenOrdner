@@ -321,6 +321,45 @@ Current tag: **v3.8.1** (beta)
 ---
 
 ## Open / deferred items
+
+### Planned work — sequenced (decided 2026-06-07)
+**Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.
+
+1. **Update-checker ("Update available") — deferred, design fixed.** Inform the user when a
+   newer release exists; do **not** auto-install.
+   - **Privacy rule (hard): never check for updates without asking.** No silent phone-home.
+   - **First approach: the user must *request* a check** — a manual "Nach Updates suchen"
+     button/menu item. An automatic startup check, if ever added, is **opt-in only** behind a
+     first-run consent toggle (DSGVO: the check discloses IP/usage to the update host).
+   - Mechanism: `GET …/releases/latest` (GitHub API) → compare `tag_name` vs
+     `version_info.VERSION` (semver); newer → show a badge linking to the release page
+     (browser download + manual unzip-replace, matching today's install flow).
+   - Architecture (logic/UI split): pure `services/updates.py` (`is_newer`, `parse_release`,
+     UI-free, unit-tested with canned JSON) + an injectable fetch port in `infra` (stdlib
+     `urllib`, offline fails silently) + `HostApi.check_for_update()` + a React badge/button.
+   - Later: move the source to a self-hosted `latest.json` on the GitHub Pages homepage
+     (no rate limit; phased rollout; `mandatory`/yanked flags). Production auto-download/
+     install (WinSparkle/Inno/MSIX) is **gated on code signing** — not before.
+
+2. **Exclusive file lock (single-writer) — deferred, must be CONFIGURABLE.** Hold an OS
+   handle on the open `.belegtool` for the window's lifetime so only one person edits at a
+   time (client-server / **SMB** store; SMB enforces share-mode locks).
+   - **Configurable on/off** (setting) — locking must be switchable, off by default until
+     validated; do not hard-wire it on.
+   - Share mode = `GENERIC_READ|GENERIC_WRITE`, **`FILE_SHARE_READ`** (deny write + deny
+     delete) via pywin32 — verified bit-for-bit identical to Adobe Acrobat (READ allowed,
+     WRITE/RENAME denied). This is also the handle DATEV's check-in-on-close likely watches
+     for (probable bonus, unconfirmed).
+   - Implications: the save path must be **funneled through the held handle** — consolidate
+     today's two-write save ([`CoreApi.save`](core/api.py): `save_belegtool` **then**
+     `embed_variants` re-opens the file) into one in-memory bytes build (`PDFStorage.to_bytes`
+     + `embed_variants_bytes`) written once. In-place overwrite is **not atomic** → add
+     **crash recovery**: `.bak` integrity restore + Office-style local autosave/recover
+     sidecar (leftover sidecar on open = unclean shutdown → offer restore). Conflict on
+     acquire → clear "in use" message; **read-only fallback deferred**.
+   - Phases when started: (1) `FileLock` primitive + intensive tests; (2) save→bytes refactor
+     + parity tests; (3) crash recovery; (4) wire acquire/release into open/save/save-as/close.
+
 - **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
   removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
   against the React UI. The features themselves are unchanged.

@@ -10,8 +10,9 @@
     checks at startup; optionally bundle a fixed-version runtime (README).
   - NO desktop6/desktop2 extensions: a PyInstaller full-trust app only needs
     EntryPoint="Windows.FullTrustApplication"; extra extensions aren't required.
-  - PackageIntegrity content enforcement is on → requires Windows 2004 (10.0.19041); hence
-    MinVersion 19041 (1903/1909 are end-of-life).
+  - MinVersion 10.0.17763.0 (Windows 10 1809) for broad compatibility. PackageIntegrity
+    content enforcement is declared and takes effect on 2004 (19041)+; it is simply inactive
+    on 1809-1909 (no error), so it stays on without raising the minimum.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -36,7 +37,7 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22631.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22631.0" />
   </Dependencies>
 
   <Resources>

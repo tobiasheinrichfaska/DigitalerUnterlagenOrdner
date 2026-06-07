@@ -44,7 +44,9 @@ New-Item -ItemType Directory -Force -Path $layout, $out | Out-Null
 Copy-Item (Join-Path $pkg "Assets") (Join-Path $layout "Assets") -Recurse
 Copy-Item $dist (Join-Path $layout "BelegTool") -Recurse
 $manifest = Get-Content (Join-Path $pkg "AppxManifest.xml") -Raw
-$manifest = $manifest -replace 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$ver`""
+# Patch ONLY the <Identity> Version. The negative lookbehind prevents matching inside
+# MinVersion="..."/MaxVersionTested="..." (which contain the substring 'Version="..."').
+$manifest = $manifest -replace '(?<![A-Za-z])Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$ver`""
 Set-Content (Join-Path $layout "AppxManifest.xml") -Value $manifest -Encoding UTF8
 
 # 5. Find the Windows SDK tools (latest x64)

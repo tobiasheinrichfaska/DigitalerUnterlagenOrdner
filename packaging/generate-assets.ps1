@@ -1,58 +1,67 @@
 # Generate the MSIX tile/logo PNGs from assets/icon.ico into an output folder.
-# Auto-generated assets are fine for a first submission; replace with hand-crafted
-# artwork later for crisp large tiles. Windows PowerShell 5.1 (GDI+ via System.Drawing).
+# Uses WPF imaging (System.Windows.Media.Imaging), which decodes PNG-compressed .ico frames
+# that the older System.Drawing.Icon GDI+ path chokes on. Windows PowerShell 5.1 (STA).
+# Auto-generated assets are fine for a first submission; replace with hand-crafted artwork
+# (and per-scale variants) for crisp large tiles later.
 param(
-  [string]$IconPath = (Join-Path $PSScriptRoot "..\assets\icon.ico"),
-  [string]$OutDir   = (Join-Path $PSScriptRoot "Assets"),
-  [string]$BackColor = "#1E293B"   # used only for the wide tile's padding
+  [string]$IconPath  = (Join-Path $PSScriptRoot "..\assets\icon.ico"),
+  [string]$OutDir    = (Join-Path $PSScriptRoot "Assets"),
+  [string]$BackColor = "#1E293B"   # used only as padding for the wide tile
 )
 
-Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName WindowsBase
 if (-not (Test-Path $IconPath)) { throw "Icon not found: $IconPath" }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-# Load the largest available frame from the .ico (256 if present).
-$srcIcon = New-Object System.Drawing.Icon($IconPath, 256, 256)
-$src = $srcIcon.ToBitmap()
+# Decode the .ico and take the largest frame.
+$bytes = [System.IO.File]::ReadAllBytes($IconPath)
+$ms = New-Object System.IO.MemoryStream(,$bytes)
+$decoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
+  $ms,
+  [System.Windows.Media.Imaging.BitmapCreateOptions]::None,
+  [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+$src = $decoder.Frames | Sort-Object PixelWidth -Descending | Select-Object -First 1
+Write-Host "Source frame: $($src.PixelWidth)x$($src.PixelHeight)"
 
-function Save-Square([int]$size, [string]$name) {
-  $bmp = New-Object System.Drawing.Bitmap($size, $size)
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-  $g.Clear([System.Drawing.Color]::Transparent)
-  $g.DrawImage($src, 0, 0, $size, $size)
-  $g.Dispose()
+function Save-Png([System.Windows.Media.Imaging.RenderTargetBitmap]$rtb, [string]$name) {
+  $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+  $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($rtb))
   $path = Join-Path $OutDir $name
-  $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-  $bmp.Dispose()
-  Write-Host "  $name ($size x $size)"
+  $fs = [System.IO.File]::Create($path)
+  try { $enc.Save($fs) } finally { $fs.Close() }
 }
 
-function Save-Wide([int]$w, [int]$h, [string]$name) {
-  $bmp = New-Object System.Drawing.Bitmap($w, $h)
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-  $g.Clear([System.Drawing.ColorTranslator]::FromHtml($BackColor))
-  $s = [Math]::Min($w, $h)                  # centered square icon, full height
-  $g.DrawImage($src, [int](($w - $s) / 2), [int](($h - $s) / 2), $s, $s)
-  $g.Dispose()
-  $path = Join-Path $OutDir $name
-  $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-  $bmp.Dispose()
+function Render([int]$w, [int]$h, [scriptblock]$draw, [string]$name) {
+  $rtb = New-Object System.Windows.Media.Imaging.RenderTargetBitmap($w, $h, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
+  $dv = New-Object System.Windows.Media.DrawingVisual
+  $ctx = $dv.RenderOpen()
+  & $draw $ctx $w $h
+  $ctx.Close()
+  $rtb.Render($dv)
+  Save-Png $rtb $name
   Write-Host "  $name ($w x $h)"
 }
 
-Write-Host "Generating MSIX assets into $OutDir :"
-Save-Square 44  "Square44x44Logo.png"
-Save-Square 71  "Square71x71Logo.png"
-Save-Square 150 "Square150x150Logo.png"
-Save-Square 310 "Square310x310Logo.png"
-Save-Square 50  "StoreLogo.png"
-Save-Wide  310 150 "Wide310x150Logo.png"
+$drawSquare = {
+  param($ctx, $w, $h)
+  $ctx.DrawImage($src, (New-Object System.Windows.Rect(0, 0, $w, $h)))
+}
+$drawWide = {
+  param($ctx, $w, $h)
+  $color = [System.Windows.Media.ColorConverter]::ConvertFromString($BackColor)
+  $ctx.DrawRectangle((New-Object System.Windows.Media.SolidColorBrush($color)), $null, (New-Object System.Windows.Rect(0, 0, $w, $h)))
+  $s = [Math]::Min($w, $h)
+  $ctx.DrawImage($src, (New-Object System.Windows.Rect((($w - $s) / 2), (($h - $s) / 2), $s, $s)))
+}
 
-$src.Dispose()
-$srcIcon.Dispose()
+Write-Host "Generating MSIX assets into $OutDir :"
+Render 44  44  $drawSquare "Square44x44Logo.png"
+Render 71  71  $drawSquare "Square71x71Logo.png"
+Render 150 150 $drawSquare "Square150x150Logo.png"
+Render 310 310 $drawSquare "Square310x310Logo.png"
+Render 50  50  $drawSquare "StoreLogo.png"
+Render 310 150 $drawWide   "Wide310x150Logo.png"
+$ms.Dispose()
 Write-Host "Done."

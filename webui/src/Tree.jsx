@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { findNode } from './lib/tree'
-import { statusDots, hasUndecided } from './lib/status'
+import { statusDots, hasUndecided, DOT_LABEL } from './lib/status'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
 
@@ -157,7 +157,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         )}
         {dots.length > 0 && (
           <span className="status-dots">
-            {dots.map((c, i) => <span key={i} className={`sdot ${c}`} />)}
+            {dots.map((c, i) => <span key={i} className={`sdot ${c}`} title={t(DOT_LABEL[c])} />)}
           </span>
         )}
         {/* ghost preview of where the dragged item will land (bottom drop), at the

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { statusColor, statusDots, hasUndecided } from './status'
+import { statusColor, statusDots, hasUndecided, DOT_LABEL, sweepCandidates } from './status'
 
 const leaf = (status = '', extra = {}) => ({ is_folder: false, status, ...extra })
 const folder = (children) => ({ is_folder: true, status: '', children })
@@ -60,5 +60,41 @@ describe('hasUndecided', () => {
 
   it('folder is false when no descendant is undecided', () => {
     expect(hasUndecided(folder([leaf('erfasst'), leaf('erfasst')]))).toBe(false)
+  })
+})
+
+describe('DOT_LABEL', () => {
+  it('has a tooltip key for every dot colour', () => {
+    expect(Object.keys(DOT_LABEL).sort()).toEqual(['black', 'green', 'red', 'yellow'])
+  })
+})
+
+describe('sweepCandidates', () => {
+  const cand = (over = {}) => ({
+    id: over.id || 'c', is_folder: false, status: '', has_source: true,
+    is_compressed: false, no_compression: false, compression_undecided: true,
+    pdf_length: 3, ...over,
+  })
+
+  it('picks cheap, undecided, compressible leaves', () => {
+    const tree = folder([cand({ id: 'a' }), cand({ id: 'b', pdf_length: 1 })])
+    expect(sweepCandidates(tree)).toEqual(['a', 'b'])
+  })
+
+  it('skips large leaves (> max pages), folders, and the already-decided', () => {
+    const tree = folder([
+      cand({ id: 'big', pdf_length: 9 }),               // too many pages
+      cand({ id: 'done', compression_undecided: false }), // already decided
+      cand({ id: 'applied', is_compressed: true }),       // compression applied
+      cand({ id: 'blocked', no_compression: true }),      // can't compress
+      cand({ id: 'nosrc', has_source: false }),           // no source bytes
+      folder([cand({ id: 'deep' })]),                     // grandchild is eligible
+    ])
+    expect(sweepCandidates(tree)).toEqual(['deep'])
+  })
+
+  it('honours a custom page cap', () => {
+    const tree = folder([cand({ id: 'p2', pdf_length: 2 }), cand({ id: 'p4', pdf_length: 4 })])
+    expect(sweepCandidates(tree, 3)).toEqual(['p2'])
   })
 })

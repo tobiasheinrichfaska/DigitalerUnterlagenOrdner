@@ -125,6 +125,7 @@ export const en = {
   'Vorjahr': 'Prior year',
   'Kein Status': 'No status',
   'Status (gesamter Inhalt)': 'Status (entire contents)',
+  'Status ({count})': 'Status ({count})',
   'Komprimierung noch nicht entschieden': 'Compression not yet decided',
   'Teils ohne Status': 'Some without status',
 

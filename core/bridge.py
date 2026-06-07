@@ -28,6 +28,7 @@ def _node_from_pdfnode(pn) -> Node:
         dpi_original=pn.dpi_original,
         dpi_current=pn.dpi_current,
         no_compression=pn.no_compression,
+        compression_no_gain=getattr(pn, "compression_no_gain", False),
         collapsed=getattr(pn, "collapsed", False),
         compression_method=getattr(pn, "compression_method", None),
         tags=tuple(getattr(pn, "tags", ()) or ()),
@@ -59,6 +60,7 @@ def _pdfnode_from_node(node: Node):
     pn.dpi_original = node.dpi_original
     pn.dpi_current = node.dpi_current
     pn.no_compression = node.no_compression
+    pn.compression_no_gain = node.compression_no_gain
     pn.collapsed = node.collapsed
     pn.compression_method = node.compression_method
     pn.tags = list(node.tags)

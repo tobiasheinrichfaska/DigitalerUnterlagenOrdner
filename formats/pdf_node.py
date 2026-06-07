@@ -28,7 +28,7 @@ class PDFNode:
         self.is_folder = is_folder
         self.children: List[PDFNode] = []
         self.pdf_length: int = 0  # always present, also for folders
-        self.status = "zu erfassen"
+        self.status = ""  # no status by default (see core.model.STATUS_NONE)
         self.position: Optional[int] = None
         self.vz_start: Optional[int] = None
         self.vz_end: Optional[int] = None
@@ -36,6 +36,7 @@ class PDFNode:
         self.dpi_original: Optional[int] = None
         self.dpi_current: Optional[int] = None
         self.no_compression: bool = False
+        self.compression_no_gain: bool = False  # evaluated, nothing smaller found (persisted)
         self.collapsed: bool = False  # folder collapsed in the tree view (persisted)
         self.compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data
         self.tags: List[str] = []  # free-form labels (persisted)
@@ -80,6 +81,7 @@ class PDFNode:
             "dpi_original": self.dpi_original,
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
+            "compression_no_gain": self.compression_no_gain,
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
             "tags": list(self.tags),
@@ -114,6 +116,7 @@ class PDFNode:
         copied.pdf_length = self.pdf_length
         copied.is_compressed = self.is_compressed
         copied.no_compression = self.no_compression
+        copied.compression_no_gain = self.compression_no_gain
         copied.dpi_original = self.dpi_original
         copied.dpi_current = self.dpi_current
         copied.compression_method = self.compression_method

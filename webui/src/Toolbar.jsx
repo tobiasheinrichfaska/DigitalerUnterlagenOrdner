@@ -6,7 +6,7 @@ import { LANGUAGE_NAMES } from './i18n/index'
 
 export function Toolbar({
   onOpen, onNewWindow, onImport, onSave, onSaveAs, onExport, onAddFolder,
-  onUndo, onRedo, onToggleTags, lang, setLang,
+  onUndo, onRedo, onToggleTags, onHelp, lang, setLang,
   dirty, selectedCount, canUndo, canRedo, tagsOn, busy, editLocked = false,
 }) {
   const { t } = useT()
@@ -35,6 +35,7 @@ export function Toolbar({
           <option key={code} value={code}>🌐 {name}</option>
         ))}
       </select>
+      <button onClick={onHelp} title={t('Hilfe')}>❓ {t('Hilfe')}</button>
       {busy ? <span className="spinner" title={t('Arbeite…')} /> : null}
     </div>
   )

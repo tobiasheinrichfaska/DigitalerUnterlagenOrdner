@@ -65,7 +65,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const AUTO_MAX_PAGES = 5
   /* eslint-disable react-hooks/set-state-in-effect -- async result drives the controls */
   useEffect(() => {
-    if (off || node.is_compressed || node.pdf_length > AUTO_MAX_PAGES) return
+    if (off || node.is_compressed || node.compression_no_gain || node.pdf_length > AUTO_MAX_PAGES) return
     let alive = true
     const d = node.dpi_current ?? defaultDpi
     setLoading(true)

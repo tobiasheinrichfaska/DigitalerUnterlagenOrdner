@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.8.2**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.9.0**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -55,7 +55,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.8.2) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.9.0) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -108,7 +108,9 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
 | `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
-| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js`, `treeNav.js`). |
+| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js`, `treeNav.js`, `status.js`). |
+| `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
+| `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal: 🇩🇪/🇬🇧 flag switch, GitHub/mailto correction links; content DE+EN authored, FR+ES best-effort, else EN fallback. |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
@@ -202,10 +204,35 @@ UI-free and tested in [`webui/src/lib/tags.js`](webui/src/lib/tags.js):
   source* pages, so they are no longer flagged `no_compression`. ⚠ Parts in
   already-saved `.belegtool` files keep the old flag until re-split.
 
-### Status system (per node)
-- `erfasst` — green
-- `zu erfassen` — blue, highlighted
-- `vorjahreswert` — red, highlighted
+### Status system (per node) — dots (v3.9.0)
+Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (yellow),
+`erfasst` (green), `vorjahreswert` (red). Shown as **trailing dots** on the row
+(pure logic in [`webui/src/lib/status.js`](webui/src/lib/status.js), tested):
+- **Leaf:** its own status dot (or none).
+- **Folder:** one dot per distinct descendant status (red→yellow→green) **+ a black dot**
+  when descendants are mixed with/without status; all-no-status or empty folder → no dots.
+  Deep aggregation (children + grandchildren).
+- **Set status** via right-click. On a **folder** it **cascades to every descendant
+  document** (`SetStatus` handler). "Kein Status" clears.
+- **Merge:** all inputs same status → kept; any difference → no status. **Split:** parts
+  inherit the original's status.
+
+### Compression "undecided" marker + persisted no-gain (v3.9.0)
+- A **red dot at the front** of a leaf row = compression **not yet decided**
+  (`compression_undecided` overlay in [`core/api.py`](core/api.py)): true unless the node is
+  applied (`is_compressed` = "Lesbarkeit geprüft"), `no_compression`, or auto-confirmed
+  no-gain. Folder rows show it if any descendant leaf is undecided.
+- **Persisted no-gain:** `Node.compression_no_gain` — when evaluation finds nothing smaller,
+  the decision is **baked at save** (`CoreApi._bake_no_gain`), round-trips in the `.belegtool`,
+  and is **cleared on rotate**. So a "nothing smaller" node is not re-evaluated on load and
+  shows no red dot. Auto-compute on view skips these.
+
+### Rename & Help (v3.9.0)
+- **F2** renames the selected node inline ([`Tree.jsx`](webui/src/Tree.jsx)).
+- **❓ Hilfe** opens a how-to modal ([`HelpModal.jsx`](webui/src/HelpModal.jsx),
+  content [`help/content.js`](webui/src/help/content.js)): DE + EN authored, FR + ES
+  best-effort, other UI languages fall back to EN; 🇩🇪/🇬🇧 flags switch to the authoritative
+  text; footer reports translation corrections via a pre-filled GitHub issue or `mailto`.
 
 ### Export
 - Single PDF with table of contents (TOC), clickable links, sidebar bookmarks
@@ -316,7 +343,7 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current tag: **v3.8.2** (beta)
+Current tag: **v3.9.0** (beta)
 
 ---
 
@@ -437,7 +464,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.8.2`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.9.0`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **Two known gaps that must NOT be reported as bugs** (the bug form's required
   checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired

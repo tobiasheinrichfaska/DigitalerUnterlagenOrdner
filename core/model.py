@@ -16,11 +16,16 @@ import uuid
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-# Status values (mirror the Tk app).
+# Status values. NO_STATUS ("" — the new default) means the node has no status
+# yet: nothing is set on a freshly drawn/imported/generated node. The three
+# positive states are set explicitly (yellow=todo, green=done, red=prior-year);
+# the empty value clears back to "no status". The vocabulary is data-driven: the
+# UI builds its status menu from STATUSES (config()).
+STATUS_NONE = ""
 STATUS_DONE = "erfasst"
 STATUS_TODO = "zu erfassen"
 STATUS_PRIOR_YEAR = "vorjahreswert"
-STATUSES = (STATUS_DONE, STATUS_TODO, STATUS_PRIOR_YEAR)
+STATUSES = (STATUS_NONE, STATUS_TODO, STATUS_DONE, STATUS_PRIOR_YEAR)
 
 
 def new_id() -> str:
@@ -34,7 +39,7 @@ class Node:
     name: str
     is_folder: bool = False
     id: str = field(default_factory=new_id)
-    status: str = STATUS_TODO
+    status: str = STATUS_NONE  # new nodes start with no status (see STATUS_NONE)
     vz_start: Optional[int] = None
     vz_end: Optional[int] = None
     pdf_length: int = 0
@@ -42,6 +47,10 @@ class Node:
     dpi_original: Optional[int] = None
     dpi_current: Optional[int] = None
     no_compression: bool = False
+    # Evaluated and nothing smaller was found → no compression decision is pending
+    # (auto-confirmed). Persisted so it isn't re-evaluated on every load and the leaf
+    # shows no "undecided" (red) dot. Cleared when the source changes (rotate/new node).
+    compression_no_gain: bool = False
     collapsed: bool = False  # folder collapsed in the tree view (persisted)
     tags: Tuple[str, ...] = ()  # free-form labels for search / sort / group (persisted)
     children: Tuple["Node", ...] = ()
@@ -64,6 +73,7 @@ class Node:
             "dpi_original": self.dpi_original,
             "dpi_current": self.dpi_current,
             "no_compression": self.no_compression,
+            "compression_no_gain": self.compression_no_gain,
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
             "tags": list(self.tags),
@@ -79,7 +89,7 @@ class Node:
             name=d["name"],
             is_folder=d.get("is_folder", False),
             id=d.get("id") or new_id(),
-            status=d.get("status", STATUS_TODO),
+            status=d.get("status", STATUS_NONE),
             vz_start=d.get("vz_start"),
             vz_end=d.get("vz_end"),
             pdf_length=d.get("pdf_length", 0),
@@ -87,6 +97,7 @@ class Node:
             dpi_original=d.get("dpi_original"),
             dpi_current=d.get("dpi_current"),
             no_compression=d.get("no_compression", False),
+            compression_no_gain=d.get("compression_no_gain", False),
             collapsed=d.get("collapsed", False),
             compression_method=d.get("compression_method"),
             tags=tuple(d.get("tags") or ()),

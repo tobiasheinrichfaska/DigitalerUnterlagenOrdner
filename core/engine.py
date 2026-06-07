@@ -73,6 +73,17 @@ class RealEngine:
                 out.setdefault(dpi, {}).update(result)
         return out
 
+    def evaluated(self, pdf_bytes: bytes) -> bool:
+        """True if this source has been run through compress_all_methods at least once
+        (any DPI) — hot or persisted. Distinguishes 'not yet checked' from 'checked,
+        nothing smaller found' (both yield empty variants_for), which the UI needs for
+        the 'compression undecided' marker."""
+        digest = hashlib.sha1(pdf_bytes).digest()
+        with self._mcache_lock:
+            if any(d == digest for (d, _dpi) in self._mcache):
+                return True
+        return any(d == digest for (d, _dpi) in self._persisted)
+
     def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
         """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
         node is instant — no recompute. Goes into the unbounded persisted layer."""

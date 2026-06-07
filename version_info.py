@@ -1,6 +1,6 @@
 # version_info.py
 APP_NAME = "DigitalerUnterlagenOrdner"
-VERSION = "3.8.2"
+VERSION = "3.9.0"
 
 
 def get_full_title() -> str:

@@ -335,7 +335,7 @@ class PDFStorage:
             node = PDFNode(name=name, is_folder=True)
             if node_data.get("uid"):
                 node.uid = node_data["uid"]  # restore persisted id
-            node.status = node_data.get("status", "zu erfassen")
+            node.status = node_data.get("status", "")  # default: no status
             node.vz_start = node_data.get("vz_start")
             node.vz_end = node_data.get("vz_end")
             node.collapsed = bool(node_data.get("collapsed", False))
@@ -365,10 +365,11 @@ class PDFStorage:
         node = PDFNode(name=name)
         if node_data.get("uid"):
             node.uid = node_data["uid"]  # restore persisted id
-        node.status = node_data.get("status", "zu erfassen")  # ✅ Hier ergänzen!
+        node.status = node_data.get("status", "")  # default: no status
         node.vz_start = node_data.get("vz_start")  # Veranlagungszeitraum (was dropped on reload)
         node.vz_end = node_data.get("vz_end")
         node.tags = list(node_data.get("tags") or [])
+        node.compression_no_gain = bool(node_data.get("compression_no_gain", False))
         is_compressed = bool(node_data.get("is_compressed", False))
 
         node.set_original_and_current_data(

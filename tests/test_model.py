@@ -8,6 +8,7 @@ from core.model import (
     Document,
     Node,
     STATUS_DONE,
+    STATUS_NONE,
     STATUS_TODO,
     find,
     insert_child,
@@ -39,7 +40,7 @@ def sample_tree() -> Node:
 
 def test_defaults_and_auto_id_unique():
     n1, n2 = Node(name="x"), Node(name="x")
-    assert n1.status == STATUS_TODO and n1.is_folder is False
+    assert n1.status == STATUS_NONE and n1.is_folder is False  # new default: no status
     assert n1.id and n2.id and n1.id != n2.id  # auto-generated, unique
 
 
@@ -81,7 +82,7 @@ def test_from_dict_roundtrip_preserves_structure_and_ids():
 def test_from_dict_generates_id_when_missing():
     n = Node.from_dict({"name": "x"})
     assert n.id  # generated
-    assert n.status == STATUS_TODO and n.children == ()
+    assert n.status == STATUS_NONE and n.children == ()  # new default: no status
 
 
 def test_document_roundtrip():

@@ -467,6 +467,10 @@ Current tag: **v3.9.1** (beta)
 - **Zammad integration** — deferred, not started yet
 
 ### Probably won't be done (accepted limitations)
+- **macOS / Linux** — Windows-only (PyInstaller `win64`; Edge WebView2 GUI; hard `pywin32`/
+  `pythonnet` deps; COM Office import). The PDF core is cross-platform, so a port is feasible
+  but not maintainer-planned — opened up as a **community contribution** via the draft RFC
+  [`docs/cross-platform-port.md`](docs/cross-platform-port.md) (linked from `CONTRIBUTING.md`).
 - **Direct drag-and-drop from Outlook** — dragging a mail/attachment straight out of Outlook
   into the window does **not** work and likely won't. Outlook hands items over as OLE
   *virtual files* (`CF_FILEGROUPDESCRIPTOR` + `CF_FILECONTENTS`); the WebView2/HTML drop layer

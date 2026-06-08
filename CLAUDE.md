@@ -524,14 +524,14 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **17 languages are now 100% (all 134 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all 134 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
-  (**native review still welcome** — see each file's header). Only **tlh (Klingon, 48 keys)**
-  stays an intentional partial: only terms with a real Okrandian word are translated, the rest
-  falls back to German rather than inventing nonsense. For the Store listing, advertise
-  **de + en-US/en-GB** (verifiable as native-professional) — the rest ship as a best-effort
-  bonus that falls back gracefully.
+  (**native review still welcome** — see each file's header). Intentional **partials** (only
+  terms with a real attested word; the rest falls back to German rather than inventing nonsense):
+  **tlh** (Klingon) and the Elvish **qya** (Quenya) / **sjn** (Sindarin). For the Store listing,
+  advertise **de + en-US/en-GB** (verifiable as native-professional) — the rest ship as a
+  best-effort bonus that falls back gracefully.
 - The **Help modal** content ([`help/content.js`](webui/src/help/content.js)) is separate from
   UI strings: DE + EN authored (🇩🇪/🇬🇧 flag toggle), others best-effort, unknown → EN fallback
   (`helpFor()`), so `en-US`/`en-GB` UIs correctly show the English help.

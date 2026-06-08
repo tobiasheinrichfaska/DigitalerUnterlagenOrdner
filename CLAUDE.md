@@ -398,6 +398,41 @@ Current tag: **v3.9.3** (beta)
 
 ## Open / deferred items
 
+### Next version — planned features (2026-06-08)
+Captured from a planning pass; **not yet built.** Items 2–6 are real UI features (→ a MINOR
+bump, **v3.10.0**), distinct from the already-staged **v3.9.4** work (committed-node
+split/rotate/merge fixes, Elvish languages, Office unit tests, dep bumps, the Python-3.13
+build, the MotW/UPX hardening — all on `master`, validated; **3.13 build + smoke-launch
+passed 2026-06-08**). Suggested sequencing: **ship v3.9.4 first** (ready), then build these
+as **v3.10.0**.
+
+1. **Golden Office conversion test.** *You* provide one reference Word/Excel/PowerPoint file;
+   each is run through `office_via_com` while testing the package; the **first output PDFs are
+   approved once → promoted to `tests/data/expected/`** as golden. Later runs compare
+   **structurally** (valid PDF + page count + key text), **not** byte-equality (Office output
+   isn't deterministic). A live/manual test (needs real Office), triggered at package-test
+   time — not in the default unit suite.
+2. **Toolbar redesign — smaller icon buttons.** Shrink the toolbar to compact, recognisable
+   icons for Open / Import / Help / Save (+ Export, New window, Undo/Redo). Tooltips carry the
+   text labels; keep an `aria-label` per button.
+3. **„Speichern" as a split-button.** A normal click saves in place; a small dropdown caret on
+   the same button opens a menu with **„Speichern unter…"**. *(Open: split-button vs. keeping
+   a separate adjacent button.)*
+4. **Rotate controls — swap display order.** In [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
+   reorder the two rotate buttons (currently „rechts drehen" before „links drehen"). *(Open:
+   confirm the exact final order — presumably left-then-right.)*
+5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
+   and drop it into **another** → **copy** by default (source keeps its node). This is
+   internal window-to-window DnD — **distinct** from the "drag from Outlook" item (still
+   won't-do; OLE virtual files). Likely: serialise the dragged subtree (reuse
+   `CoreApi.materialize_subset` → a temp `.belegtool`) and have the target window `import` it;
+   payload handed over via the OS drag/clipboard or a temp file.
+6. **Insert + edit a blank page (simple text editor).** Add a blank-page node and let the user
+   type into it via a **simple plain-text editor**; render the text to a PDF page on commit.
+   New data-driven command(s) (e.g. `InsertBlankPage` / `SetPageText`) in `core/` + a small
+   editor pane in the UI. *(Open: plain-text first (rich text later?); is the blank page its
+   own node kind?)*
+
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.
 

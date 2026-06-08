@@ -58,7 +58,7 @@ into the UI export** (consistent with CLAUDE.md / BETA_TESTING §4).
   coherently (`current_data` set, `original_data` None) and drop-source-on-save is unchanged.
 
 ## 7. Language, status bar & windows
-- **Language switcher** (18 languages incl. Deutsch and English (US)/(UK); the others fall
+- **Language switcher** (22 entries incl. Deutsch and English (US)/(UK); the others fall
   back to German for any untranslated string) translates all UI text live and persists the
   choice; document content/names are not translated.
 - **Status bar**: background activity (Komprimiere N by node / Vorschau lädt / Cache füllt) and

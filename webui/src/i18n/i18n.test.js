@@ -59,7 +59,8 @@ describe('language registry', () => {
 describe('translation coverage', () => {
   // Scan the components for literal t('…') / t("…") calls and require an English
   // entry for each — so a newly-added German string can't ship untranslated.
-  const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx']
+  const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
+                 'Toolbar.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx', 'HelpModal.jsx']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   const used = new Set()

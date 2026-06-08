@@ -694,23 +694,36 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
     parent_id = parents.pop()
     parent = doc.find(parent_id)
 
-    # Effective source per node: a committed node has no original_data, only the
-    # compressed current_data — fall back to it so a committed node's pages are not
-    # lost from the merged original (which a non-preserving merge would rely on).
-    merged_original = engine.merge([n.original_data or n.current_data or b"" for n in nodes])
-
     # DPI-conflict invariant (see DATA_CONTRACT): differing compressed DPIs ->
     # drop compression and mark no_compression.
     preserves, dpi_current, no_compression = _merge_compression_state(nodes)
     method_set = {n.compression_method for n in nodes if n.is_compressed}
-    if preserves:
+    method = next(iter(method_set)) if len(method_set) == 1 else None
+
+    if all(n.original_data is None for n in nodes):
+        # Every input is committed (compressed, source dropped on save). There is no
+        # source to merge — keep the result committed: merge the compressed bytes into
+        # current_data and leave original_data None. Resurrecting a fake "source" here
+        # would wrongly re-enable re-compress/reset on an irreversible node. A DPI
+        # mismatch can't matter (nothing to recompress), so no_compression stays False.
+        merged_original = None
         current_data = engine.merge([n.current_data for n in nodes])
         is_compressed = True
-        compression_method = next(iter(method_set)) if len(method_set) == 1 else None
+        no_compression = False
+        compression_method = method
+        dpi_current = dpi_current if preserves else None
     else:
-        current_data = None
-        is_compressed = False
-        compression_method = None
+        # At least one node still has a source: a committed node falls back to its
+        # compressed current_data so its pages aren't lost from the merged original.
+        merged_original = engine.merge([n.original_data or n.current_data or b"" for n in nodes])
+        if preserves:
+            current_data = engine.merge([n.current_data for n in nodes])
+            is_compressed = True
+            compression_method = method
+        else:
+            current_data = None
+            is_compressed = False
+            compression_method = None
 
     # Status rule: all inputs share one status -> keep it; any difference -> no status.
     status_set = {n.status for n in nodes}

@@ -118,16 +118,17 @@ def test_merge_committed_nodes_keeps_all_pages_same_dpi():
     doc = Document(Node(name="root", is_folder=True, children=(a, b)))
     d = apply(doc, Merge(node_ids=[a.id, b.id]), engine=ENGINE)
     m = d.root.children[0]
-    eff = m.current_data or m.original_data
-    assert ENGINE.page_count(eff) == 5
+    assert ENGINE.page_count(m.current_data) == 5
+    # stays committed — no resurrected source (else re-compress/reset would re-open)
+    assert m.original_data is None and m.is_compressed is True
 
 
 def test_merge_committed_nodes_keeps_all_pages_differing_dpi():
-    # Differing DPI → compression not preserved → merged node relies on the merged
-    # ORIGINAL track. Before the fix, committed nodes contributed b"" there → pages lost.
+    # Differing DPI: before any fix, committed pages were lost; the first fix then
+    # resurrected a fake source. Now it stays committed and keeps every page.
     a, b = _committed_leaf(2, 100), _committed_leaf(3, 200)
     doc = Document(Node(name="root", is_folder=True, children=(a, b)))
     d = apply(doc, Merge(node_ids=[a.id, b.id]), engine=ENGINE)
     m = d.root.children[0]
-    eff = m.current_data or m.original_data
-    assert ENGINE.page_count(eff) == 5   # would be 0 before the fix
+    assert ENGINE.page_count(m.current_data) == 5
+    assert m.original_data is None and m.is_compressed is True

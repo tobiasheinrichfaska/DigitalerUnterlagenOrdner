@@ -427,18 +427,21 @@ as **v3.10.0**.
    in-engine; the only hard part is the cross-window **gesture**.
    A web drag can't cross two separate WebView2 windows (window B gets no events from A's drag),
    so we avoid a cross-window drag entirely.
-   **Chosen approach (decided 2026-06-08) — an „Austausch-Pad" (interchange pad / drag tray),
-   no native code:** a small shared tray shown in every window.
-   - In A, **drag a node onto the pad** — an ordinary *same-window* HTML5 drag (works natively);
-     `CoreApi` copies the subtree into a shared pad register.
-   - The pad register lives in the **one shared `CoreApi`**, so its items appear in B too.
-   - In B, **drag the item from the pad onto B's tree** — again an ordinary *same-window* drag;
-     `CoreApi` inserts a copy (`materialize_subset` → insert). Source in A is untouched (**copy
-     by default**); the pad item stays (reusable) until cleared.
-   Both gestures are intra-window real drags, so the WebView2 cross-window limit never applies.
-   ⚠ No browser event bus between windows → B refreshes the pad on **focus + a light poll** (and
-   after its own drags) to pick up items A added. Bonus: the pad doubles as a within-window
-   clipboard. (A true OS-drag drop between windows remains an optional native upgrade later.)
+   Both candidate designs keep the drag **intra-window** (so the WebView2 cross-window limit
+   never applies); the staged/source contents live in the shared `CoreApi`. **To decide:**
+   - **(A) „Austausch-Pad" (interchange tray).** A small shared tray in every window. Drag a node
+     *onto the pad* in A (same-window drag) → `CoreApi` stages the subtree; the pad shows in every
+     window (shared `CoreApi`); drag the item *from the pad onto B's tree* (same-window drag) →
+     copy inserted (`materialize_subset` → insert). Simpler; **copy-only**; doubles as a
+     within-window clipboard. Needs a focus/poll refresh of the pad (no cross-window event bus).
+   - **(B) Second tree-pane (dual-pane).** Open a second tree view *in the same window* that loads
+     another currently-open document's tree; drag between the two panes (same-window) → **move or
+     copy** (copy default; modifier/menu = move). Richer "merge two documents" UX (see the whole
+     source tree, precise picking). Costs more: cross-document ops (`CopyAcross`/`MoveAcross` over
+     two sessions) and, for **move**, the source window must refresh (mutating another live doc).
+   Trade-off: (A) = quick win, copy-only stash-and-drop; (B) = powerful consolidate workflow
+   (move+copy, full source tree) at higher cost. Could ship (A) first, (B) later. A true OS-drag
+   drop between windows remains an optional native upgrade in either case.
 6. **Insert + edit a page (text editor) — via node attributes, NOT a new node kind.** Add two
    persisted fields to the node / PDFNode (round-trip in `.belegtool`):
    - **`editor_based`** (bool) — this node was built from text and can be switched back to editing;
@@ -448,9 +451,11 @@ as **v3.10.0**.
    (text→PDF, e.g. reportlab) and replace the node's bytes.
    ⚠ **The page count can change on rebuild** (more text → more pages): recompute `pdf_length`
    and propagate it — TOC page numbers, folder aggregate counts, the windowed render-cache
-   version token, and export offsets all depend on it. Decide how compress/split/merge treat an
-   editor node (likely: the text is the source of truth, the rendered PDF is regenerated, so
-   treat it like an uncommitted source). Plain-text first; rich text later if wanted.
+   version token, and export offsets all depend on it. **Decided (2026-06-08):** **compress is
+   disabled** on an editor node (the text is the source of truth, the rendered PDF is tiny);
+   **rotate/split/merge drop editor mode** — the result becomes a plain rebuilt PDF
+   (`editor_based=False`), avoiding "rebuild un-rotates the page" surprises. Plain-text first;
+   rich text later if wanted.
 
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.

@@ -1,8 +1,10 @@
-// How-to-use Help content. DE + EN are authoritative; FR + ES are best-effort
-// machine translations; every other UI language falls back to EN (the 🇩🇪/🇬🇧 flags
-// in the modal always switch to the authoritative German / English text). Corrections
-// are welcome via the report links in the modal footer — add a language by adding a
-// key here. Keep sections short; this is a quick reference, not a manual.
+// How-to-use Help content. DE + EN are authoritative (the 🇩🇪/🇬🇧 flags in the modal
+// switch to them). Help is ALSO authored for fr, es, ca, ru, uk, hr, ko, la, the
+// dialects bar/nds/vie, Celtic cy/ga/gd, yi and the playful tlh/mnn — the modal opens
+// in the current UI language when it has its own text here, otherwise falls back to EN.
+// So en-US/en-GB and the Elvish novelties qya/sjn show the English help. Non-DE/EN
+// texts are best-effort; corrections welcome via the modal footer. Add a language by
+// adding a key here + to the HELP map. Keep sections short; this is a quick reference.
 
 export const HELP_FLAG_LANGS = ['de', 'en'] // the two authoritative versions (flag buttons)
 
@@ -373,7 +375,60 @@ const mnn = [
   { t: 'Export', items: ['⬇ Export PDF → PDF (table, links, marks); selection → only those. Poulet tiki!'] },
 ]
 
-export const HELP = { de, en, fr, es, ca, ru, uk, hr, ko, la, bar, nds, vie, cy, ga, gd, yi, tlh, mnn }
+// Elvish (Tolkien) — rough best-effort, telegraphic, using attested vocabulary where
+// it exists and loanwords (PDF, Office, Status, Tags, index, links…) for modern terms.
+// Grammar/mutations are NOT guaranteed — a fluent Quenya/Sindarin speaker should review;
+// corrections welcome via the modal footer.
+const qya = [
+  { t: 'Cenë', items: [
+    'BelegTool: PDF, emmar, Office, e-mail, archë → er PDF (index as).',
+    'Alda hyarya; cenë forya.',
+  ] },
+  { t: 'Panta & Hepa', items: [
+    '📂 Panta: parma .belegtool. 💾 Hepa; 💾… essë vinya.',
+  ] },
+  { t: 'Tulta', items: [
+    '📥 Tulta aldanna: PDF, emmar, Office (Office mauya), e-mail (EML/MSG), archë (ZIP/TAR).',
+  ] },
+  { t: 'Alda', items: [
+    'Cilë; rimbë: Ctrl. ←/→: colca panta/holta. F2: essë vinya. Del: nancara.',
+  ] },
+  { t: 'Status', items: [
+    'Malina = „zu erfassen", laica = „erfasst", carnë = „Vorjahr", hya munta.',
+    'Status colcassë → ilyë hínar.',
+  ] },
+  { t: 'Compressië', items: [
+    'Carnë: compressië lá cestaina. Cenë → cilë → „Lesbarkeit geprüft".',
+  ] },
+  { t: 'Tags', items: [
+    '🏷️ Tags. Tags-nen: hosta hya cilë.',
+  ] },
+  { t: 'Menta', items: [
+    '⬇ Menta PDF: index, links, bookmarks as.',
+  ] },
+]
+
+const sjn = [
+  { t: 'BelegTool', items: [
+    'PDF, eml, Office, post, archive → er PDF.',
+    'Galadh: hair. Tiro: forn.',
+  ] },
+  { t: 'Edro & Hebo', items: [
+    '📂 Edro: .belegtool. 💾 Hebo; 💾… eneth gwain.',
+  ] },
+  { t: 'Tolo / Meno', items: [
+    '📥 Tolo (import): PDF, eml, Office (Office baur), EML/MSG, ZIP/TAR.',
+    '⬇ Meno (export): PDF — index, links, bookmarks.',
+  ] },
+  { t: 'Galadh', items: [
+    'Cilo nod; Ctrl: laew. ←/→: edro galadh. F2: eneth gwain. Risto: rist.',
+  ] },
+  { t: 'Status', items: [
+    'Malen = „zu erfassen", calen = „erfasst", caran = „Vorjahr", egor pen-status.',
+  ] },
+]
+
+export const HELP = { de, en, 'en-US': en, 'en-GB': en, fr, es, ca, ru, uk, hr, ko, la, bar, nds, vie, cy, ga, gd, yi, tlh, mnn, qya, sjn }
 
 // Pick the help for a UI language, falling back to English when not authored yet.
 export function helpFor(lang) {

@@ -10,6 +10,8 @@ import { enGB } from './en-GB'
 import { fr } from './fr'
 import { es } from './es'
 import { la } from './la'
+import { qya } from './qya'
+import { sjn } from './sjn'
 import { ko } from './ko'
 import { tlh } from './tlh'
 import { ru } from './ru'
@@ -25,12 +27,12 @@ import { gd } from './gd'
 import { ga } from './ga'
 import { cy } from './cy'
 
-export const TRANSLATIONS = { 'en-US': enUS, 'en-GB': enGB, fr, es, la, ko, tlh, ru, uk, hr, yi, mnn, ca, bar, nds, vie, gd, ga, cy } // code -> { '<German source>': '<translation>' }
+export const TRANSLATIONS = { 'en-US': enUS, 'en-GB': enGB, fr, es, la, qya, sjn, ko, tlh, ru, uk, hr, yi, mnn, ca, bar, nds, vie, gd, ga, cy } // code -> { '<German source>': '<translation>' }
 export const DEFAULT_LANG = 'de'
 export const SUPPORTED = ['de', ...Object.keys(TRANSLATIONS)]
 export const LANGUAGE_NAMES = {
   de: 'Deutsch', 'en-US': 'English (US)', 'en-GB': 'English (UK)', fr: 'Français', es: 'Español',
-  la: 'Latina', ko: '한국어', tlh: 'tlhIngan Hol',
+  la: 'Latina', qya: 'Quenya', sjn: 'Sindarin', ko: '한국어', tlh: 'tlhIngan Hol',
   ru: 'Русский', uk: 'Українська', hr: 'Hrvatski',
   yi: 'ייִדיש', mnn: 'Minionese 🍌',
   ca: 'Català', bar: 'Boarisch', nds: 'Plattdüütsch', vie: 'Weanerisch',

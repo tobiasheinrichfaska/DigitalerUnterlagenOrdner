@@ -110,7 +110,7 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
 | `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js`, `treeNav.js`, `status.js`). |
 | `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
-| `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal: 🇩🇪/🇬🇧 flag switch, GitHub/mailto correction links; content DE+EN authored, FR+ES best-effort, else EN fallback. |
+| `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal (separate from the main UI language switcher): 🇩🇪/🇬🇧 flags toggle the two authoritative versions; help text authored best-effort for all UI languages, unknown → EN fallback; GitHub/mailto correction links. |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
@@ -236,9 +236,9 @@ Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (
 ### Rename & Help (v3.9.0)
 - **F2** renames the selected node inline ([`Tree.jsx`](webui/src/Tree.jsx)).
 - **❓ Hilfe** opens a how-to modal ([`HelpModal.jsx`](webui/src/HelpModal.jsx),
-  content [`help/content.js`](webui/src/help/content.js)): DE + EN authored, FR + ES
-  best-effort, other UI languages fall back to EN; 🇩🇪/🇬🇧 flags switch to the authoritative
-  text; footer reports translation corrections via a pre-filled GitHub issue or `mailto`.
+  content [`help/content.js`](webui/src/help/content.js)): DE + EN are the two authoritative
+  versions (🇩🇪/🇬🇧 flags), help text authored best-effort for the other UI languages, unknown
+  → EN fallback; footer reports translation corrections via a pre-filled GitHub issue or `mailto`.
 
 ### Export
 - Single PDF with table of contents (TOC), clickable links, sidebar bookmarks

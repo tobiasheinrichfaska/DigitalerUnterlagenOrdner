@@ -4,8 +4,8 @@ import { en } from './en'
 
 export const enUS = {
   ...en,
-  // -ize/-or/-grayscale: the base already uses the American "color"/"grayscale";
-  // here we make the favourite→favorite spelling American too.
+  // Override only the spellings where US differs from the `en` base: favourite→favorite.
+  // (The base happens to use American "color"/"grayscale"; en-GB.js overrides those.)
   'Zu Favoriten': 'Add to favorites',
   'Aus Favoriten entfernen': 'Remove from favorites',
   'Favorit hinzufügen': 'Add favorite',

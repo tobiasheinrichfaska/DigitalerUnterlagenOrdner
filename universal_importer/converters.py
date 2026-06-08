@@ -143,7 +143,13 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
             word = win32com.client.Dispatch("Word.Application")
             # Makros/DDE-Ausführung deaktivieren (msoAutomationSecurityForceDisable = 3)
             word.AutomationSecurity = 3
-            doc = word.Documents.Open(path)
+            # Externe Verknüpfungen beim Öffnen NICHT automatisch aktualisieren
+            try:
+                word.Options.UpdateLinksAtOpen = False
+            except Exception:
+                pass
+            # Schreibgeschützt öffnen, nicht in „zuletzt verwendet" aufnehmen
+            doc = word.Documents.Open(path, ReadOnly=True, AddToRecentFiles=False)
             doc.SaveAs(out_path, FileFormat=17)  # 17 = PDF
             doc.Close()
             word.Quit()
@@ -151,7 +157,12 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
         elif ext in [".xls", ".xlsx"]:
             excel = win32com.client.Dispatch("Excel.Application")
             excel.AutomationSecurity = 3
-            wb = excel.Workbooks.Open(path)
+            try:
+                excel.AskToUpdateLinks = False
+            except Exception:
+                pass
+            # UpdateLinks=0 → externe Verknüpfungen nicht aktualisieren; schreibgeschützt
+            wb = excel.Workbooks.Open(path, UpdateLinks=0, ReadOnly=True)
             wb.ExportAsFixedFormat(0, out_path)  # 0 = PDF
             wb.Close(False)
             excel.Quit()
@@ -159,7 +170,7 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
         elif ext in [".ppt", ".pptx"]:
             powerpoint = win32com.client.Dispatch("PowerPoint.Application")
             powerpoint.AutomationSecurity = 3
-            ppt = powerpoint.Presentations.Open(path, WithWindow=False)
+            ppt = powerpoint.Presentations.Open(path, ReadOnly=True, WithWindow=False)
             ppt.SaveAs(out_path, 32)  # 32 = PDF
             ppt.Close()
             powerpoint.Quit()

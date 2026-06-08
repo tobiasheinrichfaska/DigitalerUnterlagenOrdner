@@ -1,7 +1,7 @@
 // Component tests for the two interaction paths that pure-logic tests can't cover:
 // (1) the proactive no-gain sweep clearing a leaf's front "undecided" dot, and
 // (2) the lazy Help modal opening + the 🇩🇪/🇬🇧 flag switching the text.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import App from './App'
 

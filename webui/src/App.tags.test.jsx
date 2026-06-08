@@ -103,7 +103,7 @@ describe('App tags — language change does not blank the tree (regression)', ()
     fireEvent.change(searchInput(container), { target: { value: 'Steuer' } })
     expect(screen.getByText(/Telekom/)).toBeInTheDocument()
     // switch language via the toolbar selector → the (memoised) view must survive
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'en' } })
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'en-US' } })
     expect(screen.getByText(/Telekom/)).toBeInTheDocument()
     // and the search is still applied (non-match still hidden)
     expect(screen.queryByText(/Sonstiges/)).toBeNull()

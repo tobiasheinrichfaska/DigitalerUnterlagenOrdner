@@ -421,11 +421,19 @@ as **v3.10.0**.
 4. **Rotate controls — swap display order.** In [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
    reorder the two rotate buttons to **left-then-right** (currently right before left).
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
-   and drop it into **another** → **copy** by default (source keeps its node). This is
-   internal window-to-window DnD — **distinct** from the "drag from Outlook" item (still
-   won't-do; OLE virtual files). Likely: serialise the dragged subtree (reuse
-   `CoreApi.materialize_subset` → a temp `.belegtool`) and have the target window `import` it;
-   payload handed over via the OS drag/clipboard or a temp file.
+   into **another** → **copy** by default (source keeps its node). Distinct from the Outlook
+   drag-in (still won't-do; OLE virtual files).
+   ⚠ **Feasibility constraint:** the two windows are **separate WebView2 instances**, so a
+   native HTML5 drag does **not** carry across them (separate browser contexts). Realistic
+   options:
+   - **(a) OS-level drag** — the Win32 host starts an OS drag of a temp `.belegtool`
+     (`materialize_subset`) on drag-out; the target window's existing OS file-drop
+     ([`useOsFileDrop`](webui/src/hooks/useOsFileDrop.js)) imports it. True drag feel, but needs
+     a native Win32 `IDataObject`/`DoDragDrop` shim (fiddly — same class of problem as Outlook-in).
+   - **(b) Copy/paste across windows** — simpler and **in-process** (both windows share one
+     `CoreApi`): „Knoten kopieren" in A → „Einfügen" in B, via a staged-subtree token on the
+     shared `CoreApi`; no cross-window drag gesture needed.
+   **Decision needed: (a) vs (b)** — (b) is far cheaper/reliable; (a) is the nicer UX.
 6. **Insert + edit a page (text editor) — via node attributes, NOT a new node kind.** Add two
    persisted fields to the node / PDFNode (round-trip in `.belegtool`):
    - **`editor_based`** (bool) — this node was built from text and can be switched back to editing;

@@ -140,4 +140,19 @@ export const ru = {
   'Hilfe': 'Справка',
   'Schließen': 'Закрыть',
   'Übersetzungsfehler melden:': 'Сообщить об ошибке перевода:',
+
+  // ошибки команд (бэкенд)
+  'Knoten hat keine Daten zum Teilen.': 'У узла нет данных для разделения.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Корневой узел нельзя разделить.',
+  'Knoten hat keine Daten zum Komprimieren.': 'У узла нет данных для сжатия.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Узел помечен как несжимаемый.',
+  'Knoten hat keine Daten zum Drehen.': 'У узла нет данных для поворота.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Оригинал отсутствует — сброс невозможен.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Смешанный выбор: выбраны и папка, и элемент внутри неё.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Узел нельзя переместить в самого себя или в собственное поддерево.',
+  'Nichts zu gruppieren.': 'Нечего группировать.',
+  'Der Name darf nicht leer sein.': 'Имя не должно быть пустым.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Нечего применять (нет текущей/сжатой версии).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Для объединения нужно не менее двух узлов.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Объединяемые узлы должны иметь одну родительскую папку.',
 }

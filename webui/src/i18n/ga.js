@@ -142,4 +142,19 @@ export const ga = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'Cuir an comhbhrú atá ar taispeáint faoi láthair i bhfeidhm',
   'rechts drehen': 'rothlaigh ar dheis',
   'links drehen': 'rothlaigh ar chlé',
+
+  // earráidí ordaithe (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Níl aon sonraí ag an nód le roinnt.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Ní féidir an fréamhnód a roinnt.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Níl aon sonraí ag an nód le comhbhrú.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Tá an nód marcáilte mar cheann nach féidir a chomhbhrú.',
+  'Knoten hat keine Daten zum Drehen.': 'Níl aon sonraí ag an nód le rothlú.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Níl aon bhunleagan ar fáil — ní féidir athshocrú.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Roghnú measctha: tá fillteán agus mír istigh ann roghnaithe araon.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Ní féidir nód a bhogadh isteach ann féin ná ina fhochrann féin.',
+  'Nichts zu gruppieren.': 'Níl aon rud le grúpáil.',
+  'Der Name darf nicht leer sein.': 'Ní mór don ainm gan a bheith folamh.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Níl aon rud le cur i bhfeidhm (gan leagan reatha/comhbhrúite).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Teastaíonn dhá nód ar a laghad le cumasc.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Caithfidh na nóid atá le cumasc an fillteán tuismitheora céanna a roinnt.',
 }

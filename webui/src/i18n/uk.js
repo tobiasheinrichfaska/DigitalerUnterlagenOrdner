@@ -140,4 +140,19 @@ export const uk = {
   'Hilfe': 'Довідка',
   'Schließen': 'Закрити',
   'Übersetzungsfehler melden:': 'Повідомити про помилку перекладу:',
+
+  // помилки команд (бекенд)
+  'Knoten hat keine Daten zum Teilen.': 'У вузла немає даних для поділу.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Кореневий вузол не можна поділити.',
+  'Knoten hat keine Daten zum Komprimieren.': 'У вузла немає даних для стиснення.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Вузол позначено як нестисний.',
+  'Knoten hat keine Daten zum Drehen.': 'У вузла немає даних для повороту.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Оригіналу немає — скидання неможливе.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Змішаний вибір: вибрано і папку, і елемент усередині неї.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Вузол не можна перемістити в самого себе або у власне піддерево.',
+  'Nichts zu gruppieren.': 'Немає чого групувати.',
+  'Der Name darf nicht leer sein.': 'Імʼя не може бути порожнім.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Немає чого застосувати (немає поточної/стисненої версії).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Для обʼєднання потрібно щонайменше два вузли.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Обʼєднувані вузли повинні мати одну батьківську папку.',
 }

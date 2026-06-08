@@ -141,4 +141,19 @@ export const la = {
   'Hilfe': 'Auxilium',
   'Schließen': 'Claudere',
   'Übersetzungsfehler melden:': 'Errorem translationis nuntiare:',
+
+  // errores mandatorum (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Nodus nullas habet data ad dividendum.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Nodus radicis dividi non potest.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Nodus nullas habet data ad comprimendum.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Nodus ut non comprimibilis notatus est.',
+  'Knoten hat keine Daten zum Drehen.': 'Nodus nullas habet data ad vertendum.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Nullum originale praesto — restitutio fieri non potest.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Mixta selectio: et scrinium et elementum in eo contentum electa sunt.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Nodus in se ipsum aut in suum ramum proprium moveri non potest.',
+  'Nichts zu gruppieren.': 'Nihil ad congregandum.',
+  'Der Name darf nicht leer sein.': 'Nomen vacuum esse non debet.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nihil ad adhibendum (nulla forma currens/compressa).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Coniunctio saltem duos nodos requirit.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Nodi coniungendi idem scrinium parens habere debent.',
 }

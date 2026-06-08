@@ -142,4 +142,19 @@ export const cy = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'Cymhwyso’r cywasgu a ddangosir ar hyn o bryd',
   'rechts drehen': 'troi i’r dde',
   'links drehen': 'troi i’r chwith',
+
+  // gwallau gorchymyn (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Nid oes gan y nod ddata i’w hollti.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Ni ellir hollti’r prif nod (gwreiddyn).',
+  'Knoten hat keine Daten zum Komprimieren.': 'Nid oes gan y nod ddata i’w gywasgu.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Mae’r nod wedi’i farcio fel un na ellir ei gywasgu.',
+  'Knoten hat keine Daten zum Drehen.': 'Nid oes gan y nod ddata i’w gylchdroi.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Dim gwreiddiol ar gael — ni ellir ailosod.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Dewis cymysg: mae ffolder ac eitem y tu mewn iddi wedi’u dewis.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Ni ellir symud nod i mewn iddo’i hun nac i’w is-goeden ei hun.',
+  'Nichts zu gruppieren.': 'Dim byd i’w grwpio.',
+  'Der Name darf nicht leer sein.': 'Rhaid i’r enw beidio â bod yn wag.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Dim byd i’w gymhwyso (dim fersiwn gyfredol/gywasgedig).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Mae angen o leiaf dau nod i gyfuno.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Rhaid i’r nodau i’w cyfuno rannu’r un ffolder rhiant.',
 }

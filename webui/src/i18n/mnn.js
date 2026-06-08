@@ -142,4 +142,19 @@ export const mnn = {
   'Hilfe': 'Helpo!',
   'Schließen': 'Closa',
   'Übersetzungsfehler melden:': 'Tella translata boo-boo:',
+
+  // command boo-boos (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Nodo hava no data pa choppa.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Root nodo no can choppa.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Nodo hava no data pa squisha.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Nodo marka no-squisha.',
+  'Knoten hat keine Daten zum Drehen.': 'Nodo hava no data pa turna.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'No original-o — no can resetto.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Mix pika: box y thingy insider, dos selecta.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Nodo no can muva into self o own tree-bit.',
+  'Nichts zu gruppieren.': 'Nada pa groupa.',
+  'Der Name darf nicht leer sein.': 'Nombre no can empty-o.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nada pa taka (no now/squisha versio).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Gluuu need dos nodo minimo.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Gluuu nodos need same papa-box.',
 }

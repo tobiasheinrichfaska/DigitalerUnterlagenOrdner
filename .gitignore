@@ -45,3 +45,6 @@ packaging/out/
 *.msixupload
 *.pfx
 *.cer
+
+# User documents — never commit real .belegtool files (may contain personal data)
+*.belegtool

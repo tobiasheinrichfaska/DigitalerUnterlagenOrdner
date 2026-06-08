@@ -1,19 +1,20 @@
 # Beta Testing BelegTool 🧪
 
-Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.9.1** — a
+Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.9.2** — a
 Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
 archives into one foldered tree, then compresses, previews and exports the whole
 thing as a single bookmarked PDF with a table of contents.
 
 > 🌍 **Many languages — and you can help polish them!** The language switcher
-> (top-right) offers 19 languages. Some are **full** (German [default], English,
-> Français, Español, Català, Русский, Українська, Hrvatski, 한국어); others are
-> **best-effort / partial**, where untranslated bits fall back to German — these
-> would genuinely benefit from a native eye: **Latina, ייִדיש (Yiddish), Gàidhlig
-> (Scottish Gaelic), Gaeilge (Irish), Cymraeg (Welsh)**, and the dialects
-> **Boarisch, Plattdüütsch, Weanerisch**. A couple are just for fun (**tlhIngan
-> Hol** / Klingon, **Minionese** 🍌). If you speak one of the partial ones, please
-> send corrections (see *Translations* below). Feedback in German is always welcome. 🇩🇪
+> (top-right) offers 20 entries. **Fully translated:** German (default),
+> English (US) / English (UK), Français, Español, Català, Русский, Українська,
+> Hrvatski, 한국어, Latina, the dialects **Boarisch, Plattdüütsch, Weanerisch**, and the
+> best-effort **ייִדיש (Yiddish), Gàidhlig (Scottish Gaelic), Gaeilge (Irish),
+> Cymraeg (Welsh)** — these last four are complete but **would genuinely benefit from
+> a native eye**. A couple are just for fun (**tlhIngan Hol** / Klingon — still
+> partial, falls back to German — and **Minionese** 🍌). If you speak one of the
+> best-effort ones, please send corrections (see *Translations* below). Feedback in
+> German is always welcome. 🇩🇪
 
 **Requirements:** Windows **10 or 11**. For Word/Excel/PowerPoint import you also
 need **Microsoft Office installed** — without it, importing PDFs, images, archives
@@ -24,7 +25,7 @@ and e-mails still works fine.
 ## 1. Get & run the app
 
 ### Path A — Prebuilt download (easiest, no Python/Node)
-1. Download **`BelegTool-v3.9.1-win64.zip`** from the
+1. Download **`BelegTool-v3.9.2-win64.zip`** from the
    [**latest release**](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/releases/latest).
 2. Unzip it anywhere.
 3. Double-click **`BelegTool\BelegTool.exe`**. That's it — no installation.

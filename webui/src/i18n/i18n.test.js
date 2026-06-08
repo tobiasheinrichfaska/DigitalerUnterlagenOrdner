@@ -32,9 +32,9 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // If a UI string is added, bump this number deliberately — it documents the
-    // canonical key count the "fully translated" languages are measured against.
-    expect(Object.keys(en).length).toBe(121)
+    // Canonical key count = 121 UI strings + 13 backend command-error messages.
+    // If a string is added, bump this deliberately.
+    expect(Object.keys(en).length).toBe(134)
   })
 })
 

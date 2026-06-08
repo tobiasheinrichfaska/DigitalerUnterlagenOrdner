@@ -140,4 +140,19 @@ export const fr = {
   'Hilfe': 'Aide',
   'Schließen': 'Fermer',
   'Übersetzungsfehler melden:': 'Signaler une erreur de traduction :',
+
+  // erreurs de commande (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Le nœud n’a aucune donnée à diviser.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Le nœud racine ne peut pas être divisé.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Le nœud n’a aucune donnée à compresser.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Le nœud est marqué comme non compressible.',
+  'Knoten hat keine Daten zum Drehen.': 'Le nœud n’a aucune donnée à pivoter.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Aucun original disponible — réinitialisation impossible.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Sélection mixte : un dossier et un élément qu’il contient sont tous deux sélectionnés.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Un nœud ne peut pas être déplacé dans lui-même ou dans son propre sous-arbre.',
+  'Nichts zu gruppieren.': 'Rien à grouper.',
+  'Der Name darf nicht leer sein.': 'Le nom ne doit pas être vide.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Rien à appliquer (aucune version actuelle/compressée).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'La fusion nécessite au moins deux nœuds.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Les nœuds à fusionner doivent avoir le même dossier parent.',
 }

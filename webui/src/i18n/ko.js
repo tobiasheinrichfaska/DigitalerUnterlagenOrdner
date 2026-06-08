@@ -140,4 +140,19 @@ export const ko = {
   'Hilfe': '도움말',
   'Schließen': '닫기',
   'Übersetzungsfehler melden:': '번역 오류 신고:',
+
+  // 명령 오류 (백엔드)
+  'Knoten hat keine Daten zum Teilen.': '분할할 데이터가 노드에 없습니다.',
+  'Der Wurzelknoten kann nicht geteilt werden.': '루트 노드는 분할할 수 없습니다.',
+  'Knoten hat keine Daten zum Komprimieren.': '압축할 데이터가 노드에 없습니다.',
+  'Knoten ist als nicht komprimierbar markiert.': '노드가 압축 불가로 표시되어 있습니다.',
+  'Knoten hat keine Daten zum Drehen.': '회전할 데이터가 노드에 없습니다.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': '원본이 없어 초기화할 수 없습니다.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': '혼합 선택: 폴더와 그 안의 항목이 함께 선택되었습니다.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': '노드를 자기 자신이나 자신의 하위 트리로 이동할 수 없습니다.',
+  'Nichts zu gruppieren.': '그룹화할 항목이 없습니다.',
+  'Der Name darf nicht leer sein.': '이름은 비워 둘 수 없습니다.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': '적용할 것이 없습니다 (현재/압축 버전 없음).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': '병합하려면 노드가 최소 두 개 필요합니다.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': '병합할 노드는 같은 상위 폴더에 있어야 합니다.',
 }

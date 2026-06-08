@@ -140,4 +140,19 @@ export const hr = {
   'Hilfe': 'Pomoć',
   'Schließen': 'Zatvori',
   'Übersetzungsfehler melden:': 'Prijavi pogrešku u prijevodu:',
+
+  // pogreške naredbi (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Čvor nema podataka za dijeljenje.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Korijenski čvor nije moguće podijeliti.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Čvor nema podataka za sažimanje.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Čvor je označen kao nesažimljiv.',
+  'Knoten hat keine Daten zum Drehen.': 'Čvor nema podataka za okretanje.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Izvornik nije dostupan — vraćanje nije moguće.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Mješoviti odabir: odabrani su i mapa i stavka unutar nje.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Čvor se ne može premjestiti u samog sebe ni u vlastito podstablo.',
+  'Nichts zu gruppieren.': 'Ništa za grupiranje.',
+  'Der Name darf nicht leer sein.': 'Naziv ne smije biti prazan.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Ništa za primjenu (nema trenutne/sažete verzije).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Spajanje treba najmanje dva čvora.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Čvorovi koji se spajaju moraju imati istu nadređenu mapu.',
 }

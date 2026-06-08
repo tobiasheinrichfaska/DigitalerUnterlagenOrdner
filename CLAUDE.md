@@ -416,22 +416,28 @@ as **v3.10.0**.
    icons for Open / Import / Help / Save (+ Export, New window, Undo/Redo). Tooltips carry the
    text labels; keep an `aria-label` per button.
 3. **„Speichern" as a split-button.** A normal click saves in place; a small dropdown caret on
-   the same button opens a menu with **„Speichern unter…"**. *(Open: split-button vs. keeping
-   a separate adjacent button.)*
+   the same button opens a menu with **„Speichern unter…"**. **Decided:** build the split-button
+   and evaluate it in use.
 4. **Rotate controls — swap display order.** In [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
-   reorder the two rotate buttons (currently „rechts drehen" before „links drehen"). *(Open:
-   confirm the exact final order — presumably left-then-right.)*
+   reorder the two rotate buttons to **left-then-right** (currently right before left).
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
    and drop it into **another** → **copy** by default (source keeps its node). This is
    internal window-to-window DnD — **distinct** from the "drag from Outlook" item (still
    won't-do; OLE virtual files). Likely: serialise the dragged subtree (reuse
    `CoreApi.materialize_subset` → a temp `.belegtool`) and have the target window `import` it;
    payload handed over via the OS drag/clipboard or a temp file.
-6. **Insert + edit a blank page (simple text editor).** Add a blank-page node and let the user
-   type into it via a **simple plain-text editor**; render the text to a PDF page on commit.
-   New data-driven command(s) (e.g. `InsertBlankPage` / `SetPageText`) in `core/` + a small
-   editor pane in the UI. *(Open: plain-text first (rich text later?); is the blank page its
-   own node kind?)*
+6. **Insert + edit a page (text editor) — via node attributes, NOT a new node kind.** Add two
+   persisted fields to the node / PDFNode (round-trip in `.belegtool`):
+   - **`editor_based`** (bool) — this node was built from text and can be switched back to editing;
+   - **`editor_text`** (str) — its source text.
+   "Insert blank page" = a node with `editor_based=True`, `editor_text=""`. The UI shows an editor
+   pane **only when `editor_based`**; on commit, **rebuild the PDF page(s) from `editor_text`**
+   (text→PDF, e.g. reportlab) and replace the node's bytes.
+   ⚠ **The page count can change on rebuild** (more text → more pages): recompute `pdf_length`
+   and propagate it — TOC page numbers, folder aggregate counts, the windowed render-cache
+   version token, and export offsets all depend on it. Decide how compress/split/merge treat an
+   editor node (likely: the text is the source of truth, the rendered PDF is regenerated, so
+   treat it like an uncommitted source). Plain-text first; rich text later if wanted.
 
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.

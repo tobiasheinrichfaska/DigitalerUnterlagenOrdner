@@ -22,10 +22,14 @@ describe('help content', () => {
   it('falls back to English for an unknown language code', () => {
     expect(helpFor('xx')).toBe(HELP.en)
     expect(helpFor('de')).toBe(HELP.de)
-    expect(helpFor('tlh')).toBe(HELP.tlh) // now authored (best-effort)
+    expect(helpFor('tlh')).toBe(HELP.tlh)   // authored (best-effort)
+    expect(helpFor('qya')).toBe(HELP.qya)   // Quenya authored (best-effort)
+    expect(helpFor('en-GB')).toBe(HELP.en)  // regional English → English help
   })
 
-  it('has all 19 UI languages', () => {
-    expect(Object.keys(HELP)).toHaveLength(19)
+  it('has an entry for every authored language', () => {
+    // de + en + en-US/en-GB + 17 others (incl. qya/sjn best-effort Elvish) = 23
+    expect(Object.keys(HELP)).toHaveLength(23)
+    expect(Object.keys(HELP)).toEqual(expect.arrayContaining(['en-US', 'en-GB', 'qya', 'sjn']))
   })
 })

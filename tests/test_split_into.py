@@ -4,7 +4,7 @@ import fitz
 import pytest
 
 from core.model import Document, Node
-from core.commands import SplitInto, apply, CommandError
+from core.commands import Split, SplitInto, Rotate, Merge, apply, CommandError
 from core.engine import RealEngine
 
 ENGINE = RealEngine()
@@ -66,3 +66,68 @@ def test_no_data_rejected():
     nid = doc.root.children[0].id
     with pytest.raises(CommandError):
         apply(doc, SplitInto(node_id=nid, size=1), engine=ENGINE)
+
+
+# --- committed node (compressed, source dropped on save → original_data None) ----
+# Regression: splitting such a node previously failed with "node has no data to split".
+
+def _committed_doc(pages=4):
+    """A committed leaf: only the compressed current_data exists, no source."""
+    leaf = Node(name="doc", is_folder=False, original_data=None,
+                current_data=make_pdf(pages), pdf_length=pages,
+                is_compressed=True, compression_method="jpg")
+    return Document(Node(name="root", is_folder=True, children=(leaf,))), leaf.id
+
+
+def test_split_committed_node_per_page():
+    doc, nid = _committed_doc(3)
+    d = apply(doc, Split(node_id=nid), engine=ENGINE)
+    kids = d.root.children
+    assert len(kids) == 3
+    for k in kids:
+        assert not k.is_folder and k.pdf_length == 1
+        assert k.original_data is None and k.current_data  # stays committed (no source)
+        assert k.is_compressed is True
+
+
+def test_split_into_committed_node_chunks():
+    doc, nid = _committed_doc(5)
+    d = apply(doc, SplitInto(node_id=nid, size=2), engine=ENGINE)
+    kids = d.root.children
+    assert [k.pdf_length for k in kids] == [2, 2, 1]
+    assert all(k.original_data is None and k.is_compressed for k in kids)
+
+
+def test_rotate_committed_node_stays_committed():
+    doc, nid = _committed_doc(2)
+    before = doc.root.children[0].current_data
+    d = apply(doc, Rotate(node_id=nid, direction="right"), engine=ENGINE)
+    n = d.root.children[0]
+    assert n.original_data is None and n.is_compressed is True   # still committed
+    assert n.current_data and n.current_data != before          # bytes rotated in place
+
+
+def _committed_leaf(pages, dpi):
+    return Node(name=f"d{pages}", is_folder=False, original_data=None,
+                current_data=make_pdf(pages), pdf_length=pages,
+                is_compressed=True, compression_method="jpg", dpi_current=dpi)
+
+
+def test_merge_committed_nodes_keeps_all_pages_same_dpi():
+    a, b = _committed_leaf(2, 100), _committed_leaf(3, 100)
+    doc = Document(Node(name="root", is_folder=True, children=(a, b)))
+    d = apply(doc, Merge(node_ids=[a.id, b.id]), engine=ENGINE)
+    m = d.root.children[0]
+    eff = m.current_data or m.original_data
+    assert ENGINE.page_count(eff) == 5
+
+
+def test_merge_committed_nodes_keeps_all_pages_differing_dpi():
+    # Differing DPI → compression not preserved → merged node relies on the merged
+    # ORIGINAL track. Before the fix, committed nodes contributed b"" there → pages lost.
+    a, b = _committed_leaf(2, 100), _committed_leaf(3, 200)
+    doc = Document(Node(name="root", is_folder=True, children=(a, b)))
+    d = apply(doc, Merge(node_ids=[a.id, b.id]), engine=ENGINE)
+    m = d.root.children[0]
+    eff = m.current_data or m.original_data
+    assert ENGINE.page_count(eff) == 5   # would be 0 before the fix

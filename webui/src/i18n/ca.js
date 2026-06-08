@@ -140,4 +140,19 @@ export const ca = {
   'Hilfe': 'Ajuda',
   'Schließen': 'Tanca',
   'Übersetzungsfehler melden:': 'Informa d’un error de traducció:',
+
+  // errors d’ordre (backend)
+  'Knoten hat keine Daten zum Teilen.': 'El node no té dades per dividir.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'El node arrel no es pot dividir.',
+  'Knoten hat keine Daten zum Komprimieren.': 'El node no té dades per comprimir.',
+  'Knoten ist als nicht komprimierbar markiert.': 'El node està marcat com a no comprimible.',
+  'Knoten hat keine Daten zum Drehen.': 'El node no té dades per girar.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'No hi ha cap original disponible: no es pot restablir.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Selecció mixta: hi ha seleccionats una carpeta i un element que conté.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Un node no es pot moure dins de si mateix ni del seu propi subarbre.',
+  'Nichts zu gruppieren.': 'Res a agrupar.',
+  'Der Name darf nicht leer sein.': 'El nom no pot estar buit.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Res a aplicar (no hi ha cap versió actual/comprimida).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'La combinació necessita com a mínim dos nodes.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Els nodes que es combinaran han de tenir la mateixa carpeta principal.',
 }

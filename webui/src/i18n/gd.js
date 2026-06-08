@@ -142,4 +142,19 @@ export const gd = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'Cuir an dùmhlachadh a tha ’ga shealltainn an-dràsta an sàs',
   'rechts drehen': 'cuairtich gu deas',
   'links drehen': 'cuairtich gu clì',
+
+  // mearachdan àithne (backend)
+  'Knoten hat keine Daten zum Teilen.': 'Chan eil dàta aig an nòd ri sgoltadh.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Cha ghabh am freumh-nòd a sgoltadh.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Chan eil dàta aig an nòd ri dhùmhlachadh.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Tha an nòd air a chomharrachadh mar rud nach gabh dùmhlachadh.',
+  'Knoten hat keine Daten zum Drehen.': 'Chan eil dàta aig an nòd ri chuairteachadh.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Chan eil tionndadh tùsail ann — cha ghabh ath-shuidheachadh.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Taghadh measgaichte: tha pasgan agus nì na bhroinn air an taghadh le chèile.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'Cha ghabh nòd a ghluasad a-steach ann fhèin no na fho-chraobh fhèin.',
+  'Nichts zu gruppieren.': 'Chan eil dad ri bhuidhneachadh.',
+  'Der Name darf nicht leer sein.': 'Chan fhaod an t-ainm a bhith falamh.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Chan eil dad ri chur an sàs (gun tionndadh làithreach/dùmhlaichte).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Tha feum air co-dhiù dà nòd airson co-aonadh.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Feumaidh na nòdan a thèid an co-aonadh a bhith san aon phasgan-phàrant.',
 }

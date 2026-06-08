@@ -142,4 +142,19 @@ export const bar = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'De grod zoagte Kompression übernehma',
   'rechts drehen': 'rechts drahn',
   'links drehen': 'links drahn',
+
+  // Befehls-Fehler (Backend)
+  'Knoten hat keine Daten zum Teilen.': 'Da Knotn hod koane Datn zum Aufdeiln.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'Da Wurzlknotn ko ned aufgdeit wern.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Da Knotn hod koane Datn zum Druckn.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Da Knotn is ois ned druckbor markiad.',
+  'Knoten hat keine Daten zum Drehen.': 'Da Knotn hod koane Datn zum Drahn.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Koa Original do – Zrucksetzn geht ned.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Gmischte Auswoi: a Ordna und a Element drin san beide auswöht.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'A Knotn ko ned in si selba oda in sein eigna Teilbaam gschobm wern.',
+  'Nichts zu gruppieren.': 'Nix zum Gruppiern.',
+  'Der Name darf nicht leer sein.': 'Da Nama derf ned leer sei.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nix zum Übernehma (koa aktuelle/druckte Fassung).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Zum Zammführn brauchts mindestns zwoa Knotn.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'De zammzführendn Knotn miassn den gleichn Eltern-Ordna ham.',
 }

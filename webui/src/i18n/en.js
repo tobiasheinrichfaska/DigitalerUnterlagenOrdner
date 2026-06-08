@@ -159,4 +159,23 @@ export const en = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'Apply the currently shown compression',
   'rechts drehen': 'rotate right',
   'links drehen': 'rotate left',
+
+  // backend command errors (German is the source; surfaced via t(error) in App.jsx)
+  'Knoten hat keine Daten zum Teilen.': 'Node has no data to split.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'The root node cannot be split.',
+  'Knoten hat keine Daten zum Komprimieren.': 'Node has no data to compress.',
+  'Knoten ist als nicht komprimierbar markiert.': 'Node is marked as non-compressible.',
+  'Knoten hat keine Daten zum Drehen.': 'Node has no data to rotate.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'No original available — reset is not possible.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.':
+    'Mixed selection: a folder and an item inside it are both selected.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.':
+    'A node cannot be moved into itself or its own subtree.',
+  'Nichts zu gruppieren.': 'Nothing to group.',
+  'Der Name darf nicht leer sein.': 'The name must not be empty.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).':
+    'Nothing to apply (no current/compressed version).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Merging needs at least two nodes.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.':
+    'The nodes to merge must share the same parent folder.',
 }

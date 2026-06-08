@@ -306,7 +306,7 @@ def _add_folder(doc: Document, cmd: AddFolder, engine=None) -> Document:
 def _rename(doc: Document, cmd: Rename, engine=None) -> Document:
     _require(doc, cmd.node_id)
     if not cmd.name:
-        raise CommandError("name must not be empty")
+        raise CommandError("Der Name darf nicht leer sein.")
     return doc.update_node(cmd.node_id, name=cmd.name)
 
 
@@ -404,7 +404,7 @@ def _delete_many(doc: Document, cmd: DeleteMany, engine=None) -> Document:
     for i in ids:
         for j in ids:
             if i != j and _is_descendant(doc, j, i):  # j is inside i
-                raise CommandError("mixed selection: a folder and an item inside it are both selected")
+                raise CommandError("Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.")
     for i in ids:
         doc = doc.remove_node(i)
     return doc
@@ -416,7 +416,7 @@ def _move(doc: Document, cmd: Move, engine=None) -> Document:
     _require_folder(doc, cmd.new_parent_id)
     _reject_root(doc, cmd.node_id, "move")
     if node.find(cmd.new_parent_id) is not None:
-        raise CommandError("cannot move a node into itself or its own subtree")
+        raise CommandError("Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.")
     return doc.move_node(cmd.node_id, cmd.new_parent_id, cmd.index)
 
 
@@ -457,7 +457,7 @@ def _validate_move_targets(doc: Document, ids, parent_id: str):
         node = _require(doc, nid)
         _reject_root(doc, nid, "move")
         if node.find(parent_id) is not None:
-            raise CommandError("cannot move a node into itself or its own subtree")
+            raise CommandError("Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.")
         nodes.append(node)
     return nodes
 
@@ -500,7 +500,7 @@ def _group_into_folder(doc: Document, cmd: GroupIntoFolder, engine=None) -> Docu
     _require_folder(doc, cmd.parent_id)
     ids = _top_level_ids(doc, list(cmd.node_ids))
     if not ids:
-        raise CommandError("nothing to group")
+        raise CommandError("Nichts zu gruppieren.")
     _validate_move_targets(doc, ids, cmd.parent_id)
     folder = Node(name=cmd.name or "Neue Gruppe", is_folder=True,
                   **({"id": cmd.new_id} if cmd.new_id else {}))
@@ -518,9 +518,9 @@ def _compress(doc: Document, cmd: Compress, engine=None) -> Document:
     node = _require_leaf(doc, cmd.node_id)
     _require_engine(engine)
     if node.no_compression:
-        raise CommandError("node is marked no_compression")
+        raise CommandError("Knoten ist als nicht komprimierbar markiert.")
     if not node.original_data:
-        raise CommandError("node has no data to compress")
+        raise CommandError("Knoten hat keine Daten zum Komprimieren.")
     result = engine.compress(node.original_data, cmd.dpi, cmd.method)
     if result is None:
         return doc  # this method / the best didn't beat the original → unchanged
@@ -533,7 +533,7 @@ def _compress(doc: Document, cmd: Compress, engine=None) -> Document:
 def _commit(doc: Document, cmd: Commit, engine=None) -> Document:
     node = _require_leaf(doc, cmd.node_id)
     if node.current_data is None:
-        raise CommandError("nothing to commit (no current/compressed data)")
+        raise CommandError("Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).")
     new_dpi_original = node.dpi_current if node.dpi_current is not None else node.dpi_original
     return doc.update_node(
         cmd.node_id,
@@ -552,7 +552,7 @@ def _reset(doc: Document, cmd: Reset, engine=None) -> Document:
     # A committed node reloaded from disk has no source (original dropped on save):
     # there is nothing to reset to, and clearing current_data would blank it.
     if not node.is_folder and node.original_data is None and node.current_data is not None:
-        raise CommandError("kein Original vorhanden – Zurücksetzen nicht möglich")
+        raise CommandError("Kein Original vorhanden – Zurücksetzen nicht möglich.")
     return doc.update_node(cmd.node_id, current_data=None,
                            is_compressed=False, dpi_current=None,
                            compression_method=None)
@@ -564,14 +564,20 @@ def _rotate(doc: Document, cmd: Rotate, engine=None) -> Document:
     _require_engine(engine)
     if cmd.direction not in _ROTATE_ANGLES:
         raise CommandError(f"invalid direction: {cmd.direction!r}")
-    if not node.original_data:
-        raise CommandError("node has no data to rotate")
-    rotated = engine.rotate(node.original_data, _ROTATE_ANGLES[cmd.direction])
-    # Rotating changes the source bytes → invalidates any compressed variant AND any
-    # earlier "nothing smaller" verdict (must be re-evaluated for the new bytes).
-    return doc.update_node(cmd.node_id, original_data=rotated,
-                           current_data=None, is_compressed=False, dpi_current=None,
-                           compression_method=None, compression_no_gain=False)
+    angle = _ROTATE_ANGLES[cmd.direction]
+    if node.original_data:
+        rotated = engine.rotate(node.original_data, angle)
+        # Rotating changes the source bytes → invalidates any compressed variant AND any
+        # earlier "nothing smaller" verdict (must be re-evaluated for the new bytes).
+        return doc.update_node(cmd.node_id, original_data=rotated,
+                               current_data=None, is_compressed=False, dpi_current=None,
+                               compression_method=None, compression_no_gain=False)
+    if node.current_data:
+        # Committed node (compressed, source dropped on save): rotate the compressed
+        # bytes in place and stay committed — there is no source to revert to.
+        rotated = engine.rotate(node.current_data, angle)
+        return doc.update_node(cmd.node_id, current_data=rotated)
+    raise CommandError("Knoten hat keine Daten zum Drehen.")
 
 
 def _carries_compression(node) -> bool:
@@ -592,25 +598,45 @@ def _split_part(node, name, pdf_length, src_part, comp_part):
     return Node(**kw)
 
 
+def _split_part_committed(node, name, pdf_length, data):
+    """Split-part of a committed node (compressed, source already dropped on save): the
+    compressed bytes are the only data, so the part stays committed — current_data set,
+    no source — matching the parent's irreversible state."""
+    return Node(name=name, pdf_length=pdf_length, original_data=None,
+                current_data=data, is_compressed=True,
+                compression_method=node.compression_method,
+                dpi_current=node.dpi_current, status=node.status)
+
+
 @_handler(Split)
 def _split(doc: Document, cmd: Split, engine=None) -> Document:
     node = _require_leaf(doc, cmd.node_id)
     _require_engine(engine)
-    if not node.original_data:
-        raise CommandError("node has no data to split")
     parent = doc.parent_of(cmd.node_id)
     if parent is None:
-        raise CommandError("cannot split the root node")
-    parts = engine.split(node.original_data)
+        raise CommandError("Der Wurzelknoten kann nicht geteilt werden.")
+    # A committed node (compressed, source dropped on save) has no original_data — split
+    # its compressed current_data into committed parts. Otherwise split the source.
+    committed = node.original_data is None
+    source = node.original_data or node.current_data
+    if not source:
+        raise CommandError("Knoten hat keine Daten zum Teilen.")
+    parts = engine.split(source)
     if len(parts) < 2:
         return doc  # single page → nothing to split
-    # carry the applied compression (verbatim slice, same page boundaries) so parts
-    # arrive pre-compressed AND editable; else parts are plain source pages.
-    comp = engine.split(node.current_data) if _carries_compression(node) else None
-    new_leaves = [
-        _split_part(node, f"{node.name}_{i + 1}", 1, part, comp[i] if comp else None)
-        for i, part in enumerate(parts)
-    ]
+    if committed:
+        new_leaves = [
+            _split_part_committed(node, f"{node.name}_{i + 1}", 1, part)
+            for i, part in enumerate(parts)
+        ]
+    else:
+        # carry the applied compression (verbatim slice, same page boundaries) so parts
+        # arrive pre-compressed AND editable; else parts are plain source pages.
+        comp = engine.split(node.current_data) if _carries_compression(node) else None
+        new_leaves = [
+            _split_part(node, f"{node.name}_{i + 1}", 1, part, comp[i] if comp else None)
+            for i, part in enumerate(parts)
+        ]
     index = [c.id for c in parent.children].index(cmd.node_id)
     doc = doc.remove_node(cmd.node_id)
     for offset, leaf in enumerate(new_leaves):
@@ -622,20 +648,28 @@ def _split(doc: Document, cmd: Split, engine=None) -> Document:
 def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
     node = _require_leaf(doc, cmd.node_id)
     _require_engine(engine)
-    if not node.original_data:
-        raise CommandError("node has no data to split")
     parent = doc.parent_of(cmd.node_id)
     if parent is None:
-        raise CommandError("cannot split the root node")
+        raise CommandError("Der Wurzelknoten kann nicht geteilt werden.")
+    committed = node.original_data is None
+    source = node.original_data or node.current_data
+    if not source:
+        raise CommandError("Knoten hat keine Daten zum Teilen.")
     size = max(1, int(cmd.size))
-    chunks = engine.split_chunks(node.original_data, size)  # direct range copy (fast)
+    chunks = engine.split_chunks(source, size)  # direct range copy (fast)
     if not cmd.into_folder and len(chunks) < 2:
         return doc  # nothing to split in place (single chunk)
-    comp = engine.split_chunks(node.current_data, size) if _carries_compression(node) else None
-    new_leaves = [
-        _split_part(node, f"{node.name}_{i + 1}", cnt, data, comp[i][0] if comp else None)
-        for i, (data, cnt) in enumerate(chunks)
-    ]
+    if committed:
+        new_leaves = [
+            _split_part_committed(node, f"{node.name}_{i + 1}", cnt, data)
+            for i, (data, cnt) in enumerate(chunks)
+        ]
+    else:
+        comp = engine.split_chunks(node.current_data, size) if _carries_compression(node) else None
+        new_leaves = [
+            _split_part(node, f"{node.name}_{i + 1}", cnt, data, comp[i][0] if comp else None)
+            for i, (data, cnt) in enumerate(chunks)
+        ]
     index = [c.id for c in parent.children].index(cmd.node_id)
     doc = doc.remove_node(cmd.node_id)
     if cmd.into_folder:
@@ -651,16 +685,19 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
     _require_engine(engine)
     ids = list(cmd.node_ids)
     if len(ids) < 2:
-        raise CommandError("merge needs at least two nodes")
+        raise CommandError("Zum Zusammenführen sind mindestens zwei Knoten nötig.")
     nodes = [_require_leaf(doc, nid) for nid in ids]
 
     parents = {(doc.parent_of(nid).id if doc.parent_of(nid) else None) for nid in ids}
     if len(parents) != 1 or None in parents:
-        raise CommandError("merge nodes must share one parent")
+        raise CommandError("Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.")
     parent_id = parents.pop()
     parent = doc.find(parent_id)
 
-    merged_original = engine.merge([n.original_data or b"" for n in nodes])
+    # Effective source per node: a committed node has no original_data, only the
+    # compressed current_data — fall back to it so a committed node's pages are not
+    # lost from the merged original (which a non-preserving merge would rely on).
+    merged_original = engine.merge([n.original_data or n.current_data or b"" for n in nodes])
 
     # DPI-conflict invariant (see DATA_CONTRACT): differing compressed DPIs ->
     # drop compression and mark no_compression.

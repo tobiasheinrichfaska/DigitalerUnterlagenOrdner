@@ -143,4 +143,19 @@ export const yi = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'אָננעמען די איצט געוויזענע קאָמפּרעסיע',
   'rechts drehen': 'רעכטס דרייען',
   'links drehen': 'לינקס דרייען',
+
+  // באַפֿעל-טעותן (באַקענד)
+  'Knoten hat keine Daten zum Teilen.': 'דער קנופּ האָט קיין דאַטן צום צעטיילן.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'דעם וואָרצל-קנופּ קען מען נישט צעטיילן.',
+  'Knoten hat keine Daten zum Komprimieren.': 'דער קנופּ האָט קיין דאַטן צום קאָמפּרעסירן.',
+  'Knoten ist als nicht komprimierbar markiert.': 'דער קנופּ איז אָנגעצייכנט ווי נישט-קאָמפּרעסירבאַר.',
+  'Knoten hat keine Daten zum Drehen.': 'דער קנופּ האָט קיין דאַטן צום דרייען.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'קיין אָריגינאַל פֿאַראַן — צוריקשטעלן נישט מעגלעך.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'געמישטער אויסקלײַב: אַ פּאַפּקע און אַן עלעמענט אין איר זענען ביידע אויסגעקליבן.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'מע קען נישט פֿאַרשיבן אַ קנופּ אין זיך אַליין אָדער אין זײַן אייגענעם אונטערבוים.',
+  'Nichts zu gruppieren.': 'גאָרנישט צו גרופּירן.',
+  'Der Name darf nicht leer sein.': 'דער נאָמען טאָר נישט זײַן ליידיק.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'גאָרנישט אָנצונעמען (קיין איצטיקע/קאָמפּרעסירטע ווערסיע).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'צונויפֿגיסן דאַרף לפּחות צוויי קנעפּ.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'די קנעפּ וואָס מע גיסט צונויף מוזן האָבן די זעלבע עלטער-פּאַפּקע.',
 }

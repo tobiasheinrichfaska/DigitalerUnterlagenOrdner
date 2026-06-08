@@ -511,7 +511,7 @@ export default function App() {
       </header>
 
 
-      {error && <p className="error">⚠ {error}</p>}
+      {error && <p className="error">⚠ {t(error)}</p>}
       {notice && !error && <p className="notice">✓ {notice}</p>}
 
       <div className="body">

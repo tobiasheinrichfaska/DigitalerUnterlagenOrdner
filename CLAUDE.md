@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.9.1**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.9.2**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -55,7 +55,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.9.1) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.9.2) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -392,7 +392,7 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current tag: **v3.9.1** (beta)
+Current tag: **v3.9.2** (beta)
 
 ---
 
@@ -505,10 +505,17 @@ Current tag: **v3.9.1** (beta)
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (121 keys,
-used by `i18n.test.js` coverage), every other language maps German→target and **falls back to
-the German source** for any missing key. `translate()`/`resolveInitialLang()` in
-[`index.js`](webui/src/i18n/index.js); the picker renders `LANGUAGE_NAMES`.
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (134 keys =
+121 UI strings + 13 backend command-error messages; locked by `i18n.test.js`), every other
+language maps German→target and **falls back to the German source** for any missing key.
+`translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
+renders `LANGUAGE_NAMES`.
+
+- **Localized errors (2026-06-08):** core `CommandError` messages are raised in **German**
+  (the source language) and surfaced via `t(error)` in [`App.jsx`](webui/src/App.jsx), so they
+  localize like any other string. The 13 user-facing command errors are translated in all
+  full-coverage languages; internal/developer errors (`unknown session`, `node not found: …`,
+  invalid direction/status, …) deliberately stay English diagnostics.
 
 - **Regional English (2026-06-07):** the generic `en` code was split into **`en-US`
   ("English (US)")** and **`en-GB` ("English (UK)")**, each a thin spelling-override of the
@@ -517,7 +524,7 @@ the German source** for any missing key. `translate()`/`resolveInitialLang()` in
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-07):** **17 languages are now 100% (all 121 keys)** — de (source),
+- **Completeness (2026-06-08):** **17 languages are now 100% (all 134 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Only **tlh (Klingon, 48 keys)**
@@ -548,7 +555,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.9.1`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.9.2`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **Two known gaps that must NOT be reported as bugs** (the bug form's required
   checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired

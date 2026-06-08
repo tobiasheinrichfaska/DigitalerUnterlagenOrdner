@@ -142,4 +142,19 @@ export const nds = {
   'Die aktuell angezeigte Komprimierung übernehmen': 'De jüst wieste Drück övernehmen',
   'rechts drehen': 'rechts dreihn',
   'links drehen': 'links dreihn',
+
+  // Befehl-Fehlers (Backend)
+  'Knoten hat keine Daten zum Teilen.': 'De Knütt hett keen Daten to’n Delen.',
+  'Der Wurzelknoten kann nicht geteilt werden.': 'De Wörtelknütt kann nich deelt warrn.',
+  'Knoten hat keine Daten zum Komprimieren.': 'De Knütt hett keen Daten to’n Drücken.',
+  'Knoten ist als nicht komprimierbar markiert.': 'De Knütt is as nich drückbor markeert.',
+  'Knoten hat keine Daten zum Drehen.': 'De Knütt hett keen Daten to’n Dreihn.',
+  'Kein Original vorhanden – Zurücksetzen nicht möglich.': 'Keen Original dor – Torüchsetten geiht nich.',
+  'Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.': 'Mischte Utwahl: en Mapp un en Element dorin sünd beide utwählt.',
+  'Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.': 'En Knütt kann nich in sik sülvst oder sien egen Deelboom schaven warrn.',
+  'Nichts zu gruppieren.': 'Nix to’n Grupperen.',
+  'Der Name darf nicht leer sein.': 'De Naam dröff nich leddig wesen.',
+  'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nix to’n Övernehmen (keen aktuelle/drückte Fastung).',
+  'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'To’n Tosamenföögen bruukt dat tominnst twee Knütt.',
+  'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'De tosamentoföögenden Knütt mööt deselve överornte Mapp hebben.',
 }

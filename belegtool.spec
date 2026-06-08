@@ -71,7 +71,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # UPX OFF: packing the managed .NET assembly (pythonnet's Python.Runtime.dll) and
+    # native DLLs (WebView2Loader) can make them unloadable and trips AV heuristics.
+    # The size win isn't worth the corruption/false-positive risk.
+    upx=False,
     upx_exclude=[],
     console=False,
     disable_windowed_traceback=False,
@@ -87,7 +90,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,  # see EXE() above — UPX can corrupt the .NET/native DLLs + trips AV
     upx_exclude=[],
     name='BelegTool',
 )

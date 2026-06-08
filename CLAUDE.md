@@ -316,7 +316,7 @@ the bloat. ⚠ Variants live in the file → it grows; not a separate sidecar.
 ## Build
 
 ### Prerequisites
-- Python 3.12 in PATH
+- Python 3.13 in PATH — the build pins it via the `py -3.13` launcher (`$PyVer` in `build.ps1`); running from source works on 3.12+
 - Node.js (the build runs `npm run build` in `webui/` first)
 - **Edge WebView2 Runtime** on the *target* machine (Win11 has it in-box; Win10 / minimal
   images / Windows Sandbox may not). Missing → the React UI renders **blank**. `host.py`
@@ -565,7 +565,7 @@ report known gaps, give the wrong version, etc.).
 - **Manual tests `05`–`07` are current; `01`–`04` are stale (removed Tk GUI).** When
   01–04 are rewritten against the React UI, drop the "stale" wording everywhere it
   appears (BETA_TESTING.md §3, CONTRIBUTING.md, `manual_tests/README.md`).
-- **Two run paths** (prebuilt onedir folder; from source: Python 3.12 + Node, `pip
+- **Two run paths** (prebuilt onedir folder; from source: Python 3.12+ + Node, `pip
   install -r requirements.txt`, `cd webui && npm install && npm run build`, `python
   host.py`) and **no published Release yet** — update BETA_TESTING.md §1 once a
   Release/installer exists.

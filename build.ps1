@@ -15,8 +15,19 @@ npm run build
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "webui build failed" }
 Pop-Location
 
-Write-Host "=== Saubere venv erstellen ===" -ForegroundColor Cyan
-python -m venv $VenvDir
+# Pin the build Python explicitly via the py launcher (don't silently use whatever
+# 'python' happens to be first on PATH). Bump $PyVer when moving the build Python.
+$PyVer = '3.13'
+Write-Host "=== Saubere venv erstellen (Python $PyVer) ===" -ForegroundColor Cyan
+$found = $false
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    py "-$PyVer" --version > $null 2> $null
+    $found = ($LASTEXITCODE -eq 0)
+}
+if (-not $found) {
+    throw "Python $PyVer wird fuer den Build benoetigt. Installieren ('winget install Python.Python.3.13' oder python.org) und erneut ausfuehren."
+}
+py "-$PyVer" -m venv $VenvDir
 
 Write-Host "=== Abhaengigkeiten installieren ===" -ForegroundColor Cyan
 & "$VenvDir\Scripts\python.exe" -m pip install --upgrade pip --quiet

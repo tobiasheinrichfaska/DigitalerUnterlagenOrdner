@@ -423,17 +423,22 @@ as **v3.10.0**.
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
    into **another** → **copy** by default (source keeps its node). Distinct from the Outlook
    drag-in (still won't-do; OLE virtual files).
-   ⚠ **Feasibility constraint:** the two windows are **separate WebView2 instances**, so a
-   native HTML5 drag does **not** carry across them (separate browser contexts). Realistic
-   options:
-   - **(a) OS-level drag** — the Win32 host starts an OS drag of a temp `.belegtool`
-     (`materialize_subset`) on drag-out; the target window's existing OS file-drop
-     ([`useOsFileDrop`](webui/src/hooks/useOsFileDrop.js)) imports it. True drag feel, but needs
-     a native Win32 `IDataObject`/`DoDragDrop` shim (fiddly — same class of problem as Outlook-in).
-   - **(b) Copy/paste across windows** — simpler and **in-process** (both windows share one
-     `CoreApi`): „Knoten kopieren" in A → „Einfügen" in B, via a staged-subtree token on the
-     shared `CoreApi`; no cross-window drag gesture needed.
-   **Decision needed: (a) vs (b)** — (b) is far cheaper/reliable; (a) is the nicer UX.
+   Both windows share **one in-process `CoreApi`**, so the **data** transfer is trivial
+   in-engine; the only hard part is the cross-window **gesture**.
+   A web drag can't cross two separate WebView2 windows (window B gets no events from A's drag),
+   so we avoid a cross-window drag entirely.
+   **Chosen approach (decided 2026-06-08) — an „Austausch-Pad" (interchange pad / drag tray),
+   no native code:** a small shared tray shown in every window.
+   - In A, **drag a node onto the pad** — an ordinary *same-window* HTML5 drag (works natively);
+     `CoreApi` copies the subtree into a shared pad register.
+   - The pad register lives in the **one shared `CoreApi`**, so its items appear in B too.
+   - In B, **drag the item from the pad onto B's tree** — again an ordinary *same-window* drag;
+     `CoreApi` inserts a copy (`materialize_subset` → insert). Source in A is untouched (**copy
+     by default**); the pad item stays (reusable) until cleared.
+   Both gestures are intra-window real drags, so the WebView2 cross-window limit never applies.
+   ⚠ No browser event bus between windows → B refreshes the pad on **focus + a light poll** (and
+   after its own drags) to pick up items A added. Bonus: the pad doubles as a within-window
+   clipboard. (A true OS-drag drop between windows remains an optional native upgrade later.)
 6. **Insert + edit a page (text editor) — via node attributes, NOT a new node kind.** Add two
    persisted fields to the node / PDFNode (round-trip in `.belegtool`):
    - **`editor_based`** (bool) — this node was built from text and can be switched back to editing;

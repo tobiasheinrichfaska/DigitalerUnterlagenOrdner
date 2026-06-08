@@ -427,21 +427,28 @@ as **v3.10.0**.
    in-engine; the only hard part is the cross-window **gesture**.
    A web drag can't cross two separate WebView2 windows (window B gets no events from A's drag),
    so we avoid a cross-window drag entirely.
-   Both candidate designs keep the drag **intra-window** (so the WebView2 cross-window limit
-   never applies); the staged/source contents live in the shared `CoreApi`. **To decide:**
-   - **(A) „Austausch-Pad" (interchange tray).** A small shared tray in every window. Drag a node
-     *onto the pad* in A (same-window drag) → `CoreApi` stages the subtree; the pad shows in every
-     window (shared `CoreApi`); drag the item *from the pad onto B's tree* (same-window drag) →
-     copy inserted (`materialize_subset` → insert). Simpler; **copy-only**; doubles as a
-     within-window clipboard. Needs a focus/poll refresh of the pad (no cross-window event bus).
-   - **(B) Second tree-pane (dual-pane).** Open a second tree view *in the same window* that loads
-     another currently-open document's tree; drag between the two panes (same-window) → **move or
-     copy** (copy default; modifier/menu = move). Richer "merge two documents" UX (see the whole
-     source tree, precise picking). Costs more: cross-document ops (`CopyAcross`/`MoveAcross` over
-     two sessions) and, for **move**, the source window must refresh (mutating another live doc).
-   Trade-off: (A) = quick win, copy-only stash-and-drop; (B) = powerful consolidate workflow
-   (move+copy, full source tree) at higher cost. Could ship (A) first, (B) later. A true OS-drag
-   drop between windows remains an optional native upgrade in either case.
+   All three candidate designs keep the drag **intra-window** (so the WebView2 cross-window limit
+   never applies); shared/source contents come from the shared `CoreApi`.
+   **Decision (2026-06-09): build (A) now (v3.10.0); (B) and (C) are logged for later versions.**
+   - **(A) „Austausch-Pad" (interchange tray) — NOW.** A small shared tray in every window. Drag a
+     node *onto the pad* (same-window drag) → `CoreApi` stages the subtree; the pad shows in every
+     window (shared `CoreApi`); drag the item *from the pad onto a tree* (same-window drag) → copy
+     inserted (`materialize_subset` → insert). Simple; **copy-only**; doubles as a within-window
+     clipboard. Needs a focus/poll refresh of the pad (no cross-window event bus).
+   - **(B) Second tree-pane (dual-pane) — later.** A second tree view in the same window loading
+     another open document; drag between panes → move or copy. Richer "merge two documents" UX;
+     costs cross-document `CopyAcross`/`MoveAcross` + source-window refresh on move.
+   - **(C) „Super-Tree" view — later.** A toggle that morphs the current window into a synthetic
+     tree whose first-order folder-nodes are **all open documents**, each document's tree as its
+     children (toggle back to the normal single-doc view). **MVP: only the current document is
+     editable; the others are read-only sources** — drag a foreign node into the current doc →
+     copy. *Feasibility (checked):* builds naturally on the existing **virtual-view machinery**
+     (the filtered/group views are already read-only synthetic trees with an edit-lock). Needs:
+     assemble the super-tree from all open sessions; **namespaced node ids** (which doc a node
+     belongs to); the cross-doc copy op (shared with B); and the read-only gate on foreign
+     subtrees. Cleanest UX (one unified tree of everything open) and most ambitious; a later step
+     could allow full cross-doc move/edit (with multi-document save semantics).
+   A true OS-drag drop directly between windows remains an optional native upgrade in any case.
 6. **Insert + edit a page (text editor) — via node attributes, NOT a new node kind.** Add two
    persisted fields to the node / PDFNode (round-trip in `.belegtool`):
    - **`editor_based`** (bool) — this node was built from text and can be switched back to editing;

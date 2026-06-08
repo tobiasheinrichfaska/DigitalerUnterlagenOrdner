@@ -32,25 +32,35 @@ and e-mails still works fine.
    - To open a saved file directly: `BelegTool.exe yourfile.belegtool`.
    - *Windows SmartScreen* may warn on first run (unsigned app) → **More info → Run anyway**.
 
-#### ⚠️ App won't start / antivirus blocks it (Norton, etc.)
-The beta is **not code-signed yet**, so some antivirus tools (e.g. **Norton CyberCapture**)
-sandbox or quarantine parts of it — typically `Python.Runtime.dll` — and you'll see errors
-like *"Failed to resolve Python.Runtime.Loader.Initialize …"* or *"…Pfad/Datei kann nicht
-zugegriffen werden / Berechtigungen"*. It's a **false alarm**, not malware. To run it:
-1. **Unblock the ZIP before extracting:** right-click the `.zip` → **Properties** → tick
-   **Unblock** (de: *Zulassen*) → OK, then unzip again.
-2. **Extract to a normal local folder** like `C:\Users\<you>\BelegTool` — **not** under
-   `C:\Program Files` or a network/removable drive (those need extra permissions and cause
-   the "cannot access / permissions" error).
-3. **Allow it in your antivirus:** restore the quarantined files and add an **exclusion** for
-   the BelegTool folder (Norton → *Security History/Quarantine* → restore; *Settings →
-   Antivirus → Exclusions* → add the folder).
+#### ⚠️ App errors with a ".NET / Python.Runtime / clr" message — unblock the files
+If you see *"Failed to resolve Python.Runtime.Loader.Initialize …"* (or a similar
+pythonnet/.NET error), the usual cause is **Windows' "Mark of the Web"**: downloaded files
+are flagged *"from the internet"*, and **.NET then refuses to load the bundled
+`Python.Runtime.dll`**. This happens **even if you have no antivirus** — the file is present
+and not infected. Fix by **unblocking the files**:
+1. **Best — before extracting:** right-click the downloaded `.zip` → **Properties** → tick
+   **Unblock** (de: *Zulassen* / *Blockierung aufheben*) → **OK** → then unzip.
+2. **Already extracted** — in PowerShell, inside the BelegTool folder:
+   ```powershell
+   Get-ChildItem -Recurse . | Unblock-File
+   ```
+3. Extract to a normal local folder like `C:\Users\<you>\BelegTool` — **not** under
+   `C:\Program Files` or a network/removable drive (those cause "cannot access / permissions").
 
-A signed Microsoft Store version is planned, which will remove these warnings. **Please don't
-file this as a bug** — it's a known limitation of the unsigned beta.
+(From v3.9.4 the app detects this and shows the unblock hint instead of a raw traceback.)
+
+#### ⚠️ Antivirus quarantines it (Norton, etc.)
+The beta is **not code-signed yet**, so some antivirus tools (e.g. **Norton CyberCapture**)
+may sandbox or quarantine files (often `Python.Runtime.dll`). It's a **false alarm**, not
+malware: restore the quarantined files and add an **exclusion** for the BelegTool folder
+(Norton → *Security History/Quarantine* → restore; *Settings → Antivirus → Exclusions*).
+
+A signed Microsoft Store version is planned, which removes these warnings. **Please don't
+file these as bugs** — they're known limitations of the unsigned beta.
 
 ### Path B — From source
-1. Install **Python 3.12** (on PATH) and **Node.js**.
+1. Install **Python 3.12 or newer** (on PATH) and **Node.js**. *(3.13 and 3.14 work for
+   running from source; the official prebuilt `.exe` is currently built with 3.12.)*
 2. In the project folder:
    ```powershell
    pip install -r requirements.txt

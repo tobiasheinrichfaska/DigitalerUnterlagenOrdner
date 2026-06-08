@@ -334,6 +334,34 @@ def _warn_missing_webview2():
         pass
 
 
+def _is_clr_load_error(exc) -> bool:
+    """A pythonnet/.NET assembly that failed to load — almost always because Windows
+    flagged the downloaded files with the 'Mark of the Web' and .NET refuses to load
+    the (signed) Python.Runtime.dll. Not antivirus, and the DLL is present."""
+    s = str(exc).lower()
+    return ("python.runtime" in s or "pythonnet" in s
+            or "loader.initialize" in s or "clr_loader" in s)
+
+
+def _warn_clr_load_failed(exc):
+    """Explain the Mark-of-the-Web block + how to unblock, instead of a raw traceback."""
+    msg = (".NET-Komponente konnte nicht geladen werden.\n\n"
+           "Das passiert meist, weil Windows die heruntergeladenen Dateien als "
+           "'aus dem Internet' markiert hat (Mark of the Web) und .NET das Laden "
+           "blockiert — das ist NICHT der Virenscanner.\n\n"
+           "Lösung – die Dateien entsperren:\n"
+           "• Am besten VOR dem Entpacken: Rechtsklick auf die ZIP → Eigenschaften → "
+           "unten 'Zulassen' (bzw. 'Blockierung aufheben') anhaken → OK → dann entpacken.\n"
+           "• Schon entpackt (PowerShell im BelegTool-Ordner):\n"
+           "    Get-ChildItem -Recurse . | Unblock-File\n\n"
+           f"Technische Meldung: {exc}")
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, msg, "BelegTool – Dateien entsperren", 0x10)
+    except Exception:
+        print(msg)
+
+
 def main(startup_path=None):
     # Fail loudly, not blank: without the WebView2 Runtime the window renders empty.
     # (BELEG_SKIP_WEBVIEW2_CHECK=1 bypasses, in case detection ever false-negatives.)
@@ -346,7 +374,15 @@ def main(startup_path=None):
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     # Pin a safe http port so the file server never lands on a Chromium-blocked one.
-    webview.start(_prewarm, http_port=_safe_http_port())
+    try:
+        webview.start(_prewarm, http_port=_safe_http_port())
+    except Exception as e:
+        # pythonnet/.NET failing to load is almost always Mark-of-the-Web on a
+        # downloaded build — give a clear unblock hint, not a cryptic traceback.
+        if sys.platform == "win32" and _is_clr_load_error(e):
+            _warn_clr_load_failed(e)
+            return
+        raise
 
 
 def _startup_path_from_argv(argv):

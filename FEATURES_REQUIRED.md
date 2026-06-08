@@ -46,8 +46,10 @@ menu; the vocabulary comes from the core (`config().statuses`), labels via i18n.
 
 ## 5. Export
 Export the selection (resolved) to a single PDF with a printed TOC, clickable links and
-sidebar bookmarks; auto-split above 100 pages. Acceptance: the PDF opens and the TOC links
-hit the right pages.
+sidebar bookmarks. Acceptance: the PDF opens and the TOC links hit the right pages.
+**Known gap:** exports over 100 pages stay a single PDF — the auto-split-with-
+cross-references path (`toc_export.export_pdf_split_with_toc`) exists but is **not yet wired
+into the UI export** (consistent with CLAUDE.md / BETA_TESTING §4).
 
 ## 6. Persistence
 - **Speichern saves in place** once the document has a path (no dialog), clearing the dirty
@@ -56,8 +58,9 @@ hit the right pages.
   coherently (`current_data` set, `original_data` None) and drop-source-on-save is unchanged.
 
 ## 7. Language, status bar & windows
-- **Language switcher** (Deutsch/English) translates all UI text live and persists the choice;
-  document content/names are not translated.
+- **Language switcher** (18 languages incl. Deutsch and English (US)/(UK); the others fall
+  back to German for any untranslated string) translates all UI text live and persists the
+  choice; document content/names are not translated.
 - **Status bar**: background activity (Komprimiere N by node / Vorschau lädt / Cache füllt) and
   the render-cache gauge (used/budget MB · cached/total pages) with **＋ / −** to grow/shrink
   the budget (shrink evicts immediately).

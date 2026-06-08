@@ -30,6 +30,12 @@ describe('translate (source-string keys)', () => {
   it('leaves unknown placeholders untouched', () => {
     expect(translate('en-US', 'PDF exportiert ({count} {entries})', { count: 3 })).toContain('{entries}')
   })
+
+  it('the en base has the full, fixed key set (lock against silent drift)', () => {
+    // If a UI string is added, bump this number deliberately — it documents the
+    // canonical key count the "fully translated" languages are measured against.
+    expect(Object.keys(en).length).toBe(121)
+  })
 })
 
 describe('language registry', () => {

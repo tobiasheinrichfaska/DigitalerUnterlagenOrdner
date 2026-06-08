@@ -33,6 +33,11 @@ _ARCHIVE_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 _ARCHIVE_MAX_MEMBERS = 500
 
 
+class _ArchiveTooLarge(ValueError):
+    """Tatsächlich entpackte Archivgröße überschreitet das Limit (Bomben-Schutz).
+    Eigener Typ, damit der Per-Member-Catch ihn nicht verschluckt."""
+
+
 def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> List[Dict[str, Any]]:
     result = []
 
@@ -60,10 +65,21 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
                     f"(Limit: {_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024*1024)} MB)."
                 )
 
+            # Tatsächlich entpackte Bytes deckeln — die deklarierte file_size oben
+            # ist nur ein billiger Vorab-Check; ein Eintrag kann eine kleine Größe
+            # angeben und beim Lesen trotzdem aufblähen.
+            actual_total = 0
             for info in members:
                 name = info.filename
                 with zf.open(name) as f:
-                    content = f.read()
+                    remaining = _ARCHIVE_MAX_UNCOMPRESSED_BYTES - actual_total
+                    content = f.read(remaining + 1)
+                    if len(content) > remaining:
+                        raise _ArchiveTooLarge(
+                            f"ZIP-Archiv überschreitet beim Entpacken das Limit von "
+                            f"{_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB."
+                        )
+                    actual_total += len(content)
                     try:
                         converted = UniversalImporter.convert(content, name=name)
                         if not converted.data.getvalue().strip().startswith(b"%PDF"):
@@ -105,6 +121,7 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
                     f"(Limit: {_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024*1024)} MB)."
                 )
 
+            actual_total = 0
             for member in file_members:
                 name = os.path.basename(member.name) or member.name
                 try:
@@ -112,11 +129,20 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
                     if f is None:
                         result.append(_not_importable(name))
                         continue
-                    content = f.read()
+                    remaining = _ARCHIVE_MAX_UNCOMPRESSED_BYTES - actual_total
+                    content = f.read(remaining + 1)
+                    if len(content) > remaining:
+                        raise _ArchiveTooLarge(
+                            f"TAR-Archiv überschreitet beim Entpacken das Limit von "
+                            f"{_ARCHIVE_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB."
+                        )
+                    actual_total += len(content)
                     converted = UniversalImporter.convert(content, name=name)
                     if not converted.data.getvalue().strip().startswith(b"%PDF"):
                         raise ValueError("PDF-Inhalt ungültig")
                     result.append({"name": name, "content": converted.data})
+                except _ArchiveTooLarge:
+                    raise
                 except Exception:
                     result.append(_not_importable(name))
     except tarfile.TarError as e:
@@ -167,9 +193,8 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
         try:
             msg = BytesParser(policy=policy.default).parsebytes(data)
 
+            # Kein From/Subject ins Log (PII) — nur dass das Parsing lief.
             logger.debug("EML-Parsing abgeschlossen")
-            logger.debug("From: %s", msg['from'])
-            logger.debug("Subject: %s", msg['subject'])
 
             base_name = _build_base_name(msg["subject"], msg["date"])
 
@@ -189,7 +214,8 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
             }.get(content_type, ".txt")
             body_content = body_part.get_content() if body_part else ""
 
-            logger.debug("Inhalt Start (repr): %s", repr(body_content[:200]))
+            # Nur Struktur protokollieren, nie den Mail-Inhalt (PII).
+            logger.debug("Body-Länge: %d Zeichen", len(body_content))
 
             file_name = f"{base_name}{extension}"
 
@@ -250,6 +276,7 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
 
             # Anhänge
             for att in msg.attachments:
+                fname = "Anhang"  # gebunden, bevor att-Zugriffe werfen können
                 try:
                     fname = att.longFilename or att.shortFilename or "Anhang"
                     data_att = att.data

@@ -463,6 +463,20 @@ as **v3.10.0**.
    **rotate/split/merge drop editor mode** — the result becomes a plain rebuilt PDF
    (`editor_based=False`), avoiding "rebuild un-rotates the page" surprises. Plain-text first;
    rich text later if wanted.
+7. **Multi-select tagging.** When **more than one node is selected**, applying/removing a tag
+   should affect **all selected nodes** (today the tag editor acts on the single context-menu
+   node). Apply over `selectedIds` (resolve folder/child overlaps like the other multi-ops) as
+   one undoable step.
+8. **„Neuer Ordner" — insert at the selection + naming dialog.** New folder should be created
+   **at the selected node's position / parent**, not always at the root; and it should open a
+   **naming dialog** first (default name pre-filled) instead of creating an unnamed folder.
+9. **Zoom should keep the document position, not the viewframe position.** *(Finding from a
+   check — current behaviour:)* the preview lays pages out at `width = 560 * zoom`
+   ([`Preview.jsx`](webui/src/Preview.jsx)), so page heights scale with zoom, but **`scrollTop`
+   is not re-anchored** (no effect depends on `zoom`). Result: the pixel scroll position stays
+   fixed → the **document position drifts** when zooming while scrolled down (top-anchored zoom
+   is fine). Fix: before changing zoom, capture the anchor (visible page index + intra-page
+   fraction at the viewport top, or `scrollTop/scrollHeight`) and reapply it after the relayout.
 
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.

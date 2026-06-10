@@ -157,4 +157,18 @@ export const mnn = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nada pa taka (no now/squisha versio).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Gluuu need dos nodo minimo.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Gluuu nodos need same papa-box.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Papar already edita — solo uno persona can opena at a time!',
+  'nichts zu exportieren': 'nada pa outa',
+  'nichts angezeigt': 'nada showa',
+  'nichts importiert': 'nada importa',
+  'ungültige Daten: {error}': 'data no bueno: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Skippa (no pages): {names}',
+  'Teilweise importiert — {warning}': 'Parto importa — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: no Office programa pa converta (need Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: papar typo {ext} no supporta',
+  '{name}: Datei ist passwortgeschützt': '{name}: papar hava secreto password',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no can read zip/mail ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: papar kaputt o no bueno',
 }

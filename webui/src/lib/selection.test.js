@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveSelection, isAncestor } from './selection'
+import { resolveSelection, isAncestor, mergeableIds } from './selection'
 
 // root
 //   f (folder) → c1, c2
@@ -78,5 +78,34 @@ describe('resolveSelection', () => {
     expect(isAncestor(tree, 'f', 'c1')).toBe(true)
     expect(isAncestor(tree, 'c1', 'f')).toBe(false)
     expect(isAncestor(tree, 'a', 'b')).toBe(false)
+  })
+})
+
+// Regression lock for the merge-order fix (92e7bef): merging must follow DOCUMENT
+// order (the order under the shared parent), never the click order.
+describe('mergeableIds', () => {
+  it('click order ≠ document order → result is document order', () => {
+    expect(mergeableIds(tree, ['c2', 'c1'])).toEqual(['c1', 'c2'])
+    expect(mergeableIds(tree, ['b', 'a'])).toEqual(['a', 'b'])
+  })
+
+  it('document order stays document order', () => {
+    expect(mergeableIds(tree, ['c1', 'c2'])).toEqual(['c1', 'c2'])
+  })
+
+  it('returns null for fewer than two selected nodes', () => {
+    expect(mergeableIds(tree, [])).toBeNull()
+    expect(mergeableIds(tree, ['a'])).toBeNull()
+    expect(mergeableIds(null, ['a', 'b'])).toBeNull()
+    expect(mergeableIds(tree, null)).toBeNull()
+  })
+
+  it('returns null for a mixed-parent selection', () => {
+    expect(mergeableIds(tree, ['c1', 'a'])).toBeNull()
+  })
+
+  it('returns null when a folder or unknown node is selected', () => {
+    expect(mergeableIds(tree, ['f', 'a'])).toBeNull()
+    expect(mergeableIds(tree, ['a', 'missing'])).toBeNull()
   })
 })

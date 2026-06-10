@@ -101,4 +101,15 @@ describe('Tree', () => {
     fireEvent.contextMenu(screen.getByText(/doc2/))
     expect(onContext).toHaveBeenCalledWith(expect.any(Number), expect.any(Number), expect.objectContaining({ id: 'L2' }))
   })
+
+  it('exposes tree/treeitem roles and aria-selected for accessibility', () => {
+    const { container } = renderTree({ selectedIds: ['L2'] })
+    expect(container.querySelector('ul.tree')).toHaveAttribute('role', 'tree')
+    const rows = container.querySelectorAll('.row[role="treeitem"]')
+    expect(rows.length).toBe(3) // F, L1, L2
+    const selected = [...rows].filter((r) => r.getAttribute('aria-selected') === 'true')
+    expect(selected.length).toBe(1)
+    expect(selected[0].textContent).toContain('doc2')
+    expect(rows[0].getAttribute('tabindex')).toBe('-1')
+  })
 })

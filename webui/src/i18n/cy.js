@@ -157,4 +157,18 @@ export const cy = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Dim byd i’w gymhwyso (dim fersiwn gyfredol/gywasgedig).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Mae angen o leiaf dau nod i gyfuno.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Rhaid i’r nodau i’w cyfuno rannu’r un ffolder rhiant.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Mae’r ffeil hon eisoes yn cael ei golygu a dim ond un person ar y tro all ei hagor.',
+  'nichts zu exportieren': 'dim byd i’w allforio',
+  'nichts angezeigt': 'dim byd yn cael ei ddangos',
+  'nichts importiert': 'dim byd wedi’i fewnforio',
+  'ungültige Daten: {error}': 'data annilys: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Hepgorwyd (dim tudalennau): {names}',
+  'Teilweise importiert — {warning}': 'Mewnforiwyd yn rhannol — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: rhaglen Office ar gyfer trosi ddim ar gael (angen Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: nid yw’r math o ffeil {ext} yn cael ei gefnogi',
+  '{name}: Datei ist passwortgeschützt': '{name}: mae’r ffeil wedi’i diogelu â chyfrinair',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: methwyd â darllen yr archif/e-bost ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: ffeil wedi’i difrodi neu’n annilys',
 }

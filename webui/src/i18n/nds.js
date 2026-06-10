@@ -157,4 +157,18 @@ export const nds = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nix to’n Övernehmen (keen aktuelle/drückte Fastung).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'To’n Tosamenföögen bruukt dat tominnst twee Knütt.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'De tosamentoföögenden Knütt mööt deselve överornte Mapp hebben.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Disse Datei warrt jüst al bewerkt un kann blots vun een Person togliek opmaakt warrn.',
+  'nichts zu exportieren': 'nix to’n Exporteren',
+  'nichts angezeigt': 'nix wiest',
+  'nichts importiert': 'nix importeert',
+  'ungültige Daten: {error}': 'ungüllige Daten: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Ahn Sieden översprungen: {names}',
+  'Teilweise importiert — {warning}': 'Deelwies importeert — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: Office-Programm to’n Ümwanneln nich verfögbor (Word/Excel/PowerPoint nödig)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: Dateityp {ext} warrt nich ünnerstütt',
+  '{name}: Datei ist passwortgeschützt': '{name}: Datei is mit Passwoort schuult',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: Archiv/E-Mail kunn nich leest warrn ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: kaputte oder ungüllige Datei',
 }

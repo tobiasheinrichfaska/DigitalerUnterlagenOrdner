@@ -105,6 +105,9 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
     <li>
       <div
         className={cls.join(' ')}
+        role="treeitem"
+        aria-selected={selectedIds.includes(node.id)}
+        tabIndex={-1}
         style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         draggable={editing !== node.id && !reorderDisabled}
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -221,7 +224,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
     setDrag(null)
   }
   return (
-    <ul className="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
+    <ul className="tree" role="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}

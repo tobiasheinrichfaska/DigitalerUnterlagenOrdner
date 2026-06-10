@@ -155,4 +155,18 @@ export const uk = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Немає чого застосувати (немає поточної/стисненої версії).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Для обʼєднання потрібно щонайменше два вузли.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Обʼєднувані вузли повинні мати одну батьківську папку.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Цей файл уже редагується, і одночасно його може відкрити лише одна людина.',
+  'nichts zu exportieren': 'нічого експортувати',
+  'nichts angezeigt': 'нічого не відображено',
+  'nichts importiert': 'нічого не імпортовано',
+  'ungültige Daten: {error}': 'недійсні дані: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Пропущено (без сторінок): {names}',
+  'Teilweise importiert — {warning}': 'Імпортовано частково — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: програма Office для конвертації недоступна (потрібен Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: тип файлу {ext} не підтримується',
+  '{name}: Datei ist passwortgeschützt': '{name}: файл захищено паролем',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: не вдалося прочитати архів/лист ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: пошкоджений або недійсний файл',
 }

@@ -75,6 +75,21 @@ describe('App import — toolbar button', () => {
   })
 })
 
+describe('App import — partial import warning', () => {
+  it('shows the composed warning in an aria-live error paragraph (localized at render)', async () => {
+    const calls = await renderApp({
+      import_dialog: () => ({ ok: true, session: 's', tree: TREE_AFTER, can_undo: true, can_redo: false,
+        warning: 'geheim.pdf: Datei ist passwortgeschützt' }),
+    })
+    fireEvent.click(screen.getByText(/Importieren/))
+    await waitFor(() => expect(callsOf(calls, 'import_dialog').length).toBe(1))
+    // default language is German (the source), so the composite renders as-is;
+    // the English mapping of these templates is locked in lib/messages.test.js
+    const err = await screen.findByText(/Teilweise importiert — geheim\.pdf: Datei ist passwortgeschützt/)
+    expect(err.closest('p.error')).toHaveAttribute('aria-live', 'polite')
+  })
+})
+
 describe('App import — OS file drag-drop (fake files)', () => {
   it('drops two fake files: placeholders appear, each is imported, then they land as siblings', async () => {
     const calls = await renderApp()

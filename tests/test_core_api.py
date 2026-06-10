@@ -1,6 +1,8 @@
 """Unit tests for the in-process core façade (core/api.py) — no pipe, no GUI."""
 
-from core.api import CoreApi
+import os
+
+from core.api import CoreApi, sweep_stale_view_dirs
 from core.bridge import save_belegtool
 from core.model import Document, Node
 from helpers import create_valid_pdf
@@ -132,6 +134,65 @@ def test_materialize_subset_keeps_only_displayed_in_normal_order(tmp_path):
     # normal order preserved (F then c); the hidden sibling b is dropped
     assert [n["name"] for n in tree["children"]] == ["F", "c"]
     assert [n["name"] for n in tree["children"][0]["children"]] == ["a"]
+
+
+def test_close_session_frees_session_state(tmp_path):
+    # Closing a window must free its session — otherwise the document bytes + undo
+    # log live for the process and its node ids keep blocking render-cache eviction.
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), path)
+    api = CoreApi()
+    a = api.open(path=str(path))
+    sid_a, leaf_id = a["session"], a["tree"]["children"][0]["id"]
+    sid_b = api.open()["session"]
+    api._pcount[(leaf_id, 0)] = 1  # simulate a prefetch-cached page count for the leaf
+    assert any(k[0] == leaf_id for k in api._pcount)
+    assert leaf_id in api._all_live_node_ids()
+
+    assert api.close_session(sid_a)["ok"] is True
+    assert sid_a not in api._sessions and sid_a not in api._paths
+    assert leaf_id not in api._all_live_node_ids()        # node no longer counts as live
+    assert not any(k[0] == leaf_id for k in api._pcount)  # page-count entries gone
+    assert sid_b in api._sessions                          # other window untouched
+    assert api.close_session(sid_a)["ok"] is True          # idempotent
+
+
+def test_materialized_view_tempdir_deleted_when_its_window_closes(tmp_path):
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="Ansicht")
+    view_dir = os.path.dirname(res["path"])
+    assert os.path.isdir(view_dir)
+    # the new window opens the temp file → the dir binds to the NEW session …
+    new_sid = api.open(path=res["path"])["session"]
+    assert api._view_dirs.get(new_sid) == view_dir
+    assert view_dir not in api._pending_view_dirs
+    # … and closing that window deletes it
+    api.close_session(new_sid)
+    assert not os.path.exists(view_dir)
+
+
+def test_sweep_stale_view_dirs_removes_only_old_view_dirs(tmp_path):
+    import time
+    old = tmp_path / "beleg_view_old"
+    old.mkdir()
+    (old / "x.belegtool").write_bytes(b"x")
+    fresh = tmp_path / "beleg_view_fresh"
+    fresh.mkdir()
+    other = tmp_path / "unrelated"
+    other.mkdir()
+    stale = time.time() - 3 * 24 * 3600
+    os.utime(old, (stale, stale))
+
+    removed = sweep_stale_view_dirs(root=str(tmp_path))
+    assert str(old) in removed and not old.exists()  # stale view dir swept
+    assert fresh.exists()                            # a possibly-live view is kept
+    assert other.exists()                            # non-view dirs never touched
 
 
 def test_materialize_subset_empty_selection_is_rejected():

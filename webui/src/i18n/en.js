@@ -178,4 +178,21 @@ export const en = {
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Merging needs at least two nodes.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.':
     'The nodes to merge must share the same parent folder.',
+
+  // host-level errors/warnings (core/api.py; dynamic ones via lib/messages.js templates)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.':
+    'This file is already being edited and can only be opened by one person at a time.',
+  'nichts zu exportieren': 'nothing to export',
+  'nichts angezeigt': 'nothing displayed',
+  'nichts importiert': 'nothing imported',
+  'ungültige Daten: {error}': 'invalid data: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Skipped (no pages): {names}',
+  'Teilweise importiert — {warning}': 'Partially imported — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)':
+    '{name}: Office program for conversion not available (Word/Excel/PowerPoint required)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: file type {ext} is not supported',
+  '{name}: Datei ist passwortgeschützt': '{name}: file is password-protected',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})':
+    '{name}: archive/email could not be read ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: damaged or invalid file',
 }

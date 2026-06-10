@@ -157,4 +157,18 @@ export const bar = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nix zum Übernehma (koa aktuelle/druckte Fassung).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Zum Zammführn brauchts mindestns zwoa Knotn.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'De zammzführendn Knotn miassn den gleichn Eltern-Ordna ham.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'De Datei wead grod scho beorbeit und ko nur vo oana Person gleichzeitig aufgmocht wern.',
+  'nichts zu exportieren': 'nix zum Exportiern',
+  'nichts angezeigt': 'nix ozoagt',
+  'nichts importiert': 'nix importiert',
+  'ungültige Daten: {error}': 'ungültige Datn: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Ohne Seitn übersprunga: {names}',
+  'Teilweise importiert — {warning}': 'Teilweis importiert — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: Office-Programm zum Konvertiern ned verfügbor (Word/Excel/PowerPoint brauchts)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: Dateityp {ext} wead ned unterstützt',
+  '{name}: Datei ist passwortgeschützt': '{name}: Datei is passwortgschützt',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: Archiv/E-Mail hod ned glesn wern kenna ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: kaputte oda ungültige Datei',
 }

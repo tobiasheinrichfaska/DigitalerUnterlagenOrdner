@@ -104,11 +104,11 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | File | Role |
 |---|---|
 | `host.py` | pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid; stores the uid, never the window object — that recurses). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty` via `evaluate_js`), startup `_prewarm` of the heavy PDF libs. |
-| `core/api.py` | `CoreApi` façade (JSON in/out, one `DocumentSession` per window): `open/save/dispatch/undo/redo/render/render_compressed/compress_options/import_paths/import_bytes/export/config/any_dirty`. Per-session `dirty` tracking. |
+| `core/api.py` | `CoreApi` façade (JSON in/out, one `DocumentSession` per window): `open/save/dispatch/undo/redo/render/render_compressed/compress_options/import_paths/import_bytes/export/config/any_dirty`. Per-session `dirty` tracking. **`close_session`** frees a closed window's session (bytes, undo log, page-count cache, lock, materialized-view temp dir) and prunes the render cache — called from `host._bind_close`; `sweep_stale_view_dirs` clears crashed-session `beleg_view_*` temp dirs at startup (>1 day old). |
 | `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
 | `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
-| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js`, `treeNav.js`, `status.js`). |
+| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js` incl. `mergeableIds`, `treeNav.js`, `status.js`, `messages.js`). |
 | `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
 | `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal (separate from the main UI language switcher): 🇩🇪/🇬🇧 flags toggle the two authoritative versions; help text authored best-effort for all UI languages, unknown → EN fallback; GitHub/mailto correction links. |
 
@@ -585,8 +585,9 @@ as **v3.10.0**.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (134 keys =
-121 UI strings + 13 backend command-error messages; locked by `i18n.test.js`), every other
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (146 keys =
+121 UI strings + 13 backend command-error messages + 12 host-level error/warning
+strings; locked by `i18n.test.js`), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
 renders `LANGUAGE_NAMES`.
@@ -596,6 +597,15 @@ renders `LANGUAGE_NAMES`.
   localize like any other string. The 13 user-facing command errors are translated in all
   full-coverage languages; internal/developer errors (`unknown session`, `node not found: …`,
   invalid direction/status, …) deliberately stay English diagnostics.
+- **Localized host-level errors (2026-06-10):** `CoreApi`'s static error/warning strings
+  (lock "in use", "nichts zu exportieren/angezeigt/importiert", …) are en.js keys too;
+  messages with **dynamic parts** (`_friendly_import_error` per-file errors, "ungültige
+  Daten: …", the export skip warning, App's "Teilweise importiert — …" composite) are
+  reverse-matched against German templates in
+  [`webui/src/lib/messages.js`](webui/src/lib/messages.js) (`localizeMessage`) so the static
+  wording translates while filenames/exception text survive. `messages.test.js` locks the
+  templates against `core/api.py`/`App.jsx` — changing those backend strings requires
+  updating the templates + all full-coverage language files.
 
 - **Regional English (2026-06-07):** the generic `en` code was split into **`en-US`
   ("English (US)")** and **`en-GB` ("English (UK)")**, each a thin spelling-override of the
@@ -604,7 +614,7 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **19 languages are 100% (all 134 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all 146 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Intentional **partials** (only

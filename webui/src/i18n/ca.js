@@ -155,4 +155,18 @@ export const ca = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Res a aplicar (no hi ha cap versió actual/comprimida).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'La combinació necessita com a mínim dos nodes.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Els nodes que es combinaran han de tenir la mateixa carpeta principal.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Aquest fitxer ja s’està editant i només el pot obrir una persona alhora.',
+  'nichts zu exportieren': 'res a exportar',
+  'nichts angezeigt': 'res a mostrar',
+  'nichts importiert': 'res importat',
+  'ungültige Daten: {error}': 'dades no vàlides: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Omesos (sense pàgines): {names}',
+  'Teilweise importiert — {warning}': 'Importació parcial — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: programa d’Office per a la conversió no disponible (cal Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: el tipus de fitxer {ext} no és compatible',
+  '{name}: Datei ist passwortgeschützt': '{name}: el fitxer està protegit amb contrasenya',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no s’ha pogut llegir l’arxiu/correu ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: fitxer malmès o no vàlid',
 }

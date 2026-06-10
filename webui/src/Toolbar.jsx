@@ -17,14 +17,14 @@ export function Toolbar({
       <button onClick={onNewWindow} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
       <button onClick={onImport} disabled={editLocked} title={lockTitle}>📥 {t('Importieren')}</button>
       <button onClick={onSave}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
-      <button onClick={onSaveAs} title={t('Speichern unter…')}>💾…</button>
+      <button onClick={onSaveAs} title={t('Speichern unter…')} aria-label={t('Speichern unter…')}>💾…</button>
       <button onClick={onExport} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>
         ⬇ {t('Export PDF')}{selectedCount ? ` (${t('Auswahl')} ${selectedCount})` : ''}
       </button>
       <span className="sep" />
       <button onClick={onAddFolder} disabled={editLocked} title={lockTitle}>＋ {t('Ordner')}</button>
-      <button onClick={onUndo} disabled={!canUndo} title={t('Rückgängig')}>↶</button>
-      <button onClick={onRedo} disabled={!canRedo} title={t('Wiederholen')}>↷</button>
+      <button onClick={onUndo} disabled={!canUndo} title={t('Rückgängig')} aria-label={t('Rückgängig')}>↶</button>
+      <button onClick={onRedo} disabled={!canRedo} title={t('Wiederholen')} aria-label={t('Wiederholen')}>↷</button>
       <span className="sep" />
       <button className={tagsOn ? 'tag-toggle on' : 'tag-toggle'} aria-pressed={tagsOn}
         onClick={onToggleTags} title={t('Tags ein-/ausschalten')}>🏷️ {t('Tags')}</button>

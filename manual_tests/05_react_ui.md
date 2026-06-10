@@ -63,6 +63,8 @@ a Word/Excel/`.md` file.
 - Move re-renders from the returned tree (no flicker/duplication); the slide ghost
   names the destination ("in <folder>" / "oberste Ebene").
 - **Zusammenführen** only appears for 2+ **sibling** leaves and makes one PDF node.
+  It is offered only when you right-click **one of the selected nodes** — right-
+  clicking a node outside the selection hides it (like Export/Status/Löschen).
 - **In neuen Ordner** works across depths (folder lands in the common parent, else
   the root) and keeps the items separate.
 - **Splitten** replaces the leaf with one node per page.

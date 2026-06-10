@@ -155,4 +155,18 @@ export const ru = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Нечего применять (нет текущей/сжатой версии).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Для объединения нужно не менее двух узлов.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Объединяемые узлы должны иметь одну родительскую папку.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Этот файл уже редактируется, и одновременно его может открыть только один человек.',
+  'nichts zu exportieren': 'нечего экспортировать',
+  'nichts angezeigt': 'ничего не отображено',
+  'nichts importiert': 'ничего не импортировано',
+  'ungültige Daten: {error}': 'недопустимые данные: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Пропущены (без страниц): {names}',
+  'Teilweise importiert — {warning}': 'Импортировано частично — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: программа Office для конвертации недоступна (требуется Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: тип файла {ext} не поддерживается',
+  '{name}: Datei ist passwortgeschützt': '{name}: файл защищён паролем',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: не удалось прочитать архив/письмо ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: повреждённый или недопустимый файл',
 }

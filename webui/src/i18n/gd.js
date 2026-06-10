@@ -157,4 +157,18 @@ export const gd = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Chan eil dad ri chur an sàs (gun tionndadh làithreach/dùmhlaichte).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Tha feum air co-dhiù dà nòd airson co-aonadh.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Feumaidh na nòdan a thèid an co-aonadh a bhith san aon phasgan-phàrant.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Tha am faidhle seo ’ga dheasachadh mu thràth is chan urrainn ach do dh’aon neach aig an aon àm fhosgladh.',
+  'nichts zu exportieren': 'chan eil dad ri às-phortadh',
+  'nichts angezeigt': 'chan eil dad ’ga shealltainn',
+  'nichts importiert': 'cha deach dad ion-phortadh',
+  'ungültige Daten: {error}': 'dàta mì-dhligheach: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Air a leigeil seachad (gun duilleagan): {names}',
+  'Teilweise importiert — {warning}': 'Air ion-phortadh gu ìre — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: chan eil prògram Office airson an iompachaidh ri fhaighinn (tha feum air Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: cha chuirear taic ri seòrsa an fhaidhle {ext}',
+  '{name}: Datei ist passwortgeschützt': '{name}: tha am faidhle dìonta le facal-faire',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: cha b’ urrainn an tasglann/post-d a leughadh ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: faidhle millte no mì-dhligheach',
 }

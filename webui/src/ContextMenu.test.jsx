@@ -119,10 +119,17 @@ describe('ContextMenu', () => {
     expect(dispatch).toHaveBeenCalledWith({ type: 'Delete', node_id: 'L' })
   })
 
-  it('merge entry appears with mergeIds and dispatches Merge', () => {
-    const { dispatch } = setup(leaf, { mergeIds: ['L', 'M'] })
+  it('merge entry appears when the clicked node is in the selection and dispatches Merge', () => {
+    const { dispatch } = setup(leaf, { mergeIds: ['L', 'M'], selectedIds: ['L', 'M'] })
     fireEvent.click(screen.getByText(/Zusammenführen/))
     expect(dispatch).toHaveBeenCalledWith({ type: 'Merge', node_ids: ['L', 'M'] })
+  })
+
+  it('merge entry is hidden when the clicked node is OUTSIDE the selection', () => {
+    // matches the export/status/delete membership rule — right-clicking an
+    // unrelated node must not offer merging the (invisible) selection
+    setup({ ...leaf, id: 'X' }, { mergeIds: ['L', 'M'], selectedIds: ['L', 'M'] })
+    expect(screen.queryByText(/Zusammenführen/)).toBeNull()
   })
 
   it('export uses the selection when the node is part of it', () => {

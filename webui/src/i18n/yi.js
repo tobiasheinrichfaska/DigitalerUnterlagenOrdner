@@ -158,4 +158,18 @@ export const yi = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'גאָרנישט אָנצונעמען (קיין איצטיקע/קאָמפּרעסירטע ווערסיע).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'צונויפֿגיסן דאַרף לפּחות צוויי קנעפּ.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'די קנעפּ וואָס מע גיסט צונויף מוזן האָבן די זעלבע עלטער-פּאַפּקע.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'די טעקע ווערט שוין באַאַרבעט און קען זײַן געעפֿנט נאָר פֿון איין מענטש אויף איין מאָל.',
+  'nichts zu exportieren': 'גאָרנישט צו עקספּאָרטירן',
+  'nichts angezeigt': 'גאָרנישט געוויזן',
+  'nichts importiert': 'גאָרנישט אימפּאָרטירט',
+  'ungültige Daten: {error}': 'אומגילטיקע דאַטן: {error}',
+  'Ohne Seiten übersprungen: {names}': 'איבערגעהיפּערט (אָן זײַטן): {names}',
+  'Teilweise importiert — {warning}': 'טיילווײַז אימפּאָרטירט — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: אָפֿיס-פּראָגראַם פֿאַר קאָנווערטירן נישט פֿאַראַן (מע דאַרף Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: טעקע-טיפּ {ext} ווערט נישט געשטיצט',
+  '{name}: Datei ist passwortgeschützt': '{name}: די טעקע איז באַשיצט מיט אַ פּאַראָל',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: דעם אַרכיוו/בליצבריוו האָט מען נישט געקענט לייענען ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: אַ צעבראָכענע אָדער אומגילטיקע טעקע',
 }

@@ -157,4 +157,18 @@ export const ga = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Níl aon rud le cur i bhfeidhm (gan leagan reatha/comhbhrúite).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Teastaíonn dhá nód ar a laghad le cumasc.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Caithfidh na nóid atá le cumasc an fillteán tuismitheora céanna a roinnt.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Tá an comhad seo á chur in eagar cheana féin agus ní féidir ach le duine amháin é a oscailt ag an am céanna.',
+  'nichts zu exportieren': 'níl aon rud le heaspórtáil',
+  'nichts angezeigt': 'níl aon rud ar taispeáint',
+  'nichts importiert': 'níor iompórtáladh aon rud',
+  'ungültige Daten: {error}': 'sonraí neamhbhailí: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Fágtha ar lár (gan leathanaigh): {names}',
+  'Teilweise importiert — {warning}': 'Iompórtáilte go páirteach — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: níl clár Office don tiontú ar fáil (Word/Excel/PowerPoint de dhíth)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: ní thacaítear leis an gcineál comhaid {ext}',
+  '{name}: Datei ist passwortgeschützt': '{name}: tá an comhad cosanta le pasfhocal',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: níorbh fhéidir an chartlann/ríomhphost a léamh ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: comhad damáistithe nó neamhbhailí',
 }

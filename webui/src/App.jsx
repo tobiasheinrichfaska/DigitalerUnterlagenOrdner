@@ -15,7 +15,8 @@ import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
 import { useKeyboard } from './hooks/useKeyboard'
 import { visibleOrder } from './lib/treeNav'
-import { resolveSelection } from './lib/selection'
+import { resolveSelection, mergeableIds } from './lib/selection'
+import { localizeMessage } from './lib/messages'
 import { useT } from './i18n/LanguageProvider'
 import './App.css'
 
@@ -219,6 +220,8 @@ export default function App() {
   const handleImport = (promise) =>
     run(promise).then((resp) => {
       afterChange(resp)
+      // raw German composite — localized at render time via lib/messages.js
+      // (the 'Teilweise importiert — {warning}' template + per-file templates)
       if (resp?.warning) setError(`Teilweise importiert — ${resp.warning}`)
     })
 
@@ -380,20 +383,9 @@ export default function App() {
   }, [selectedIds, selected, state, session, run, apply, resolveSel, viewActive])
 
 
-  // 2+ selected sibling leaves → the ids that can be merged into one PDF (else null)
-  const mergeable = (() => {
-    if (selectedIds.length < 2 || !state?.tree) return null
-    const nodes = selectedIds.map((id) => findNode(state.tree, id))
-    if (nodes.some((n) => !n || n.is_folder)) return null
-    const parents = selectedIds.map((id) => findParent(state.tree, id))
-    const parentIds = parents.map((p) => p?.id)
-    if (new Set(parentIds).size !== 1 || parentIds.some((p) => p == null)) return null
-    // Merge in DOCUMENT order (the order under the parent), not click order — so the
-    // merged PDF's pages follow the visible order and the kept name/slot is the TOPMOST
-    // node, not whichever happened to be selected first.
-    const order = parents[0].children.map((c) => c.id)
-    return [...selectedIds].sort((a, b) => order.indexOf(a) - order.indexOf(b))
-  })()
+  // 2+ selected sibling leaves → the ids that can be merged into one PDF, in
+  // DOCUMENT order (else null) — pure logic in lib/selection.js (unit-tested there)
+  const mergeable = mergeableIds(state?.tree, selectedIds)
 
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
   // their common parent if they share one, else at the root (always safe).
@@ -456,7 +448,9 @@ export default function App() {
         setError(null)
         const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
         const base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
-        setNotice(resp.warning ? `${base} — ${resp.warning}` : base)
+        // resp.warning is a German backend message ("Ohne Seiten übersprungen: …")
+        // with dynamic names — localize it before composing the (translated) notice.
+        setNotice(resp.warning ? `${base} — ${localizeMessage(t, resp.warning)}` : base)
       }
       else if (resp?.error && resp.error !== 'cancelled') setError(resp.error)
     })
@@ -516,8 +510,8 @@ export default function App() {
       </header>
 
 
-      {error && <p className="error">⚠ {t(error)}</p>}
-      {notice && !error && <p className="notice">✓ {notice}</p>}
+      {error && <p className="error" aria-live="polite">⚠ {localizeMessage(t, error)}</p>}
+      {notice && !error && <p className="notice" aria-live="polite">✓ {notice}</p>}
 
       <div className="body">
         <div className="pane tree-pane" style={{ flex: `0 0 ${treeWidth}px` }}>

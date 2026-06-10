@@ -32,9 +32,10 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 121 UI strings + 13 backend command-error messages.
+    // Canonical key count = 121 UI strings + 13 backend command-error messages
+    // + 12 host-level error/warning strings (core/api.py + lib/messages.js).
     // If a string is added, bump this deliberately.
-    expect(Object.keys(en).length).toBe(134)
+    expect(Object.keys(en).length).toBe(146)
   })
 })
 
@@ -60,7 +61,8 @@ describe('translation coverage', () => {
   // Scan the components for literal t('…') / t("…") calls and require an English
   // entry for each — so a newly-added German string can't ship untranslated.
   const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
-                 'Toolbar.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx', 'HelpModal.jsx']
+                 'Toolbar.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx', 'HelpModal.jsx',
+                 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   const used = new Set()

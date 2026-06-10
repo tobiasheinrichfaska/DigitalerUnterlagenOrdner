@@ -155,4 +155,18 @@ export const es = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nada que aplicar (no hay versión actual/comprimida).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'La combinación necesita al menos dos nodos.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Los nodos que se van a combinar deben tener la misma carpeta principal.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Este archivo ya se está editando y solo puede abrirlo una persona a la vez.',
+  'nichts zu exportieren': 'nada que exportar',
+  'nichts angezeigt': 'nada que mostrar',
+  'nichts importiert': 'nada importado',
+  'ungültige Daten: {error}': 'datos no válidos: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Omitidos (sin páginas): {names}',
+  'Teilweise importiert — {warning}': 'Importación parcial — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: programa de Office para la conversión no disponible (se requiere Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: el tipo de archivo {ext} no es compatible',
+  '{name}: Datei ist passwortgeschützt': '{name}: el archivo está protegido con contraseña',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no se pudo leer el archivo comprimido/correo ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: archivo dañado o no válido',
 }

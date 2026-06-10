@@ -155,4 +155,18 @@ export const fr = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Rien à appliquer (aucune version actuelle/compressée).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'La fusion nécessite au moins deux nœuds.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Les nœuds à fusionner doivent avoir le même dossier parent.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Ce fichier est déjà en cours de modification et ne peut être ouvert que par une seule personne à la fois.',
+  'nichts zu exportieren': 'rien à exporter',
+  'nichts angezeigt': 'rien d’affiché',
+  'nichts importiert': 'rien d’importé',
+  'ungültige Daten: {error}': 'données invalides : {error}',
+  'Ohne Seiten übersprungen: {names}': 'Ignorés (sans pages) : {names}',
+  'Teilweise importiert — {warning}': 'Importation partielle — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name} : programme Office pour la conversion non disponible (Word/Excel/PowerPoint requis)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name} : le type de fichier {ext} n’est pas pris en charge',
+  '{name}: Datei ist passwortgeschützt': '{name} : le fichier est protégé par mot de passe',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name} : l’archive/e-mail n’a pas pu être lue ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name} : fichier endommagé ou invalide',
 }

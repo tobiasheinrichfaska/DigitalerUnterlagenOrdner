@@ -156,4 +156,18 @@ export const la = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Nihil ad adhibendum (nulla forma currens/compressa).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Coniunctio saltem duos nodos requirit.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Nodi coniungendi idem scrinium parens habere debent.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Hoc pligamen iam tractatur et ab una tantum persona simul aperiri potest.',
+  'nichts zu exportieren': 'nihil exportandum',
+  'nichts angezeigt': 'nihil monstratum',
+  'nichts importiert': 'nihil importatum',
+  'ungültige Daten: {error}': 'data invalida: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Sine paginis praetermissa: {names}',
+  'Teilweise importiert — {warning}': 'Ex parte importatum — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: programma Office ad convertendum non praesto est (Word/Excel/PowerPoint requiritur)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: genus pligaminis {ext} non sustinetur',
+  '{name}: Datei ist passwortgeschützt': '{name}: pligamen tessera protectum est',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: archivum/epistula legi non potuit ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: pligamen corruptum aut invalidum',
 }

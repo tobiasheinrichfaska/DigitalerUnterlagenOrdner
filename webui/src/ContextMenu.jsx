@@ -35,6 +35,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
   }
   // export the current selection if this node is part of it, else just this node
   const exportIds = (selectedIds?.includes(node.id) && selectedIds.length >= 1) ? selectedIds : [node.id]
+  // merge acts on the SELECTION — offer it only when the clicked node is part of it
+  // (same membership rule as export/status/delete above/below)
+  const mergeHere = mergeIds && selectedIds?.includes(node.id) ? mergeIds : null
   const isLeaf = !node.is_folder
   const run = (extra) => {
     dispatch({ ...extra, node_id: node.id })
@@ -73,9 +76,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
       />
       <div ref={menuRef} className="context-menu"
         style={{ left: pos ? pos.left : x, top: pos ? pos.top : y }}>
-        {!editLocked && (mergeIds || group) && (
+        {!editLocked && (mergeHere || group) && (
           <>
-            {mergeIds && <button onClick={merge}>{t('Zusammenführen → 1 PDF ({count})', { count: mergeIds.length })}</button>}
+            {mergeHere && <button onClick={merge}>{t('Zusammenführen → 1 PDF ({count})', { count: mergeHere.length })}</button>}
             {group && <button onClick={groupInto}>{t('In neuen Ordner ({count})', { count: group.ids.length })}</button>}
             <div className="cm-sep" />
           </>

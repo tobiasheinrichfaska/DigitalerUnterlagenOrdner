@@ -34,6 +34,8 @@ def _prewarm():
     try:
         import os
         import tempfile
+        from core.api import sweep_stale_view_dirs
+        sweep_stale_view_dirs()  # clean up beleg_view_* temp dirs stranded by a crash
         from pypdf import PdfWriter
         from formats import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
         from core.bridge import save_belegtool, load_belegtool
@@ -96,6 +98,8 @@ def _bind_close(win, api):
         try:
             if api._session:
                 api._core.release(api._session)  # free the file lock for this window
+                # free the session itself (document bytes, undo log, caches, temp view)
+                api._core.close_session(api._session)
         except Exception:
             pass
         return True
@@ -380,6 +384,8 @@ def main(startup_path=None):
         # pythonnet/.NET failing to load is almost always Mark-of-the-Web on a
         # downloaded build — give a clear unblock hint, not a cryptic traceback.
         if sys.platform == "win32" and _is_clr_load_error(e):
+            # log the real exception too — the dialog may be the user's only view of it
+            logger.exception("pythonnet/.NET load failed (likely Mark-of-the-Web)")
             _warn_clr_load_failed(e)
             return
         raise

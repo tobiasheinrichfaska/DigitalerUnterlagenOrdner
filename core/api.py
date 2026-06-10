@@ -31,6 +31,33 @@ from infra.log_config import logger
 from version_info import APP_NAME
 
 
+def sweep_stale_view_dirs(root=None, max_age_s=24 * 3600, now=None):
+    """Best-effort startup cleanup of leftover ``beleg_view_*`` temp dirs.
+    Materialized tag views are deleted when their window closes (close_session),
+    but a crash can strand them. Only dirs older than ``max_age_s`` are removed,
+    so a concurrently running instance's live view is never touched. Returns the
+    removed paths."""
+    import glob
+    import shutil
+    import tempfile
+    import time
+    root = root or tempfile.gettempdir()
+    now = now if now is not None else time.time()
+    removed = []
+    for d in glob.glob(os.path.join(root, "beleg_view_*")):
+        try:
+            if os.path.isdir(d) and now - os.path.getmtime(d) > max_age_s:
+                shutil.rmtree(d, ignore_errors=True)
+                removed.append(d)
+        except OSError:
+            continue
+    return removed
+
+
+# NOTE on i18n: the German messages below (and the static error strings in CoreApi)
+# are translation KEYS — the React UI localizes them via t()/localizeMessage
+# (webui/src/lib/messages.js mirrors the dynamic templates). Changing the wording
+# here requires updating en.js + every full-coverage language file.
 def _friendly_import_error(path: str, exc: Exception) -> str:
     """Map a raw import exception to a clear, per-file German message."""
     name = os.path.basename(path)
@@ -67,6 +94,8 @@ class CoreApi:
         # opening a .belegtool holds an exclusive handle for the session's lifetime.
         self._file_lock_enabled = os.environ.get("BELEG_FILE_LOCK", "").lower() not in ("", "0", "false", "no")
         self._locks = {}  # session -> FileLock (only while file-lock is enabled)
+        self._view_dirs = {}  # session -> temp beleg_view_* dir of its materialized view (deleted on close)
+        self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
 
     def _renderer(self):
         if self._render_service is None:
@@ -263,7 +292,8 @@ class CoreApi:
             pass
 
     def _release_lock(self, session):
-        lock = self._locks.pop(session, None)
+        with self._lock:  # pywebview dispatches JS calls on separate threads
+            lock = self._locks.pop(session, None)
         if lock is not None:
             lock.release()
 
@@ -304,6 +334,12 @@ class CoreApi:
             self._paths[sid] = path if path else None  # remember where it came from
             if lock is not None:
                 self._locks[sid] = lock
+            # a materialized tag view opened in its new window → bind the temp dir to
+            # this session so close_session can delete it with the window.
+            view_dir = os.path.dirname(path) if path else None
+            if view_dir and view_dir in self._pending_view_dirs:
+                self._pending_view_dirs.discard(view_dir)
+                self._view_dirs[sid] = view_dir
             resp = self._doc_response_locked(sid)
         if prev_lock is not None:
             prev_lock.release()
@@ -596,13 +632,17 @@ class CoreApi:
     def _relock_after_save_as(self, session, new_path) -> None:
         """After a normal (unlocked) save to a NEW path while file-lock is on: release the
         old lock and lock the just-written file so the session keeps its single-writer hold."""
-        if not self._file_lock_enabled or new_path == self._paths.get(session):
+        if not self._file_lock_enabled:
             return
+        with self._lock:
+            if new_path == self._paths.get(session):
+                return
         self._release_lock(session)
         try:
             lock = self._acquire_lock(new_path)
             if lock is not None:
-                self._locks[session] = lock
+                with self._lock:
+                    self._locks[session] = lock
         except Exception:
             logger.warning("[lock] could not lock the new file after save-as", exc_info=True)
 
@@ -610,6 +650,40 @@ class CoreApi:
         """Release the session's file lock — called when its window closes so another
         person/window can open the file without quitting the app. Idempotent."""
         self._release_lock(session)
+        return {"ok": True}
+
+    def close_session(self, session: str) -> dict:
+        """Free everything a closed window held: its DocumentSession (full bytes +
+        undo log), path binding, page-count entries, cancel tokens, file lock and —
+        for a materialized tag view — its temp beleg_view_* dir. Then prune the
+        shared render cache so the gone nodes' renders can be evicted. Idempotent."""
+        with self._lock:
+            s = self._sessions.pop(session, None)
+            self._paths.pop(session, None)
+            lock = self._locks.pop(session, None)
+            view_dir = self._view_dirs.pop(session, None)
+            if s is not None:
+                live = set()
+                for other in self._sessions.values():
+                    live.update(n.id for n in other.document.root.iter())
+                # node uids persist in .belegtool, so the same file open twice shares
+                # ids — only drop what no remaining session still uses.
+                gone = {n.id for n in s.document.root.iter()} - live
+                for key in [k for k in self._pcount if k[0] in gone]:
+                    del self._pcount[key]
+                for nid in gone:
+                    ev = self._cancel_tokens.pop(nid, None)
+                    if ev is not None:
+                        ev.set()  # abort any in-flight compression of a vanished node
+            if self._last_seed and self._last_seed[0] == session:
+                self._last_seed = None  # never resume prefetch for a closed session
+        if lock is not None:
+            lock.release()
+        if view_dir is not None:
+            import shutil
+            shutil.rmtree(view_dir, ignore_errors=True)
+        if self._render_service is not None:
+            self._render_service.prune(self._all_live_node_ids())
         return {"ok": True}
 
     def export(self, session: str, path: str, node_ids=None, options=None) -> dict:
@@ -693,6 +767,8 @@ class CoreApi:
         except Exception as e:
             logger.exception("materialize_subset failed")
             return {"ok": False, "error": str(e)}
+        with self._lock:  # remember the temp dir until its new window opens (then per-session)
+            self._pending_view_dirs.add(os.path.dirname(path))
         return {"ok": True, "path": path, "count": sum(1 for _ in new_root.iter()) - 1}
 
     def any_dirty(self) -> bool:

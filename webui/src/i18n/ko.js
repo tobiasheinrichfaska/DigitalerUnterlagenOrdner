@@ -155,4 +155,18 @@ export const ko = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': '적용할 것이 없습니다 (현재/압축 버전 없음).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': '병합하려면 노드가 최소 두 개 필요합니다.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': '병합할 노드는 같은 상위 폴더에 있어야 합니다.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': '이 파일은 이미 편집 중이며 한 번에 한 사람만 열 수 있습니다.',
+  'nichts zu exportieren': '내보낼 항목이 없습니다',
+  'nichts angezeigt': '표시된 항목이 없습니다',
+  'nichts importiert': '가져온 항목이 없습니다',
+  'ungültige Daten: {error}': '잘못된 데이터: {error}',
+  'Ohne Seiten übersprungen: {names}': '페이지 없음으로 건너뜀: {names}',
+  'Teilweise importiert — {warning}': '부분적으로 가져옴 — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: 변환에 필요한 Office 프로그램을 사용할 수 없습니다 (Word/Excel/PowerPoint 필요)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: 파일 형식 {ext}은(는) 지원되지 않습니다',
+  '{name}: Datei ist passwortgeschützt': '{name}: 파일이 암호로 보호되어 있습니다',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: 압축 파일/이메일을 읽을 수 없습니다 ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: 손상되었거나 잘못된 파일',
 }

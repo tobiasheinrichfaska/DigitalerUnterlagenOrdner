@@ -147,6 +147,65 @@ class _Win:
         self.events = type("E", (), {"closing": _Hook()})()
 
 
+def test_close_guard_frees_the_windows_session():
+    # Closing a window must free its session in the shared CoreApi (lock + document
+    # bytes + caches) — not only the file lock.
+    captured = []
+
+    class _Closing:
+        def __iadd__(self, fn):
+            captured.append(fn)
+            return self
+
+    class _W:
+        uid = "w"
+
+        def __init__(self):
+            self.events = type("E", (), {"closing": _Closing()})()
+
+    core = CoreApi()
+    api = host.HostApi(core)
+    api._session = api.open()["session"]
+    host._bind_close(_W(), api)
+    assert captured, "closing handler was not registered"
+    assert captured[0]() is True              # not dirty → close proceeds
+    assert api._session not in core._sessions  # the session died with the window
+
+
+def test_is_clr_load_error_matches_pythonnet_failures():
+    for msg in ("Failed to initialize pythonnet",
+                "Could not load file or assembly Python.Runtime",
+                "loader.initialize returned -1",
+                "clr_loader could not resolve the runtime"):
+        assert host._is_clr_load_error(Exception(msg)) is True, msg
+
+
+def test_is_clr_load_error_ignores_other_failures():
+    for msg in ("ERR_UNSAFE_PORT", "[WinError 10048] address already in use",
+                "KeyError: 'session'", ""):
+        assert host._is_clr_load_error(Exception(msg)) is False, msg
+
+
+def test_main_logs_and_explains_clr_load_failure(monkeypatch):
+    # A pythonnet load failure must be LOGGED (not only shown in the dialog) and
+    # routed to the MotW explanation instead of a raw traceback.
+    calls = {"warned": None, "logged": False}
+
+    class _Log:
+        def exception(self, *a, **k):
+            calls["logged"] = True
+
+    monkeypatch.setattr(host, "_webview2_installed", lambda: True)
+    monkeypatch.setattr(host, "_open_window", lambda core, startup_path=None: {"ok": True})
+    monkeypatch.setattr(host.webview, "start",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Failed to initialize Python.Runtime")))
+    monkeypatch.setattr(host, "_warn_clr_load_failed", lambda e: calls.__setitem__("warned", e))
+    monkeypatch.setattr(host, "logger", _Log())
+    host.main()  # must return (no raise): the failure is explained, not crashed on
+    assert calls["logged"] is True
+    assert isinstance(calls["warned"], RuntimeError)
+
+
 def test_new_window_creates_a_window(monkeypatch):
     created = []
     monkeypatch.setattr(host.webview, "create_window",

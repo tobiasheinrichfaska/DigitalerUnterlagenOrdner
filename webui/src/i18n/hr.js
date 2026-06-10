@@ -155,4 +155,18 @@ export const hr = {
   'Nichts zu übernehmen (keine aktuelle/komprimierte Fassung).': 'Ništa za primjenu (nema trenutne/sažete verzije).',
   'Zum Zusammenführen sind mindestens zwei Knoten nötig.': 'Spajanje treba najmanje dva čvora.',
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.': 'Čvorovi koji se spajaju moraju imati istu nadređenu mapu.',
+
+  // Host-Fehler/Warnungen (core/api.py; dynamische Teile via webui/src/lib/messages.js)
+  'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.': 'Ova se datoteka već uređuje i istodobno je može otvoriti samo jedna osoba.',
+  'nichts zu exportieren': 'ništa za izvoz',
+  'nichts angezeigt': 'ništa prikazano',
+  'nichts importiert': 'ništa uvezeno',
+  'ungültige Daten: {error}': 'nevažeći podaci: {error}',
+  'Ohne Seiten übersprungen: {names}': 'Preskočeno (bez stranica): {names}',
+  'Teilweise importiert — {warning}': 'Djelomično uvezeno — {warning}',
+  '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)': '{name}: Office program za pretvorbu nije dostupan (potreban je Word/Excel/PowerPoint)',
+  '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: vrsta datoteke {ext} nije podržana',
+  '{name}: Datei ist passwortgeschützt': '{name}: datoteka je zaštićena lozinkom',
+  '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: arhivu/e-poštu nije bilo moguće pročitati ({msg})',
+  '{name}: beschädigte oder ungültige Datei': '{name}: oštećena ili nevažeća datoteka',
 }

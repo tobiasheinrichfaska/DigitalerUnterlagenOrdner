@@ -477,6 +477,17 @@ as **v3.10.0**.
    fixed → the **document position drifts** when zooming while scrolled down (top-anchored zoom
    is fine). Fix: before changing zoom, capture the anchor (visible page index + intra-page
    fraction at the viewport top, or `scrollTop/scrollHeight`) and reapply it after the relayout.
+10. **Reusable accessible menu (keyboard nav).** *(Deferred audit item, folded here.)* Build one
+    accessible-menu pattern — `role="menu"`/`menuitem`, roving focus, ↑/↓ to move, Enter/Space to
+    activate, Esc to close, focus-first-on-open — and have **`ContextMenu.jsx` AND the planned #3
+    Save split-button dropdown share it**, rather than retrofitting today's ContextMenu and
+    rebuilding for the split-button. (Today: ContextMenu is mouse + Esc/backdrop only.)
+11. **Error-code contract (architectural, optional).** *(Deferred audit High — the pragmatic
+    `lib/messages.js` reverse-template localizer already covers it functionally.)* Optionally
+    replace backend German error strings with stable **`{ code, params }`** so the UI owns all
+    wording (kills the reverse-template matching). If not done, **new error paths from #1/#5/#6
+    must follow the established convention**: raise the static German text as an `en.js` key (+
+    full-coverage langs, bump the key-lock), and add a `messages.js` template for any dynamic parts.
 
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.

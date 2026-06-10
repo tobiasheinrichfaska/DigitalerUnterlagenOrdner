@@ -132,6 +132,18 @@ describe('ContextMenu', () => {
     expect(screen.queryByText(/Zusammenführen/)).toBeNull()
   })
 
+  it('group entry appears when the clicked node is in the selection', () => {
+    setup(leaf, { group: { ids: ['L', 'M'], parentId: 'P' }, selectedIds: ['L', 'M'] })
+    expect(screen.getByText(/In neuen Ordner/)).toBeInTheDocument()
+  })
+
+  it('group entry is hidden when the clicked node is OUTSIDE the selection', () => {
+    // same membership rule as merge — don't group the invisible selection from an
+    // unrelated node
+    setup({ ...leaf, id: 'X' }, { group: { ids: ['L', 'M'], parentId: 'P' }, selectedIds: ['L', 'M'] })
+    expect(screen.queryByText(/In neuen Ordner/)).toBeNull()
+  })
+
   it('export uses the selection when the node is part of it', () => {
     const { onExport } = setup(leaf, { selectedIds: ['L', 'X'] })
     fireEvent.click(screen.getByText(/Auswahl als PDF exportieren/))

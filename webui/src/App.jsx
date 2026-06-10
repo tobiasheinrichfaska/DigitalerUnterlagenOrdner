@@ -385,9 +385,14 @@ export default function App() {
     if (selectedIds.length < 2 || !state?.tree) return null
     const nodes = selectedIds.map((id) => findNode(state.tree, id))
     if (nodes.some((n) => !n || n.is_folder)) return null
-    const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
-    if (new Set(parents).size !== 1 || parents.some((p) => p == null)) return null
-    return selectedIds
+    const parents = selectedIds.map((id) => findParent(state.tree, id))
+    const parentIds = parents.map((p) => p?.id)
+    if (new Set(parentIds).size !== 1 || parentIds.some((p) => p == null)) return null
+    // Merge in DOCUMENT order (the order under the parent), not click order — so the
+    // merged PDF's pages follow the visible order and the kept name/slot is the TOPMOST
+    // node, not whichever happened to be selected first.
+    const order = parents[0].children.map((c) => c.id)
+    return [...selectedIds].sort((a, b) => order.indexOf(a) - order.indexOf(b))
   })()
 
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in

@@ -107,6 +107,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         className={cls.join(' ')}
         role="treeitem"
         aria-selected={selectedIds.includes(node.id)}
+        aria-expanded={node.is_folder ? (forceExpand || !node.collapsed) : undefined}
         tabIndex={-1}
         style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         draggable={editing !== node.id && !reorderDisabled}
@@ -167,8 +168,8 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
             chosen indent level, with the destination named. Absolute → no layout shift. */}
         {over?.zone === 'after' && over.ghost && (
           <div className="drop-ghost" style={{ left: `${over.depth * INDENT + 6}px` }}>
-            <span className="drop-ghost-row">{over.files ? '📥 importieren' : `${dragIcon} ${dragLabel}`}</span>
-            <span className="drop-ghost-where">{over.target.parentName ? `in ${over.target.parentName}` : 'oberste Ebene'}</span>
+            <span className="drop-ghost-row">{over.files ? t('📥 importieren') : `${dragIcon} ${dragLabel}`}</span>
+            <span className="drop-ghost-where">{over.target.parentName ? t('in {target}', { target: over.target.parentName }) : t('oberste Ebene')}</span>
           </div>
         )}
       </div>
@@ -193,12 +194,13 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
 
 export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled = false, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
+  const { t } = useT()
   const [drag, setDrag] = useState(null)
   const [editing, setEditing] = useState(null) // node id being inline-renamed
   const renameTimerRef = useRef(0) // shared: click-marked-again schedules a rename
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
   const dragNode = drag ? findNode(node, drag) : null
-  const dragLabel = many ? `${selectedIds.length} Elemente` : (dragNode?.name ?? '')
+  const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
   // F2 renames the primary-selected node inline (a content edit — allowed in views too).

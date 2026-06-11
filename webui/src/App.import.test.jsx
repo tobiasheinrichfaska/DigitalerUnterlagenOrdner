@@ -90,6 +90,26 @@ describe('App import — partial import warning', () => {
   })
 })
 
+describe('App — always-mounted aria-live regions', () => {
+  it('error + notice live regions exist (empty) before any error, and the error TEXT is inserted into the existing node', async () => {
+    await renderApp({ import_dialog: () => ({ ok: false, error: 'nichts importiert' }) })
+    // both regions are in the DOM from the start — screen readers only reliably
+    // announce text inserted into an EXISTING live region, not a freshly mounted one
+    const container = document.body
+    const errRegion = container.querySelector('p.error[aria-live="polite"]')
+    const noticeRegion = container.querySelector('p.notice[aria-live="polite"]')
+    expect(errRegion).toBeInTheDocument()
+    expect(noticeRegion).toBeInTheDocument()
+    expect(errRegion).toHaveTextContent('')        // empty (visually collapsed via :empty CSS)
+    expect(noticeRegion).toHaveTextContent('')
+
+    fireEvent.click(screen.getByText(/Importieren/))
+    await waitFor(() => expect(errRegion).toHaveTextContent('nichts importiert'))
+    // the SAME node received the text (it was never unmounted/remounted)
+    expect(container.querySelector('p.error[aria-live="polite"]')).toBe(errRegion)
+  })
+})
+
 describe('App import — OS file drag-drop (fake files)', () => {
   it('drops two fake files: placeholders appear, each is imported, then they land as siblings', async () => {
     const calls = await renderApp()

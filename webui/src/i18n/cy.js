@@ -171,4 +171,10 @@ export const cy = {
   '{name}: Datei ist passwortgeschützt': '{name}: mae’r ffeil wedi’i diogelu â chyfrinair',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: methwyd â darllen yr archif/e-bost ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: ffeil wedi’i difrodi neu’n annilys',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Ffenestr heb ei chanfod',
+  'in {target}': 'i {target}',
+  '📥 importieren': '📥 mewnforio',
+  '{n} Elemente': '{n} eitem',
 }

@@ -169,4 +169,10 @@ export const uk = {
   '{name}: Datei ist passwortgeschützt': '{name}: файл захищено паролем',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: не вдалося прочитати архів/лист ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: пошкоджений або недійсний файл',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Вікно не знайдено',
+  'in {target}': 'у {target}',
+  '📥 importieren': '📥 імпортувати',
+  '{n} Elemente': 'елементів: {n}',
 }

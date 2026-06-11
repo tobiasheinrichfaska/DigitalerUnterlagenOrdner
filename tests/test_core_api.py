@@ -157,6 +157,34 @@ def test_close_session_frees_session_state(tmp_path):
     assert api.close_session(sid_a)["ok"] is True          # idempotent
 
 
+def test_close_session_keeps_shared_uid_nodes_of_the_surviving_window(tmp_path):
+    # Node uids persist in .belegtool, so the SAME file opened in two windows shares
+    # node ids. Closing one window must not evict the survivor's state: its ids stay
+    # live and its page-count cache entries are kept (the guard in close_session).
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), path)
+    api = CoreApi()
+    a = api.open(path=str(path))
+    b = api.open(path=str(path))  # same file → same persisted node uids
+    sid_a, sid_b = a["session"], b["session"]
+    leaf_a = a["tree"]["children"][0]["id"]
+    leaf_b = b["tree"]["children"][0]["id"]
+    assert sid_a != sid_b and leaf_a == leaf_b  # shared uid across both windows
+
+    api._pcount[(leaf_a, 0)] = 1  # simulate a cached page count for the shared leaf
+    assert api.close_session(sid_a)["ok"] is True
+
+    assert leaf_b in api._all_live_node_ids()       # survivor's node still counts as live
+    assert (leaf_b, 0) in api._pcount               # its page-count entry was NOT dropped
+    assert sid_b in api._sessions                   # survivor session untouched
+    # the survivor keeps working: rendering its leaf through the shared cache succeeds
+    assert api.render(sid_b, leaf_b)["ok"] is True
+    # closing the last window then really frees the shared state
+    api.close_session(sid_b)
+    assert leaf_b not in api._all_live_node_ids()
+    assert not any(k[0] == leaf_b for k in api._pcount)
+
+
 def test_materialized_view_tempdir_deleted_when_its_window_closes(tmp_path):
     src = Document(Node(name="root", is_folder=True, children=(
         Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
@@ -175,6 +203,53 @@ def test_materialized_view_tempdir_deleted_when_its_window_closes(tmp_path):
     # … and closing that window deletes it
     api.close_session(new_sid)
     assert not os.path.exists(view_dir)
+
+
+def test_binding_a_view_dir_refreshes_its_mtime_so_a_sweep_keeps_it(tmp_path):
+    # Edge: a SECOND running instance's startup sweep deletes beleg_view_* dirs
+    # older than 24 h. A live view dir's mtime used to stay at creation time, so a
+    # window open >24 h could lose its dir. open() now touches the dir on bind.
+    import time
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="Ansicht")
+    view_dir = os.path.dirname(res["path"])
+
+    # simulate the dir having been created >24 h ago (mtime = creation time)
+    stale = time.time() - 2 * 24 * 3600
+    os.utime(view_dir, (stale, stale))
+
+    new_sid = api.open(path=res["path"])["session"]  # binding touches the mtime …
+    assert api._view_dirs.get(new_sid) == view_dir
+    assert time.time() - os.path.getmtime(view_dir) < 3600
+
+    # … so another instance's sweep no longer considers it stale
+    removed = sweep_stale_view_dirs(root=str(os.path.dirname(view_dir)))
+    assert view_dir not in removed and os.path.isdir(view_dir)
+
+
+def test_saving_through_a_view_dir_refreshes_its_mtime(tmp_path):
+    import time
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="Ansicht")
+    view_dir = os.path.dirname(res["path"])
+    new_sid = api.open(path=res["path"])["session"]
+
+    stale = time.time() - 2 * 24 * 3600
+    os.utime(view_dir, (stale, stale))  # window has been open >24 h since the bind
+    assert api.save(new_sid, res["path"])["ok"] is True  # in-place Speichern
+    assert time.time() - os.path.getmtime(view_dir) < 3600  # sweep-safe again
 
 
 def test_sweep_stale_view_dirs_removes_only_old_view_dirs(tmp_path):

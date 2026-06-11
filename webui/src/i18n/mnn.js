@@ -171,4 +171,10 @@ export const mnn = {
   '{name}: Datei ist passwortgeschützt': '{name}: papar hava secreto password',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no can read zip/mail ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: papar kaputt o no bueno',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Windo no findo',
+  'in {target}': 'in {target}',
+  '📥 importieren': '📥 bringa in',
+  '{n} Elemente': '{n} thingies',
 }

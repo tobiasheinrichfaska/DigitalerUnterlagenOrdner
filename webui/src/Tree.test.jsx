@@ -112,4 +112,22 @@ describe('Tree', () => {
     expect(selected[0].textContent).toContain('doc2')
     expect(rows[0].getAttribute('tabindex')).toBe('-1')
   })
+
+  it('folder rows carry aria-expanded matching their collapse state; leaves omit it', () => {
+    const { container } = renderTree()
+    const folder = [...container.querySelectorAll('.row[role="treeitem"]')].find((r) => r.textContent.includes('Ordner'))
+    expect(folder).toHaveAttribute('aria-expanded', 'true')
+    const leaf = [...container.querySelectorAll('.row[role="treeitem"]')].find((r) => r.textContent.includes('doc2'))
+    expect(leaf).not.toHaveAttribute('aria-expanded')
+  })
+
+  it('a collapsed folder reports aria-expanded=false, unless forceExpand shows it open', () => {
+    const a = renderTree({ node: collapsedTree })
+    const folderA = [...a.container.querySelectorAll('.row[role="treeitem"]')].find((r) => r.textContent.includes('Ordner'))
+    expect(folderA).toHaveAttribute('aria-expanded', 'false')
+    a.unmount()
+    const b = renderTree({ node: collapsedTree, forceExpand: true })
+    const folderB = [...b.container.querySelectorAll('.row[role="treeitem"]')].find((r) => r.textContent.includes('Ordner'))
+    expect(folderB).toHaveAttribute('aria-expanded', 'true') // children are actually visible
+  })
 })

@@ -172,4 +172,10 @@ export const yi = {
   '{name}: Datei ist passwortgeschützt': '{name}: די טעקע איז באַשיצט מיט אַ פּאַראָל',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: דעם אַרכיוו/בליצבריוו האָט מען נישט געקענט לייענען ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: אַ צעבראָכענע אָדער אומגילטיקע טעקע',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'פֿענצטער נישט געפֿונען',
+  'in {target}': 'אין {target}',
+  '📥 importieren': '📥 אַרײַנברענגען',
+  '{n} Elemente': '{n} עלעמענטן',
 }

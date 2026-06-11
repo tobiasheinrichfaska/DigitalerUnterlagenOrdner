@@ -67,6 +67,11 @@ export const en = {
     'Drop files — onto a position in the tree (into/between) for a precise target, otherwise into {target}',
   'oberste Ebene': 'top level',
 
+  // drag-ghost (Tree.jsx drop preview)
+  'in {target}': 'into {target}',
+  '📥 importieren': '📥 import',
+  '{n} Elemente': '{n} items',
+
   // context menu
   'Neuer Ordner': 'New folder',
   'Umbenennen': 'Rename',
@@ -179,7 +184,8 @@ export const en = {
   'Die zusammenzuführenden Knoten müssen denselben übergeordneten Ordner haben.':
     'The nodes to merge must share the same parent folder.',
 
-  // host-level errors/warnings (core/api.py; dynamic ones via lib/messages.js templates)
+  // host-level errors/warnings (host.py + core/api.py; dynamic ones via lib/messages.js templates)
+  'Fenster nicht gefunden': 'Window not found',
   'Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.':
     'This file is already being edited and can only be opened by one person at a time.',
   'nichts zu exportieren': 'nothing to export',

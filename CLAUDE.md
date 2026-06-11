@@ -596,8 +596,8 @@ as **v3.10.0**.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (146 keys =
-121 UI strings + 13 backend command-error messages + 12 host-level error/warning
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (150 keys =
+124 UI strings + 13 backend command-error messages + 13 host-level error/warning
 strings; locked by `i18n.test.js`), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
@@ -609,7 +609,8 @@ renders `LANGUAGE_NAMES`.
   full-coverage languages; internal/developer errors (`unknown session`, `node not found: …`,
   invalid direction/status, …) deliberately stay English diagnostics.
 - **Localized host-level errors (2026-06-10):** `CoreApi`'s static error/warning strings
-  (lock "in use", "nichts zu exportieren/angezeigt/importiert", …) are en.js keys too;
+  (lock "in use", "nichts zu exportieren/angezeigt/importiert", …) and `host.py`'s
+  "Fenster nicht gefunden" are en.js keys too;
   messages with **dynamic parts** (`_friendly_import_error` per-file errors, "ungültige
   Daten: …", the export skip warning, App's "Teilweise importiert — …" composite) are
   reverse-matched against German templates in
@@ -625,7 +626,7 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **19 languages are 100% (all 146 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all 150 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Intentional **partials** (only

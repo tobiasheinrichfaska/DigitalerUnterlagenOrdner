@@ -510,8 +510,12 @@ export default function App() {
       </header>
 
 
-      {error && <p className="error" aria-live="polite">⚠ {localizeMessage(t, error)}</p>}
-      {notice && !error && <p className="notice" aria-live="polite">✓ {notice}</p>}
+      {/* Always-mounted live regions: screen readers only reliably announce TEXT
+          inserted into an existing aria-live node, not a node mounted with its text.
+          Empty → visually collapsed via the :empty CSS rule (never display:none,
+          which would drop the region from the accessibility tree). */}
+      <p className="error" aria-live="polite">{error ? `⚠ ${localizeMessage(t, error)}` : ''}</p>
+      <p className="notice" aria-live="polite">{notice && !error ? `✓ ${notice}` : ''}</p>
 
       <div className="body">
         <div className="pane tree-pane" style={{ flex: `0 0 ${treeWidth}px` }}>

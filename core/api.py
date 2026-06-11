@@ -340,6 +340,7 @@ class CoreApi:
             if view_dir and view_dir in self._pending_view_dirs:
                 self._pending_view_dirs.discard(view_dir)
                 self._view_dirs[sid] = view_dir
+                self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
             resp = self._doc_response_locked(sid)
         if prev_lock is not None:
             prev_lock.release()
@@ -349,6 +350,16 @@ class CoreApi:
     def document_path(self, session: str):
         """The on-disk path this session is bound to (None if never saved/opened)."""
         return self._paths.get(session)
+
+    @staticmethod
+    def _touch_view_dir(view_dir):
+        """Refresh a live view dir's mtime so a SECOND running instance's startup
+        sweep (sweep_stale_view_dirs, >24 h) never deletes a dir that is still in
+        use — its mtime would otherwise stay at creation time for the window's life."""
+        try:
+            os.utime(view_dir, None)
+        except OSError:
+            pass
 
     def _prewarm_cache(self, session):
         """Kick off the background prefetch around the first leaf, so the render cache
@@ -604,6 +615,9 @@ class CoreApi:
             if s is not None:
                 s.mark_saved()
             self._paths[session] = path  # bind the session to this file for in-place saves
+            view_dir = self._view_dirs.get(session)
+        if view_dir:
+            self._touch_view_dir(view_dir)  # saving through a view keeps it sweep-safe
         return {"ok": True, "session": session, "path": path}
 
     def _save_through_lock(self, lock, path, document, store_alternatives) -> None:

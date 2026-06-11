@@ -169,4 +169,10 @@ export const ko = {
   '{name}: Datei ist passwortgeschützt': '{name}: 파일이 암호로 보호되어 있습니다',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: 압축 파일/이메일을 읽을 수 없습니다 ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: 손상되었거나 잘못된 파일',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': '창을 찾을 수 없습니다',
+  'in {target}': '{target} 안으로',
+  '📥 importieren': '📥 가져오기',
+  '{n} Elemente': '항목 {n}개',
 }

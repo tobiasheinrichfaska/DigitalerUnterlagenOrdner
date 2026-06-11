@@ -171,4 +171,10 @@ export const bar = {
   '{name}: Datei ist passwortgeschützt': '{name}: Datei is passwortgschützt',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: Archiv/E-Mail hod ned glesn wern kenna ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: kaputte oda ungültige Datei',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Fensta ned gfundn',
+  'in {target}': 'in {target}',
+  '📥 importieren': '📥 importiern',
+  '{n} Elemente': '{n} Sachan',
 }

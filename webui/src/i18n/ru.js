@@ -169,4 +169,10 @@ export const ru = {
   '{name}: Datei ist passwortgeschützt': '{name}: файл защищён паролем',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: не удалось прочитать архив/письмо ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: повреждённый или недопустимый файл',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Окно не найдено',
+  'in {target}': 'в {target}',
+  '📥 importieren': '📥 импортировать',
+  '{n} Elemente': 'элементов: {n}',
 }

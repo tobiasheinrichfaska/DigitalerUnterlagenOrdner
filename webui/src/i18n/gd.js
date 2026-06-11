@@ -171,4 +171,10 @@ export const gd = {
   '{name}: Datei ist passwortgeschützt': '{name}: tha am faidhle dìonta le facal-faire',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: cha b’ urrainn an tasglann/post-d a leughadh ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: faidhle millte no mì-dhligheach',
+
+  // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
+  'Fenster nicht gefunden': 'Cha deach an uinneag a lorg',
+  'in {target}': 'a-steach do {target}',
+  '📥 importieren': '📥 ion-phortaich',
+  '{n} Elemente': '{n} nithean',
 }

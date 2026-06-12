@@ -63,8 +63,14 @@ class RealEngine:
         # object hashes once) — _doc_response_locked calls variants_for/evaluated per
         # leaf on EVERY edit while holding the CoreApi lock; without the memo each
         # call re-hashes the document's full bytes. Same pattern as CoreApi._version_of.
+        # The strong ref to the bytes is what makes id-keying safe; evicting only by
+        # entry count could pin 256 FULL leaf byte-strings (incl. closed sessions'),
+        # so eviction is ALSO byte-budgeted. An evicted entry simply re-hashes.
         self._dcache: "OrderedDict[int, tuple]" = OrderedDict()
         self._dcache_lock = threading.Lock()
+        self._dcache_bytes = 0
+        self._dcache_max_entries = 256
+        self._dcache_budget = 64 * 1024 * 1024
 
     def _digest(self, pdf_bytes: bytes) -> bytes:
         key = id(pdf_bytes)
@@ -76,9 +82,15 @@ class RealEngine:
         d = hashlib.sha1(pdf_bytes).digest()
         with self._dcache_lock:
             # the cache holds the bytes, so a live id can't be reused for other bytes
+            old = self._dcache.pop(key, None)
+            if old is not None:  # defensive — a live entry's id can't actually collide
+                self._dcache_bytes -= len(old[0])
             self._dcache[key] = (pdf_bytes, d)
-            if len(self._dcache) > 256:
-                self._dcache.popitem(last=False)
+            self._dcache_bytes += len(pdf_bytes)
+            while self._dcache and (len(self._dcache) > self._dcache_max_entries
+                                    or self._dcache_bytes > self._dcache_budget):
+                _k, (old_bytes, _d) = self._dcache.popitem(last=False)
+                self._dcache_bytes -= len(old_bytes)
         return d
 
     def variants_for(self, pdf_bytes: bytes) -> dict:

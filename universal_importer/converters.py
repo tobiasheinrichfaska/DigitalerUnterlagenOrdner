@@ -131,21 +131,39 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
 # Restrisiko (dokumentiert): Legacy-OLE-Formate (.doc/.xls/.ppt) sind kein ZIP
 # und werden hier nicht erfasst; dort verbleibt der COM-seitige Schutz
 # (AutomationSecurity=3, ReadOnly, UpdateLinks aus).
-_RELS_EXTERNAL_PREFIXES = (b"http://", b"https://", b"file:", b"\\\\", b"//")
+_RELS_EXTERNAL_PREFIXES = (b"http://", b"https://", b"ftp://", b"ftps://",
+                           b"file:", b"\\\\", b"//")
 _RELS_MAX_BYTES = 4 * 1024 * 1024  # ein .rels ist winzig; Cap gegen Zip-Bomben
+_RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-Bomben
 _REL_TAG_RE = re.compile(rb"<Relationship\b[^>]*>", re.IGNORECASE)
 _REL_ATTR_RE = re.compile(rb'(\w+)\s*=\s*"([^"]*)"')
+
+# Sentinel: die Datei IST ein ZIP, aber der Scan konnte sie nicht prüfen → der
+# Aufrufer muss ABLEHNEN (fail closed). Words toleranter OPC-Parser könnte ein
+# externes Ziel auflösen, das unser zipfile nicht lesen konnte (Bypass).
+SCAN_UNREADABLE = "<.rels nicht prüfbar>"
 
 
 def scan_ooxml_external_targets(path: str) -> Optional[str]:
     """Erstes verdächtiges externes Ziel in den ``*.rels`` einer OOXML-Datei
     (sonst ``None``). Nur ``TargetMode="External"``-Beziehungen, Hyperlinks
-    ausgenommen; geflaggt werden http(s)-, file:- und UNC-Ziele."""
+    ausgenommen; geflaggt werden http(s)/ftp(s)-, file:- und UNC-Ziele.
+
+    Fail-closed: Ist die Datei ein ZIP, aber der Scan schlägt fehl (defektes
+    Local-Header, exotische Methode, Entry-Bombe), wird ``SCAN_UNREADABLE``
+    zurückgegeben und der Aufrufer lehnt ab. Nur echtes Nicht-ZIP (Legacy-OLE
+    .doc/.xls/.ppt — dort gibt es kein .rels) bleibt fail-open."""
     try:
         if not zipfile.is_zipfile(path):
             return None  # Legacy-OLE (.doc/.xls/.ppt) — kein .rels vorhanden
+    except Exception:
+        return None  # nicht mal lesbar → das COM-Open scheitert von selbst
+    try:
         with zipfile.ZipFile(path) as z:
-            for name in z.namelist():
+            names = z.namelist()
+            if len(names) > _RELS_MAX_ENTRIES:
+                return SCAN_UNREADABLE  # kein plausibles Office-Dokument
+            for name in names:
                 if not name.lower().endswith(".rels"):
                     continue
                 with z.open(name) as f:
@@ -160,7 +178,10 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                     if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
                         return target.decode("utf-8", errors="replace")
     except Exception:
-        return None  # Scan ist Defense-in-Depth — nie einen Import daran scheitern lassen
+        # ZIP, aber nicht prüfbar → fail CLOSED (sonst öffnet Word ungeprüft,
+        # und sein toleranter Parser könnte die externe Vorlage doch auflösen).
+        logger.warning("OOXML-.rels-Scan fehlgeschlagen für %s", path, exc_info=True)
+        return SCAN_UNREADABLE
     return None
 
 

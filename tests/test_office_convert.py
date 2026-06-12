@@ -165,6 +165,57 @@ def test_scan_ignores_non_zip_legacy_files(tmp_path):
     assert scan_ooxml_external_targets(str(legacy)) is None
 
 
+def test_scan_flags_ftp_target(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="ftp://evil.example/t.dotm" TargetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == "ftp://evil.example/t.dotm"
+
+
+def _corrupt_rels_local_header(path, member="word/_rels/settings.xml.rels"):
+    """Smash the .rels member's LOCAL file header signature: is_zipfile (EOCD) and
+    namelist() (central directory) still work, but z.open(member) raises — the
+    shape of a zip Python can't read while Word's lenient OPC parser might."""
+    data = bytearray(open(path, "rb").read())
+    idx = data.find(member.encode())  # first hit = the local header's name field
+    assert idx >= 30
+    data[idx - 30:idx - 26] = b"XXXX"
+    open(path, "wb").write(bytes(data))
+
+
+def test_scan_fails_closed_on_unreadable_rels_member(tmp_path):
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    _corrupt_rels_local_header(p)
+    assert _zipfile.is_zipfile(p)  # still a zip as far as is_zipfile is concerned
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE  # fail CLOSED, not None
+
+
+def test_office_via_com_refuses_unscannable_zip(tmp_path):
+    """A zip whose .rels can't be parsed must be REFUSED before any COM open —
+    a parse error must not fail open (Word might still resolve the template)."""
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    _corrupt_rels_local_header(p)
+    ci, cu = _no_com()
+    with ci, cu, patch("win32com.client.Dispatch") as disp:
+        with pytest.raises(ValueError, match="externe Vorlage/Quelle"):
+            office_via_com(p, ".docx")
+    disp.assert_not_called()
+
+
+def test_scan_fails_closed_on_entry_bomb(tmp_path, monkeypatch):
+    import universal_importer.converters as conv
+    monkeypatch.setattr(conv, "_RELS_MAX_ENTRIES", 3)
+    p = _docx_with_rels(tmp_path, "")  # 3 members
+    with _zipfile.ZipFile(p, "a") as z:
+        z.writestr("word/extra.xml", "<x/>")  # 4th member → over the (patched) cap
+    assert scan_ooxml_external_targets(p) == conv.SCAN_UNREADABLE
+
+
 def test_office_via_com_refuses_external_template_before_any_com(tmp_path):
     p = _docx_with_rels(tmp_path,
         '<Relationship Id="rId1" Type=".../attachedTemplate" '

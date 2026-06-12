@@ -101,7 +101,9 @@ def _bind_close(win, api):
                 # free the session itself (document bytes, undo log, caches, temp view)
                 api._core.close_session(api._session)
         except Exception:
-            pass
+            # still swallow — never block the window close — but TRACE it: a failed
+            # release/close_session silently leaks the whole session otherwise.
+            logger.exception("window close: release/close_session failed (session leaked)")
         return True
     win.events.closing += _on_closing
 
@@ -188,11 +190,9 @@ class HostApi:
     def redo(self, session):
         return self._core.redo(session)
 
-    def render(self, session, node_id, dpi=100):
-        return self._core.render(session, node_id, dpi)
-
-    def render_compressed(self, session, node_id, dpi=150, method=None):
-        return self._core.render_compressed(session, node_id, dpi, method)
+    # (render/render_compressed bridge wrappers removed 2026-06-12 — the React UI
+    # only uses the windowed variants below; CoreApi.render stays for the IPC
+    # server, CoreApi.render_compressed for tests.)
 
     def compress_options(self, session, node_id, dpi=150):
         return self._core.compress_options(session, node_id, dpi)

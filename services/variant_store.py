@@ -11,6 +11,7 @@ node dropped its source on save and IS its compressed result, so it needs none.
 from __future__ import annotations
 
 import io
+import zlib
 
 import pikepdf
 from infra.log_config import logger
@@ -19,6 +20,40 @@ from services import variant_blobs
 _PREFIX = "variant_"
 DEFAULT_BUDGET = 300 * 1024 * 1024  # cap embedded-variant bytes per file
 MAX_ATTACHMENTS = 500  # bomb guard: cap variant_* attachments read from an untrusted file
+# Bomb guards at THIS layer too (2026-06-12): pikepdf's read_bytes() inflates the
+# embedded-file's /FlateDecode stream uncapped, so the caps in variant_blobs.unpack
+# alone sit BELOW where a deflate bomb would detonate. Mirror unpack's magnitudes.
+MAX_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap per attachment
+MAX_TOTAL_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap across all attachments
+
+
+def _read_attachment_capped(filespec, max_bytes: int):
+    """Decoded bytes of an embedded-file attachment, bounded against deflate bombs.
+
+    Reads the RAW (stored) stream first — cheap, bounded by the file on disk — and
+    inflates it incrementally with a hard decoded-size cap, instead of pikepdf's
+    uncapped ``read_bytes()``. Legit blobs are stored ZIPs of already-compressed
+    PDFs (raw ≈ decoded), so the cap never bites them. Returns ``None`` when over
+    cap or not safely decodable (fail-safe: skip → the variants just recompute)."""
+    stream = filespec.get_file().obj
+    raw = stream.read_raw_bytes()
+    if len(raw) > max_bytes:
+        return None
+    filters = stream.get("/Filter", None)
+    if filters is None:
+        return bytes(raw)
+    names = [str(f) for f in filters] if isinstance(filters, pikepdf.Array) else [str(filters)]
+    if names != ["/FlateDecode"] or stream.get("/DecodeParms", None) is not None:
+        return None  # never inflate an unexpected encoding blind
+    d = zlib.decompressobj()
+    try:
+        out = d.decompress(bytes(raw), max_bytes + 1)
+    except zlib.error:
+        return None
+    if len(out) > max_bytes or d.unconsumed_tail:
+        return None  # decoded size exceeds the cap — a bomb reveals itself at cap+1 bytes
+    out += d.flush()
+    return out if len(out) <= max_bytes else None
 
 
 def pending_variant_count(doc, engine) -> int:
@@ -107,6 +142,7 @@ def seed_variants_from_file(path, doc, engine) -> int:
     if not hasattr(engine, "seed_variants"):
         return 0
     data_by_id = {}
+    total = 0
     try:
         with pikepdf.open(path) as pdf:
             for name in list(pdf.attachments):
@@ -117,9 +153,17 @@ def seed_variants_from_file(path, doc, engine) -> int:
                                    MAX_ATTACHMENTS)
                     break
                 try:
-                    data_by_id[name[len(_PREFIX):]] = pdf.attachments[name].get_file().read_bytes()
+                    blob = _read_attachment_capped(pdf.attachments[name], MAX_ATTACHMENT_BYTES)
                 except Exception:
                     continue
+                if blob is None:
+                    logger.warning("[variants] attachment %s over the size cap; skipped", name)
+                    continue
+                if total + len(blob) > MAX_TOTAL_ATTACHMENT_BYTES:
+                    logger.warning("[variants] total attachment budget reached; rest ignored")
+                    break
+                total += len(blob)
+                data_by_id[name[len(_PREFIX):]] = blob
     except Exception as e:
         logger.warning("[variants] read failed: %s", e)
         return 0

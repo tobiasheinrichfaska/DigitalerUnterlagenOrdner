@@ -221,6 +221,75 @@ def test_seed_variants_from_file_caps_attachment_count(tmp_path, monkeypatch):
     assert seeded == 1  # capped (2 attachments exist in the file)
 
 
+def _build_doc_with_leaf(tmp_path):
+    """One imported leaf, saved as a .belegtool. Returns (bel_path, leaf_id)."""
+    pdf_path = tmp_path / "src.pdf"
+    pdf_path.write_bytes(_make_pdf(1))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_path)])
+    leaf = next(n for n in api._sessions[sid].document.root.iter()
+                if not n.is_folder and n.original_data)
+    assert api.save(sid, bel)["ok"]
+    return bel, leaf.id
+
+
+def _attach_blob(bel, name, blob):
+    import pikepdf
+    with pikepdf.open(bel, allow_overwriting_input=True) as pdf:
+        pdf.attachments[name] = pikepdf.AttachedFileSpec(
+            pdf, blob, filename=name, mime_type="application/zip")
+        pdf.save(bel)
+
+
+def test_seed_skips_flatedecode_bomb_attachment(tmp_path, monkeypatch):
+    """A variant_* attachment whose DECODED embedded-file stream blows past the cap
+    is skipped on open WITHOUT inflating it — pikepdf's read_bytes() would inflate
+    the /FlateDecode stream one layer ABOVE variant_blobs.unpack's caps, so the
+    bounded read in variant_store must catch it. Skipping is fail-safe, not fatal."""
+    from core.bridge import load_belegtool
+    from services import variant_store
+    bel, leaf_id = _build_doc_with_leaf(tmp_path)
+    # stored-ZIP of zeros: tiny as a /FlateDecode stream in the file, 1 MB decoded
+    bomb = variant_blobs.pack({150: {"jpg": b"\0" * (1024 * 1024)}})
+    _attach_blob(bel, "variant_" + leaf_id, bomb)
+    document = load_belegtool(bel)
+
+    # sanity: under the default budget the same attachment decodes + seeds fine
+    assert variant_store.seed_variants_from_file(bel, document, RealEngine()) == 1
+
+    monkeypatch.setattr(variant_store, "MAX_ATTACHMENT_BYTES", 64 * 1024)
+    eng = RealEngine()
+    assert variant_store.seed_variants_from_file(bel, document, eng) == 0  # skipped
+    leaf = next(n for n in document.root.iter() if not n.is_folder and n.original_data)
+    assert eng.variants_for(leaf.original_data) == {}  # nothing seeded → recomputes
+
+
+def test_seed_total_budget_spans_attachments(tmp_path, monkeypatch):
+    """The decoded-bytes budget is a RUNNING TOTAL across all variant_* attachments,
+    so 500 small-but-bombed attachments can't accumulate past it."""
+    from core.bridge import load_belegtool
+    from services import variant_store
+    pdf_a = tmp_path / "a.pdf"; pdf_a.write_bytes(_make_pdf(1))
+    pdf_b = tmp_path / "b.pdf"; pdf_b.write_bytes(_make_pdf(2))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_a)])
+    api.import_paths(sid, [str(pdf_b)])
+    for n in api._sessions[sid].document.root.iter():
+        if not n.is_folder and n.original_data:
+            api._engine.seed_variants(n.original_data, {150: {"jpg": b"V" * 600}})
+    assert api.save(sid, bel)["ok"]
+    document = load_belegtool(bel)
+
+    assert variant_store.seed_variants_from_file(bel, document, RealEngine()) == 2
+
+    monkeypatch.setattr(variant_store, "MAX_TOTAL_ATTACHMENT_BYTES", 1000)
+    assert variant_store.seed_variants_from_file(bel, document, RealEngine()) == 1
+
+
 def test_node_id_survives_save_reload(tmp_path):
     pdf_path = tmp_path / "src.pdf"
     pdf_path.write_bytes(_make_pdf(1))

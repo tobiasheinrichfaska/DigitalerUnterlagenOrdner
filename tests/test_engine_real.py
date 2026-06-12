@@ -98,6 +98,23 @@ def test_digest_is_memoised_by_bytes_identity(monkeypatch):
     assert len(calls) == 2
 
 
+def test_digest_cache_is_byte_budgeted():
+    # the memo pins strong refs to full leaf byte-strings (that's what makes
+    # id-keying safe) — eviction must be bounded by BYTES, not just entry count,
+    # or 256 large leaves (incl. closed sessions') stay pinned indefinitely.
+    import hashlib
+    eng = RealEngine()
+    eng._dcache_budget = 10_000
+    blobs = [bytes([65 + i]) * 4_000 for i in range(5)]  # 5 × 4 KB, distinct content
+    for b in blobs:
+        eng._digest(b)
+    assert eng._dcache_bytes <= 10_000           # never over the byte budget
+    assert len(eng._dcache) == 2                  # oldest entries evicted
+    # correctness: an evicted source simply re-hashes to the same digest
+    assert eng._digest(blobs[0]) == hashlib.sha1(blobs[0]).digest()
+    assert eng._dcache_bytes <= 10_000
+
+
 def test_digest_memo_distinguishes_equal_lifetimes():
     # two distinct bytes objects with different content must never share a digest
     eng = RealEngine()

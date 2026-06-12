@@ -171,6 +171,7 @@ export const ga = {
   '{name}: Datei ist passwortgeschützt': '{name}: tá an comhad cosanta le pasfhocal',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: níorbh fhéidir an chartlann/ríomhphost a léamh ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: comhad damáistithe nó neamhbhailí',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: tagraíonn an doiciméad do theimpléad/fhoinse sheachtrach agus níor iompórtáladh é ar chúiseanna slándála',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Fuinneog gan aimsiú',

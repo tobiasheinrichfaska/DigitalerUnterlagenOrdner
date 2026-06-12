@@ -174,7 +174,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><th>Command</th><th>Fields</th><th>Effect / cascade</th></tr>
 <tr><td><code>Compress</code></td><td>node_id, dpi=150, method=None</td><td>leaf → set <code>current_data</code>, <code>is_compressed</code>, <code>dpi_current</code>, <code>compression_method</code>; no-op if no gain; rejects <code>no_compression</code>.</td></tr>
 <tr><td><code>Commit</code></td><td>node_id</td><td>Promote <code>current_data</code> → <code>original_data</code>; clear compression flags.</td></tr>
-<tr><td><code>Reset</code></td><td>node_id</td><td>Drop the compressed variant (clear <code>current_data</code> + flags).</td></tr>
+<tr><td><code>Reset</code></td><td>node_id</td><td>Leaf only — drop the compressed variant (clear <code>current_data</code> + flags); rejects folders and a committed node without a source.</td></tr>
 <tr><td><code>Rotate</code></td><td>node_id, direction</td><td>Rotate the original (right/left/180); invalidates any compressed variant.</td></tr>
 <tr><td><code>Split</code></td><td>node_id</td><td>Leaf → one page-leaf per page, in place (single page = no-op). Parts <b>inherit the original's status</b>.</td></tr>
 <tr><td><code>SplitInto</code></td><td>node_id, size=1, into_folder=False</td><td>Leaf → chunks of <code>size</code> pages (1 = per page). <code>into_folder</code> wraps the parts in a NEW folder named after the node; else in place. In-place single-chunk = no-op.</td></tr>

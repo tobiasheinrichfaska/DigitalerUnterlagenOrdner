@@ -68,6 +68,8 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
         return f"{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)"
     if "nicht unterstützt" in low or "unsupported" in low:
         return f"{name}: Dateityp {ext} wird nicht unterstützt"
+    if "externe vorlage/quelle" in low:  # OOXML .rels pre-scan refusal (converters.py)
+        return f"{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert"
     if "passwort" in low or "password" in low or "encrypted" in low:
         return f"{name}: Datei ist passwortgeschützt"
     if name.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
@@ -96,23 +98,32 @@ class CoreApi:
         self._locks = {}  # session -> FileLock (only while file-lock is enabled)
         self._view_dirs = {}  # session -> temp beleg_view_* dir of its materialized view (deleted on close)
         self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
+        self._view_touched = {}  # view_dir -> last os.utime, to rate-limit the keep-alive touch
+        self._renderer_lock = threading.Lock()  # guards the lazy RenderService build
 
     def _renderer(self):
         if self._render_service is None:
-            from services.render import render_page
-            from services.render_service import RenderService
-            from services.cpu import default_budget_for_ram, total_physical_ram
-            budget = default_budget_for_ram(total_physical_ram())
-            self._render_service = RenderService(render_page, budget_bytes=budget)
+            with self._renderer_lock:  # js threads race here → never build the service twice
+                if self._render_service is None:
+                    from services.render import render_page
+                    from services.render_service import RenderService
+                    from services.cpu import default_budget_for_ram, total_physical_ram
+                    budget = default_budget_for_ram(total_physical_ram())
+                    self._render_service = RenderService(render_page, budget_bytes=budget)
         return self._render_service
 
     def _count_for(self, node_id, version, data):
+        # _pcount is iterated by close_session under self._lock (js threads), so the
+        # read/insert here must hold it too — an unlocked insert mid-iteration raises
+        # inside close_session and silently leaks the whole session.
         key = (node_id, version)
-        c = self._pcount.get(key)
+        with self._lock:
+            c = self._pcount.get(key)
         if c is None:
             from services.render import page_count
             c = page_count(data)
-            self._pcount[key] = c
+            with self._lock:
+                self._pcount[key] = c
         return c
 
     def _cancel_token(self, node_id):
@@ -361,6 +372,15 @@ class CoreApi:
         except OSError:
             pass
 
+    def _maybe_touch_view_dir(self, view_dir, min_interval_s=3600):
+        """Rate-limited keep-alive touch, piggybacked on render traffic — so a view
+        window open >24 h WITHOUT ever saving still never looks stale to a sweep."""
+        import time
+        now = time.time()
+        if now - self._view_touched.get(view_dir, 0) >= min_interval_s:
+            self._view_touched[view_dir] = now
+            self._touch_view_dir(view_dir)
+
     def _prewarm_cache(self, session):
         """Kick off the background prefetch around the first leaf, so the render cache
         starts warming as soon as a document is open (before any node is selected)."""
@@ -382,15 +402,44 @@ class CoreApi:
     def dispatch(self, session: str, command: dict) -> dict:
         cmd = command_from_dict(command)
         removed = self._removed_node_ids(session, cmd)
-        for nid in removed:  # abort in-flight compressions of nodes about to vanish
-            ev = self._cancel_tokens.get(nid)
-            if ev is not None:
-                ev.set()
-        resp = self._mutate(session, lambda s: s.dispatch(cmd))
+        if removed:
+            with self._lock:
+                # node uids persist in .belegtool, so the same file open twice shares
+                # ids — only cancel what no OTHER session still uses (same guard as
+                # close_session), or deleting in one window kills the other's compression.
+                live_elsewhere = set()
+                for sid, other in self._sessions.items():
+                    if sid != session:
+                        live_elsewhere.update(n.id for n in other.document.root.iter())
+                for nid in removed:  # abort in-flight compressions of nodes about to vanish
+                    ev = self._cancel_tokens.get(nid)
+                    if ev is not None and nid not in live_elsewhere:
+                        ev.set()
+        return self._after_mutate(session, self._mutate(session, lambda s: s.dispatch(cmd)))
+
+    def _after_mutate(self, session, resp) -> dict:
+        """Shared post-mutation hygiene for dispatch/undo/redo: revive cancel tokens
+        of ids back in the document, drop vanished nodes' renders from the cache,
+        and keep the background prefetch warming around the new state."""
         if resp.get("ok"):
+            self._revive_cancel_tokens(session)
             self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
+
+    def _revive_cancel_tokens(self, session):
+        """Drop SET cancel tokens of ids that are (back) in the document — a
+        delete→undo revives the node, and a stale set token would make every later
+        compression abort instantly (compress_options == [] forever). The next
+        compress call recreates a fresh, unset Event on demand."""
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return
+            for n in s.document.root.iter():
+                ev = self._cancel_tokens.get(n.id)
+                if ev is not None and ev.is_set():
+                    del self._cancel_tokens[n.id]
 
     def _all_live_node_ids(self):
         """Every node id across all open documents (the cache is shared) — anything not
@@ -403,10 +452,10 @@ class CoreApi:
         return ids
 
     def undo(self, session: str) -> dict:
-        return self._mutate(session, lambda s: s.undo())
+        return self._after_mutate(session, self._mutate(session, lambda s: s.undo()))
 
     def redo(self, session: str) -> dict:
-        return self._mutate(session, lambda s: s.redo())
+        return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
 
     def render(self, session: str, node_id: str, dpi: int = 100) -> dict:
         """Render a leaf node's effective pages to base64 PNG data-URLs."""
@@ -521,6 +570,9 @@ class CoreApi:
             if node is None:
                 return {"ok": False, "error": f"node not found: {node_id}"}
             data, version = self._effective(node)
+            view_dir = self._view_dirs.get(session)
+        if view_dir:
+            self._maybe_touch_view_dir(view_dir)  # a rendering view window is alive
         if not data:
             return {"ok": True, "session": session, "node": node_id, "first": first, "pages": []}
         from base64 import b64encode
@@ -784,11 +836,6 @@ class CoreApi:
         with self._lock:  # remember the temp dir until its new window opens (then per-session)
             self._pending_view_dirs.add(os.path.dirname(path))
         return {"ok": True, "path": path, "count": sum(1 for _ in new_root.iter()) - 1}
-
-    def any_dirty(self) -> bool:
-        """True if any open session has unsaved changes (for the close prompt)."""
-        with self._lock:
-            return any(s.dirty for s in self._sessions.values())
 
     def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
         """Available compression methods for a leaf at ``dpi`` (smallest first)."""

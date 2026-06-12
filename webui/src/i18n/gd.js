@@ -171,6 +171,7 @@ export const gd = {
   '{name}: Datei ist passwortgeschützt': '{name}: tha am faidhle dìonta le facal-faire',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: cha b’ urrainn an tasglann/post-d a leughadh ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: faidhle millte no mì-dhligheach',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: tha an sgrìobhainn a’ toirt iomradh air teamplaid/tùs on taobh a-muigh agus cha deach a thoirt a-steach air sgàth tèarainteachd',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Cha deach an uinneag a lorg',

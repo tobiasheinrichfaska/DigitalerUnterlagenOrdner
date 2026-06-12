@@ -201,4 +201,5 @@ export const en = {
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})':
     '{name}: archive/email could not be read ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: damaged or invalid file',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: document references an external template/source and was not imported for security reasons',
 }

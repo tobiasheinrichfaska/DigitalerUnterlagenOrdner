@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { visibleOrder, navStep, moveTarget, applyMove, locate, allFolderIds } from './treeNav'
+import { visibleOrder, rangeIds, navStep, moveTarget, applyMove, locate, allFolderIds } from './treeNav'
 
 // root
 //  ├ A (folder)
@@ -101,5 +101,27 @@ describe('applyMove (matches move_node remove-then-insert)', () => {
 describe('allFolderIds', () => {
   it('lists every folder', () => {
     expect(allFolderIds(tree).sort()).toEqual(['A', 'B'])
+  })
+})
+
+describe('rangeIds (shift-range over VISIBLE rows)', () => {
+  it('spans depths over the visible pre-order, either direction', () => {
+    expect(rangeIds(tree, 'A1', 'B1')).toEqual(['A1', 'A2', 'B', 'B1'])
+    expect(rangeIds(tree, 'B1', 'A1')).toEqual(['A1', 'A2', 'B', 'B1'])
+  })
+  it('skips a collapsed folder’s hidden children (regression: silent hidden-row select)', () => {
+    const collapsed = {
+      ...tree,
+      children: tree.children.map((c) => (c.id === 'A' ? { ...c, collapsed: true } : c)),
+    }
+    expect(rangeIds(collapsed, 'A', 'C')).toEqual(['A', 'B', 'B1', 'C']) // no A1/A2
+  })
+  it('returns null when an end is not visible (caller falls back to plain select)', () => {
+    const collapsed = {
+      ...tree,
+      children: tree.children.map((c) => (c.id === 'A' ? { ...c, collapsed: true } : c)),
+    }
+    expect(rangeIds(collapsed, 'A1', 'C')).toBeNull() // anchor hidden by the collapse
+    expect(rangeIds(tree, 'nope', 'C')).toBeNull()
   })
 })

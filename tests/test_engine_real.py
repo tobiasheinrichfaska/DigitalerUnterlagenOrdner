@@ -78,3 +78,63 @@ def test_rotate_command_with_real_engine():
     a = d1.find("a")
     assert ENGINE.page_count(a.original_data) == 1
     assert a.current_data is None  # compression invalidated
+
+
+def test_digest_is_memoised_by_bytes_identity(monkeypatch):
+    # _doc_response_locked hits variants_for/evaluated per leaf under the API lock
+    # on every edit — the sha1 must run once per bytes OBJECT, not per call.
+    import core.engine as engine_mod
+    calls = []
+    orig = engine_mod.hashlib.sha1
+    monkeypatch.setattr(engine_mod.hashlib, "sha1",
+                        lambda b: (calls.append(1), orig(b))[1])
+    eng = RealEngine()
+    data = create_valid_pdf(pages=1)
+    eng.variants_for(data)
+    eng.evaluated(data)
+    eng.variants_for(data)
+    assert len(calls) == 1                       # hashed once, then identity-memoised
+    eng.variants_for(create_valid_pdf(pages=2))  # different bytes → new digest
+    assert len(calls) == 2
+
+
+def test_digest_memo_distinguishes_equal_lifetimes():
+    # two distinct bytes objects with different content must never share a digest
+    eng = RealEngine()
+    a, b = b"%PDF-A" * 100, b"%PDF-B" * 100
+    eng.seed_variants(a, {150: {"jpg": b"VA"}})
+    assert eng.variants_for(a) == {150: {"jpg": b"VA"}}
+    assert eng.variants_for(b) == {}
+
+
+def test_persisted_layer_is_safe_under_concurrent_seed_and_read():
+    # Regression: seed_variants wrote _persisted unlocked while variants_for
+    # iterated it on another thread -> "dictionary changed size during iteration".
+    import threading
+    eng = RealEngine()
+    reader_src = b"%PDF-reader-source"
+    eng.seed_variants(reader_src, {150: {"jpg": b"V"}})
+    errors = []
+    done = threading.Event()
+
+    def seeder():
+        try:
+            for i in range(3000):
+                eng.seed_variants(b"PDF-seed-" + str(i).encode(),
+                                  {100 + (i % 50): {"jpg": b"x"}})
+        finally:
+            done.set()
+
+    def reader():
+        try:
+            while not done.is_set():
+                eng.variants_for(reader_src)
+                eng.evaluated(reader_src)
+        except RuntimeError as e:  # pragma: no cover - only on regression
+            errors.append(e)
+
+    t1, t2 = threading.Thread(target=seeder), threading.Thread(target=reader)
+    t2.start(); t1.start()
+    t1.join(); t2.join()
+    assert errors == []
+    assert eng.variants_for(reader_src) == {150: {"jpg": b"V"}}

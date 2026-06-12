@@ -294,14 +294,15 @@ def test_export_pdf_with_toc(tmp_path):
 
 
 def test_dirty_tracking_cleared_on_save(tmp_path):
+    # per-session dirty flag (the host's close guard uses its own per-window flag)
     api = CoreApi()
     opened = api.open()
     sid, root_id = opened["session"], opened["tree"]["id"]
-    assert api.any_dirty() is False
+    assert api._sessions[sid].dirty is False
     api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id, "name": "X", "index": None, "new_id": "x"})
-    assert api.any_dirty() is True            # an edit makes it dirty (close should warn)
+    assert api._sessions[sid].dirty is True   # an edit makes it dirty (close should warn)
     api.save(sid, str(tmp_path / "d.belegtool"))
-    assert api.any_dirty() is False           # saving clears it
+    assert api._sessions[sid].dirty is False  # saving clears it
 
 
 def test_save_unknown_session(tmp_path):
@@ -432,6 +433,115 @@ def test_import_into_selected_folder(tmp_path):
     r = api.import_paths(sid, [str(pdf)], "f1")
     f = next(c for c in r["tree"]["children"] if c["id"] == "f1")
     assert [c["name"] for c in f["children"]] == ["beleg"]
+
+
+def test_compress_options_survive_delete_undo(tmp_path):
+    # Regression: dispatch(Delete) set the node's cancel token and nothing cleared
+    # it on undo → every later compression aborted instantly and compress_options
+    # returned [] forever (the "undecided" dot never resolved).
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    sid, leaf_id = opened["session"], opened["tree"]["children"][0]["id"]
+    assert api.compress_options(sid, leaf_id, dpi=150)["options"]  # creates the token
+    assert api.dispatch(sid, {"type": "Delete", "node_id": leaf_id})["ok"]
+    assert api.undo(sid)["ok"]
+    # different dpi → bypasses the engine memo, so a stale set token WOULD cancel
+    assert api.compress_options(sid, leaf_id, dpi=100)["options"]
+
+
+def test_delete_in_one_window_keeps_other_windows_compression(tmp_path):
+    # Same file open twice → shared node uids. Deleting the node in window A must
+    # not set the cancel token while window B still holds the node (the same
+    # "still live elsewhere" guard close_session uses).
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    a = api.open(path=str(path))
+    b = api.open(path=str(path))
+    leaf_id = a["tree"]["children"][0]["id"]
+    assert api.compress_options(b["session"], leaf_id, dpi=150)["options"]
+    assert api.dispatch(a["session"], {"type": "Delete", "node_id": leaf_id})["ok"]
+    assert not api._cancel_tokens[leaf_id].is_set()  # B still owns the node
+    assert api.compress_options(b["session"], leaf_id, dpi=100)["options"]
+
+
+def test_count_for_is_safe_against_concurrent_close_session(tmp_path, monkeypatch):
+    # Regression: _count_for inserted into _pcount unlocked while close_session
+    # iterated it under the lock → RuntimeError (swallowed by the host) → silent
+    # session leak. Hammer both concurrently; nothing may raise and the closed
+    # session's entries must be gone.
+    import threading
+    from services import render as render_mod
+    monkeypatch.setattr(render_mod, "page_count", lambda data: 1)
+    api = CoreApi()
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), path)
+    errors = []
+
+    def hammer():
+        try:
+            for i in range(4000):
+                api._count_for(f"x{i}", 0, b"%PDF-fake")
+        except Exception as e:  # pragma: no cover - only on regression
+            errors.append(e)
+
+    t = threading.Thread(target=hammer)
+    t.start()
+    for _ in range(20):
+        sid = api.open(path=str(path))["session"]
+        leaf = api._sessions[sid].document.root.children[0]
+        api._pcount[(leaf.id, 0)] = 1
+        assert api.close_session(sid)["ok"]
+    t.join()
+    assert errors == []
+
+
+def test_undo_redo_prune_render_cache_and_kick_prewarm():
+    # undo/redo must run the same post-mutate cache hygiene as dispatch
+    class StubRenderer:
+        def __init__(self):
+            self.pruned, self.prefetched = 0, 0
+
+        def prune(self, ids):
+            self.pruned += 1
+
+        def prefetch(self, build, dpi, pause_if=None):
+            self.prefetched += 1
+
+    api = CoreApi()
+    stub = api._render_service = StubRenderer()
+    opened = api.open()
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id,
+                       "name": "X", "index": None, "new_id": "x"})
+    base = stub.pruned
+    assert api.undo(sid)["ok"] and stub.pruned == base + 1
+    assert api.redo(sid)["ok"] and stub.pruned == base + 2
+
+
+def test_render_window_touches_a_stale_view_dir(tmp_path):
+    # A view window open >24 h WITHOUT saving must stay sweep-safe: rendering
+    # refreshes the dir's mtime (rate-limited keep-alive).
+    import time
+    from core.model import Document, Node
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="Ansicht")
+    view_dir = os.path.dirname(res["path"])
+    new_sid = api.open(path=res["path"])["session"]
+
+    stale = time.time() - 2 * 24 * 3600
+    os.utime(view_dir, (stale, stale))     # window has been open >24 h, never saved
+    api._view_touched.pop(view_dir, None)  # interval elapsed → next render touches
+    assert api.render_window(new_sid, "a", 0, 1)["ok"]
+    assert time.time() - os.path.getmtime(view_dir) < 3600  # sweep-safe again
 
 
 def test_compress_options_lists_methods_smallest_first(tmp_path):

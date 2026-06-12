@@ -20,14 +20,6 @@ export function findParent(node, id, parent = null) {
   return null
 }
 
-/** Visible pre-order list of ids (excludes the implicit root) — for shift-range. */
-export function flattenIds(root) {
-  const out = []
-  const walk = (n) => { for (const c of n.children ?? []) { out.push(c.id); walk(c) } }
-  walk(root)
-  return out
-}
-
 /** Depth of a node (root's children = 0). */
 export function depthOf(root, id, d = -1) {
   if (root.id === id) return d

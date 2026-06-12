@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findNode, findParent, flattenIds, depthOf, isAncestorOf, afterLevels } from './tree'
+import { findNode, findParent, depthOf, isAncestorOf, afterLevels } from './tree'
 
 // root → [a, f → [b, g → [c]]]
 const root = {
@@ -21,9 +21,6 @@ describe('lib/tree', () => {
     expect(findParent(root, 'c').id).toBe('g')
     expect(findParent(root, 'a').id).toBe('root')
     expect(findParent(root, 'root')).toBeNull()
-  })
-  it('flattenIds (pre-order, excludes root)', () => {
-    expect(flattenIds(root)).toEqual(['a', 'f', 'b', 'g', 'c'])
   })
   it('depthOf (root children = 0)', () => {
     expect(depthOf(root, 'a')).toBe(0)

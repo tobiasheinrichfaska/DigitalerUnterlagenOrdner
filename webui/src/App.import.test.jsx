@@ -110,6 +110,17 @@ describe('App — always-mounted aria-live regions', () => {
   })
 })
 
+describe('App — bridge REJECTION surfaces as a visible error', () => {
+  it('a rejected core call sets the error region instead of dying silently', async () => {
+    // regression: run() had no .catch → an api-level throw was an unhandled
+    // rejection; the spinner cleared and the user saw nothing.
+    await renderApp({ import_dialog: () => { throw new Error('Bridge weg') } })
+    fireEvent.click(screen.getByText(/Importieren/))
+    const err = await screen.findByText(/Bridge weg/)
+    expect(err.closest('p.error')).toHaveAttribute('aria-live', 'polite')
+  })
+})
+
 describe('App import — OS file drag-drop (fake files)', () => {
   it('drops two fake files: placeholders appear, each is imported, then they land as siblings', async () => {
     const calls = await renderApp()

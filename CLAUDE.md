@@ -104,7 +104,7 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | File | Role |
 |---|---|
 | `host.py` | pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid; stores the uid, never the window object — that recurses). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty` via `evaluate_js`), startup `_prewarm` of the heavy PDF libs. |
-| `core/api.py` | `CoreApi` façade (JSON in/out, one `DocumentSession` per window): `open/save/dispatch/undo/redo/render/render_compressed/compress_options/import_paths/import_bytes/export/config/any_dirty`. Per-session `dirty` tracking. **`close_session`** frees a closed window's session (bytes, undo log, page-count cache, lock, materialized-view temp dir) and prunes the render cache — called from `host._bind_close`; `sweep_stale_view_dirs` clears crashed-session `beleg_view_*` temp dirs at startup (>1 day old). |
+| `core/api.py` | `CoreApi` façade (JSON in/out, one `DocumentSession` per window): `open/save/dispatch/undo/redo/render/render_compressed/compress_options/import_paths/import_bytes/export/config`. Per-session `dirty` tracking. `dispatch`/`undo`/`redo` share one post-mutate hook (`_after_mutate`): revive stale cancel tokens of ids back in the doc (delete→undo regression), prune the render cache, re-kick the prefetch. **`close_session`** frees a closed window's session (bytes, undo log, page-count cache, lock, materialized-view temp dir) and prunes the render cache — called from `host._bind_close`; `sweep_stale_view_dirs` clears crashed-session `beleg_view_*` temp dirs at startup (>1 day old); a live view dir's mtime is also refreshed via render traffic (rate-limited), so an unsaved view window open >24 h stays sweep-safe. |
 | `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
 | `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
@@ -149,6 +149,18 @@ render/compress path at startup.
 - **Office** (Word, Excel, PPT) → Win32-COM or GhostScript → PDF
 - **Archives** (ZIP, TAR) → structure preserved, loaded recursively
 - **Email** (eml, msg) → body + attachments extracted as tree structure
+
+**Import hardening (2026-06-12):** the EXE/script signature + magic-byte gate
+(`verify_content_matches_extension`) runs on **both** branches — archive/email
+members (bytes) *and* single-file imports (path: import dialog / OS drag). OOXML
+Office files are pre-scanned (`converters.scan_ooxml_external_targets`) for
+`TargetMode="External"` non-hyperlink `.rels` targets (http/https/file:/UNC —
+attached template, linked content) and **refused** before any COM open (NTLM-hash
+leak / SSRF mitigation; residual risk: legacy OLE `.doc/.xls/.ppt` are not ZIPs,
+there only the COM guards apply). Office apps are `Quit()` in `finally`, so a
+failed conversion leaks no hidden WINWORD/EXCEL/POWERPNT. Rendering clamps DPI to
+a per-page pixel budget (`services/render.MAX_RENDER_PIXELS`) against oversized-
+MediaBox allocation bombs.
 
 ### Tree operations
 Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop.
@@ -305,7 +317,11 @@ not tree nodes; ignored by plain viewers. `CoreApi.save` calls
 [`services/variant_store.embed_variants`](services/variant_store.py) (packs
 `{dpi:{method:bytes}}` via [`variant_blobs`](services/variant_blobs.py) ↔ a stored ZIP,
 no pickle); `open` calls `seed_variants_from_file` → `RealEngine.seed_variants` (an
-unbounded **persisted** layer next to the LRU memo). For id-keyed blocks to match on
+unbounded **persisted** layer next to the LRU memo, guarded by the memo lock).
+**Bomb-guarded (2026-06-12):** `variant_blobs.unpack` enforces an actual-read
+per-blob total cap (500 MB) + entry-count cap (500), and `seed_variants_from_file`
+caps the `variant_*` attachments processed (500) — a hostile `.belegtool` can't
+OOM the app on open; an over-cap blob is discarded whole (variants just recompute). For id-keyed blocks to match on
 reload, the node **`uid` is now persisted** in `/JSONStructure` (`to_dict`/`_parse_node`).
 This does **not** reverse drop-source-on-save: only nodes that *still have a source*
 (uncommitted) store variants; a committed node has none. Per-file variant budget caps
@@ -513,6 +529,13 @@ as **v3.10.0**.
    it: a graphical on/off setting (currently env-gated), the Office-style autosave/recover
    sidecar, and the read-only fallback.
 
+- **Accepted audit-info residuals (2026-06-12, deliberately not fixed):**
+  `save()` reads `_locks`/`_paths` outside the lock (unreachable via the modal UI);
+  `SetPeriod` does no value validation; `initialize_async`/`office_via_com`
+  CoInitialize/CoUninitialize balance on js threads is best-effort;
+  `_friendly_import_error`'s raw-text fallback tail stays untranslated (known);
+  the OOXML `.rels` pre-scan does not cover legacy OLE `.doc/.xls/.ppt` (no ZIP —
+  COM guards only).
 - **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
   removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
   against the React UI. The features themselves are unchanged.
@@ -596,9 +619,10 @@ as **v3.10.0**.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (150 keys =
-124 UI strings + 13 backend command-error messages + 13 host-level error/warning
-strings; locked by `i18n.test.js`), every other
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (151 keys =
+124 UI strings + 13 backend command-error messages + 14 host-level error/warning
+strings; locked by `i18n.test.js`, which also asserts every full-coverage language's
+key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
 renders `LANGUAGE_NAMES`.
@@ -626,7 +650,7 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **19 languages are 100% (all 150 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all 151 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Intentional **partials** (only

@@ -175,6 +175,52 @@ def test_save_without_alternatives_skips_embed(tmp_path):
         assert any(str(n).startswith("variant_") for n in pdf.attachments)
 
 
+def test_unpack_rejects_deflate_bomb_without_allocating_it():
+    # A hostile blob declares small but inflates on read. With the actual-read cap
+    # the bomb is detected after at most cap+1 bytes — the whole blob is discarded.
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("150/jpg", b"\0" * (1024 * 1024))  # ~1 KB compressed, 1 MB unpacked
+    assert variant_blobs.unpack(buf.getvalue(), max_total_bytes=1024) == {}
+
+
+def test_unpack_running_total_cap_spans_entries():
+    blob = variant_blobs.pack({150: {"jpg": b"a" * 600, "png": b"b" * 600}})
+    assert variant_blobs.unpack(blob, max_total_bytes=1000) == {}    # 600+600 > 1000
+    assert variant_blobs.unpack(blob, max_total_bytes=2000) != {}    # within budget
+
+
+def test_unpack_rejects_too_many_entries():
+    blob = variant_blobs.pack({150: {f"m{i}": b"x" for i in range(5)}})
+    assert variant_blobs.unpack(blob, max_entries=4) == {}
+    assert len(variant_blobs.unpack(blob, max_entries=5)[150]) == 5
+
+
+def test_seed_variants_from_file_caps_attachment_count(tmp_path, monkeypatch):
+    # More variant_* attachments than the cap → only the cap is processed on open.
+    from services import variant_store
+    pdf_a = tmp_path / "a.pdf"; pdf_a.write_bytes(_make_pdf(1))
+    pdf_b = tmp_path / "b.pdf"; pdf_b.write_bytes(_make_pdf(2))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_a)])
+    api.import_paths(sid, [str(pdf_b)])
+    for n in api._sessions[sid].document.root.iter():
+        if not n.is_folder and n.original_data:
+            api._engine.seed_variants(n.original_data, {150: {"jpg": b"V-" + n.id.encode()}})
+    assert api.save(sid, bel)["ok"]
+
+    monkeypatch.setattr(variant_store, "MAX_ATTACHMENTS", 1)
+    from core.bridge import load_belegtool
+    eng = RealEngine()
+    document = load_belegtool(bel)
+    seeded = variant_store.seed_variants_from_file(bel, document, eng)
+    assert seeded == 1  # capped (2 attachments exist in the file)
+
+
 def test_node_id_survives_save_reload(tmp_path):
     pdf_path = tmp_path / "src.pdf"
     pdf_path.write_bytes(_make_pdf(1))

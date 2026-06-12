@@ -6,8 +6,9 @@ with the current (mutable) PDFNode/PDFStorage app objects.
 - ``document_from_storage`` / ``document_to_storage`` — in-memory, full fidelity
   (every field + page bytes; folders hold no bytes; node ids preserved via uid).
 - ``load_belegtool`` / ``save_belegtool`` — go through a real ``.belegtool`` file.
-  The file format does not store node ids, so a freshly loaded document gets new
-  ids (ids are session-scoped anyway).
+  Node ids ARE persisted (``uid`` round-trips in ``/JSONStructure``), so a reloaded
+  document keeps its ids — the variant_<id> attachments and CoreApi.close_session's
+  shared-uid guard depend on that.
 """
 
 from __future__ import annotations

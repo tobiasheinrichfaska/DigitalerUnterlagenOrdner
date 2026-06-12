@@ -171,6 +171,7 @@ export const cy = {
   '{name}: Datei ist passwortgeschützt': '{name}: mae’r ffeil wedi’i diogelu â chyfrinair',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: methwyd â darllen yr archif/e-bost ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: ffeil wedi’i difrodi neu’n annilys',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: mae’r ddogfen yn cyfeirio at dempled/ffynhonnell allanol ac ni chafodd ei mewnforio am resymau diogelwch',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Ffenestr heb ei chanfod',

@@ -171,6 +171,7 @@ export const nds = {
   '{name}: Datei ist passwortgeschützt': '{name}: Datei is mit Passwoort schuult',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: Archiv/E-Mail kunn nich leest warrn ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: kaputte oder ungüllige Datei',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: Dokment wiest op en extern Vörlaag/Born un warrt ut Sekerheit nich importeert',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Finster nich funnen',

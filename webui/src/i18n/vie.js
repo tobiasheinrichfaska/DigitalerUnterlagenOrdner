@@ -171,6 +171,7 @@ export const vie = {
   '{name}: Datei ist passwortgeschützt': '{name}: Datei is passwortgschützt',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: Archiv/E-Mail hot ned glesn wern kennan ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: kaputte oda ungültige Datei',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: Dokument verweist auf a externe Vuálog/Quelln und wiad aus Sicherheitsgründ ned importiert',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Fensta ned gfundn',

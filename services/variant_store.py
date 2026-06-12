@@ -18,6 +18,7 @@ from services import variant_blobs
 
 _PREFIX = "variant_"
 DEFAULT_BUDGET = 300 * 1024 * 1024  # cap embedded-variant bytes per file
+MAX_ATTACHMENTS = 500  # bomb guard: cap variant_* attachments read from an untrusted file
 
 
 def pending_variant_count(doc, engine) -> int:
@@ -111,6 +112,10 @@ def seed_variants_from_file(path, doc, engine) -> int:
             for name in list(pdf.attachments):
                 if not name.startswith(_PREFIX):
                     continue
+                if len(data_by_id) >= MAX_ATTACHMENTS:
+                    logger.warning("[variants] attachment cap reached (%d); rest ignored",
+                                   MAX_ATTACHMENTS)
+                    break
                 try:
                     data_by_id[name[len(_PREFIX):]] = pdf.attachments[name].get_file().read_bytes()
                 except Exception:

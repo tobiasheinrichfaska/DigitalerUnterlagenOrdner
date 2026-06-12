@@ -9,12 +9,12 @@ import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
-import { findNode, findParent, flattenIds, isAncestorOf, afterLevels } from './lib/tree'
+import { findNode, findParent, isAncestorOf, afterLevels } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
 import { useKeyboard } from './hooks/useKeyboard'
-import { visibleOrder } from './lib/treeNav'
+import { visibleOrder, rangeIds } from './lib/treeNav'
 import { resolveSelection, mergeableIds } from './lib/selection'
 import { localizeMessage } from './lib/messages'
 import { useT } from './i18n/LanguageProvider'
@@ -83,10 +83,15 @@ export default function App() {
     return () => el.removeEventListener('wheel', onWheel)
   })
 
-  // run any core call with the global busy indicator on
+  // run any core call with the global busy indicator on. A bridge REJECTION (vs a
+  // {ok:false} response) surfaces as a visible error instead of an unhandled
+  // rejection that silently kills the action; downstream .then() handlers all
+  // tolerate the null it resolves to.
   const run = useCallback((promise) => {
     setBusy((n) => n + 1)
-    return promise.finally(() => setBusy((n) => Math.max(0, n - 1)))
+    return promise
+      .catch((e) => { setError(String(e?.message || e)); return null })
+      .finally(() => setBusy((n) => Math.max(0, n - 1)))
   }, [])
 
   // stable identity (only stable state setters inside) so callbacks that depend
@@ -121,23 +126,16 @@ export default function App() {
 
   const session = state?.session
 
-  // Unified preview rendering for the selected node. Folders → []. For a leaf,
-  // PreviewControls sets a request (previewReq = {dpi, method}) → a *transient*
-  // compressed preview (render_compressed, no document mutation); null → the plain
-  // stored bytes. Re-fires when `selected` identity changes (every edit replaces
-  // it) or the request changes, so edits and method/DPI browsing both refresh.
+  // Unified preview state for the selected node. Folders → [] (no pages — folders
+  // carry no bytes, no bridge roundtrip needed). Leaves (plain stored bytes AND the
+  // compressed working-preview) are windowed on demand by <Preview>; nothing to
+  // fetch here. Re-fires when `selected` identity changes (every edit replaces it).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset the page indicator when the selected node / preview request changes
     setPageInfo(null) // stale page indicator until the new node reports its viewport
     if (!session || !selected) { setPages(null); return }
-    if (selected.is_folder) {
-      run(core.render(session, selected.id)).then((r) => setPages(r?.ok ? r.pages : []))
-    } else {
-      // leaves (plain stored bytes AND the compressed working-preview) are
-      // windowed on demand by <Preview>; nothing to fetch here.
-      setPages(null)
-    }
-  }, [selected, session]) // eslint-disable-line react-hooks/exhaustive-deps
+    setPages(selected.is_folder ? [] : null)
+  }, [selected, session])
 
   // Proactive no-gain sweep: once per opened document, evaluate the CHEAP (≤5-page)
   // undecided leaves in the background — reusing the same compressOptions call as
@@ -305,12 +303,10 @@ export default function App() {
     if (isGroupNode(node.id)) return // synthetic group-by-tag folder: not a real node
     const { ctrl = false, shift = false } = mods
     if (shift && anchorId && state?.tree) {
-      const order = flattenIds(state.tree)
-      const a = order.indexOf(anchorId)
-      const b = order.indexOf(node.id)
-      if (a !== -1 && b !== -1) {
-        const [lo, hi] = a <= b ? [a, b] : [b, a]
-        setSelectedIds(order.slice(lo, hi + 1))
+      // visible rows only — a collapsed folder's hidden children must not be swept in
+      const range = rangeIds(state.tree, anchorId, node.id)
+      if (range) {
+        setSelectedIds(range)
         setSelected(node); setPages(null); setPreviewReq(null)
         return
       }

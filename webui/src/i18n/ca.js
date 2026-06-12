@@ -169,6 +169,7 @@ export const ca = {
   '{name}: Datei ist passwortgeschützt': '{name}: el fitxer està protegit amb contrasenya',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no s’ha pogut llegir l’arxiu/correu ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: fitxer malmès o no vàlid',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: el document fa referència a una plantilla/font externa i no s’ha importat per motius de seguretat',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Finestra no trobada',

@@ -169,6 +169,7 @@ export const fr = {
   '{name}: Datei ist passwortgeschützt': '{name} : le fichier est protégé par mot de passe',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name} : l’archive/e-mail n’a pas pu être lue ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name} : fichier endommagé ou invalide',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name} : le document référence un modèle/une source externe et n’a pas été importé pour des raisons de sécurité',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Fenêtre introuvable',

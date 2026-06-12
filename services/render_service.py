@@ -242,12 +242,14 @@ class RenderService:
         """Lazy N-worker render pool. Workers run at below-normal priority so the OS
         preempts them for foreground / other sessions' work (terminal-server fair)."""
         if self._pool is None:
-            from concurrent.futures import ThreadPoolExecutor
-            self._pool = ThreadPoolExecutor(
-                max_workers=self.max_workers,
-                initializer=cpu.set_current_thread_below_normal,
-                thread_name_prefix="render-pool",
-            )
+            with self._lock:  # don't build (and leak) a second pool on a racing init
+                if self._pool is None:
+                    from concurrent.futures import ThreadPoolExecutor
+                    self._pool = ThreadPoolExecutor(
+                        max_workers=self.max_workers,
+                        initializer=cpu.set_current_thread_below_normal,
+                        thread_name_prefix="render-pool",
+                    )
         return self._pool
 
     def fill_until_idle(self, node_specs: Sequence[NodeSpec], focus_node: str,
@@ -311,8 +313,10 @@ class RenderService:
     # --- background seeding (fire-and-forget) -----------------------------
     def _exec(self):
         if self._executor is None:
-            from concurrent.futures import ThreadPoolExecutor
-            self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="render-seed")
+            with self._lock:  # js threads race here — never build a second executor
+                if self._executor is None:
+                    from concurrent.futures import ThreadPoolExecutor
+                    self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="render-seed")
         return self._executor
 
     def seed(self, node_specs: Sequence[NodeSpec], focus_node: str, focus_page: int,

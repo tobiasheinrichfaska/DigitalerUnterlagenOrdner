@@ -152,8 +152,17 @@ def seed_variants_from_file(path, doc, engine) -> int:
                     logger.warning("[variants] attachment cap reached (%d); rest ignored",
                                    MAX_ATTACHMENTS)
                     break
+                # Clamp the in-flight decode to the REMAINING total budget so a single
+                # attachment can't transiently allocate the full per-attachment cap on
+                # top of already-retained bytes (no ~2x peak). The per-attachment cap
+                # still bounds an isolated decode; the post-decode total check stays.
+                remaining = MAX_TOTAL_ATTACHMENT_BYTES - total
+                if remaining <= 0:
+                    logger.warning("[variants] total attachment budget reached; rest ignored")
+                    break
                 try:
-                    blob = _read_attachment_capped(pdf.attachments[name], MAX_ATTACHMENT_BYTES)
+                    blob = _read_attachment_capped(
+                        pdf.attachments[name], min(MAX_ATTACHMENT_BYTES, remaining))
                 except Exception:
                     continue
                 if blob is None:

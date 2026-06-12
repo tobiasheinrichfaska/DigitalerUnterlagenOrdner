@@ -168,6 +168,11 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                     continue
                 with z.open(name) as f:
                     xml = f.read(_RELS_MAX_BYTES)
+                if len(xml) >= _RELS_MAX_BYTES:
+                    # truncated read → ein externes Ziel könnte JENSEITS des Caps liegen
+                    # und der Regex sähe es nie. Ein legitimes .rels ist winzig, also ist
+                    # ein übergroßes selbst verdächtig → fail CLOSED (wie der Entry-Cap).
+                    return SCAN_UNREADABLE
                 for tag in _REL_TAG_RE.findall(xml):
                     attrs = {k.lower(): v for k, v in _REL_ATTR_RE.findall(tag)}
                     if attrs.get(b"targetmode", b"").lower() != b"external":

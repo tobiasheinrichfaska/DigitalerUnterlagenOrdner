@@ -499,6 +499,44 @@ def test_open_after_cross_window_delete_revives_token(tmp_path):
     assert api.compress_options(b["session"], leaf_id, dpi=100)["options"]
 
 
+def test_import_paths_revives_token_for_reimported_uid(tmp_path):
+    # import_paths shares _revive_cancel_tokens with open() (only the open() edge is
+    # locked by test_open_after_cross_window_delete_revives_token). A persisted uid
+    # whose token is SET (deleted elsewhere) must come back compressible on re-import.
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    a = api.open(path=str(path))
+    sid_a, leaf_id = a["session"], a["tree"]["children"][0]["id"]
+    assert api.compress_options(sid_a, leaf_id, dpi=150)["options"]  # creates the token
+    assert api.dispatch(sid_a, {"type": "Delete", "node_id": leaf_id})["ok"]
+    assert api._cancel_tokens[leaf_id].is_set()  # gone everywhere → token set
+    # re-IMPORT the same file (uids persist) into a fresh window → token must revive
+    b = api.open()["session"]
+    assert api.import_paths(b, [str(path)])["ok"]
+    assert leaf_id not in api._cancel_tokens  # revived (dropped), not left set
+    assert api.compress_options(b, leaf_id, dpi=100)["options"]
+
+
+def test_close_session_prunes_view_touched_entry(tmp_path):
+    # A materialized tag view binds its temp dir to the new window's session; render
+    # traffic records a keep-alive timestamp in _view_touched. close_session must drop
+    # BOTH the view-dir binding and its keep-alive entry (no leak across closes).
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_leaf(pages=1), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    sid, leaf_id = opened["session"], opened["tree"]["children"][0]["id"]
+    res = api.materialize_subset(sid, [leaf_id], name="Ansicht")
+    assert res["ok"]
+    view_sid = api.open(path=res["path"])["session"]
+    view_dir = api._view_dirs[view_sid]
+    api._view_touched[view_dir] = 123.0  # as a render-traffic keep-alive touch would
+    assert api.close_session(view_sid)["ok"]
+    assert view_sid not in api._view_dirs
+    assert view_dir not in api._view_touched  # pruned on close
+
+
 def test_count_for_is_safe_against_concurrent_close_session(tmp_path, monkeypatch):
     # Regression: _count_for inserted into _pcount unlocked while close_session
     # iterated it under the lock → RuntimeError (swallowed by the host) → silent

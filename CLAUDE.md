@@ -158,7 +158,9 @@ Office files are pre-scanned (`converters.scan_ooxml_external_targets`) for
 attached template, linked content) and **refused** before any COM open (NTLM-hash
 leak / SSRF mitigation). The scan **fails closed** for ZIPs: a file that
 `is_zipfile` accepts but whose `.rels` can't be scanned (corrupt header, exotic
-method, > entry cap) returns `SCAN_UNREADABLE` → same refusal (Word's lenient OPC
+method, > entry cap, or an oversized `.rels` that **truncates** at the 4 MB read cap
+— a legit `.rels` is tiny, so an oversized one hiding a target past the cap is itself
+suspicious) returns `SCAN_UNREADABLE` → same refusal (Word's lenient OPC
 parser could otherwise resolve a target our `zipfile` couldn't read). Only genuine
 non-zip legacy OLE `.doc/.xls/.ppt` stays fail-open — no `.rels` exists, there only
 the COM guards apply. Office apps are `Quit()` in `finally`, so a

@@ -290,6 +290,77 @@ def test_seed_total_budget_spans_attachments(tmp_path, monkeypatch):
     assert variant_store.seed_variants_from_file(bel, document, RealEngine()) == 1
 
 
+def test_seed_clamps_inflight_decode_to_remaining_budget(tmp_path, monkeypatch):
+    """The per-attachment decode cap is clamped to the REMAINING total budget, so a
+    single in-flight decode can't transiently allocate the full per-attachment cap on
+    top of the already-retained bytes (bounds the ~2x peak)."""
+    from core.bridge import load_belegtool
+    from services import variant_store
+    pdf_a = tmp_path / "a.pdf"; pdf_a.write_bytes(_make_pdf(1))
+    pdf_b = tmp_path / "b.pdf"; pdf_b.write_bytes(_make_pdf(2))
+    bel = str(tmp_path / "doc.belegtool")
+    api = CoreApi()
+    sid = api.open()["session"]
+    api.import_paths(sid, [str(pdf_a)])
+    api.import_paths(sid, [str(pdf_b)])
+    for n in api._sessions[sid].document.root.iter():
+        if not n.is_folder and n.original_data:
+            api._engine.seed_variants(n.original_data, {150: {"jpg": b"V" * 600}})
+    assert api.save(sid, bel)["ok"]
+    document = load_belegtool(bel)
+
+    caps = []
+    real = variant_store._read_attachment_capped
+    monkeypatch.setattr(variant_store, "_read_attachment_capped",
+                        lambda fs, mb: caps.append(mb) or real(fs, mb))
+    # per-attachment cap huge, total budget tiny → every decode cap must reflect the
+    # SMALL remaining total budget, never the huge per-attachment cap (the 2x guard).
+    monkeypatch.setattr(variant_store, "MAX_ATTACHMENT_BYTES", 10 ** 9)
+    monkeypatch.setattr(variant_store, "MAX_TOTAL_ATTACHMENT_BYTES", 4000)
+    variant_store.seed_variants_from_file(bel, document, RealEngine())
+    assert caps and max(caps) <= 4000  # clamped to remaining budget, not 1e9
+
+
+def test_read_attachment_capped_rejects_unexpected_encodings():
+    """Reject branches of _read_attachment_capped: raw>cap, filter-array (double
+    FlateDecode), non-Flate single filter, /DecodeParms present — each returns None
+    (skip), never inflating an unexpected encoding blind. No filter → raw passthrough."""
+    import types
+
+    import pikepdf
+
+    from services.variant_store import _read_attachment_capped
+
+    class _Stream:
+        def __init__(self, raw, d):
+            self._raw, self._d = raw, d
+
+        def read_raw_bytes(self):
+            return self._raw
+
+        def get(self, k, default=None):
+            return self._d.get(k, default)
+
+    def _fs(raw, d):
+        return types.SimpleNamespace(
+            get_file=lambda: types.SimpleNamespace(obj=_Stream(raw, d)))
+
+    cap = 1024
+    # raw larger than the cap → rejected before any decode
+    assert _read_attachment_capped(_fs(b"\0" * (cap + 1), {}), cap) is None
+    # double /FlateDecode (filter array) → never inflated blind
+    arr = pikepdf.Array([pikepdf.Name.FlateDecode, pikepdf.Name.FlateDecode])
+    assert _read_attachment_capped(_fs(b"x", {"/Filter": arr}), cap) is None
+    # a non-Flate single filter → rejected
+    assert _read_attachment_capped(
+        _fs(b"x", {"/Filter": pikepdf.Name.ASCIIHexDecode}), cap) is None
+    # /FlateDecode but with /DecodeParms present → rejected
+    assert _read_attachment_capped(
+        _fs(b"x", {"/Filter": pikepdf.Name.FlateDecode, "/DecodeParms": object()}), cap) is None
+    # no /Filter at all → raw passed straight through
+    assert _read_attachment_capped(_fs(b"hello", {}), cap) == b"hello"
+
+
 def test_node_id_survives_save_reload(tmp_path):
     pdf_path = tmp_path / "src.pdf"
     pdf_path.write_bytes(_make_pdf(1))

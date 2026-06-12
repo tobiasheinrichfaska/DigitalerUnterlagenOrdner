@@ -80,6 +80,10 @@ class RealEngine:
                 self._dcache.move_to_end(key)
                 return ent[1]
         d = hashlib.sha1(pdf_bytes).digest()
+        if len(pdf_bytes) > self._dcache_budget:
+            # a single object larger than the whole budget can't stay cached — caching
+            # it would just drain every other entry, then evict itself. Skip the insert.
+            return d
         with self._dcache_lock:
             # the cache holds the bytes, so a live id can't be reused for other bytes
             old = self._dcache.pop(key, None)

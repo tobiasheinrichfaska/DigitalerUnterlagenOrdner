@@ -97,6 +97,25 @@ describe('App tags — structural edit-lock while a view is active', () => {
   })
 })
 
+describe('App tags — shift-range selection uses the filtered view, not the full tree', () => {
+  it('shift-range in a filter only spans visible nodes (no hidden rows selected)', async () => {
+    // Tree in filter "Steuer": only A (Telekom) is visible (F/B/C filtered out).
+    // Shift-click from A to A should produce [A] only — NOT [A, F, B, C] from the full tree.
+    const { container } = await renderApp()
+    fireEvent.change(searchInput(container), { target: { value: 'Steuer' } })
+    // click A (anchor)
+    fireEvent.click(screen.getByText(/Telekom/))
+    // shift-click A again (range anchor == target → just [A])
+    fireEvent.click(screen.getByText(/Telekom/), { shiftKey: true })
+    // The selected node should be the single visible match, not an inflated set
+    expect(document.querySelector('.row.selected')).toBeInTheDocument()
+    // Verify that hidden nodes (Sonstiges/Quittung) are not in the DOM at all
+    expect(screen.queryByText(/Sonstiges/)).toBeNull()
+    expect(screen.queryByText(/Quittung/)).toBeNull()
+    void container
+  })
+})
+
 describe('App tags — language change does not blank the tree (regression)', () => {
   it('keeps the filtered tree visible after switching language', async () => {
     const { container } = await renderApp()

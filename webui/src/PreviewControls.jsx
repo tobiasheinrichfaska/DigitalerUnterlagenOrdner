@@ -5,7 +5,7 @@
 // the user opens the dropdown; a transient compressed preview is shown only when
 // they pick a method or move the DPI slider. The document changes only on a
 // deliberate apply ("❓ Lesbarkeit geprüft" → Compress, "Original" → Reset).
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { core } from './lib/core'
 import { useT } from './i18n/LanguageProvider'
 
@@ -35,6 +35,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const [origSize, setOrigSize] = useState(null) // byte size of the uncompressed source
   const [loading, setLoading] = useState(false) // compression options being computed
   const [method, setMethod] = useState(node.compression_method ?? 'original')
+  const loadReqId = useRef(0) // bumped on each loadOptions call — last-response-wins guard
 
   // keep the dropdown/slider in sync with the model after apply/reset/undo —
   // pure state, never triggers compression
@@ -48,15 +49,22 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
   const preview = (d, m) => onPreview({ dpi: d, method: m })
   const loadOptions = (d) => {
     if (off) return
+    // Bump the request id so that an earlier in-flight call (e.g. a prior DPI value)
+    // can detect it has been superseded and drop its result (last-response-wins guard).
+    loadReqId.current += 1
+    const reqId = loadReqId.current
     setLoading(true)
-    core.compressOptions(session, node.id, d).then((r) => {
-      const opts = r?.ok ? r.options : []
-      setOptions(opts)
-      setOrigSize(r?.ok ? r.original_size : null)
-      setLoading(false)
-      // refresh the front dot: no smaller option → decided; else still undecided.
-      if (!node.is_compressed) onResolved?.(node.id, opts.length > 0)
-    })
+    core.compressOptions(session, node.id, d)
+      .then((r) => {
+        if (reqId !== loadReqId.current) return // superseded by a newer call
+        const opts = r?.ok ? r.options : []
+        setOptions(opts)
+        setOrigSize(r?.ok ? r.original_size : null)
+        setLoading(false)
+        // refresh the front dot: no smaller option → decided; else still undecided.
+        if (!node.is_compressed) onResolved?.(node.id, opts.length > 0)
+      })
+      .catch(() => { if (reqId === loadReqId.current) setLoading(false) })
   }
 
   // On displaying a (compressible, not-yet-committed) node: eagerly compute its

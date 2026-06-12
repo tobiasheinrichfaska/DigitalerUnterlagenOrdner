@@ -155,4 +155,10 @@ describe('ContextMenu', () => {
     fireEvent.click(container.querySelector('.cm-backdrop'))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('Escape closes the menu (F3)', () => {
+    const { onClose } = setup(leaf)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+  })
 })

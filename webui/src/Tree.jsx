@@ -44,9 +44,13 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
   const { t } = useT()
+
+  // Clear the rename timer on unmount so a stale callback never fires for a node
+  // that is no longer mounted (e.g. navigated away with ↓ before the 350 ms elapsed).
+  useEffect(() => () => clearTimeout(renameTimerRef.current), [renameTimerRef])
 
   const handleDragOver = (e) => {
     if (reorderDisabled) return // filtered view: positions are virtual, no drops
@@ -119,17 +123,33 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         onClick={(e) => {
           const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }
           clearTimeout(renameTimerRef.current)
-          // click an already-selected (marked) node again → inline rename (Explorer-style);
+          // click an already-selected single node again → inline rename (Explorer-style);
           // a double-click cancels the pending rename.
-          if (!mods.ctrl && !mods.shift && node.id === primaryId) {
-            renameTimerRef.current = setTimeout(() => setEditing(node.id), 350)
+          // Only schedule rename when this is a single-node selection (not a multi-select).
+          if (!mods.ctrl && !mods.shift && node.id === primaryId && selectedIds.length <= 1) {
+            // Store the expected primary id alongside the timer so the callback can
+            // verify it is still the primary when it fires (navigation may have moved it).
+            const expected = node.id
+            renameTimerRef.current = setTimeout(() => {
+              // Re-read the CURRENT primaryId via the ref — arrow-key navigation
+              // updates it synchronously (state → re-render → primaryIdRef.current)
+              // before this 350ms timer fires.
+              if (expected === primaryIdRef.current) setEditing(expected)
+            }, 350)
           } else onSelect(node, mods)
         }}
         onDoubleClick={() => clearTimeout(renameTimerRef.current)}
         onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
       >
         <span className="alt-slot">
-          {undecided && <span className="alt-dot" title={t('Komprimierung noch nicht entschieden')} />}
+          {undecided && (
+            <span
+              className="alt-dot"
+              title={t('Komprimierung noch nicht entschieden')}
+              role="img"
+              aria-label={t('Komprimierung noch nicht entschieden')}
+            />
+          )}
         </span>
         {node.is_folder ? (
           <button className="tw-chevron" title={node.collapsed ? t('Aufklappen') : t('Zuklappen')}
@@ -161,7 +181,15 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         )}
         {dots.length > 0 && (
           <span className="status-dots">
-            {dots.map((c, i) => <span key={i} className={`sdot ${c}`} title={t(DOT_LABEL[c])} />)}
+            {dots.map((c, i) => (
+              <span
+                key={i}
+                className={`sdot ${c}`}
+                title={t(DOT_LABEL[c])}
+                role="img"
+                aria-label={t(DOT_LABEL[c])}
+              />
+            ))}
           </span>
         )}
         {/* ghost preview of where the dragged item will land (bottom drop), at the
@@ -177,7 +205,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         <ul>
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
-              selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
+              selectedIds={selectedIds} primaryId={primaryId} primaryIdRef={primaryIdRef} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
               editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
@@ -198,6 +226,11 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   const [drag, setDrag] = useState(null)
   const [editing, setEditing] = useState(null) // node id being inline-renamed
   const renameTimerRef = useRef(0) // shared: click-marked-again schedules a rename
+  // A ref that always holds the CURRENT primaryId so the rename-timer callback can
+  // re-read it at fire-time instead of relying on a stale click-time closure.
+  const primaryIdRef = useRef(primaryId)
+  // eslint-disable-next-line react-hooks/refs -- intentional: keep ref in sync with the latest prop
+  primaryIdRef.current = primaryId
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
   const dragNode = drag ? findNode(node, drag) : null
   const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
@@ -229,7 +262,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
     <ul className="tree" role="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
-          selectedIds={selectedIds} primaryId={primaryId} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
+          selectedIds={selectedIds} primaryId={primaryId} primaryIdRef={primaryIdRef} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
           editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}

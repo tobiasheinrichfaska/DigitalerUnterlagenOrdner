@@ -1,6 +1,6 @@
 // Right-click context menu for a tree node — operations live here (like the old
 // app's tree context menu), not as buttons.
-import { useState, useLayoutEffect, useRef } from 'react'
+import { useState, useLayoutEffect, useEffect, useRef } from 'react'
 import { useT } from './i18n/LanguageProvider'
 
 // The status DATA keys (from config().statuses) → their German display text, which
@@ -24,7 +24,19 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
       left: Math.max(4, Math.min(x, window.innerWidth - width - 4)),
       top: Math.max(4, Math.min(y, window.innerHeight - height - 4)),
     })
+    // Reset the split flyout whenever the menu target changes
+    setSplitOpen(false)
   }, [menu, x, y])
+
+  // Escape closes the menu (mirrors the backdrop click; makes the CLAUDE.md
+  // "closes on Esc" claim true — F3).
+  useEffect(() => {
+    if (!menu) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu, onClose])
+
   if (!menu) return null
 
   const splitN = (intoFolder) => {
@@ -60,8 +72,11 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
   }
 
   const rename = () => {
-    const name = window.prompt(t('Neuer Name'), node.name)
-    if (name) run({ type: 'Rename', name })
+    const raw = window.prompt(t('Neuer Name'), node.name)
+    // Apply the same trim + no-change guard as the inline rename in Tree.jsx / App.jsx:
+    // null = cancelled, empty/whitespace = ignored, same name = no-op.
+    const name = raw != null ? raw.trim() : null
+    if (name && name !== node.name) run({ type: 'Rename', name })
     else onClose()
   }
   const addFolder = () => {

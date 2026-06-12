@@ -330,7 +330,7 @@ def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
             y -= 4
             c.setFont("Helvetica-Bold", 11)
             c.setFillColorRGB(0, 0, 0)
-            c.drawString(_ML, y, f"🏷 {item.text}" if False else item.text)
+            c.drawString(_ML, y, item.text)
             y -= _ROW
             continue
 

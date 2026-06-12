@@ -664,8 +664,9 @@ renders `LANGUAGE_NAMES`.
 
 - **Regional English (2026-06-07):** the generic `en` code was split into **`en-US`
   ("English (US)")** and **`en-GB` ("English (UK)")**, each a thin spelling-override of the
-  `en` base ([`en-US.js`](webui/src/i18n/en-US.js) favorite/color/grayscale;
-  [`en-GB.js`](webui/src/i18n/en-GB.js) favourite/colour/greyscale). `resolveInitialLang`
+  `en` base ([`en-US.js`](webui/src/i18n/en-US.js) overrides favorite/favourite trio only —
+  the `en` base already uses `color`/`grayscale`; [`en-GB.js`](webui/src/i18n/en-GB.js)
+  overrides favourite/colour/greyscale). `resolveInitialLang`
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**

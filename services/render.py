@@ -27,7 +27,7 @@ DEFAULT_PREVIEW_DPI = 100
 MAX_RENDER_PIXELS = 64_000_000
 
 
-def _capped_dpi(page, dpi: int) -> int:
+def capped_dpi(page, dpi: int) -> int:
     """Clamp ``dpi`` down so the page renders within MAX_RENDER_PIXELS."""
     rect = page.rect
     px = (rect.width * dpi / 72.0) * (rect.height * dpi / 72.0)
@@ -38,6 +38,9 @@ def _capped_dpi(page, dpi: int) -> int:
     logger.warning("Übergroße Seite (%.0f×%.0f pt) – DPI von %d auf %d begrenzt.",
                    rect.width, rect.height, dpi, capped)
     return capped
+
+
+_capped_dpi = capped_dpi  # back-compat alias for existing callers/tests
 
 
 def render_pdf_to_images(
@@ -68,7 +71,7 @@ def render_pdf_to_images(
         try:
             for page in doc:
                 try:
-                    pix = page.get_pixmap(dpi=_capped_dpi(page, dpi))
+                    pix = page.get_pixmap(dpi=capped_dpi(page, dpi))
                     ppm_bytes = pix.tobytes("ppm")
                     if not ppm_bytes.startswith(b"P6"):
                         logger.warning(
@@ -134,7 +137,7 @@ def render_page(
         if page_index < 0 or page_index >= doc.page_count:
             return b""
         page = doc[page_index]
-        pix = page.get_pixmap(dpi=_capped_dpi(page, dpi))
+        pix = page.get_pixmap(dpi=capped_dpi(page, dpi))
         ppm = pix.tobytes("ppm")
         if not ppm.startswith(b"P6"):
             return b""

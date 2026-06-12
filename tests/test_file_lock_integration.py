@@ -127,3 +127,25 @@ def test_open_restores_from_bak_when_truncated(tmp_path):
         assert "A" in _names(a, r["session"])
     finally:
         a.release(r["session"])
+
+
+def test_open_restores_from_bak_when_header_only_but_truncated(tmp_path):
+    # A save interrupted AFTER the %PDF header but before the trailer leaves a file
+    # that the old header-only check wrongly kept → silent data loss. The trailer
+    # check (%%EOF) now treats it as corrupt and restores the good .bak.
+    p = str(tmp_path / "d.belegtool")
+    _make_belegtool(p)
+    with open(p, "rb") as f:
+        good = f.read()
+    with open(p, "wb") as f:
+        f.write(b"%PDF-1.7\n% truncated, no trailer here")  # header present, NO %%EOF
+    with open(p + ".bak", "wb") as f:
+        f.write(good)
+    a = _locked_api()
+    r = a.open(path=p)
+    try:
+        assert r["ok"]                     # restored from .bak despite the %PDF header
+        assert not os.path.exists(p + ".bak")
+        assert "A" in _names(a, r["session"])
+    finally:
+        a.release(r["session"])

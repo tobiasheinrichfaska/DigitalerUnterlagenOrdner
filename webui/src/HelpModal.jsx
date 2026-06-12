@@ -2,9 +2,10 @@
 // not yet translated); the 🇩🇪 / 🇬🇧 flags switch to the authoritative German / English
 // text. Footer offers two ways to report translation corrections: a pre-filled GitHub
 // issue (preferred) and a mailto fallback (no account needed).
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { helpFor } from './help/content'
+import { useModal } from './hooks/useModal'
 
 const REPO = 'https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner'
 const EMAIL = 'tobias.a.w.heinrich@gmail.com'
@@ -14,11 +15,9 @@ export function HelpModal({ lang, onClose }) {
   const [view, setView] = useState(helpFor(lang) === helpFor('en') && lang !== 'en' ? 'en' : lang)
   const sections = helpFor(view)
 
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Focus management: focus first element on open, trap Tab, close on Esc, restore focus on unmount.
+  // (Replaces the manual Esc-only useEffect that was here before.)
+  const dialogRef = useModal({ onClose })
 
   const subject = `[Übersetzung/Translation] ${lang}`
   const body = `Sprache / language: ${lang}\n\nKorrektur / correction:\n`
@@ -28,7 +27,7 @@ export function HelpModal({ lang, onClose }) {
   return (
     <>
       <div className="cm-backdrop" onClick={onClose} />
-      <div className="help-modal" role="dialog" aria-modal="true" aria-label={t('Hilfe')}>
+      <div ref={dialogRef} className="help-modal" role="dialog" aria-modal="true" aria-label={t('Hilfe')}>
         <div className="help-head">
           <h2>❓ {t('Hilfe')}</h2>
           <div className="help-flags">

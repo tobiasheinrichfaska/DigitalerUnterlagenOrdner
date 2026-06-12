@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { visibleOrder, rangeIds, navStep, moveTarget, applyMove, locate, allFolderIds } from './treeNav'
+import { visibleOrder, rangeIds, navStep, moveTarget, applyMove, locate } from './treeNav'
 
 // root
 //  ├ A (folder)
@@ -95,12 +95,6 @@ describe('applyMove (matches move_node remove-then-insert)', () => {
   it('locate reads the resulting position', () => {
     const t = applyMove(tree, 'C', 'B', null)
     expect(locate(t, 'C')).toEqual({ parentId: 'B', index: 1 })
-  })
-})
-
-describe('allFolderIds', () => {
-  it('lists every folder', () => {
-    expect(allFolderIds(tree).sort()).toEqual(['A', 'B'])
   })
 })
 

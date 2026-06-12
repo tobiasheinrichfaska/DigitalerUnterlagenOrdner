@@ -77,7 +77,7 @@ def compress_all_methods(
     smallest-first so callers can pick dict[next(iter(...))] for the best result.
 
     The set of methods tried is taken from ``config.methods``; defaults are
-    ("jpg", "png", "pikepdf"). ``cancel`` is an optional predicate checked between
+    ("jpg", "jpg_color", "png", "pikepdf"). ``cancel`` is an optional predicate checked between
     methods and per page; if it returns True, ``CompressionCancelled`` is raised.
     """
     candidates = {}
@@ -142,7 +142,7 @@ def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
     """Rasterize + encode a single page → (img_bytes, width, height). Pure: no
     shared state, so it is safe to run on a worker thread (with that thread's doc)."""
     page = doc.load_page(page_index)
-    if config.max_width_pt is not None and page.rect.width >= config.max_width_pt:
+    if config.max_width_pt is not None and page.rect.width > config.max_width_pt:
         scale_factor = config.max_width_pt / page.rect.width
         dpi_rel = int(dpi * scale_factor)
         target_width = config.max_width_pt
@@ -153,8 +153,8 @@ def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
         target_height = page.rect.height
     # Same per-page pixel budget as the preview renders (services/render): the
     # width clamp alone leaves the height unbounded against an oversized MediaBox.
-    from services.render import _capped_dpi
-    dpi_rel = _capped_dpi(page, dpi_rel)
+    from services.render import capped_dpi
+    dpi_rel = capped_dpi(page, dpi_rel)
     pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
     image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
     buf = io.BytesIO()
@@ -196,7 +196,9 @@ def _render_pdf_as_images(
     config: CompressionConfig = DEFAULT_CONFIG,
     cancel=None,
 ) -> bytes:
-    """Renders every page as a greyscale image.  Broken pages are skipped.
+    """Renders every page to an image.  Broken pages are skipped.
+
+    Greyscale for "jpg"/"png"; colour (RGB) for "jpg_color".
 
     Pages wider than config.max_width_pt are scaled down to that width.
     The colorspace, JPEG quality, and PNG compression level are taken from
@@ -221,9 +223,15 @@ def _render_pdf_as_images(
         pool = _get_compress_pool()
         chunks = _contiguous_chunks(n_pages, workers)
         rendered = []
-        for fut in [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode, cancel)
-                    for ch in chunks]:
-            rendered.extend(fut.result())  # CompressionCancelled propagates here
+        futures = [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode, cancel)
+                   for ch in chunks]
+        try:
+            for fut in futures:
+                rendered.extend(fut.result())  # CompressionCancelled propagates here
+        except CompressionCancelled:
+            for f in futures:
+                f.cancel()  # stop siblings that haven't started instead of letting them run on
+            raise
 
     # assemble sequentially in page order → byte-identical to the old serial path
     rendered.sort(key=lambda t: t[0])

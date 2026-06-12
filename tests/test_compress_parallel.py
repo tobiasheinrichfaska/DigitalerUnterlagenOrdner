@@ -99,6 +99,33 @@ def test_compression_cancels_mid_run():
         C.compress_all_methods(data, dpi=100, cancel=cancel)
 
 
+def test_cancellation_propagates_from_parallel_branch(monkeypatch):
+    """A chunk raising CompressionCancelled propagates out of the parallel (>=50-page)
+    branch within bounded time, and the remaining sibling futures are cancelled (C-4)."""
+    import time
+
+    data = _make_pdf(60)  # above _PARALLEL_MIN_PAGES → parallel branch
+    monkeypatch.setattr(C.cpu, "worker_count", lambda: 4)
+
+    started = []
+    orig = C._render_chunk
+
+    def slow_or_cancel(input_bytes, indices, *args, **kwargs):
+        started.append(tuple(indices[:1]))
+        # the first chunk cancels immediately; later chunks would sleep long
+        if indices and indices[0] == 0:
+            raise C.CompressionCancelled()
+        time.sleep(2)  # if a sibling were awaited to completion the test would block
+        return orig(input_bytes, indices, *args, **kwargs)
+
+    monkeypatch.setattr(C, "_render_chunk", slow_or_cancel)
+
+    t0 = time.time()
+    with pytest.raises(C.CompressionCancelled):
+        C._render_pdf_as_images(data, dpi=100, method="jpg")
+    assert time.time() - t0 < 1.5  # propagated promptly; siblings not awaited
+
+
 def test_engine_does_not_memoise_cancelled():
     """A cancelled compress returns None and doesn't poison the memo."""
     from core.engine import RealEngine

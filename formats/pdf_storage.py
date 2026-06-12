@@ -14,6 +14,15 @@ import pikepdf
 from infra.tools import sanitize_pdf
 from infra.log_config import logger
 
+# Reject pathologically deep .belegtool trees at parse time: to_dict/export/prune
+# re-walk the tree recursively outside the load guard, so a hostile file could blow
+# Python's recursion limit downstream. A real tree is a handful of levels deep.
+_MAX_TREE_DEPTH = 200
+
+
+class StructureTooDeep(ValueError):
+    """The serialized .belegtool tree nests deeper than _MAX_TREE_DEPTH."""
+
 def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     """
     Erzeugt bei Bedarf einen Wrapper-Ordner für die übergebenen root.children,
@@ -135,6 +144,8 @@ class PDFStorage:
                     structure = json.loads(json_str)
                     self._parse_json_structure(structure, data)
                     return  # ✅ Struktur erfolgreich geladen
+                except StructureTooDeep:
+                    raise  # refuse a bomb cleanly; don't silently degrade to a single node
                 except Exception as e:
                     logger.warning("JSON-Struktur ungültig oder nicht lesbar: %s", e)
 
@@ -186,7 +197,7 @@ class PDFStorage:
         # Parse the source PDF ONCE and reuse the reader for every node — slicing
         # used to re-parse the whole file per node (O(nodes) full parses = slow load).
         for child_data in structure.get("children", []):
-            node = self._parse_node(child_data, reader, current_start, total_pages)
+            node = self._parse_node(child_data, reader, current_start, total_pages, depth=1)
             if node:
                 self.root.add_child(node)
 
@@ -327,7 +338,9 @@ class PDFStorage:
         writer.write(buf)
         return buf.getvalue()
 
-    def _parse_node(self, node_data: dict, reader: PdfReader, current_start: List[int], total_pages: int) -> Optional['PDFNode']:
+    def _parse_node(self, node_data: dict, reader: PdfReader, current_start: List[int], total_pages: int, depth: int = 0) -> Optional['PDFNode']:
+        if depth > _MAX_TREE_DEPTH:
+            raise StructureTooDeep(f"Baumtiefe überschreitet das Limit von {_MAX_TREE_DEPTH} Ebenen.")
         name = node_data.get("name", "unnamed")
         is_folder = node_data.get("is_folder", False)
 
@@ -341,7 +354,7 @@ class PDFStorage:
             node.collapsed = bool(node_data.get("collapsed", False))
             node.tags = list(node_data.get("tags") or [])
             for child_data in node_data.get("children", []):
-                child_node = self._parse_node(child_data, reader, current_start, total_pages)
+                child_node = self._parse_node(child_data, reader, current_start, total_pages, depth + 1)
                 if child_node:
                     node.add_child(child_node)
             return node

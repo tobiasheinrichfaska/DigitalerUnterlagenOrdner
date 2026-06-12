@@ -81,6 +81,7 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
 
 class CoreApi:
     def __init__(self, engine=None):
+        # Lock order (never invert): CoreApi._lock → engine._dcache_lock → engine._mcache_lock.
         self._engine = engine or RealEngine()
         self._sessions = {}
         self._paths = {}  # session -> on-disk path (so Speichern saves in place, not Save-As)
@@ -288,8 +289,19 @@ class CoreApi:
         bak = path + ".bak"
         if not os.path.exists(bak):
             return
+        # A save interrupted AFTER the %PDF header but before the body/trailer leaves a
+        # truncated file that a header-only check would wrongly accept (→ silent data
+        # loss). Require BOTH a header and a trailer (%%EOF near the end); otherwise the
+        # file is incomplete and we restore the previous good bytes from .bak.
         try:
-            ok = os.path.getsize(path) > 0 and b"%PDF" in open(path, "rb").read(1024)
+            size = os.path.getsize(path)
+            ok = False
+            if size > 0:
+                with open(path, "rb") as f:
+                    head = f.read(1024)
+                    f.seek(max(0, size - 1024))
+                    tail = f.read()
+                ok = b"%PDF" in head and b"%%EOF" in tail
         except Exception:
             ok = False
         if not ok:
@@ -366,6 +378,17 @@ class CoreApi:
     def document_path(self, session: str):
         """The on-disk path this session is bound to (None if never saved/opened)."""
         return self._paths.get(session)
+
+    def sweep_stale_view_dirs(self, root=None, max_age_s=24 * 3600, now=None):
+        """Instance wrapper: run the on-disk sweep, then drop any ``_pending_view_dirs``
+        entry whose dir is gone (a materialized view never opened in a window orphans
+        both the dir AND its pending-set entry). Returns the removed paths."""
+        removed = sweep_stale_view_dirs(root=root, max_age_s=max_age_s, now=now)
+        with self._lock:
+            for d in list(self._pending_view_dirs):
+                if not os.path.isdir(d):
+                    self._pending_view_dirs.discard(d)
+        return removed
 
     @staticmethod
     def _touch_view_dir(view_dir):
@@ -529,7 +552,6 @@ class CoreApi:
     def _effective(self, node):
         """Effective bytes + a content-derived version (so a compress/rotate/edit
         changes the version and the cache auto-invalidates)."""
-        import zlib
         data = node.current_data or node.original_data
         return (data, zlib.crc32(data)) if data else (None, 0)
 
@@ -560,8 +582,10 @@ class CoreApi:
         node, data, err = self._leaf_data(session, node_id)
         if err:
             return err
-        from services.render import page_count
-        return {"ok": True, "session": session, "node": node_id, "count": page_count(data)}
+        # Route through the shared _pcount cache (same key the windowed render path
+        # uses) so this IPC-only call doesn't re-open the PDF on every hit.
+        count = self._count_for(node_id, self._version_of(data), data) if data else 0
+        return {"ok": True, "session": session, "node": node_id, "count": count}
 
     def page_dims(self, session: str, node_id: str) -> dict:
         """(width, height) per page in points — for stable placeholder boxes."""
@@ -842,7 +866,15 @@ class CoreApi:
         from core.bridge import save_belegtool
         # open() titles a document from its FILE NAME (stem), so encode the wanted name
         # there — in its own temp dir to avoid mkstemp's random suffix in the title.
-        safe = re.sub(r'[<>:"/\\|?*]', "_", (name or "Ansicht")).strip() or "Ansicht"
+        # The name flows from a tag string → window title: strip illegal chars,
+        # Windows-reserved basenames, and trailing dots/spaces before it becomes a path.
+        safe = re.sub(r'[<>:"/\\|?*]', "_", (name or "Ansicht"))
+        safe = safe.strip().rstrip(". ")
+        _RESERVED = {"CON", "PRN", "AUX", "NUL",
+                     *(f"COM{i}" for i in range(1, 10)),
+                     *(f"LPT{i}" for i in range(1, 10))}
+        if not safe or safe.upper() in _RESERVED:
+            safe = "Ansicht"
         path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)

@@ -277,6 +277,56 @@ def test_materialize_subset_empty_selection_is_rejected():
     assert api.materialize_subset("nope", ["x"])["ok"] is False
 
 
+def test_orphan_view_dir_swept_when_never_opened(tmp_path):
+    # materialize_subset, but the new window never opens (open_session not called):
+    # the temp dir + its _pending_view_dirs entry are orphaned. The instance sweep
+    # removes the dir and keeps _pending_view_dirs consistent.
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="Ansicht")
+    view_dir = os.path.dirname(res["path"])
+    assert view_dir in api._pending_view_dirs and os.path.isdir(view_dir)
+
+    removed = api.sweep_stale_view_dirs(root=os.path.dirname(view_dir), max_age_s=0)
+    assert view_dir in removed
+    assert not os.path.exists(view_dir)
+    assert view_dir not in api._pending_view_dirs  # pending set stays consistent
+
+
+def test_materialize_subset_rejects_reserved_basename(tmp_path):
+    # A tag named like a Windows reserved device must not become a "CON.belegtool" path.
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", id="a", pdf_length=1, no_compression=True, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    res = api.materialize_subset(sid, ["a"], name="CON")
+    assert res["ok"] and os.path.basename(res["path"]) == "Ansicht.belegtool"
+    res2 = api.materialize_subset(sid, ["a"], name="  ...  ")
+    assert res2["ok"] and os.path.basename(res2["path"]) == "Ansicht.belegtool"
+
+
+def test_effective_version_token_changes_with_bytes():
+    api = CoreApi()
+    a = create_valid_pdf(1)
+    n1 = Node(name="x", id="x", original_data=a)
+    n2 = Node(name="x", id="x", original_data=bytes(a))  # identical content, new object
+    _, v1 = api._effective(n1)
+    _, v2 = api._effective(n2)
+    assert v1 == v2  # same bytes → same token
+    mutated = a + b"%mutated"
+    n3 = Node(name="x", id="x", original_data=mutated)
+    _, v3 = api._effective(n3)
+    assert v3 != v1  # different bytes → different token
+
+
 def test_export_pdf_with_toc(tmp_path):
     src = Document(Node(name="root", is_folder=True, children=(
         Node(name="A", pdf_length=1, original_data=create_valid_pdf(1)),

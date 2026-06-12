@@ -10,9 +10,13 @@ export function useKeyboard({
   enabled, reorderEnabled = true, tree, selected, selectedIds, grab, setGrab, select, dispatch,
   setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
   deleteSelection, canUndo, canRedo,
+  // modal/menu flags: shortcuts must be OFF while any overlay is open
+  saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false,
 }) {
   useEffect(() => {
-    if (!enabled) return undefined
+    // Disable all shortcuts while any modal dialog or context menu is open so that
+    // e.g. pressing Delete or Ctrl+S inside a dialog does not trigger tree actions.
+    if (!enabled || saveAskOpen || exportAskOpen || helpOpen || menuOpen) return undefined
     const onKey = (e) => {
       const tag = e.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -74,7 +78,9 @@ export function useKeyboard({
       }
       if (mod && k === 's') { e.preventDefault(); saveFile() }
       else if (mod && k === 'o') { e.preventDefault(); openFile() }
-      else if (mod && k === 'e') { e.preventDefault(); exportPdf() }
+      // Ctrl+E: mirrors the toolbar button — export the selection when present,
+      // otherwise export the whole document (null). Keeps keyboard and mouse consistent.
+      else if (mod && k === 'e') { e.preventDefault(); exportPdf(selectedIds.length ? selectedIds : null) }
       else if (mod && k === 'n') { e.preventDefault(); newWindow() }
       else if (mod && k === 'z' && e.shiftKey) { e.preventDefault(); if (canRedo) redo() }
       else if (mod && k === 'y') { e.preventDefault(); if (canRedo) redo() }

@@ -52,10 +52,24 @@ async function renderApp() {
 beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true) })
 afterEach(() => { delete window.pywebview; vi.restoreAllMocks() })
 
-describe('App keyboard — Testmodus gating', () => {
-  it('hides the Testmodus button when config.dev is false', async () => {
-    await renderApp()
-    expect(screen.queryByText(/Testmodus/)).toBeNull()
+describe('App keyboard — modal gating', () => {
+  it('Delete / Ctrl+S / ArrowDown do nothing while the export dialog is open', async () => {
+    const calls = await renderApp()
+    // Select beta so Delete would normally dispatch
+    fireEvent.click(screen.getByText(/beta/))
+    // Click the Export PDF toolbar button — this synchronously opens the ExportDialog
+    // (exportPdf() just calls setExportAsk({ids}) — no async, no bridge call)
+    fireEvent.click(screen.getByText(/Export PDF/))
+    // Dialog is now open — the export dialog h2 should be visible
+    expect(screen.getByText('PDF exportieren')).toBeInTheDocument()
+    // Snapshot dispatch count before firing keyboard events
+    const countBefore = calls.filter((c) => c.method === 'dispatch').length
+    // All of these must be swallowed by the modal gate in useKeyboard
+    fireEvent.keyDown(window, { key: 'Delete' })
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+    const countAfter = calls.filter((c) => c.method === 'dispatch').length
+    expect(countAfter).toBe(countBefore) // no new dispatches while dialog is open
   })
 })
 

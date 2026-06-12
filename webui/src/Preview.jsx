@@ -159,10 +159,18 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   }, [visibleRange, fetchMissing, onPage, count])
 
   const onScroll = useCallback(() => {
-    if (nodeId && scrollRef.current) scrollMemory.set(nodeId, scrollRef.current.scrollTop)
+    if (nodeId && scrollRef.current) {
+      scrollMemory.set(nodeId, scrollRef.current.scrollTop)
+      // Keep scrollMemory bounded (cap at 64 entries, same as geomCache) so
+      // it doesn't grow unbounded across a long session with many nodes.
+      if (scrollMemory.size > 64) scrollMemory.delete(scrollMemory.keys().next().value)
+    }
     if (raf.current) return
     raf.current = requestAnimationFrame(() => { raf.current = 0; update() })
   }, [nodeId, update])
+
+  // Cancel any pending rAF on unmount to avoid calling update() on an unmounted component.
+  useEffect(() => () => { if (raf.current) cancelAnimationFrame(raf.current) }, [])
 
   // restore scroll position + fetch the visible window on node/variant/count change.
   // Keyed on the node OBJECT (not its id) so a same-id content change — commit

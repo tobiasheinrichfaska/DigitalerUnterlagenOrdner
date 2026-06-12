@@ -28,7 +28,9 @@ def _not_importable(name: str, reason: str = "") -> Dict[str, Any]:
     }
 
 
-# Schutz vor ZIP-Bomben / riesigen Archiven
+# Schutz vor Bomben / riesigen Containern — shared across ALL container paths
+# (zip, tar AND email): cap the number of members/parts processed and a running
+# total of decoded bytes.
 _ARCHIVE_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 _ARCHIVE_MAX_MEMBERS = 500
 
@@ -221,7 +223,17 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
 
             logger.debug("Aufruf _convert_mail_body mit Datei: %s", file_name)
 
-            result.append(_convert_mail_body(body_content, file_name))
+            # Bomb guard: cap the parts processed and a running total of decoded bytes
+            # (the body counts too — an oversized body alone can be a DoS).
+            members = 0
+            decoded_total = 0
+            body_bytes = body_content.encode("utf-8") if isinstance(body_content, str) else (body_content or b"")
+            decoded_total += len(body_bytes)
+            members += 1
+            if decoded_total <= _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                result.append(_convert_mail_body(body_content, file_name))
+            else:
+                result.append(_not_importable(file_name, reason="zu groß"))
 
             # Anhänge + eingebettete Bilder — walk() durchläuft auch verschachtelte MIME-Strukturen
             for part in msg.walk():
@@ -229,6 +241,9 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                     continue
                 if part is body_part:
                     continue
+                if members >= _ARCHIVE_MAX_MEMBERS or decoded_total > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                    result.append(_not_importable("Weitere Teile", reason="Limit überschritten"))
+                    break
 
                 disp = (part.get("Content-Disposition") or "").lower()
                 fname = part.get_filename()
@@ -246,6 +261,8 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                         fname = (fname or "Anhang") + _ctype_ext
                     content = part.get_payload(decode=True)
                     if content:
+                        members += 1
+                        decoded_total += len(content)
                         result.append(_convert_attachment(content, fname))
                 elif maintype == "image":
                     cid = (part.get("Content-ID") or "").strip("<>")
@@ -253,6 +270,8 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                         fname = fname or f"Bild_{cid or 'inline'}.png"
                         content = part.get_payload(decode=True)
                         if content:
+                            members += 1
+                            decoded_total += len(content)
                             result.append(_convert_attachment(content, fname))
         except Exception:
             logger.exception("[extract_email_to_structure] Ausnahme beim Parsen der EML:")
@@ -264,23 +283,37 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
             msg = extract_msg.Message(io.BytesIO(data))
             base_name = _build_base_name(msg.subject, msg.date)
 
+            members = 0
+            decoded_total = 0
+
             # Body: Prioritätsliste
             for attr, ext in [("htmlBody", ".html"), ("body", ".txt"), ("rtfBody", ".rtf")]:
                 content = getattr(msg, attr, None)
                 if content:
+                    body_bytes = content.encode("utf-8") if isinstance(content, str) else content
+                    decoded_total += len(body_bytes)
+                    members += 1
                     file_name = f"{base_name}{ext}"
-                    result.append(_convert_mail_body(content, file_name))
+                    if decoded_total <= _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                        result.append(_convert_mail_body(content, file_name))
+                    else:
+                        result.append(_not_importable(file_name, reason="zu groß"))
                     break
             else:
                 result.append(_not_importable(base_name))
 
             # Anhänge
             for att in msg.attachments:
+                if members >= _ARCHIVE_MAX_MEMBERS or decoded_total > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                    result.append(_not_importable("Weitere Anhänge", reason="Limit überschritten"))
+                    break
                 fname = "Anhang"  # gebunden, bevor att-Zugriffe werfen können
                 try:
                     fname = att.longFilename or att.shortFilename or "Anhang"
                     data_att = att.data
                     if data_att:
+                        members += 1
+                        decoded_total += len(data_att) if isinstance(data_att, (bytes, bytearray)) else 0
                         result.append(_convert_attachment(data_att, fname))
                     else:
                         result.append(_not_importable(fname))

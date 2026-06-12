@@ -117,15 +117,3 @@ export function locate(root, nodeId) {
   return { parentId: parent.id, index: (parent.children ?? []).findIndex((c) => c.id === nodeId) }
 }
 
-// All folder ids in the tree (for "collapse all").
-export function allFolderIds(root) {
-  const out = []
-  const walk = (n) => {
-    for (const c of n.children ?? []) {
-      if (c.is_folder) out.push(c.id)
-      walk(c)
-    }
-  }
-  walk(root)
-  return out
-}

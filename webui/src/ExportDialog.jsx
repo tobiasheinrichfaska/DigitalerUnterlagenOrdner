@@ -3,6 +3,7 @@
 // and PDF sidebar bookmarks. Returns the chosen options to the caller.
 import { useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
+import { useModal } from './hooks/useModal'
 
 export function ExportDialog({ hasTags, onChoose, onCancel }) {
   const { t } = useT()
@@ -12,15 +13,19 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
   const [indexLinks, setIndexLinks] = useState(true)
   const [bookmarks, setBookmarks] = useState(true)
 
+  // Focus management: focus first element on open, trap Tab, close on Esc, restore focus on unmount.
+  const dialogRef = useModal({ onClose: onCancel })
+
   const confirm = () => onChoose({
-    toc, toc_links: tocLinks,
+    toc,
+    toc_links: toc && tocLinks,   // only meaningful when toc is on
     index: hasTags && index, index_links: indexLinks,
     bookmarks,
   })
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <h2>{t('PDF exportieren')}</h2>
 
         <label className="exp-row">

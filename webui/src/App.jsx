@@ -70,7 +70,8 @@ export default function App() {
   const previewRef = useRef(null)
 
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
-  // preventDefault the webview's page zoom).
+  // preventDefault the webview's page zoom). Empty deps: setZoom is stable (useState
+  // setter) and previewRef is a stable ref — no need to re-bind on every render.
   useEffect(() => {
     const el = previewRef.current
     if (!el) return
@@ -81,7 +82,7 @@ export default function App() {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  })
+  }, [])
 
   // run any core call with the global busy indicator on. A bridge REJECTION (vs a
   // {ok:false} response) surfaces as a visible error instead of an unhandled
@@ -303,8 +304,12 @@ export default function App() {
     if (isGroupNode(node.id)) return // synthetic group-by-tag folder: not a real node
     const { ctrl = false, shift = false } = mods
     if (shift && anchorId && state?.tree) {
+      // In an active tag-filter view the displayed rows come from treeForView, not
+      // the full tree — use it so the range only covers VISIBLE (non-hidden) rows.
+      // Group mode already bails on synthetic nodes via isGroupNode above.
+      const rangeTree = viewActive ? treeForView : state.tree
       // visible rows only — a collapsed folder's hidden children must not be swept in
-      const range = rangeIds(state.tree, anchorId, node.id)
+      const range = rangeTree && rangeIds(rangeTree, anchorId, node.id)
       if (range) {
         setSelectedIds(range)
         setSelected(node); setPages(null); setPreviewReq(null)
@@ -322,7 +327,7 @@ export default function App() {
     setAnchorId(node.id)
     setPages(null)
     setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
-  }, [selectedIds, state, anchorId])
+  }, [selectedIds, state, anchorId, viewActive, treeForView])
 
   // --- folder collapse/expand (persisted: SetCollapsed / SetAllCollapsed) ---
   const setCollapsedFor = useCallback((id, val) => dispatch({ type: 'SetCollapsed', node_id: id, collapsed: val }), [dispatch])
@@ -467,12 +472,14 @@ export default function App() {
     })
   }
 
-  // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing)
+  // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing,
+  // and fully disabled while any modal dialog or context menu is open)
   useKeyboard({
     enabled: !!session, reorderEnabled: !viewActive, tree: state?.tree, selected, selectedIds, grab, setGrab,
     select, dispatch, setCollapsedFor, saveFile, openFile, exportPdf,
     newWindow: () => core.newWindow(), undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
+    saveAskOpen: !!saveAsk, exportAskOpen: !!exportAsk, helpOpen, menuOpen: !!menu,
   })
 
   if (!state && !error) {

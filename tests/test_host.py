@@ -172,6 +172,34 @@ def test_close_guard_frees_the_windows_session():
     assert api._session not in core._sessions  # the session died with the window
 
 
+def test_close_guard_logs_release_failure_but_still_closes(monkeypatch):
+    # A failing release/close_session must not block the window close, but it must
+    # be TRACED (logger.exception) — a bare pass silently leaked the whole session.
+    captured = []
+
+    class _Closing:
+        def __iadd__(self, fn):
+            captured.append(fn)
+            return self
+
+    class _W:
+        uid = "w"
+
+        def __init__(self):
+            self.events = type("E", (), {"closing": _Closing()})()
+
+    core = CoreApi()
+    api = host.HostApi(core)
+    api._session = api.open()["session"]
+    monkeypatch.setattr(core, "release",
+                        lambda sid: (_ for _ in ()).throw(RuntimeError("boom")))
+    logged = []
+    monkeypatch.setattr(host.logger, "exception", lambda *a, **k: logged.append(a))
+    host._bind_close(_W(), api)
+    assert captured[0]() is True  # close still proceeds (swallowed)
+    assert logged, "close failure was not logged"
+
+
 def test_is_clr_load_error_matches_pythonnet_failures():
     for msg in ("Failed to initialize pythonnet",
                 "Could not load file or assembly Python.Runtime",

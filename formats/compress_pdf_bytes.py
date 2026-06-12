@@ -151,6 +151,10 @@ def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
         dpi_rel = dpi
         target_width = page.rect.width
         target_height = page.rect.height
+    # Same per-page pixel budget as the preview renders (services/render): the
+    # width clamp alone leaves the height unbounded against an oversized MediaBox.
+    from services.render import _capped_dpi
+    dpi_rel = _capped_dpi(page, dpi_rel)
     pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
     image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
     buf = io.BytesIO()

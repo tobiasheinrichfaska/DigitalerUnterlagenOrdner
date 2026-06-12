@@ -215,6 +215,8 @@ class CoreApi:
         """Warm the focus node from the viewport outward, then the nearest
         neighbouring leaves (tree order), filling the cache until it's full. The
         whole enumeration/hashing runs on the background worker (via prefetch)."""
+        # unlocked write is deliberate: a single atomic tuple swap, readers only
+        # ever see a complete old or new value (audit 2026-06-12: benign)
         self._last_seed = (session, focus_id, focus_page, dpi)  # to resume after a pause
 
         def build():
@@ -355,6 +357,9 @@ class CoreApi:
             resp = self._doc_response_locked(sid)
         if prev_lock is not None:
             prev_lock.release()
+        # uids persist in .belegtool: a node deleted (set token) in another window
+        # must be compressible in this fresh session of the same file.
+        self._revive_cancel_tokens(sid)
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
         return resp
 
@@ -420,9 +425,13 @@ class CoreApi:
     def _after_mutate(self, session, resp) -> dict:
         """Shared post-mutation hygiene for dispatch/undo/redo: revive cancel tokens
         of ids back in the document, drop vanished nodes' renders from the cache,
-        and keep the background prefetch warming around the new state."""
+        and keep the background prefetch warming around the new state. Tokens are
+        revived on the FAILURE path too — dispatch sets them before the mutate, so
+        a failed command (which removed nothing) must not leave still-present
+        nodes' tokens set (their compress_options would return [] until the next
+        successful edit)."""
+        self._revive_cancel_tokens(session)
         if resp.get("ok"):
-            self._revive_cancel_tokens(session)
             self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
@@ -458,7 +467,11 @@ class CoreApi:
         return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
 
     def render(self, session: str, node_id: str, dpi: int = 100) -> dict:
-        """Render a leaf node's effective pages to base64 PNG data-URLs."""
+        """Render a leaf node's effective pages to base64 PNG data-URLs.
+
+        IPC/test-only: the named-pipe server still dispatches ``op == "render"``
+        here, but the React UI renders exclusively through ``render_window`` (the
+        JS-bridge wrapper was removed)."""
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -480,10 +493,11 @@ class CoreApi:
                           dpi: int = DEFAULT_COMPRESSION_DPI, method: str = None) -> dict:
         """Render a *transient* compressed preview of a leaf — compress its
         original bytes with ``method`` at ``dpi`` and rasterise the result, WITHOUT
-        mutating the document. Powers the working-preview UI: browse methods/DPI
-        with no undo entry; the document only changes on an explicit Compress.
-        Falls back to the original bytes if the method yields no gain / no_compression.
-        """
+        mutating the document. Falls back to the original bytes if the method
+        yields no gain / no_compression.
+
+        Test-only: not on the JS bridge and not an IPC op — the working-preview UI
+        uses the windowed ``render_compressed_window`` exclusively."""
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -728,6 +742,8 @@ class CoreApi:
             self._paths.pop(session, None)
             lock = self._locks.pop(session, None)
             view_dir = self._view_dirs.pop(session, None)
+            if view_dir is not None:
+                self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
             if s is not None:
                 live = set()
                 for other in self._sessions.values():
@@ -904,6 +920,9 @@ class CoreApi:
             except CommandError as e:
                 return {"ok": False, "error": str(e)}
             resp = self._doc_response_locked(session)
+        # re-importing a persisted uid that was deleted elsewhere (set token) must
+        # leave the node compressible — same revive as dispatch/undo/redo.
+        self._revive_cancel_tokens(session)
         self._kick_prewarm(session)  # warm the freshly imported pages without a click
         if errors:
             resp["warning"] = "; ".join(errors)

@@ -467,6 +467,38 @@ def test_delete_in_one_window_keeps_other_windows_compression(tmp_path):
     assert api.compress_options(b["session"], leaf_id, dpi=100)["options"]
 
 
+def test_failed_command_revives_cancel_tokens(tmp_path):
+    # N2: dispatch SETS removed nodes' cancel tokens BEFORE the mutate; a command
+    # that fails removed nothing, so the still-present node's token must be revived
+    # (else its compress_options return [] until the next successful edit).
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    opened = api.open(path=str(path))
+    sid, leaf_id = opened["session"], opened["tree"]["children"][0]["id"]
+    assert api.compress_options(sid, leaf_id, dpi=150)["options"]  # creates the token
+    r = api.dispatch(sid, {"type": "Merge", "node_ids": [leaf_id]})  # < 2 nodes → fails
+    assert r["ok"] is False
+    assert leaf_id not in api._cancel_tokens or not api._cancel_tokens[leaf_id].is_set()
+    assert api.compress_options(sid, leaf_id, dpi=100)["options"]  # not cancelled
+
+
+def test_open_after_cross_window_delete_revives_token(tmp_path):
+    # N3: delete WITHOUT save in window A sets the node's token (no other session
+    # holds the uid); opening the same file in window B (uids persist) must revive
+    # it, or the node is uncompressable in B until B's first edit.
+    path = tmp_path / "s.belegtool"
+    save_belegtool(_doc_with_compressible_leaf(), path)
+    api = CoreApi()
+    a = api.open(path=str(path))
+    sid_a, leaf_id = a["session"], a["tree"]["children"][0]["id"]
+    assert api.compress_options(sid_a, leaf_id, dpi=150)["options"]  # creates the token
+    assert api.dispatch(sid_a, {"type": "Delete", "node_id": leaf_id})["ok"]
+    assert api._cancel_tokens[leaf_id].is_set()  # gone everywhere → token set
+    b = api.open(path=str(path))  # fresh window of the same file → same uid
+    assert api.compress_options(b["session"], leaf_id, dpi=100)["options"]
+
+
 def test_count_for_is_safe_against_concurrent_close_session(tmp_path, monkeypatch):
     # Regression: _count_for inserted into _pcount unlocked while close_session
     # iterated it under the lock → RuntimeError (swallowed by the host) → silent

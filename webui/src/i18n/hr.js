@@ -169,6 +169,7 @@ export const hr = {
   '{name}: Datei ist passwortgeschützt': '{name}: datoteka je zaštićena lozinkom',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: arhivu/e-poštu nije bilo moguće pročitati ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: oštećena ili nevažeća datoteka',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: dokument upućuje na vanjski predložak/izvor i nije uvezen iz sigurnosnih razloga',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Prozor nije pronađen',

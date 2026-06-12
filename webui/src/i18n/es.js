@@ -169,6 +169,7 @@ export const es = {
   '{name}: Datei ist passwortgeschützt': '{name}: el archivo está protegido con contraseña',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: no se pudo leer el archivo comprimido/correo ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: archivo dañado o no válido',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: el documento hace referencia a una plantilla/fuente externa y no se importó por motivos de seguridad',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Ventana no encontrada',

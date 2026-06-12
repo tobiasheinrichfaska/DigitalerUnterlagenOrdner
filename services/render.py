@@ -21,6 +21,24 @@ from infra.log_config import logger
 
 DEFAULT_PREVIEW_DPI = 100
 
+# Pixel budget per rendered page: a hostile/oversized MediaBox (up to 200×200 in)
+# would otherwise make get_pixmap allocate GBs. ~64 MP ≈ 192 MB RGB — far above
+# any legitimate page at preview DPI, so normal renders are never affected.
+MAX_RENDER_PIXELS = 64_000_000
+
+
+def _capped_dpi(page, dpi: int) -> int:
+    """Clamp ``dpi`` down so the page renders within MAX_RENDER_PIXELS."""
+    rect = page.rect
+    px = (rect.width * dpi / 72.0) * (rect.height * dpi / 72.0)
+    if px <= MAX_RENDER_PIXELS or px <= 0:
+        return dpi
+    import math
+    capped = max(1, int(dpi * math.sqrt(MAX_RENDER_PIXELS / px)))
+    logger.warning("Übergroße Seite (%.0f×%.0f pt) – DPI von %d auf %d begrenzt.",
+                   rect.width, rect.height, dpi, capped)
+    return capped
+
 
 def render_pdf_to_images(
     data: Optional[Union[bytes, io.BytesIO]],
@@ -50,7 +68,7 @@ def render_pdf_to_images(
         try:
             for page in doc:
                 try:
-                    pix = page.get_pixmap(dpi=dpi)
+                    pix = page.get_pixmap(dpi=_capped_dpi(page, dpi))
                     ppm_bytes = pix.tobytes("ppm")
                     if not ppm_bytes.startswith(b"P6"):
                         logger.warning(
@@ -115,7 +133,8 @@ def render_page(
     try:
         if page_index < 0 or page_index >= doc.page_count:
             return b""
-        pix = doc[page_index].get_pixmap(dpi=dpi)
+        page = doc[page_index]
+        pix = page.get_pixmap(dpi=_capped_dpi(page, dpi))
         ppm = pix.tobytes("ppm")
         if not ppm.startswith(b"P6"):
             return b""

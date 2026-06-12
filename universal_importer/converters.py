@@ -5,9 +5,11 @@ into a single PDF (`ConvertedPDF`). No detection/dispatch logic lives here — t
 
 import io
 import os
+import re
 import tempfile
+import zipfile
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 import pikepdf
 import pythoncom
@@ -119,7 +121,65 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
         return ConvertedPDF(name=name, data=io.BytesIO(raw))
 
 
+# --- OOXML remote-reference pre-scan ---------------------------------------
+# COM kann den Abruf einer „angehängten Vorlage" (attachedTemplate) bzw. extern
+# verknüpfter Inhalte beim Öffnen nicht vollständig blockieren — Word löst eine
+# UNC-/HTTP-Vorlage schon beim Open auf (NTLMv2-Hash-Leak / SSRF-Callback), bevor
+# unsere ReadOnly-/UpdateLinks-Guards greifen. Billige Gegenmaßnahme: die *.rels
+# der OOXML-Datei VOR dem Öffnen auf externe Ziele prüfen und solche Dateien
+# ablehnen. Hyperlinks bleiben erlaubt (werden beim Öffnen nicht abgerufen).
+# Restrisiko (dokumentiert): Legacy-OLE-Formate (.doc/.xls/.ppt) sind kein ZIP
+# und werden hier nicht erfasst; dort verbleibt der COM-seitige Schutz
+# (AutomationSecurity=3, ReadOnly, UpdateLinks aus).
+_RELS_EXTERNAL_PREFIXES = (b"http://", b"https://", b"file:", b"\\\\", b"//")
+_RELS_MAX_BYTES = 4 * 1024 * 1024  # ein .rels ist winzig; Cap gegen Zip-Bomben
+_REL_TAG_RE = re.compile(rb"<Relationship\b[^>]*>", re.IGNORECASE)
+_REL_ATTR_RE = re.compile(rb'(\w+)\s*=\s*"([^"]*)"')
+
+
+def scan_ooxml_external_targets(path: str) -> Optional[str]:
+    """Erstes verdächtiges externes Ziel in den ``*.rels`` einer OOXML-Datei
+    (sonst ``None``). Nur ``TargetMode="External"``-Beziehungen, Hyperlinks
+    ausgenommen; geflaggt werden http(s)-, file:- und UNC-Ziele."""
+    try:
+        if not zipfile.is_zipfile(path):
+            return None  # Legacy-OLE (.doc/.xls/.ppt) — kein .rels vorhanden
+        with zipfile.ZipFile(path) as z:
+            for name in z.namelist():
+                if not name.lower().endswith(".rels"):
+                    continue
+                with z.open(name) as f:
+                    xml = f.read(_RELS_MAX_BYTES)
+                for tag in _REL_TAG_RE.findall(xml):
+                    attrs = {k.lower(): v for k, v in _REL_ATTR_RE.findall(tag)}
+                    if attrs.get(b"targetmode", b"").lower() != b"external":
+                        continue
+                    if attrs.get(b"type", b"").lower().endswith(b"/hyperlink"):
+                        continue  # nicht beim Öffnen aufgelöst → erlaubt
+                    target = attrs.get(b"target", b"").strip()
+                    if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
+                        return target.decode("utf-8", errors="replace")
+    except Exception:
+        return None  # Scan ist Defense-in-Depth — nie einen Import daran scheitern lassen
+    return None
+
+
 def office_via_com(path: str, ext: str) -> ConvertedPDF:
+    ext = ext.lower()
+    path = os.path.normpath(os.path.abspath(path))
+    base_name = os.path.splitext(os.path.basename(path))[0]
+
+    if ext not in [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]:
+        raise ValueError(f"Nicht unterstützter Office-Typ: {ext}")
+
+    # VOR dem Öffnen: OOXML mit externer Vorlage/Verknüpfung ablehnen (Office würde
+    # das Ziel beim Open auflösen — Hash-Leak/SSRF; siehe scan_ooxml_external_targets).
+    target = scan_ooxml_external_targets(path)
+    if target:
+        logger.warning("Office-Import abgelehnt, externes Ziel in .rels: %s", target)
+        raise ValueError("verweist auf eine externe Vorlage/Quelle"
+                         " – aus Sicherheitsgründen abgelehnt")
+
     # COM nur pro Thread (STA) initialisieren — das genügt. Im headless Core /
     # pywebview läuft die Konvertierung auf einem Worker-Thread (die js_api-Aufrufe
     # sind nicht im Hauptthread); mit CoInitialize ist das zulässig, daher keine
@@ -129,10 +189,6 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
     except pythoncom.com_error:
         pass  # COM war bereits initialisiert – kein Problem
 
-    ext = ext.lower()
-    path = os.path.normpath(os.path.abspath(path))
-    base_name = os.path.splitext(os.path.basename(path))[0]
-
     # Sicheres temporäres Verzeichnis mit garantiertem Cleanup verwenden,
     # statt eines vorhersagbaren Pfads in %TEMP%.
     tmp_dir = tempfile.mkdtemp(prefix="belegtool_office_")
@@ -141,42 +197,53 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
     try:
         if ext in [".doc", ".docx"]:
             word = win32com.client.Dispatch("Word.Application")
-            # Makros/DDE-Ausführung deaktivieren (msoAutomationSecurityForceDisable = 3)
-            word.AutomationSecurity = 3
-            # Externe Verknüpfungen beim Öffnen NICHT automatisch aktualisieren
             try:
-                word.Options.UpdateLinksAtOpen = False
-            except Exception:
-                pass
-            # Schreibgeschützt öffnen, nicht in „zuletzt verwendet" aufnehmen
-            doc = word.Documents.Open(path, ReadOnly=True, AddToRecentFiles=False)
-            doc.SaveAs(out_path, FileFormat=17)  # 17 = PDF
-            doc.Close()
-            word.Quit()
+                # Makros/DDE-Ausführung deaktivieren (msoAutomationSecurityForceDisable = 3)
+                word.AutomationSecurity = 3
+                # Externe Verknüpfungen beim Öffnen NICHT automatisch aktualisieren
+                try:
+                    word.Options.UpdateLinksAtOpen = False
+                except Exception:
+                    pass
+                # Schreibgeschützt öffnen, nicht in „zuletzt verwendet" aufnehmen
+                doc = word.Documents.Open(path, ReadOnly=True, AddToRecentFiles=False)
+                try:
+                    doc.SaveAs(out_path, FileFormat=17)  # 17 = PDF
+                finally:
+                    doc.Close()
+            finally:
+                word.Quit()  # immer — sonst leakt ein fehlgeschlagener Import WINWORD
 
         elif ext in [".xls", ".xlsx"]:
             excel = win32com.client.Dispatch("Excel.Application")
-            excel.AutomationSecurity = 3
             try:
-                excel.AskToUpdateLinks = False
-            except Exception:
-                pass
-            # UpdateLinks=0 → externe Verknüpfungen nicht aktualisieren; schreibgeschützt
-            wb = excel.Workbooks.Open(path, UpdateLinks=0, ReadOnly=True)
-            wb.ExportAsFixedFormat(0, out_path)  # 0 = PDF
-            wb.Close(False)
-            excel.Quit()
+                excel.AutomationSecurity = 3
+                try:
+                    excel.AskToUpdateLinks = False
+                except Exception:
+                    pass
+                # UpdateLinks=0 → externe Verknüpfungen nicht aktualisieren; schreibgeschützt
+                wb = excel.Workbooks.Open(path, UpdateLinks=0, ReadOnly=True)
+                try:
+                    wb.ExportAsFixedFormat(0, out_path)  # 0 = PDF
+                finally:
+                    wb.Close(False)
+            finally:
+                excel.Quit()
 
         elif ext in [".ppt", ".pptx"]:
             powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-            powerpoint.AutomationSecurity = 3
-            ppt = powerpoint.Presentations.Open(path, ReadOnly=True, WithWindow=False)
-            ppt.SaveAs(out_path, 32)  # 32 = PDF
-            ppt.Close()
-            powerpoint.Quit()
-
-        else:
-            raise ValueError(f"Nicht unterstützter Office-Typ: {ext}")
+            try:
+                powerpoint.AutomationSecurity = 3
+                # PowerPoint kennt kein UpdateLinks-Argument beim Open; verknüpfte
+                # Inhalte deckt der .rels-Pre-Scan oben ab (Restrisiko: Legacy .ppt).
+                ppt = powerpoint.Presentations.Open(path, ReadOnly=True, WithWindow=False)
+                try:
+                    ppt.SaveAs(out_path, 32)  # 32 = PDF
+                finally:
+                    ppt.Close()
+            finally:
+                powerpoint.Quit()
 
         with open(out_path, "rb") as f:
             buffer = io.BytesIO(f.read())

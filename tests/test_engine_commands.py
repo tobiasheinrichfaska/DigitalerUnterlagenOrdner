@@ -107,6 +107,12 @@ def test_reset_clears_compression():
     assert a.original_data == DATA  # original kept
 
 
+def test_reset_rejects_folders():
+    # a folder has nothing to reset — Reset requires a leaf like the other engine ops
+    with pytest.raises(CommandError, match="not a leaf"):
+        apply(leaf_doc(), Reset("root"))
+
+
 # --- Rotate ----------------------------------------------------------------
 
 def test_rotate_invalidates_compression():

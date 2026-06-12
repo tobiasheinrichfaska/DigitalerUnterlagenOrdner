@@ -39,7 +39,7 @@ describe('core.js → window.pywebview.api mapping', () => {
     expect((await core.newWindow()).method).toBe('new_window')
     expect((await core.setDirty(true)).args).toEqual([true])
     expect((await core.exportPdf('s1', ['a', 'b'])).method).toBe('export_dialog')
-    expect((await core.renderCompressed('s1', 'n1', 150, 'jpg')).method).toBe('render_compressed')
+    expect((await core.renderCompressedWindow('s1', 'n1', 150, 'jpg')).method).toBe('render_compressed_window')
     expect((await core.importBytes('s1', 'f.pdf', 'data', 'p1', 2)).args)
       .toEqual(['s1', 'f.pdf', 'data', 'p1', 2])
 

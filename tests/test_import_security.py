@@ -79,3 +79,26 @@ def test_html_link_blocks_remote_and_local(uri):
 ])
 def test_html_link_allows_inline_only(uri):
     assert block(uri, "") == uri
+
+
+# --- the gate also runs on the PATH branch (import dialog / OS drag) -------
+def test_path_import_refuses_exe_masquerading_as_image(tmp_path):
+    f = tmp_path / "foto.jpg"
+    f.write_bytes(b"MZ\x90\x00 not an image at all")
+    with pytest.raises(ValueError, match="EXE|Programm"):
+        UniversalImporter.convert(str(f))
+
+
+def test_path_import_refuses_magic_mismatch(tmp_path):
+    f = tmp_path / "scan.pdf"
+    f.write_bytes(b"GIF89a definitely not a pdf")
+    with pytest.raises(ValueError, match="Unerwarteter Inhalt"):
+        UniversalImporter.convert(str(f))
+
+
+def test_path_import_still_accepts_a_real_file(tmp_path):
+    from helpers import create_valid_pdf
+    f = tmp_path / "ok.pdf"
+    f.write_bytes(create_valid_pdf(pages=1))
+    result = UniversalImporter.convert(str(f))
+    assert result.data.getvalue().startswith(b"%PDF")

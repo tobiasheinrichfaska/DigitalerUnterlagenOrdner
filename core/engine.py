@@ -56,19 +56,39 @@ class RealEngine:
         self._mcache_lock = threading.Lock()
         # variants loaded from a .belegtool (persisted): NOT LRU-bounded, so every
         # node's saved variants stay available after reopening. Keyed like _mcache.
+        # Guarded by _mcache_lock too — seed_variants writes it during open() while
+        # variants_for/evaluated iterate it on other pywebview threads.
         self._persisted: dict = {}
+        # identity-memoised sha1 (the model's bytes are immutable, so a given bytes
+        # object hashes once) — _doc_response_locked calls variants_for/evaluated per
+        # leaf on EVERY edit while holding the CoreApi lock; without the memo each
+        # call re-hashes the document's full bytes. Same pattern as CoreApi._version_of.
+        self._dcache: "OrderedDict[int, tuple]" = OrderedDict()
+        self._dcache_lock = threading.Lock()
+
+    def _digest(self, pdf_bytes: bytes) -> bytes:
+        key = id(pdf_bytes)
+        with self._dcache_lock:
+            ent = self._dcache.get(key)
+            if ent is not None and ent[0] is pdf_bytes:
+                self._dcache.move_to_end(key)
+                return ent[1]
+        d = hashlib.sha1(pdf_bytes).digest()
+        with self._dcache_lock:
+            # the cache holds the bytes, so a live id can't be reused for other bytes
+            self._dcache[key] = (pdf_bytes, d)
+            if len(self._dcache) > 256:
+                self._dcache.popitem(last=False)
+        return d
 
     def variants_for(self, pdf_bytes: bytes) -> dict:
         """All known variants for this source as ``{dpi: {method: bytes}}`` — both
         freshly computed (hot cache) and loaded from file — for persistence on save."""
-        digest = hashlib.sha1(pdf_bytes).digest()
+        digest = self._digest(pdf_bytes)
         out: dict = {}
         with self._mcache_lock:
-            items = list(self._mcache.items())
+            items = list(self._mcache.items()) + list(self._persisted.items())
         for (d, dpi), result in items:
-            if d == digest and result:
-                out.setdefault(dpi, {}).update(result)
-        for (d, dpi), result in self._persisted.items():
             if d == digest and result:
                 out.setdefault(dpi, {}).update(result)
         return out
@@ -78,23 +98,24 @@ class RealEngine:
         (any DPI) — hot or persisted. Distinguishes 'not yet checked' from 'checked,
         nothing smaller found' (both yield empty variants_for), which the UI needs for
         the 'compression undecided' marker."""
-        digest = hashlib.sha1(pdf_bytes).digest()
+        digest = self._digest(pdf_bytes)
         with self._mcache_lock:
-            if any(d == digest for (d, _dpi) in self._mcache):
-                return True
-        return any(d == digest for (d, _dpi) in self._persisted)
+            return (any(d == digest for (d, _dpi) in self._mcache)
+                    or any(d == digest for (d, _dpi) in self._persisted))
 
     def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
         """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
         node is instant — no recompute. Goes into the unbounded persisted layer."""
-        digest = hashlib.sha1(pdf_bytes).digest()
+        digest = self._digest(pdf_bytes)
         for dpi, methods in (variants or {}).items():
             if methods:
-                self._persisted[(digest, int(dpi))] = dict(methods)
+                with self._mcache_lock:
+                    self._persisted[(digest, int(dpi))] = dict(methods)
 
     def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
-        key = (hashlib.sha1(pdf_bytes).digest(), dpi)
-        persisted = self._persisted.get(key)
+        key = (self._digest(pdf_bytes), dpi)
+        with self._mcache_lock:
+            persisted = self._persisted.get(key)
         if persisted is not None:
             return persisted
         with self._mcache_lock:

@@ -170,6 +170,7 @@ export const la = {
   '{name}: Datei ist passwortgeschützt': '{name}: pligamen tessera protectum est',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})': '{name}: archivum/epistula legi non potuit ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: pligamen corruptum aut invalidum',
+  '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: documentum exemplar/fontem externum citat et securitatis causa non importatum est',
 
   // Fenster-Fehler (host.py) + Drag-Geist (Tree.jsx)
   'Fenster nicht gefunden': 'Fenestra non inventa',

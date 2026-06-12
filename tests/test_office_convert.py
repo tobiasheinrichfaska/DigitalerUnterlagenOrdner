@@ -115,3 +115,77 @@ def test_nonpdf_output_rejected(tmp_path):
     with ci, cu, patch("win32com.client.Dispatch", return_value=word):
         with pytest.raises(ValueError, match="kein gültiges PDF"):
             office_via_com(str(src), ".docx")
+
+
+# --- OOXML external-reference pre-scan (attached template / linked content) ----
+import zipfile as _zipfile  # noqa: E402
+
+from universal_importer.converters import scan_ooxml_external_targets  # noqa: E402
+
+_RELS_TPL = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+             '{rels}</Relationships>')
+
+
+def _docx_with_rels(tmp_path, rels_xml, member="word/_rels/settings.xml.rels"):
+    path = tmp_path / "doc.docx"
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", "<w:document/>")
+        z.writestr(member, _RELS_TPL.format(rels=rels_xml))
+    return str(path)
+
+
+def test_scan_flags_remote_attached_template(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships/attachedTemplate" Target="https://evil.example/t.dotm" '
+        'TargetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == "https://evil.example/t.dotm"
+
+
+def test_scan_flags_unc_target(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        r'Target="\\evil-host\share\t.dotm" TargetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == r"\\evil-host\share\t.dotm"
+
+
+def test_scan_allows_hyperlinks_and_internal_rels(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+        '2006/relationships/hyperlink" Target="https://example.org" TargetMode="External"/>'
+        '<Relationship Id="rId2" Type=".../styles" Target="styles.xml"/>')
+    assert scan_ooxml_external_targets(p) is None  # hyperlinks are not fetched on open
+
+
+def test_scan_ignores_non_zip_legacy_files(tmp_path):
+    legacy = tmp_path / "old.doc"
+    legacy.write_bytes(b"\xd0\xcf\x11\xe0 legacy OLE stub")
+    assert scan_ooxml_external_targets(str(legacy)) is None
+
+
+def test_office_via_com_refuses_external_template_before_any_com(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    ci, cu = _no_com()
+    with ci, cu, patch("win32com.client.Dispatch") as disp:
+        with pytest.raises(ValueError, match="externe Vorlage/Quelle"):
+            office_via_com(p, ".docx")
+    disp.assert_not_called()  # refused BEFORE Word could resolve the template
+
+
+def test_word_quit_runs_even_when_conversion_fails(tmp_path):
+    # a failed SaveAs must not leak a hidden WINWORD process — Quit always runs
+    src = tmp_path / "Rechnung.docx"
+    src.write_bytes(b"stub")
+    word = MagicMock()
+    doc = word.Documents.Open.return_value
+    doc.SaveAs.side_effect = RuntimeError("COM exploded")
+
+    ci, cu = _no_com()
+    with ci, cu, patch("win32com.client.Dispatch", return_value=word):
+        with pytest.raises(RuntimeError, match="COM exploded"):
+            office_via_com(str(src), ".docx")
+    assert doc.Close.called and word.Quit.called

@@ -39,6 +39,19 @@ export function visibleOrder(root) {
   return out
 }
 
+// Shift-range selection: all VISIBLE ids between anchor and target (inclusive,
+// either direction). Collapsed folders' descendants are hidden rows and must NOT
+// be swept into the range (they'd silently inflate "{n} Elemente" / DeleteMany).
+// Returns null when either end isn't currently visible (caller falls back).
+export function rangeIds(root, anchorId, targetId) {
+  const order = visibleOrder(root).map((e) => e.id)
+  const a = order.indexOf(anchorId)
+  const b = order.indexOf(targetId)
+  if (a === -1 || b === -1) return null
+  const [lo, hi] = a <= b ? [a, b] : [b, a]
+  return order.slice(lo, hi + 1)
+}
+
 // Previous/next visible id for ↑/↓. Returns null at the ends.
 export function navStep(order, currentId, dir) {
   const i = order.findIndex((e) => e.id === currentId)

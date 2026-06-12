@@ -31,6 +31,8 @@ describe('localizeMessage (host-level backend messages)', () => {
       .toBe('alt.doc: Office program for conversion not available (Word/Excel/PowerPoint required)')
     expect(localizeMessage(t, 'müll.pdf: beschädigte oder ungültige Datei'))
       .toBe('müll.pdf: damaged or invalid file')
+    expect(localizeMessage(t, 'brief.docx: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert'))
+      .toBe('brief.docx: document references an external template/source and was not imported for security reasons')
   })
 
   it('localizes a "; "-joined multi-file warning part by part', () => {

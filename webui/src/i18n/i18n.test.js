@@ -33,10 +33,26 @@ describe('translate (source-string keys)', () => {
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
     // Canonical key count = 124 UI strings (incl. the 3 Tree.jsx drag-ghost keys)
-    // + 13 backend command-error messages + 13 host-level error/warning strings
+    // + 13 backend command-error messages + 14 host-level error/warning strings
     // (host.py + core/api.py + lib/messages.js). If a string is added, bump this
     // deliberately — and add it to every full-coverage language file.
-    expect(Object.keys(en).length).toBe(150)
+    expect(Object.keys(en).length).toBe(151)
+  })
+})
+
+describe('full-coverage languages', () => {
+  // Intentional partials (only attested words; the rest falls back to German).
+  const PARTIAL = ['tlh', 'qya', 'sjn']
+  const FULL = Object.keys(TRANSLATIONS).filter((c) => !PARTIAL.includes(c))
+
+  it.each(FULL)('"%s" has exactly the same key set as the en base', (code) => {
+    // Locks the "n languages = full key set" claim per language — a key silently
+    // missing from one map would otherwise just fall back to German unnoticed.
+    const keys = new Set(Object.keys(TRANSLATIONS[code]))
+    const missing = Object.keys(en).filter((k) => !keys.has(k))
+    const extra = [...keys].filter((k) => !(k in en))
+    expect(missing, `missing in ${code}`).toEqual([])
+    expect(extra, `extra in ${code} (not in en)`).toEqual([])
   })
 })
 

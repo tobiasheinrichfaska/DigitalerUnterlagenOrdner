@@ -48,7 +48,7 @@ export function onActivity(fn) {
 
 function categoryOf(method) {
   if (method === 'compress_options' || method === 'render_compressed_window') return 'compress'
-  if (method === 'render_window' || method === 'render' || method === 'render_compressed') return 'render'
+  if (method === 'render_window') return 'render'
   return null // metadata / IO calls aren't shown as background activity
 }
 
@@ -82,8 +82,8 @@ export const core = {
   dispatch: (session, command) => call('dispatch', session, command),
   undo: (session) => call('undo', session),
   redo: (session) => call('redo', session),
-  render: (session, nodeId) => call('render', session, nodeId),
-  renderCompressed: (session, nodeId, dpi, method) => call('render_compressed', session, nodeId, dpi, method),
+  // (render/renderCompressed wrappers removed — every preview is windowed via
+  // renderWindow/renderCompressedWindow; folders render no pages at all.)
   compressOptions: (session, nodeId, dpi) => call('compress_options', session, nodeId, dpi),
   pageCount: (session, nodeId) => call('page_count', session, nodeId),
   pageDims: (session, nodeId) => call('page_dims', session, nodeId),

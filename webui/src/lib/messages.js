@@ -21,6 +21,7 @@ export const MESSAGE_TEMPLATES = [
   { tpl: '{name}: Datei ist passwortgeschützt' },
   { tpl: '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})' },
   { tpl: '{name}: beschädigte oder ungültige Datei' },
+  { tpl: '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert' },
 ]
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

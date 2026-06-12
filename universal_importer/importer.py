@@ -137,6 +137,15 @@ class UniversalImporter:
         if isinstance(source, str):
             path = source
             ext = os.path.splitext(path)[1].lower()
+            # Same signature/magic gate as the bytes branch — so single-file imports
+            # (import dialog / OS drag) refuse an EXE/script up front too, instead of
+            # degrading to an opaque "%PDF"-check failure later.
+            try:
+                with open(path, "rb") as f:
+                    head = f.read(16)
+            except OSError:
+                head = b""
+            cls.verify_content_matches_extension(head, ext, os.path.basename(path))
         else:
             # Bytes oder BytesIO: Temporäre Datei erzeugen
             if isinstance(source, io.BytesIO):

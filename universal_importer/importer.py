@@ -7,12 +7,8 @@ handled separately in :mod:`universal_importer.archives`.
 import io
 import os
 import tempfile
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 
-import pythoncom
-import win32com.client
-
-from infra import tasks
 from infra.log_config import logger
 
 from . import converters
@@ -31,10 +27,6 @@ class UniversalImporter:
     OFFICE_EXCEL_EXT = [".xls", ".xlsx", ".ods"]
     OFFICE_POWERPOINT_EXT = [".ppt", ".pptx", ".odp"]
     OFFICE_EXTENSIONS = OFFICE_WORD_EXT + OFFICE_EXCEL_EXT + OFFICE_POWERPOINT_EXT
-    _is_initialized = False  # wird auf True gesetzt, wenn Office-Erkennung abgeschlossen ist
-    _has_word = False
-    _has_excel = False
-    _has_powerpoint = False
 
     # Executable / script signatures we refuse to import whatever the extension
     # claims — guards against an EXE/script masquerading as a benign attachment.
@@ -79,45 +71,40 @@ class UniversalImporter:
 
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
-        exts = (
+        # Office/ODF are ALWAYS advertised: conversion runs through office_via_com
+        # (COM) and degrades gracefully to "nicht importierbar" if Office isn't
+        # installed — exactly like the path branch of convert(), which routes by
+        # OFFICE_EXTENSIONS unconditionally. (The old runtime COM probe — _has_word
+        # etc. — launched Word/Excel/PowerPoint just to detect them AND was never
+        # wired in, so it stayed False forever; that made the bytes branch reject
+        # every Office/ODF member inside a zip/email. Removed.)
+        return (
             cls.PDF_EXTENSIONS +
             cls.IMAGE_EXTENSIONS +
             cls.CUSTOM_EXTENSIONS +
             cls.MODERN_IMAGE_EXTENSIONS +
             cls.ARCHIVE_AND_EMAIL_EXTENSIONS +
             cls.TEXT_EXTENSIONS +
-            cls.HTML_EXTENSIONS
+            cls.HTML_EXTENSIONS +
+            cls.OFFICE_EXTENSIONS
         )
-        if cls._has_word:
-            exts += cls.OFFICE_WORD_EXT
-        if cls._has_excel:
-            exts += cls.OFFICE_EXCEL_EXT
-        if cls._has_powerpoint:
-            exts += cls.OFFICE_POWERPOINT_EXT
-        return exts
 
     @classmethod
     def get_filetypes_for_dialog(cls) -> List[tuple]:
         def pattern(exts):
             return " ".join(f"*{ext}" for ext in exts)
 
-        filetypes = [
+        return [
             ("Alle unterstützten Formate", pattern(cls.get_supported_extensions())),
             ("PDF",                        "*.pdf"),
             ("BelegTool-Dateien",          "*.belegtool"),
             ("Archive",                    "*.zip *.tar *.tgz"),
             ("E-Mails",                    "*.eml *.msg"),
             ("Bilder",                     pattern(cls.IMAGE_EXTENSIONS + cls.MODERN_IMAGE_EXTENSIONS)),
+            ("Word / OpenDocument Text",   pattern(cls.OFFICE_WORD_EXT)),
+            ("Excel / OpenDocument Tabelle", pattern(cls.OFFICE_EXCEL_EXT)),
+            ("PowerPoint / OpenDocument Präsentation", pattern(cls.OFFICE_POWERPOINT_EXT)),
         ]
-
-        if cls._has_word:
-            filetypes.append(("Word / OpenDocument Text",   pattern(cls.OFFICE_WORD_EXT)))
-        if cls._has_excel:
-            filetypes.append(("Excel / OpenDocument Tabelle", pattern(cls.OFFICE_EXCEL_EXT)))
-        if cls._has_powerpoint:
-            filetypes.append(("PowerPoint / OpenDocument Präsentation", pattern(cls.OFFICE_POWERPOINT_EXT)))
-
-        return filetypes
 
     @classmethod
     def is_supported(cls, path: str) -> bool:
@@ -213,38 +200,3 @@ class UniversalImporter:
             raise ValueError(f"Ungültige PDF-Daten erzeugt aus Datei: {path}")
 
         return result
-
-    @classmethod
-    def _detect_office_support(cls):
-        try:
-            cls._has_word = bool(win32com.client.gencache.EnsureDispatch("Word.Application"))
-        except Exception:
-            cls._has_word = False
-        try:
-            cls._has_excel = bool(win32com.client.gencache.EnsureDispatch("Excel.Application"))
-        except Exception:
-            cls._has_excel = False
-        try:
-            cls._has_powerpoint = bool(win32com.client.gencache.EnsureDispatch("PowerPoint.Application"))
-        except Exception:
-            cls._has_powerpoint = False
-
-    @classmethod
-    def initialize(cls):
-        cls._detect_office_support()
-        cls._is_initialized = True
-
-    @classmethod
-    def initialize_async(cls, on_complete: Optional[Callable[[], None]] = None):
-        def task():
-            pythoncom.CoInitialize()
-            cls._detect_office_support()
-            cls._is_initialized = True
-            if on_complete:
-                # Run the callback on the UI/main thread (headless: inline).
-                try:
-                    tasks.run_on_ui_thread(on_complete)
-                except Exception as e:
-                    logger.warning("Callback-Fehler: %s", e)
-
-        tasks.submit(task)

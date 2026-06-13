@@ -56,7 +56,19 @@ def compress_pdf_bytes(input_bytes: bytes, dpi: int = 150, method: str = "jpg") 
     """
     rendered = _render_pdf_as_images(input_bytes, dpi=dpi, method=method)
     reencoded = reencode_pdf_structure(rendered)
-    # Always return whichever is smaller: the re-encoded result or the original.
+    # Guard against silent page loss: _render_pdf_as_images omits any page that fails to
+    # render, so a smaller result could have *fewer* pages than the source. Never return a
+    # truncated document — fall back to the original if the page count dropped.
+    try:
+        with fitz.open(stream=input_bytes, filetype="pdf") as src:
+            n_in = src.page_count
+        with fitz.open(stream=reencoded, filetype="pdf") as out:
+            n_out = out.page_count
+        if n_out < n_in:
+            return input_bytes
+    except Exception:
+        return input_bytes
+    # Otherwise return whichever is smaller: the re-encoded result or the original.
     return reencoded if len(reencoded) < len(input_bytes) else input_bytes
 
 

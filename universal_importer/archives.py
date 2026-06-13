@@ -262,8 +262,13 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                     content = part.get_payload(decode=True)
                     if content:
                         members += 1
-                        decoded_total += len(content)
-                        result.append(_convert_attachment(content, fname))
+                        # Refuse before converting: an oversized part must not push the
+                        # running total past the cap (mirrors the zip/tar early-abort).
+                        if decoded_total + len(content) > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                            result.append(_not_importable(fname, reason="zu groß"))
+                        else:
+                            decoded_total += len(content)
+                            result.append(_convert_attachment(content, fname))
                 elif maintype == "image":
                     cid = (part.get("Content-ID") or "").strip("<>")
                     if "inline" in disp or cid:
@@ -271,8 +276,11 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                         content = part.get_payload(decode=True)
                         if content:
                             members += 1
-                            decoded_total += len(content)
-                            result.append(_convert_attachment(content, fname))
+                            if decoded_total + len(content) > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                                result.append(_not_importable(fname, reason="zu groß"))
+                            else:
+                                decoded_total += len(content)
+                                result.append(_convert_attachment(content, fname))
         except Exception:
             logger.exception("[extract_email_to_structure] Ausnahme beim Parsen der EML:")
             result.append(_not_importable("Unbekannte E-Mail"))
@@ -313,8 +321,12 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> 
                     data_att = att.data
                     if data_att:
                         members += 1
-                        decoded_total += len(data_att) if isinstance(data_att, (bytes, bytearray)) else 0
-                        result.append(_convert_attachment(data_att, fname))
+                        att_len = len(data_att) if isinstance(data_att, (bytes, bytearray)) else 0
+                        if decoded_total + att_len > _ARCHIVE_MAX_UNCOMPRESSED_BYTES:
+                            result.append(_not_importable(fname, reason="zu groß"))
+                        else:
+                            decoded_total += att_len
+                            result.append(_convert_attachment(data_att, fname))
                     else:
                         result.append(_not_importable(fname))
                 except Exception as e:

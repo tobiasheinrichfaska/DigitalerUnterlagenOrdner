@@ -57,6 +57,12 @@ const GROUP_PREFIX = '__tag__' // synthetic group-folder id marker (not a real n
 /** True for the synthetic folders groupByTag produces (so the UI can skip ops on them). */
 export const isGroupNode = (id) => typeof id === 'string' && id.startsWith(GROUP_PREFIX)
 
+/** Normalise a selection captured over a group-by-tag view to REAL, UNIQUE node ids:
+ *  a shift-range there sweeps across synthetic group-folder rows AND can include the
+ *  same real leaf once per tag it appears under. Without this, selection counts
+ *  ("Auswahl N" / "Status (N)") overcount while the ops silently act on fewer nodes. */
+export const realSelectionIds = (ids) => [...new Set((ids || []).filter((id) => !isGroupNode(id)))]
+
 /** Every REAL node id currently displayed by a view (skips synthetic group folders;
  *  de-duplicated, since grouping can show a node more than once). Feeds the backend
  *  "open this view in a new window" materialiser. */

@@ -720,10 +720,24 @@ class CoreApi:
             from services.variant_store import embed_variants_bytes
             data, _ = embed_variants_bytes(data, document, self._engine)
         bak = path + ".bak"
+        read_ok = True
         try:
             prev = lock.read_all()
         except Exception:
             prev = b""
+            read_ok = False
+        if not read_ok:
+            # Reading the current bytes through the held handle failed. If the on-disk file
+            # is non-empty, proceeding would overwrite it with NO .bak — losing the only copy
+            # exactly when I/O is already flaky. Abort instead of risking an unrecoverable
+            # truncated write. (A genuinely empty/absent file has nothing to protect → proceed.)
+            try:
+                on_disk = os.path.getsize(path)
+            except OSError:
+                on_disk = 0
+            if on_disk:
+                raise OSError(
+                    f"Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}")
         if prev:
             with open(bak, "wb") as f:
                 f.write(prev)

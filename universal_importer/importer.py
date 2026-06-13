@@ -90,31 +90,6 @@ class UniversalImporter:
         )
 
     @classmethod
-    def get_filetypes_for_dialog(cls) -> List[tuple]:
-        def pattern(exts):
-            return " ".join(f"*{ext}" for ext in exts)
-
-        return [
-            ("Alle unterstützten Formate", pattern(cls.get_supported_extensions())),
-            ("PDF",                        "*.pdf"),
-            ("BelegTool-Dateien",          "*.belegtool"),
-            ("Archive",                    "*.zip *.tar *.tgz"),
-            ("E-Mails",                    "*.eml *.msg"),
-            ("Bilder",                     pattern(cls.IMAGE_EXTENSIONS + cls.MODERN_IMAGE_EXTENSIONS)),
-            ("Word / OpenDocument Text",   pattern(cls.OFFICE_WORD_EXT)),
-            ("Excel / OpenDocument Tabelle", pattern(cls.OFFICE_EXCEL_EXT)),
-            ("PowerPoint / OpenDocument Präsentation", pattern(cls.OFFICE_POWERPOINT_EXT)),
-        ]
-
-    @classmethod
-    def is_supported(cls, path: str) -> bool:
-        p = path.lower()
-        if p.endswith(".tar.gz") or p.endswith(".tgz"):
-            return True
-        ext = os.path.splitext(p)[1]
-        return ext in cls.get_supported_extensions()
-
-    @classmethod
     def convert(cls, source: Union[str, bytes, io.BytesIO], name: Optional[str] = None) -> ConvertedPDF:
         """Konvertiert eine Datei (Pfad, Bytes oder BytesIO) in ein PDF.
 

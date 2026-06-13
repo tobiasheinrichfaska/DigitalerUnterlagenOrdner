@@ -68,6 +68,10 @@ def _prewarm():
 # Frozen (PyInstaller onedir): data files live under sys._MEIPASS, not next to
 # this module (which is packed into the archive). Dev: resolve from the source.
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+# BELEG_DEV mode loads the Vite dev server. webui runs bare `vite` (no --port), so
+# this MUST track Vite's default 5173 — NOT the workspace-wide 5178 web-server port
+# (that rule targets standalone servers; this is an embedded-SPA dev convenience).
+# If webui's dev script ever pins a port, update this in the same change.
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")

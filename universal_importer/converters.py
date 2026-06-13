@@ -195,7 +195,12 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
     path = os.path.normpath(os.path.abspath(path))
     base_name = os.path.splitext(os.path.basename(path))[0]
 
-    if ext not in [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]:
+    # ODF (.odt/.ods/.odp) is advertised in get_supported_extensions/the file dialog and
+    # opens through the matching Office app (Word/Excel/PowerPoint) — route it like the OOXML
+    # twin. The .rels external-target pre-scan below is a no-op for ODF (a ZIP without .rels →
+    # scan returns None, fail-open like legacy OLE), so the COM guards (AutomationSecurity=3,
+    # ReadOnly, UpdateLinks off) are the active protection for this format.
+    if ext not in [".doc", ".docx", ".odt", ".xls", ".xlsx", ".ods", ".ppt", ".pptx", ".odp"]:
         raise ValueError(f"Nicht unterstützter Office-Typ: {ext}")
 
     # VOR dem Öffnen: OOXML mit externer Vorlage/Verknüpfung ablehnen (Office würde
@@ -221,7 +226,7 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
     out_path = os.path.join(tmp_dir, base_name + ".pdf")
 
     try:
-        if ext in [".doc", ".docx"]:
+        if ext in [".doc", ".docx", ".odt"]:
             word = win32com.client.Dispatch("Word.Application")
             try:
                 # Makros/DDE-Ausführung deaktivieren (msoAutomationSecurityForceDisable = 3)
@@ -240,7 +245,7 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
             finally:
                 word.Quit()  # immer — sonst leakt ein fehlgeschlagener Import WINWORD
 
-        elif ext in [".xls", ".xlsx"]:
+        elif ext in [".xls", ".xlsx", ".ods"]:
             excel = win32com.client.Dispatch("Excel.Application")
             try:
                 excel.AutomationSecurity = 3
@@ -257,7 +262,7 @@ def office_via_com(path: str, ext: str) -> ConvertedPDF:
             finally:
                 excel.Quit()
 
-        elif ext in [".ppt", ".pptx"]:
+        elif ext in [".ppt", ".pptx", ".odp"]:
             powerpoint = win32com.client.Dispatch("PowerPoint.Application")
             try:
                 powerpoint.AutomationSecurity = 3

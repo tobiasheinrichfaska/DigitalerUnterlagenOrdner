@@ -71,11 +71,20 @@ HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file_
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")
-IMPORT_FILE_TYPES = (
-    "Unterstützte Dateien (*.pdf;*.belegtool;*.jpg;*.jpeg;*.png;*.webp;*.heic;"
-    "*.docx;*.xlsx;*.pptx;*.zip;*.tar;*.eml;*.msg)",
-    "Alle Dateien (*.*)",
-)
+
+
+def _import_file_types():
+    """Import-dialog filter, derived from the importer's ACTUAL supported set so newly
+    supported formats (e.g. ODF .odt/.ods/.odp, legacy .doc/.xls/.ppt, .tif/.txt/.html)
+    appear without hand-editing — the old hardcoded tuple silently omitted several.
+    Imported lazily: universal_importer pulls in the heavy COM/Office/HEIC stack, which
+    must stay off the startup path (see _prewarm)."""
+    try:
+        from universal_importer import UniversalImporter
+        all_pattern = ";".join(f"*{e}" for e in UniversalImporter.get_supported_extensions())
+        return (f"Unterstützte Dateien ({all_pattern})", "Alle Dateien (*.*)")
+    except Exception:
+        return ("Alle Dateien (*.*)",)
 
 
 def _entry():
@@ -238,7 +247,7 @@ class HostApi:
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
         result = win.create_file_dialog(
-            webview.FileDialog.OPEN, allow_multiple=True, file_types=IMPORT_FILE_TYPES)
+            webview.FileDialog.OPEN, allow_multiple=True, file_types=_import_file_types())
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.import_paths(session, list(result), parent_id)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { allTags, effectiveTagsOf, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './tags'
+import { allTags, effectiveTagsOf, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './tags'
 
 // root → [a(Steuer,2023), f[Steuer] → [b(Spende), c()]]
 const tree = {
@@ -92,5 +92,20 @@ describe('displayedNodeIds', () => {
   it('de-duplicates across a grouped view and skips synthetic group headers', () => {
     // grouping shows a/f/b/c (b and f appear twice) → distinct real ids only
     expect(displayedNodeIds(groupByTag(tree)).sort()).toEqual(['a', 'b', 'c', 'f'])
+  })
+})
+
+describe('realSelectionIds', () => {
+  it('drops synthetic group ids and de-duplicates real ones', () => {
+    // a shift-range over a grouped view: group headers + a repeated real leaf
+    expect(realSelectionIds(['__tag__Steuer', 'a', 'b', '__tag__Spende', 'b']))
+      .toEqual(['a', 'b'])
+  })
+  it('is a no-op on a clean real-id selection', () => {
+    expect(realSelectionIds(['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
+  })
+  it('handles null / empty', () => {
+    expect(realSelectionIds(null)).toEqual([])
+    expect(realSelectionIds([])).toEqual([])
   })
 })

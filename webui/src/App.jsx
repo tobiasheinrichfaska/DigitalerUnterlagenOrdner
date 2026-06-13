@@ -8,7 +8,7 @@ import { ExportDialog } from './ExportDialog'
 import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
-import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds } from './lib/tags'
+import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
 import { findNode, findParent, isAncestorOf, afterLevels } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
@@ -67,13 +67,18 @@ export default function App() {
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
   const { width: treeWidth, startResize } = useResizablePane()
-  const previewRef = useRef(null)
-
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
-  // preventDefault the webview's page zoom). Empty deps: setZoom is stable (useState
-  // setter) and previewRef is a stable ref — no need to re-bind on every render.
-  useEffect(() => {
-    const el = previewRef.current
+  // preventDefault the webview's page zoom). Bound via a *callback ref* so it attaches
+  // exactly when the preview element mounts. (A prior useEffect with [] deps ran once
+  // during the "Verbinde mit Core…" loading screen — before the element existed — so it
+  // bailed on the null ref and never re-bound, silently killing Ctrl+wheel for the whole
+  // session.) setZoom is a stable useState setter, so the callback never needs to change.
+  const previewWheelCleanup = useRef(null)
+  const previewRef = useCallback((el) => {
+    if (previewWheelCleanup.current) {
+      previewWheelCleanup.current()
+      previewWheelCleanup.current = null
+    }
     if (!el) return
     const onWheel = (e) => {
       if (!e.ctrlKey) return
@@ -81,7 +86,7 @@ export default function App() {
       setZoom((z) => Math.min(4, Math.max(0.25, z + (e.deltaY < 0 ? 0.15 : -0.15))))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
+    previewWheelCleanup.current = () => el.removeEventListener('wheel', onWheel)
   }, [])
 
   // run any core call with the global busy indicator on. A bridge REJECTION (vs a
@@ -157,7 +162,10 @@ export default function App() {
       }
     })()
     return () => { cancelled = true }
-  }, [session]) // eslint-disable-line react-hooks/exhaustive-deps -- once per opened document
+    // Re-run per opened *document*, not per session: CoreApi.open reuses the session id
+    // when reopening in the same window, so keying on [session] alone never re-swept a
+    // second document. The root node id changes per document but is stable across edits.
+  }, [session, state?.tree?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: exclude full state.tree/config
 
   // every leaf preview is virtualized; only folders use the `pages` path
   const windowed = !!(selected && !selected.is_folder)
@@ -311,7 +319,10 @@ export default function App() {
       // visible rows only — a collapsed folder's hidden children must not be swept in
       const range = rangeTree && rangeIds(rangeTree, anchorId, node.id)
       if (range) {
-        setSelectedIds(range)
+        // In a group-by-tag view the range crosses synthetic group rows and can repeat
+        // a real leaf under several tags — keep only real, unique ids so the selection
+        // count matches what export / SetStatusMany actually process.
+        setSelectedIds(realSelectionIds(range))
         setSelected(node); setPages(null); setPreviewReq(null)
         return
       }

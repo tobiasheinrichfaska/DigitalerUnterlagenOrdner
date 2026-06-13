@@ -146,9 +146,21 @@ render/compress path at startup.
 ### Import pipeline
 - **PDF / .belegtool** → loaded directly as nodes
 - **Images** (jpg, png, webp, heic) → converted to PDF
-- **Office** (Word, Excel, PPT) → Win32-COM or GhostScript → PDF
+- **Office** (Word/Excel/PPT **+ OpenDocument .odt/.ods/.odp**) → Win32-COM → PDF
+  (ODF opens through the matching app — Word/Excel/PowerPoint; ⚠ ODF COM conversion
+  is **not yet verified on a real Office machine** — see the golden Office test below)
 - **Archives** (ZIP, TAR) → structure preserved, loaded recursively
 - **Email** (eml, msg) → body + attachments extracted as tree structure
+
+**Import-routing fix (2026-06-13, audit M-1/L-1/L-2):** `UniversalImporter.get_supported_extensions()`
+now **always** lists Office/ODF — the old runtime COM probe (`_has_word/_excel/_powerpoint`,
+`_detect_office_support`, `initialize`/`initialize_async`) was never wired in (it would have
+launched Word/Excel/PowerPoint just to detect them) so it stayed False forever, which made the
+**bytes path reject every Office/ODF member inside a zip/email**. That dead probe is removed;
+conversion still degrades to "nicht importierbar" if Office isn't installed (same as the path
+branch). The import dialog filter (`host._import_file_types()`) is now derived from
+`get_supported_extensions()` (lazily, to keep the heavy COM import off startup), so newly
+supported formats — incl. ODF — appear instead of the old hand-maintained subset.
 
 **Import hardening (2026-06-12):** the EXE/script signature + magic-byte gate
 (`verify_content_matches_extension`) runs on **both** branches — archive/email
@@ -161,9 +173,11 @@ leak / SSRF mitigation). The scan **fails closed** for ZIPs: a file that
 method, > entry cap, or an oversized `.rels` that **truncates** at the 4 MB read cap
 — a legit `.rels` is tiny, so an oversized one hiding a target past the cap is itself
 suspicious) returns `SCAN_UNREADABLE` → same refusal (Word's lenient OPC
-parser could otherwise resolve a target our `zipfile` couldn't read). Only genuine
+parser could otherwise resolve a target our `zipfile` couldn't read). Genuine
 non-zip legacy OLE `.doc/.xls/.ppt` stays fail-open — no `.rels` exists, there only
-the COM guards apply. Office apps are `Quit()` in `finally`, so a
+the COM guards apply; **ODF (`.odt/.ods/.odp`) is a ZIP but has no `.rels` either, so
+the scan returns `None` (fail-open) and the COM guards are likewise the active
+protection for it.** Office apps are `Quit()` in `finally`, so a
 failed conversion leaks no hidden WINWORD/EXCEL/POWERPNT. Rendering clamps DPI to
 a per-page pixel budget (`services/render.MAX_RENDER_PIXELS`) against oversized-
 MediaBox allocation bombs — on the preview paths **and** the compression raster
@@ -435,7 +449,9 @@ build, the MotW/UPX hardening — all on `master`, validated; **3.13 build + smo
 passed 2026-06-08**). Suggested sequencing: **ship v3.9.4 first** (ready), then build these
 as **v3.10.0**.
 
-1. **Golden Office conversion test.** *You* provide one reference Word/Excel/PowerPoint file;
+1. **Golden Office conversion test.** *You* provide one reference Word/Excel/PowerPoint file
+   **(and one OpenDocument `.odt/.ods/.odp` — ODF routing was added 2026-06-12 but is only
+   unit-tested with a mocked COM; a real Office round-trip is unverified)**;
    each is run through `office_via_com` while testing the package; the **first output PDFs are
    approved once → promoted to `tests/data/expected/`** as golden. Later runs compare
    **structurally** (valid PDF + page count + key text), **not** byte-equality (Office output
@@ -544,7 +560,7 @@ as **v3.10.0**.
 
 - **Accepted audit-info residuals (2026-06-12, deliberately not fixed):**
   `save()` reads `_locks`/`_paths` outside the lock (unreachable via the modal UI);
-  `SetPeriod` does no value validation; `initialize_async`/`office_via_com`
+  `SetPeriod` does no value validation; `office_via_com`'s
   CoInitialize/CoUninitialize balance on js threads is best-effort;
   `_friendly_import_error`'s raw-text fallback tail stays untranslated (known);
   the OOXML `.rels` pre-scan does not cover legacy OLE `.doc/.xls/.ppt` (no ZIP —

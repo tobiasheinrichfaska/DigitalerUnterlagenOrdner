@@ -94,13 +94,39 @@ def test_powerpoint_pptx_readonly_pdf(tmp_path):
 
 
 def test_unsupported_office_type_raises(tmp_path):
-    src = tmp_path / "x.odt"
+    # .rtf is not in the Office allowlist (.doc/.docx/.odt/.xls/.xlsx/.ods/.ppt/.pptx/.odp).
+    src = tmp_path / "x.rtf"
     src.write_bytes(b"stub")
     ci, cu = _no_com()
     with ci, cu, patch("win32com.client.Dispatch") as disp:
         with pytest.raises(ValueError, match="Nicht unterstützter"):
-            office_via_com(str(src), ".odt")
+            office_via_com(str(src), ".rtf")
     disp.assert_not_called()                                  # bails before any COM app
+
+
+def test_odf_types_route_to_office_app(tmp_path):
+    """.odt/.ods/.odp are advertised in the file dialog and must route to the matching
+    COM app (Word/Excel/PowerPoint) instead of being rejected as 'Nicht unterstützter'.
+    The .rels external-target pre-scan is a no-op for ODF (a ZIP without .rels), so the
+    stub bytes pass the scan and we reach Dispatch."""
+    for ext, app in ((".odt", "Word.Application"),
+                     (".ods", "Excel.Application"),
+                     (".odp", "PowerPoint.Application")):
+        src = tmp_path / f"doc{ext}"
+        src.write_bytes(b"stub")  # not a real ODF, but the scan only refuses on a real .rels
+        word = MagicMock()
+        # make the SaveAs/ExportAsFixedFormat write a valid-looking PDF so we get past the check
+        word.Documents.Open.return_value.SaveAs.side_effect = \
+            lambda out, *a, **k: open(out, "wb").write(b"%PDF-1.7\n")
+        word.Workbooks.Open.return_value.ExportAsFixedFormat.side_effect = \
+            lambda fmt, out, *a, **k: open(out, "wb").write(b"%PDF-1.7\n")
+        word.Presentations.Open.return_value.SaveAs.side_effect = \
+            lambda out, *a, **k: open(out, "wb").write(b"%PDF-1.7\n")
+        ci, cu = _no_com()
+        with ci, cu, patch("win32com.client.Dispatch", return_value=word) as disp:
+            result = office_via_com(str(src), ext)
+        disp.assert_called_once_with(app)
+        assert result.data.getvalue().startswith(b"%PDF")
 
 
 def test_nonpdf_output_rejected(tmp_path):

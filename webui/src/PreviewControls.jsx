@@ -62,7 +62,9 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         setOrigSize(r?.ok ? r.original_size : null)
         setLoading(false)
         // refresh the front dot: no smaller option → decided; else still undecided.
-        if (!node.is_compressed) onResolved?.(node.id, opts.length > 0)
+        // Only when the call SUCCEEDED — a failed/cancelled {ok:false} proves nothing,
+        // so leave the undecided dot (and the persisted no-gain verdict) untouched.
+        if (r?.ok && !node.is_compressed) onResolved?.(node.id, opts.length > 0)
       })
       .catch(() => { if (reqId === loadReqId.current) setLoading(false) })
   }
@@ -87,7 +89,9 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         setOptions(opts)
         setOrigSize(r?.ok ? r.original_size : null)
         setLoading(false)
-        onResolved?.(node.id, opts.length > 0)  // no gain → clear the front "undecided" dot
+        // no gain → clear the front "undecided" dot, but only on a SUCCESSFUL evaluation:
+        // a failed/cancelled {ok:false} must not clear the dot or bake a false no-gain verdict.
+        if (r?.ok) onResolved?.(node.id, opts.length > 0)
         const remembered = methodMemory.get(node.id)
         const valid = remembered === 'original' || opts.some((o) => o.method === remembered)
         const pick = valid ? remembered : opts[0]?.method // options are smallest-first

@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Playwright e2e (generated; the specs + playwright.config.js ARE tracked)
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

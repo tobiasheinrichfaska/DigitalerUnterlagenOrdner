@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { visibleOrder, rangeIds, navStep, moveTarget, applyMove, locate } from './treeNav'
+import { visibleOrder, rangeIds, navStep, moveTarget, applyMove, locate, moveManyDrop } from './treeNav'
 
 // root
 //  ├ A (folder)
@@ -95,6 +95,36 @@ describe('applyMove (matches move_node remove-then-insert)', () => {
   it('locate reads the resulting position', () => {
     const t = applyMove(tree, 'C', 'B', null)
     expect(locate(t, 'C')).toEqual({ parentId: 'B', index: 1 })
+  })
+})
+
+describe('moveManyDrop (multi-node carry → MoveMany args, pre-removal frame)', () => {
+  // flat tree: root → [a, b, c, d]
+  const flat = {
+    id: 'root', is_folder: true, children: ['a', 'b', 'c', 'd'].map((id) => ({ id, is_folder: false, children: [] })),
+  }
+
+  it('lands the block before the first non-carried node after the primary', () => {
+    // carry {a, c}, primary c moved up to index 1 → preview [a, c, b, d]
+    const preview = applyMove(flat, 'c', 'root', 1)
+    // successor after c is b (index 1 in the original) → drop at index 1
+    expect(moveManyDrop(flat, preview, ['a', 'c'], 'c')).toEqual({ parentId: 'root', index: 1 })
+  })
+
+  it('appends (index null) when the primary moved to the end (no successor)', () => {
+    const preview = applyMove(flat, 'c', 'root', 3) // [a, b, d, c]
+    expect(moveManyDrop(flat, preview, ['a', 'c'], 'c')).toEqual({ parentId: 'root', index: null })
+  })
+
+  it('skips carried nodes when picking the successor', () => {
+    // carry {a, b}, primary b moved up to index 0 → preview [b, a, c, d]
+    const preview = applyMove(flat, 'b', 'root', 0)
+    // after b: a is carried → skip; c is the successor → original index of c is 2
+    expect(moveManyDrop(flat, preview, ['a', 'b'], 'b')).toEqual({ parentId: 'root', index: 2 })
+  })
+
+  it('returns null when the primary did not actually move (no-op drop)', () => {
+    expect(moveManyDrop(flat, flat, ['a', 'c'], 'c')).toBeNull()
   })
 })
 

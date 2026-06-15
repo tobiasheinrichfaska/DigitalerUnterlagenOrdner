@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { findNode, findParent } from '../lib/tree'
-import { visibleOrder, navStep, moveTarget, applyMove, locate } from '../lib/treeNav'
+import { visibleOrder, navStep, moveTarget, applyMove, locate, moveManyDrop } from '../lib/treeNav'
 
 // Global keyboard: arrow navigation, Insert carry-move (optical grab → drop, one
 // undoable Move), and Ctrl shortcuts (save/open/export/new-window/undo/redo/delete).
@@ -8,7 +8,7 @@ import { visibleOrder, navStep, moveTarget, applyMove, locate } from '../lib/tre
 // current state/handlers.
 export function useKeyboard({
   enabled, reorderEnabled = true, tree, selected, selectedIds, grab, setGrab, select, dispatch,
-  setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
+  moveMany, setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
   deleteSelection, canUndo, canRedo,
   // modal/menu flags: shortcuts must be OFF while any overlay is open
   saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false,
@@ -30,14 +30,21 @@ export function useKeyboard({
         e.preventDefault()
         if (!reorderEnabled) return
         if (grab) {
-          const from = locate(tree, grab.id)
-          const to = locate(grab.tree, grab.id)
-          if (to && (!from || from.parentId !== to.parentId || from.index !== to.index)) {
-            dispatch({ type: 'Move', node_id: grab.id, new_parent_id: to.parentId, index: to.index })
+          // A multi-selection carries the whole block: the primary moved optically,
+          // the rest follow on drop via one MoveMany. A single node → one Move.
+          if (grab.ids && grab.ids.length > 1 && moveMany) {
+            const drop = moveManyDrop(tree, grab.tree, grab.ids, grab.id)
+            if (drop) moveMany(grab.ids, drop.parentId, drop.index)
+          } else {
+            const from = locate(tree, grab.id)
+            const to = locate(grab.tree, grab.id)
+            if (to && (!from || from.parentId !== to.parentId || from.index !== to.index)) {
+              dispatch({ type: 'Move', node_id: grab.id, new_parent_id: to.parentId, index: to.index })
+            }
           }
           setGrab(null)
         } else if (selected && tree) {
-          setGrab({ id: selected.id, tree })
+          setGrab({ id: selected.id, ids: selectedIds, tree })
         }
         return
       }
@@ -48,7 +55,7 @@ export function useKeyboard({
         if (dir) {
           e.preventDefault()
           const t = moveTarget(grab.tree, grab.id, dir)
-          if (t) setGrab({ id: grab.id, tree: applyMove(grab.tree, grab.id, t.new_parent_id, t.index) })
+          if (t) setGrab({ ...grab, tree: applyMove(grab.tree, grab.id, t.new_parent_id, t.index) })
         }
         return
       }

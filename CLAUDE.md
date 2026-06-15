@@ -118,6 +118,21 @@ prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd 
 method-name mapping and the `pywebviewready` wait/fail-fast). **Manual tests:**
 [`manual_tests/05_react_ui.md`](manual_tests/05_react_ui.md).
 
+**Two test layers (frontend):**
+- **jsdom unit/component** (`npm test`, Vitest, fast) — covers logic (`src/lib/`), and
+  components/integration by rendering against a **mocked `window.pywebview.api`** (a Proxy
+  recording calls). Includes selection/multi-select + the keyboard multi-node `MoveMany`
+  carry and its partial-folder resolver parity with drag (`App.select.test.jsx`,
+  `App.moveresolver.test.jsx`), the dialogs (`ExportDialog`/`SaveDialog`/`HelpModal`), and
+  `StatusBar`/`PreviewPane`/`TagEditor`/`TagViewBar`. Vitest's `include` is pinned to
+  `src/**` so it never picks up the e2e specs.
+- **Playwright e2e** ([`e2e/`](webui/e2e), `npm run test:e2e`, real Chromium) — covers the
+  two layout-dependent things jsdom can't: **scroll virtualization** in [`Preview.jsx`](webui/src/Preview.jsx)
+  (binary-search on real `offsetTop`/`scrollTop`) and the **HTML5 drag-and-drop** handshake
+  in [`Tree.jsx`](webui/src/Tree.jsx). A browser has no Python host, so each spec injects a
+  stub bridge before load ([`e2e/bridge.js`](webui/e2e/bridge.js)). First run needs
+  `npx playwright install chromium`. `webServer` runs `npm run dev` on port 5178.
+
 Performance notes worth keeping: `.belegtool` is parsed **once** on load (was
 re-parsed per node); `universal_importer` (win32com/COM, ~2.6 s) is imported lazily
 only when an Office/archive/email import needs it; `host._prewarm` warms the
@@ -192,6 +207,13 @@ Split, merge (with DPI conflict check), create folder, delete, rename, deep copy
 **optically** (↑/↓ reorder, → nest into the folder above, ← out a level) — nothing is
 committed until **Insert** drops it (a single undoable `Move`); **Esc** cancels and
 reverts. (Ctrl is multi-select, so it can't be the move modifier.)
+**Multi-node carry:** when more than one node is selected, Insert locks in the whole
+selection — the **primary** moves optically while the rest stay visibly selected, and
+the block follows on drop as **one undoable `MoveMany`**. The drop slot is computed by
+[`moveManyDrop`](webui/src/lib/treeNav.js) (pure, tested) in the core's pre-removal frame
+— the original index of the first non-carried node after the primary, or append — so the
+block lands exactly where the primary was dropped (the core discounts the moved-out
+siblings). Wired in [`useKeyboard.js`](webui/src/hooks/useKeyboard.js) → `App.onMoveMany`.
 
 **Folder collapse** is a **persisted** `Node.collapsed` field (set via `SetCollapsed`
 / `SetAllCollapsed` commands — undoable, marks dirty, round-trips in `.belegtool`).

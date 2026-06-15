@@ -117,3 +117,30 @@ export function locate(root, nodeId) {
   return { parentId: parent.id, index: (parent.children ?? []).findIndex((c) => c.id === nodeId) }
 }
 
+// Multi-node carry-move drop. During the carry only the PRIMARY is moved optically
+// (the others stay visibly locked); on drop the whole block follows the primary.
+// We express the landing slot the way MoveMany expects it — in the PRE-REMOVAL
+// frame: the original index of the first NON-carried node after the primary in the
+// preview (the core discounts the moved-out siblings before that slot). No such
+// node → null = append to the destination folder.
+//
+// Returns { parentId, index } for a MoveMany dispatch, or null if the primary did
+// not actually move (a no-op drop should not push an undo entry).
+export function moveManyDrop(originalTree, previewTree, ids, primaryId) {
+  const to = locate(previewTree, primaryId)
+  if (!to) return null
+  const from = locate(originalTree, primaryId)
+  if (from && from.parentId === to.parentId && from.index === to.index) return null // unmoved
+  const carried = new Set(ids)
+  const previewParent = find(previewTree, to.parentId)
+  let successor = null
+  for (let i = to.index + 1; i < (previewParent?.children ?? []).length; i++) {
+    if (!carried.has(previewParent.children[i].id)) { successor = previewParent.children[i]; break }
+  }
+  const origParent = find(originalTree, to.parentId)
+  const index = successor && origParent
+    ? origParent.children.findIndex((c) => c.id === successor.id)
+    : null
+  return { parentId: to.parentId, index }
+}
+

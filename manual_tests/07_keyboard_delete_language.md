@@ -26,6 +26,28 @@ tweaks (resizable pane, chevrons, one-line names, page indicator).
 
 ---
 
+## MT-50b: Multi-node Insert carry — move a whole selection at once
+
+**Preconditions:** A document with several sibling nodes (and ideally a folder to drop into).
+
+**Steps:**
+1. **Ctrl-click** two or more nodes so several rows are selected; note which one is the
+   **primary** (the one with the preview / strongest highlight — usually the last clicked).
+2. Press **Insert**. The primary gets the dashed "carry" outline.
+3. Press **↑/↓** (and optionally **→/←**) to move the carry to a new position, then press
+   **Insert** again to drop. Press **Ctrl+Z** afterwards.
+
+**Expected:**
+- During the carry, **only the primary moves visually**; the other selected rows **stay
+  put but remain selected** (they are "locked in"). *Not obvious:* the others don't visibly
+  travel with the cursor — they jump to join the primary only on drop.
+- On drop, **all selected nodes move together** to the primary's position, in their existing
+  order, as **one step**. **Ctrl+Z** undoes the whole move at once (it's a single `MoveMany`,
+  not one undo per node).
+- Dropping without having moved the primary changes nothing.
+
+---
+
 ## MT-51: Multi-select delete — all selected, focus moves on
 
 **Steps:**

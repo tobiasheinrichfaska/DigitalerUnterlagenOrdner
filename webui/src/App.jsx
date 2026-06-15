@@ -487,7 +487,7 @@ export default function App() {
   // and fully disabled while any modal dialog or context menu is open)
   useKeyboard({
     enabled: !!session, reorderEnabled: !viewActive, tree: state?.tree, selected, selectedIds, grab, setGrab,
-    select, dispatch, setCollapsedFor, saveFile, openFile, exportPdf,
+    select, dispatch, moveMany: onMoveMany, setCollapsedFor, saveFile, openFile, exportPdf,
     newWindow: () => core.newWindow(), undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
     saveAskOpen: !!saveAsk, exportAskOpen: !!exportAsk, helpOpen, menuOpen: !!menu,

@@ -11,11 +11,13 @@ from __future__ import annotations
 import io
 import zipfile
 
-# Bomb guards (mirroring universal_importer/archives.py): the blob comes from an
-# untrusted .belegtool and is decompressed automatically on open() — a deflate
-# bomb must never balloon. Declared sizes lie, so the ACTUAL read is capped.
-MAX_TOTAL_BYTES = 500 * 1024 * 1024  # 500 MB unpacked per blob
-MAX_ENTRIES = 500
+from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES
+
+# Bomb guards (shared infra.limits caps): the blob comes from an untrusted
+# .belegtool and is decompressed automatically on open() — a deflate bomb must
+# never balloon. Declared sizes lie, so the ACTUAL read is capped.
+MAX_TOTAL_BYTES = BOMB_CAP_BYTES  # 500 MB unpacked per blob
+MAX_ENTRIES = BOMB_CAP_ENTRIES
 
 
 def pack(variants: dict) -> bytes:

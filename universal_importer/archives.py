@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import extract_msg
 
+from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES
 from infra.log_config import logger
 
 from .importer import UniversalImporter
@@ -31,8 +32,8 @@ def _not_importable(name: str, reason: str = "") -> Dict[str, Any]:
 # Schutz vor Bomben / riesigen Containern — shared across ALL container paths
 # (zip, tar AND email): cap the number of members/parts processed and a running
 # total of decoded bytes.
-_ARCHIVE_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
-_ARCHIVE_MAX_MEMBERS = 500
+_ARCHIVE_MAX_UNCOMPRESSED_BYTES = BOMB_CAP_BYTES  # 500 MB
+_ARCHIVE_MAX_MEMBERS = BOMB_CAP_ENTRIES
 
 
 class _ArchiveTooLarge(ValueError):

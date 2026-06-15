@@ -32,7 +32,6 @@ def _prewarm():
     Best-effort; never blocks startup.
     """
     try:
-        import os
         import tempfile
         from core.api import sweep_stale_view_dirs
         sweep_stale_view_dirs()  # clean up beleg_view_* temp dirs stranded by a crash

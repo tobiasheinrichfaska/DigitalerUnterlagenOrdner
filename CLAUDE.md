@@ -420,6 +420,30 @@ python host.py file.belegtool   # …opening a file
 
 ## Tests
 
+### Full preflight / audit gate — run ALL FIVE layers
+
+⚠️ A complete check (an `/audit` preflight, a pre-release gate, "run all tests") is **all
+five** layers below — not just `pytest` + `npm test`. The Playwright **Chromium** e2e suite
+is a **separate** npm script (`test:e2e`, NOT part of `npm test`), so it is easy to skip and
+the drag-drop + preview-virtualization layer can regress unseen. Run every one:
+
+```powershell
+.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~498)
+cd webui ; npm run lint                            # eslint — 0 errors
+cd webui ; npm run test:all                        # vitest jsdom (~281) + Playwright REAL Chromium e2e (3)
+cd webui ; npm run build                           # vite build must succeed
+```
+
+(`npm run test:all` = `vitest run && playwright test` — runs both frontend layers so the
+e2e layer can't be skipped. First run on a fresh machine: `npx playwright install chromium`.
+You can still run them apart with `npm test` / `npm run test:e2e`.)
+
+Do **not** report a clean test run unless `test:e2e` was among them. Chromium is already
+installed in this workspace's playwright cache; if a fresh machine lacks it, run
+`npx playwright install chromium` first.
+
+### What each layer covers
+
 Framework: `pytest`. Tests in `tests/` cover the `.belegtool` carrier (`pdf_storage`, the `pdf_node` round-trip), compression/import (incl. `test_compress_parallel` — content+order match of the multi-worker path), the data-driven `core/` (model, commands, engine, session, bridge, api, ipc, **render_policy**), the render helpers, the CPU-fairness primitives (`test_cpu`), and the pywebview host glue (`test_host.py`). A real-Office COM round-trip is in `test_office_golden.py` (marked `office`; runs by default, auto-skips without Office; fixtures from `make_office_fixtures.py`). The legacy PDFNode-operation/eager-preview unit tests were removed — those operations now live in and are tested through `core/engine`/`core/commands` (`test_split_merge`, `test_engine_commands`, …). Run `pytest` for the current pass count.
 
 ```powershell
@@ -601,9 +625,8 @@ as **v3.10.0**.
   (any visible page goes through `render_window`); `CoreApi.render` is kept for the
   named-pipe IPC server and `CoreApi.render_compressed` for tests (both annotated;
   their dead JS-bridge wrappers in `host.py` were removed 2026-06-12).
-- **Manual tests 01–04 still describe legacy Tk flows** — after the v3.6.0 Tk
-  removal, their step wording (menus, toolbar) is stale; re-verify/rewrite each
-  against the React UI. The features themselves are unchanged.
+- **Manual tests 01–04 rewritten against the React UI (2026-06-15)** — the legacy
+  Tk menu/toolbar wording was removed; 01–08 now all describe the React/pywebview UI.
 - **`PDFNode` is now a pure `.belegtool` I/O carrier — DONE.** The dead preview/
   operation machinery was removed: `pdf_node.py` no longer carries `preview_lazy`/
   `preview_folder`/`update_preview`/`_create_previews`/`compress*`/`select_compression_method`/
@@ -754,9 +777,8 @@ report known gaps, give the wrong version, etc.).
   into the UI; (2) compression irreversible after save ("bereits komprimiert (keine
   Quelle)"). **If either gap is fixed, remove it from the checkbox, BETA_TESTING.md
   §4, and CONTRIBUTING.md** — otherwise testers are told a working feature is broken.
-- **Manual tests `05`–`07` are current; `01`–`04` are stale (removed Tk GUI).** When
-  01–04 are rewritten against the React UI, drop the "stale" wording everywhere it
-  appears (BETA_TESTING.md §3, CONTRIBUTING.md, `manual_tests/README.md`).
+- **Manual tests `01`–`08` are all current against the React UI** (01–04 rewritten
+  2026-06-15; the removed Tk GUI is no longer referenced anywhere).
 - **Two run paths** (prebuilt onedir folder; from source: Python 3.12+ + Node, `pip
   install -r requirements.txt`, `cd webui && npm install && npm run build`, `python
   host.py`) and **no published Release yet** — update BETA_TESTING.md §1 once a

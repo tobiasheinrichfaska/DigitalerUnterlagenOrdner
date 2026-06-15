@@ -1,70 +1,79 @@
 # 04 — Export & persistence
 
-Covers exporting to PDF and saving/reloading the `.belegtool` format.
+Covers exporting to PDF and saving/reloading the `.belegtool` format, in the
+**React/pywebview UI**. Toolbar: **⬇ Export PDF** and **💾 Speichern**; opening is
+**📂 Öffnen**. There is no menu bar.
 
 ---
 
-## MT-14: Export selection to a PDF with table of contents
+## MT-14: Export to a PDF with table of contents
 
-**Preconditions:** A storage with several nodes/folders. Select one or more nodes.
+**Preconditions:** A document with several nodes/folders.
 
 **Steps:**
-1. Right-click → **Exportieren…** (or **Datei → Exportieren…**).
-2. Choose a target `.pdf` path and confirm.
-3. Open the exported PDF in a normal PDF viewer.
+1. Click **⬇ Export PDF** (or **Strg+E**) — or Ctrl-select some nodes first and right-click
+   → **Auswahl als PDF exportieren (N)** (a single node → **Als PDF exportieren**).
+2. In the **export-options dialog**, leave **TOC**, **Stichwortverzeichnis** (only offered
+   when the document has tags) and **PDF-Lesezeichen** as desired, then confirm.
+3. Choose a target `.pdf` path (the default filename is the **document name + .pdf**) and save.
+4. Open the exported PDF in a normal PDF viewer.
 
 **Expected:**
-- The PDF opens and contains **every selected node's pages**.
-- The first page(s) are a printed **table of contents**; the TOC entries are
-  **clickable** and jump to the right page. The viewer's sidebar shows matching
-  **bookmarks**.
-- *Not obvious:* a very large export (>100 pages) is **auto-split** into multiple
-  PDFs with cross-references between them.
+- The PDF opens and contains **every exported node's pages**.
+- With TOC on, the first page(s) are a printed **table of contents** whose entries are
+  **clickable** and jump to the right page; the viewer's sidebar shows matching **bookmarks**;
+  a tag index appears when enabled.
+- A green **"✓ PDF exportiert (N …)"** notice appears on success.
+- *Not obvious (known gap):* an export over **100 pages** stays a **single PDF** — the
+  auto-split-with-cross-references path exists in code but is **not yet wired into the UI**
+  (consistent with `CLAUDE.md` / `BETA_TESTING.md` §4).
 
 ---
 
 ## MT-15: Save and reload a `.belegtool` file (round-trip)
 
-**Preconditions:** A storage with folders, several nodes, mixed statuses, and at
-least one compressed node.
+**Preconditions:** A document with folders, several nodes, mixed statuses, some collapsed
+folders, and at least one compressed node.
 
 **Steps:**
-1. **Datei → Speichern als…** (`Strg+Umsch+S`), choose a path, save.
-2. **Datei → Schließen** (close the storage).
-3. **[Import]** / **Datei → Importieren…** the `.belegtool` file you just saved.
+1. Press **💾 Speichern** (or **Strg+S**). On a document that has **no path yet**, this
+   prompts for a location (Save-as); afterwards it saves **in place** without asking.
+2. Close the window.
+3. **📂 Öffnen** the `.belegtool` file you just saved.
 
 **Expected:**
-- The tree comes back **exactly as before**: same folder structure, names, order,
-  statuses (colours), and compression state.
-- Previews render again (a placeholder may flash first).
-- *Not obvious:* **Speichern** (`Strg+S`) saves back to the already-known file
-  without asking for a path; **Speichern als…** always asks.
+- The tree comes back **exactly as before**: same folder structure, names, order, **node
+  ids**, statuses (dots), **collapsed** folders, tags, and compression state.
+- Previews render again (a striped placeholder may flash first).
+- *Not obvious:* **Speichern** clears the **"•"** dirty marker and shows a green
+  **"✓ Gespeichert"** notice; the title bar reflects the saved state. There is one Save
+  button — it only prompts when the document has never been saved.
 
 ---
 
 ## MT-17: Committed compression drops the source (irreversible)
 
-Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft"),
-the saved file keeps only the compressed result — the uncompressed original is
-dropped, and a reloaded committed node can no longer be re-compressed or reset.
+Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft"), the saved
+file keeps only the compressed result — the uncompressed original is dropped, and a reloaded
+committed node can no longer be re-compressed or reset.
 
-**Preconditions:** the app running (`python host.py`); a multi-page color PDF imported as a node.
+**Preconditions:** the app running (`python host.py`); a multi-page colour PDF imported as a node.
 
 **Steps:**
 1. Select the imported node. In the compression controls, pick a method (e.g.
-   **JPEG (Farbe)** or **JPEG (Graustufen)**) and click **❓ Lesbarkeit geprüft**.
-2. **Save** the document as a `.belegtool` file.
-3. Close the window, then **open** that saved `.belegtool` again.
+   **JPG (Farbe)** or **JPG (Graustufen)**) and click **✓ Lesbarkeit geprüft**.
+2. **💾 Speichern** the document as a `.belegtool` file.
+3. Close the window, then **📂 Öffnen** that saved `.belegtool` again.
 4. Select the same node and open the compression dropdown.
 
 **Expected:**
-- After saving, the file is noticeably smaller than the original import (only the
-  compressed result is stored, not the source).
-- On reload the node still previews correctly (rendered from the compressed bytes).
+- After saving, the file is noticeably smaller than the original import (only the compressed
+  result is stored, not the source). On reload the node still previews correctly (rendered
+  from the compressed bytes).
 - *Not obvious / important:* the compression dropdown for that node now shows
-  **"bereits komprimiert (keine Quelle)"** and is **disabled** — you cannot
-  re-compress or reset it, because the original was intentionally discarded on
-  save. This is by design and **irreversible**: the only copy is the compressed one.
+  **"bereits komprimiert (keine Quelle)"** and is **disabled** — you cannot re-compress or
+  reset it, because the original was intentionally discarded on save. This is by design and
+  **irreversible**.
 - A node you did **not** compress before saving keeps its source and remains fully
   compressible after reload.
 
@@ -75,24 +84,22 @@ dropped, and a reloaded committed node can no longer be re-compressed or reset.
 Verifies the save-time choice that appears only when there are **computed-but-unapplied**
 compression alternatives to embed.
 
-**Preconditions:** the app running; a multi-page color PDF imported as a node.
+**Preconditions:** the app running; a multi-page colour PDF imported as a node.
 
 **Steps:**
 1. Import the node but **do not** click "Lesbarkeit geprüft". Select it and open the
    **compression dropdown** so the methods compute (you'll see method sizes appear).
-2. Press **Speichern** (Ctrl+S) and choose a path.
+2. Press **💾 Speichern** (Ctrl+S) and choose a path.
 3. Observe the dialog, then click **Wie geplant speichern**. Note the file size.
-4. Repeat the save (Speichern unter…) but this time click **Original speichern**;
-   save to a second file. Compare sizes.
+4. Repeat the save to a second file, this time clicking **Original speichern**. Compare sizes.
 
 **Expected:**
 - A dialog **„Komprimierungs-Alternativen speichern?"** appears with three buttons:
   **Wie geplant speichern · Original speichern · Abbrechen**.
-- *Not obvious:* the dialog appears **only** when alternatives exist. If you never
-  opened the compression dropdown (nothing computed), or every node is committed
-  ("Lesbarkeit geprüft"), Save proceeds **without** the dialog.
-- **Wie geplant** → larger file; reopening shows the compression options instantly
-  (no "Kompression läuft …").
-- **Original speichern** → noticeably smaller file; reopening recomputes the options
-  on demand when you open the dropdown.
-- **Abbrechen** → nothing is saved; the title bar still shows unsaved changes (•).
+- *Not obvious:* the dialog appears **only** when alternatives exist. If you never opened the
+  compression dropdown (nothing computed), or every node is committed, Save proceeds **without**
+  the dialog.
+- **Wie geplant** → larger file; reopening shows the compression options instantly (no
+  "Kompression läuft …"). **Original speichern** → smaller file; reopening recomputes the
+  options on demand. **Abbrechen** → nothing is saved; the title bar still shows unsaved
+  changes (•).

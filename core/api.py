@@ -651,7 +651,6 @@ class CoreApi:
             with self._compressing():
                 variant = self._engine.compress(data, dpi, method,
                                                 cancel=self._cancel_token(node_id).is_set) or data
-        import zlib
         version = zlib.crc32(variant)  # variant bytes → its own cache identity
         from base64 import b64encode
         pages = self._renderer().render_window(node_id, version, variant, first, count, 100)

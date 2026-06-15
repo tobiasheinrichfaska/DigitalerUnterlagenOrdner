@@ -1,75 +1,87 @@
 # 03 — Preview & compression, status
 
-Covers the preview panel (right side), the DPI/compression controls, and the
-status colour system.
+Covers the preview panel (right side), the DPI/compression controls
+(`PreviewControls.jsx`), and the status-dot system, in the **React/pywebview UI**.
+The status **dots** have a dedicated deep test in `08_status_dots_help.md`; this file
+covers the basics.
 
 ---
 
-## MT-10: Preview, zoom, original toggle
+## MT-10: Preview & zoom
 
 **Preconditions:** A leaf node with a real PDF/image. Select it.
 
 **Steps:**
-1. Look at the preview panel on the right.
-2. Use **Strg + +** / **Strg + −** to zoom, **Strg + 0** to reset (also under
-   menu **Ansicht**).
-3. Toggle **Ansicht → Original anzeigen** on and off.
+1. Look at the preview panel on the right; scroll through the pages.
+2. Zoom with **Strg + Mausrad** (Ctrl + wheel) over the preview, and use the zoom bar
+   **− / ＋ / 100 %** at the bottom of the preview.
 
 **Expected:**
-- Pages render in the preview; zoom changes the size, reset returns to fit.
-- "Original anzeigen" switches between the compressed view and the untouched
-  original. *Not obvious:* for a not-yet-compressed node the two look the same.
+- Pages render in the preview (windowed — only visible pages render, placeholders fill
+  in as you scroll; see MT-39). Ctrl+wheel and the zoom bar change the page size.
+- The zoom bar also shows the viewport position as **"Seite n / m"**.
+- *Not obvious:* there is **no separate "Original anzeigen" toggle** — the preview shows
+  the node's effective bytes; the compression **working-preview** (MT-11) is where you
+  compare a method against the original.
 
 ---
 
 ## MT-11: Compress with the DPI slider and pick a method
 
-**Preconditions:** A leaf node with a reasonably detailed page (e.g. a scanned
-receipt or `compress_sample.pdf`). Select it.
+**Preconditions:** A leaf node with a reasonably detailed page (e.g. a scanned receipt or
+`compress_sample.pdf`). Select it.
 
 **Steps:**
-1. In the preview panel, drag the **DPI** slider (range 50–300).
-2. Open the **Kompression** method dropdown and try the offered methods.
+1. In the preview panel, open the **Kompression** method dropdown.
+2. Pick a method; drag the **DPI** slider (range 50–300); also try **unkomprimierte Fassung**.
 
 **Expected:**
-- After a moment the page re-renders at the chosen DPI; the size labels update.
-- *Not obvious:* the dropdown only lists methods that produced a file **smaller
-  than the original** — methods that made it larger are hidden. A brief
-  placeholder/spinner is normal while compression runs in the background.
+- *Not obvious:* selecting a leaf runs **no** compression (the undo arrow stays disabled).
+  Opening the dropdown shows **"Kompression läuft …"**, then the methods.
+- The dropdown only lists methods that produced a file **smaller than the original** —
+  methods that made it larger are hidden. Methods include **JPG (Graustufen)**,
+  **JPG (Farbe)** (keeps colour), **PNG**, and **pikepdf** (structural). The original size
+  is shown for comparison.
+- Browsing methods/DPI only **previews** — the document is not changed yet (windowed, so a
+  big document doesn't freeze; switching back to an already-viewed method is instant).
 
 ---
 
 ## MT-12: Commit ("Lesbarkeit geprüft") and reset
 
-**Preconditions:** A leaf node you have just compressed (MT-11).
+**Preconditions:** A leaf node you have just been previewing a method on (MT-11).
 
 **Steps:**
 1. Click **✓ Lesbarkeit geprüft** (commit) in the preview panel.
-2. Re-select the node and confirm the change stuck.
-3. Now use the tree context menu: right-click the node →
-   **Kompression zurücksetzen** and confirm the dialog.
+2. Re-select the node and confirm the chosen method stuck (the button now reads **✓ übernommen**).
+3. On an **uncommitted** node, use the **reset** button in the preview controls.
 
 **Expected:**
-- **Commit** replaces the stored original with the compressed version (the node
-  is now "done"); the status colour may change.
-- **Kompression zurücksetzen** restores the original (uncompressed) data after a
-  confirmation dialog.
-- *Not obvious:* **Komprimieren**, **Lesbarkeit geprüft** and **Kompression
-  zurücksetzen** are now also available directly on the **right-click menu**, not
-  only via the preview panel. They are greyed out when nothing is selected.
+- **Commit** applies the compressed version as the node's current data (one undo step); the
+  front red "undecided" dot clears.
+- **Reset** (on an uncommitted node) returns to the original bytes.
+- *Not obvious / important:* once a committed node has been **saved**, its source is dropped
+  — on reload the compression dropdown shows **"bereits komprimiert (keine Quelle)"** and is
+  **disabled** (re-compress and reset are blocked). This is by design and irreversible — see
+  `04_export_persistence.md` MT-17. (Compression controls live only in the preview panel, not
+  on the right-click menu.)
 
 ---
 
-## MT-13: Status colours
+## MT-13: Status dots
 
-**Preconditions:** Any node selected.
+**Preconditions:** A document with a folder containing several leaves.
 
 **Steps:**
-1. Right-click → **Status →** and pick, in turn, **Zu erfassen**, **Erfasst**,
-   **Vorjahreswert**.
+1. Right-click a leaf → **Status →** and pick, in turn, **Zu erfassen**, **Erfasst**,
+   **Vorjahr**, then **Kein Status**.
+2. Right-click the **folder** → **Status (gesamter Inhalt) →** pick a value.
 
 **Expected:**
-- The node's row colour changes to match:
-  - **Erfasst** → green
-  - **Zu erfassen** → blue, highlighted
-  - **Vorjahreswert** → red, highlighted
+- A leaf shows a single **trailing dot**: **zu erfassen → yellow**, **erfasst → green**,
+  **vorjahreswert → red**, **Kein Status → no dot**.
+- A **folder** shows one dot per distinct descendant status (red → yellow → green) **plus a
+  black dot** when descendants are mixed with/without status; an all-no-status or empty
+  folder shows no dots. Setting a status on a folder **cascades to every descendant document**.
+- *Not obvious:* this replaced the old row-colour scheme — status is shown as dots, not by
+  tinting the row. The full aggregation rules are tested in `08_status_dots_help.md`.

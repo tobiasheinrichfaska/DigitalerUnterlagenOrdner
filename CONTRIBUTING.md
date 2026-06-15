@@ -67,10 +67,8 @@ PDF test fixtures live in **`tests/data/input/`** (e.g. `sample.pdf`,
 Regenerate them with `python tests/make_fixtures.py`.
 
 **Manual tests** (human tester, no coding): see
-[`manual_tests/`](manual_tests/README.md). The current, accurate files are
-**`05_react_ui.md`, `06_status_cache_compression.md`, `07_keyboard_delete_language.md`**.
-Files `01`–`04` are **stale** (they describe the removed Tk GUI) — perform the
-equivalent action in the React UI.
+[`manual_tests/`](manual_tests/README.md). All files **`01`–`08` describe the current
+React/pywebview UI** (toolbar + right-click menu; no menu bar).
 
 ---
 

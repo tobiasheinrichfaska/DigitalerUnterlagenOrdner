@@ -96,9 +96,8 @@ Use these three — they match the current app:
 - **[`07_keyboard_delete_language.md`](manual_tests/07_keyboard_delete_language.md)**
   — keyboard structuring, multi-delete, inline rename, language switcher.
 
-> ⚠️ Files **`01`–`04` are stale** — they describe an older interface (a removed
-> Tk GUI) with different menus/toolbars. The *features* still exist, so just
-> perform the **equivalent action** in the current React UI.
+> All files **`01`–`08` describe the current React/pywebview UI** (toolbar +
+> right-click menu; no menu bar).
 
 Core workflows to make sure you exercise: **import** (several formats),
 **tree view** (folders, move, rename), **split / merge / compress**,

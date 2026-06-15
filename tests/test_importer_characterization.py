@@ -42,6 +42,23 @@ def test_txt_converts_to_pdf():
     assert out.data.getvalue().startswith(b"%PDF")
 
 
+def test_txt_long_line_is_wrapped_not_truncated():
+    # Regression (audit F-2): a line longer than the 120-char budget must wrap, not
+    # silently drop its tail. Render the PDF and assert the overflow text survives.
+    import fitz  # PyMuPDF (a project dependency)
+
+    head = "A" * 200  # the 121st..200th chars used to be discarded
+    tail_marker = "ENDE_DER_ZEILE"
+    out = UniversalImporter.convert(
+        (head + tail_marker).encode("utf-8"), name="long.txt")
+    pdf = out.data.getvalue()
+    assert pdf.startswith(b"%PDF")
+    with fitz.open(stream=pdf, filetype="pdf") as doc:
+        rendered = "".join(page.get_text() for page in doc)
+    assert tail_marker in rendered  # tail past 120 chars preserved
+    assert rendered.count("A") >= 200  # no characters dropped
+
+
 def test_html_converts_to_pdf_and_ignores_local_img():
     # the file:// image must not break conversion nor be fetched (LFI guard) —
     # we still get a valid PDF out.

@@ -72,6 +72,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>children</code></td><td>tuple[Node, …]</td><td class="opt">opt</td><td>()</td><td>Ordered child nodes (order = position).</td></tr>
 <tr><td><code>original_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Canonical page bytes. <b>Not serialised</b> to JSON.</td></tr>
 <tr><td><code>current_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Compressed variant bytes, if any. <b>Not serialised</b>.</td></tr>
+<tr><td><code>has_source</code></td><td>bool</td><td class="opt">derived</td><td>—</td><td><b>Not a stored field</b> — emitted by <code>to_dict</code> only as a UI hint, computed as <code>original_data is not None</code>. False for a committed node reloaded from disk (its original was dropped on save), so the UI disables re-compress/reset.</td></tr>
 </table>
 
 <h3><span class="pill folder">entity</span> Document <span class="src">— core/model.py</span></h3>

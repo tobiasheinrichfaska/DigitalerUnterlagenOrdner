@@ -59,14 +59,36 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     margin = 50
+    font_name, font_size = "Helvetica", 10
+    max_width = width - 2 * margin
+    c.setFont(font_name, font_size)
     y = height - margin
 
+    def _wrap(line: str) -> list:
+        # Wrap by MEASURED width, not a fixed character count — a long line (e.g. a
+        # plain-text e-mail body) must neither be truncated nor run off the page edge
+        # (off-page glyphs are clipped → effectively lost). Char-level greedy wrap keeps
+        # every character verbatim; an empty line stays one blank row.
+        if not line:
+            return [""]
+        out, cur = [], ""
+        for ch in line:
+            if c.stringWidth(cur + ch, font_name, font_size) <= max_width:
+                cur += ch
+            else:
+                out.append(cur)
+                cur = ch
+        out.append(cur)
+        return out
+
     for line in text.splitlines():
-        c.drawString(margin, y, line[:120])  # Zeilenlänge begrenzt
-        y -= 14
-        if y < margin:
-            c.showPage()
-            y = height - margin
+        for chunk in _wrap(line):
+            c.drawString(margin, y, chunk)
+            y -= 14
+            if y < margin:
+                c.showPage()
+                c.setFont(font_name, font_size)  # font resets on a new page
+                y = height - margin
 
     c.save()
     buffer.seek(0)

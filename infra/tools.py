@@ -2,6 +2,7 @@ import io
 import pikepdf
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
+from infra.limits import BOMB_CAP_BYTES
 from infra.log_config import logger
 
 # Deflate-bomb guard for the repair step: pikepdf re-encodes (and may inflate)
@@ -9,7 +10,7 @@ from infra.log_config import logger
 # multiple of its input; a bomb explodes far past it. Cap at max(absolute, ratio×in)
 # and discard the repair when it blows the cap (the original — unreadable — is
 # returned, so downstream fitz/pypdf just fails normally instead of OOMing here).
-_REPAIR_ABS_CAP = 500 * 1024 * 1024  # 500 MB, mirrors the archive caps
+_REPAIR_ABS_CAP = BOMB_CAP_BYTES  # 500 MB, mirrors the archive caps
 _REPAIR_RATIO = 50
 
 

@@ -125,6 +125,25 @@ def test_html_to_pdf_rejects_oversized_input():
         html_to_pdf(huge)
 
 
+def test_exceeds_byte_cap_measures_str_in_utf8_bytes(monkeypatch):
+    # F-4: a str must be capped by its UTF-8 BYTE length, not its char count.
+    from universal_importer import converters
+    monkeypatch.setattr(converters, "BOMB_CAP_BYTES", 10)
+    assert converters._exceeds_byte_cap("ä" * 6) is True    # 6 chars, 12 bytes > 10
+    assert converters._exceeds_byte_cap("a" * 6) is False   # 6 ASCII bytes < 10
+    assert converters._exceeds_byte_cap(b"a" * 11) is True  # bytes measured directly
+    assert converters._exceeds_byte_cap(b"a" * 9) is False
+
+
+def test_txt_to_pdf_caps_multibyte_str_by_bytes(monkeypatch):
+    from universal_importer import converters
+    monkeypatch.setattr(converters, "BOMB_CAP_BYTES", 10)
+    with pytest.raises(ValueError, match="zu groß"):
+        converters.txt_to_pdf("ä" * 6)  # 12 bytes > 10-byte cap
+    out = converters.txt_to_pdf("äa")    # 3 bytes ≤ cap → still renders
+    assert out.data.getvalue().startswith(b"%PDF")
+
+
 def test_txt_to_pdf_wraps_long_line_without_truncation():
     # A long single line (no spaces) must wrap onto multiple rows, keeping every
     # character — and finish quickly (the wrap is O(n), not O(n²)).

@@ -52,16 +52,26 @@ def modern_image(path: str) -> ConvertedPDF:
     return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
 
 
+def _exceeds_byte_cap(data: Union[str, bytes]) -> bool:
+    """True if a text/HTML payload is over the decoded BYTE budget. Bytes are
+    measured directly; a str is measured by its UTF-8 byte length — a str's char
+    count is a unit mismatch against a byte cap (a multibyte str of N chars can be
+    several N bytes). The char count short-circuits the encode: chars > cap already
+    implies bytes > cap (UTF-8 is ≥ 1 byte/char), so the encode only runs when the
+    string is already within the cap by characters (bounded work)."""
+    if isinstance(data, (bytes, bytearray)):
+        return len(data) > BOMB_CAP_BYTES
+    return len(data) > BOMB_CAP_BYTES or len(data.encode("utf-8")) > BOMB_CAP_BYTES
+
+
 def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
-    if isinstance(text, bytes):
-        # Cap before decode/render: an oversized text file would otherwise pin the
-        # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
-        # the archive/email bomb cap so a single huge .txt can't DoS the import.
-        if len(text) > BOMB_CAP_BYTES:
-            raise ValueError("Textdatei zu groß")
-        text = text.decode("utf-8", errors="replace")
-    elif len(text) > BOMB_CAP_BYTES:
+    # Cap before decode/render: an oversized text file would otherwise pin the
+    # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
+    # the archive/email bomb cap so a single huge .txt can't DoS the import.
+    if _exceeds_byte_cap(text):
         raise ValueError("Textdatei zu groß")
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -126,7 +136,7 @@ def block_remote_link(uri: str, rel: str):
 
 
 def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:
-    if len(html) > BOMB_CAP_BYTES:  # bound the parse/render like txt_to_pdf
+    if _exceeds_byte_cap(html):  # bound the parse/render like txt_to_pdf (byte-accurate)
         raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
         html = html.decode("utf-8", errors="replace")

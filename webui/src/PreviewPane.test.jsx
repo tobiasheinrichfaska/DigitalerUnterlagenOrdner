@@ -1,52 +1,71 @@
 // Component tests for the presentational right pane: which children show for the
 // empty / windowed / legacy-image states, the page-info text, and the zoom bar.
-// The heavy children (PreviewControls, Preview, TagEditor) are stubbed so this
-// tests PreviewPane's own composition logic, not their side effects.
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-
-vi.mock('./PreviewControls', () => ({ PreviewControls: () => <div data-testid="controls" /> }))
-vi.mock('./Preview', () => ({ Preview: () => <div data-testid="windowed-preview" /> }))
-vi.mock('./TagEditor', () => ({ TagEditor: () => <div data-testid="tag-editor" /> }))
-
+//
+// NOTE: no `vi.mock()` here (it does not take effect under this project's `vmThreads`
+// Vitest pool — see CLAUDE.md "Two test layers"). Instead we render the REAL children
+// against a stubbed `window.pywebview.api` bridge and assert on their root elements
+// (.preview-controls / .tag-editor / .win-preview), which is enough to verify
+// PreviewPane's own composition logic (which child shows in which state).
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { PreviewPane } from './PreviewPane'
 
-afterEach(cleanup)
+// Benign bridge so the real children (PreviewControls / Preview) can mount without
+// erroring; page_count > 0 lets the windowed <Preview> render its .win-preview root.
+beforeEach(() => {
+  const base = {
+    page_count: () => ({ ok: true, count: 3 }),
+    page_dims: () => ({ ok: true, dims: [] }),
+    compress_options: () => ({ ok: true, options: [], original_size: 100 }),
+    render_window: () => ({ ok: true, pages: [] }),
+    render_compressed_window: () => ({ ok: true, pages: [] }),
+  }
+  window.pywebview = { api: new Proxy({}, {
+    get(_t, prop) {
+      if (typeof prop !== 'string' || prop === 'then') return undefined
+      return (...args) => (base[prop] || (() => ({ ok: true })))(...args)
+    },
+  }) }
+})
+afterEach(() => { cleanup(); delete window.pywebview })
 
 const leaf = { id: 'L', name: 'doc', is_folder: false, pdf_length: 3 }
 
 const renderPane = (props = {}) => {
   const setZoom = vi.fn()
-  render(<PreviewPane
+  const utils = render(<PreviewPane
     previewRef={{ current: null }} tagsOn={false} selected={null} docTags={[]}
     dispatch={() => {}} session="s" onPreview={() => {}} defaultDpi={150}
     onCompressionResolved={() => {}} windowed={false} pages={null} pageInfo={null}
     zoom={1} setZoom={setZoom} previewReq={null} onPageInfo={() => {}} busy={0}
     {...props} />)
-  return { setZoom }
+  return { setZoom, ...utils }
 }
 
 describe('PreviewPane — selection states', () => {
   it('prompts to pick a node when nothing is selected', () => {
-    renderPane({ selected: null })
+    const { container } = renderPane({ selected: null })
     expect(screen.getByText('Knoten auswählen für die Vorschau')).toBeInTheDocument()
-    expect(screen.queryByTestId('controls')).toBeNull()
+    expect(container.querySelector('.preview-controls')).toBeNull()
   })
 
   it('shows the compression controls for a selected node', () => {
-    renderPane({ selected: leaf })
-    expect(screen.getByTestId('controls')).toBeInTheDocument()
+    const { container } = renderPane({ selected: leaf })
+    expect(container.querySelector('.preview-controls')).toBeInTheDocument()
   })
 
   it('renders the tag editor only when tagging is on and a node is selected', () => {
-    const { setZoom } = renderPane({ selected: leaf, tagsOn: true })
-    expect(screen.getByTestId('tag-editor')).toBeInTheDocument()
-    expect(setZoom).not.toHaveBeenCalled()
+    const off = renderPane({ selected: leaf, tagsOn: false })
+    expect(off.container.querySelector('.tag-editor')).toBeNull()
+    cleanup()
+    const on = renderPane({ selected: leaf, tagsOn: true })
+    expect(on.container.querySelector('.tag-editor')).toBeInTheDocument()
+    expect(on.setZoom).not.toHaveBeenCalled()
   })
 
-  it('mounts the windowed Preview when windowed', () => {
-    renderPane({ selected: leaf, windowed: true })
-    expect(screen.getByTestId('windowed-preview')).toBeInTheDocument()
+  it('mounts the windowed Preview when windowed', async () => {
+    const { container } = renderPane({ selected: leaf, windowed: true })
+    await waitFor(() => expect(container.querySelector('.win-preview')).toBeInTheDocument())
   })
 })
 

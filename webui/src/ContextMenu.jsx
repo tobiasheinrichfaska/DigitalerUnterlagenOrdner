@@ -26,6 +26,11 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
     })
     // Reset the split flyout whenever the menu target changes
     setSplitOpen(false)
+    // a11y (F-3): tag items as menuitems and move focus into the menu so it's
+    // immediately keyboard-operable (focus-first-on-open).
+    const btns = el.querySelectorAll('button')
+    btns.forEach((b) => b.setAttribute('role', 'menuitem'))
+    btns[0]?.focus()
   }, [menu, x, y])
 
   // Escape closes the menu (mirrors the backdrop click; makes the CLAUDE.md
@@ -36,6 +41,12 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [menu, onClose])
+
+  // Keep role="menuitem" on items that appear after the initial open (the split
+  // flyout submenu) so arrow navigation and screen readers reach them too (F-3).
+  useEffect(() => {
+    menuRef.current?.querySelectorAll('button').forEach((b) => b.setAttribute('role', 'menuitem'))
+  }, [splitOpen])
 
   if (!menu) return null
 
@@ -84,6 +95,18 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
     onClose()
   }
 
+  // Roving focus: ↑/↓ cycle the items, Home/End jump to the ends. Enter/Space
+  // activate the focused <button> natively; Esc closes via the window listener (F-3).
+  const onMenuKey = (e) => {
+    const btns = Array.from(menuRef.current?.querySelectorAll('button') ?? [])
+    if (!btns.length) return
+    const i = btns.indexOf(document.activeElement)
+    if (e.key === 'ArrowDown') { e.preventDefault(); btns[i < 0 ? 0 : (i + 1) % btns.length].focus() }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); btns[i < 0 ? btns.length - 1 : (i - 1 + btns.length) % btns.length].focus() }
+    else if (e.key === 'Home') { e.preventDefault(); btns[0].focus() }
+    else if (e.key === 'End') { e.preventDefault(); btns[btns.length - 1].focus() }
+  }
+
   return (
     <>
       <div
@@ -91,7 +114,11 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose() }}
       />
-      <div ref={menuRef} className="context-menu"
+      {/* aria-label is the German source string directly (not via t()): a single
+          a11y label isn't worth threading a new key through all 19 full-coverage
+          i18n files + the key-lock. */}
+      <div ref={menuRef} className="context-menu" role="menu" aria-label="Kontextmenü"
+        tabIndex={-1} onKeyDown={onMenuKey}
         style={{ left: pos ? pos.left : x, top: pos ? pos.top : y }}>
         {!editLocked && (mergeHere || groupHere) && (
           <>

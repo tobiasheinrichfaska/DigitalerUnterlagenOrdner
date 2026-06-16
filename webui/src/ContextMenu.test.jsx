@@ -161,4 +161,38 @@ describe('ContextMenu', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
   })
+
+  // --- accessibility (F-3): ARIA roles + keyboard navigation ---
+  it('exposes role="menu" with an accessible name and role="menuitem" items', () => {
+    setup(leaf)
+    const menu = screen.getByRole('menu')
+    expect(menu).toHaveAttribute('aria-label')
+    const items = screen.getAllByRole('menuitem')
+    expect(items.length).toBeGreaterThan(0)
+    // every rendered button participates as a menuitem
+    expect(items.length).toBe(menu.querySelectorAll('button').length)
+  })
+
+  it('focuses the first item when the menu opens', () => {
+    setup(leaf)
+    const items = screen.getAllByRole('menuitem')
+    expect(document.activeElement).toBe(items[0])
+  })
+
+  it('ArrowDown / ArrowUp move roving focus and wrap around', () => {
+    setup(leaf)
+    const menu = screen.getByRole('menu')
+    const items = screen.getAllByRole('menuitem')
+    expect(document.activeElement).toBe(items[0])
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(items[1])
+    fireEvent.keyDown(menu, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(items[0])
+    fireEvent.keyDown(menu, { key: 'ArrowUp' })          // wrap to last
+    expect(document.activeElement).toBe(items[items.length - 1])
+    fireEvent.keyDown(menu, { key: 'Home' })
+    expect(document.activeElement).toBe(items[0])
+    fireEvent.keyDown(menu, { key: 'End' })
+    expect(document.activeElement).toBe(items[items.length - 1])
+  })
 })

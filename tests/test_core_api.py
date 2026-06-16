@@ -676,3 +676,54 @@ def test_compress_options_lists_methods_smallest_first(tmp_path):
     assert len(sizes) >= 1 and sizes == sorted(sizes)            # best = options[0]
     assert all(s < resp["original_size"] for s in sizes)        # all beat the original
     assert resp["options"][0]["method"]                          # method name present
+
+
+# --- _version_of memo cache (F-2: thread-safe, LRU-bounded) ----------------
+import zlib
+
+
+def test_version_of_memoizes_and_matches_crc32():
+    api = CoreApi()
+    data = b"%PDF-1.7\nsome bytes"
+    v1 = api._version_of(data)
+    assert v1 == zlib.crc32(data)
+    assert api._version_of(data) == v1            # cache hit, same object identity
+    assert api._vcache[id(data)] == (data, v1)    # held so id() can't be reused
+
+
+def test_version_of_lru_bound_holds():
+    api = CoreApi()
+    # Keep references so ids stay alive; the cache must still cap at 64 entries.
+    blobs = [f"doc-{i}".encode() for i in range(200)]
+    for b in blobs:
+        api._version_of(b)
+    assert len(api._vcache) <= 64
+
+
+def test_version_of_is_thread_safe_under_contention():
+    # F-2: page_count (caller thread) and the prefetch worker both call _version_of.
+    # Hammer it from many threads on shared + distinct data; the locked get/move/set/
+    # popitem sequence must never raise and must return the correct crc each time.
+    import threading
+
+    api = CoreApi()
+    shared = b"shared-payload"
+    shared_crc = zlib.crc32(shared)
+    errors = []
+
+    def worker(seed):
+        try:
+            for i in range(300):
+                assert api._version_of(shared) == shared_crc
+                d = f"t{seed}-{i}".encode()
+                assert api._version_of(d) == zlib.crc32(d)
+        except Exception as e:  # any KeyError/race surfaces here
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(s,)) for s in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+    assert len(api._vcache) <= 64

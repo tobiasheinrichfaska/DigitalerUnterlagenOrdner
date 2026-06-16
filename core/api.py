@@ -102,6 +102,10 @@ class CoreApi:
         self._view_touched = {}  # view_dir -> last os.utime, to rate-limit the keep-alive touch
         self._renderer_lock = threading.Lock()  # guards the lazy RenderService build
 
+    # ----------------------------------------------------------------------
+    # Render cache + windowed-prefetch coordination
+    # (the stateful RenderService lives in services/; these wire it to sessions)
+    # ----------------------------------------------------------------------
     def _renderer(self):
         if self._render_service is None:
             with self._renderer_lock:  # js threads race here → never build the service twice
@@ -249,6 +253,9 @@ class CoreApi:
         # pause warming while a compression runs, so it gets the CPU
         self._renderer().prefetch(build, dpi, pause_if=lambda: self._compress_active > 0)
 
+    # ----------------------------------------------------------------------
+    # Process config / identity / untitled-naming
+    # ----------------------------------------------------------------------
     def _next_untitled_name(self) -> str:
         with self._lock:
             self._untitled += 1
@@ -265,56 +272,12 @@ class CoreApi:
             sid = self._new_locked(Document.empty())
         return {"ok": True, "session": sid, "core_version": CORE_VERSION}
 
+    # ----------------------------------------------------------------------
+    # Single-writer file lock (the stateless .bak/acquire disk-I/O policy lives
+    # in infra.file_lock; here we only track which session holds which lock)
+    # ----------------------------------------------------------------------
     def _should_lock(self, path) -> bool:
         return bool(self._file_lock_enabled and path)
-
-    def _acquire_lock(self, path):
-        """Acquire the single-writer lock for ``path`` (after restoring from a leftover
-        .bak if the file was left truncated by an interrupted locked save). Returns a
-        FileLock, or raises FileInUseError. Non-Windows / unexpected errors → None
-        (best-effort: open without a lock rather than block the user)."""
-        from infra.file_lock import FileLock, FileInUseError
-        self._restore_from_bak(path)
-        try:
-            return FileLock(path).acquire()
-        except FileInUseError:
-            raise
-        except Exception:
-            logger.warning("[lock] acquire failed; opening without a lock", exc_info=True)
-            return None
-
-    def _restore_from_bak(self, path):
-        """If a locked save was interrupted, the file may be truncated/invalid while a
-        sibling .bak holds the previous good bytes — restore it before opening."""
-        bak = path + ".bak"
-        if not os.path.exists(bak):
-            return
-        # A save interrupted AFTER the %PDF header but before the body/trailer leaves a
-        # truncated file that a header-only check would wrongly accept (→ silent data
-        # loss). Require BOTH a header and a trailer (%%EOF near the end); otherwise the
-        # file is incomplete and we restore the previous good bytes from .bak.
-        try:
-            size = os.path.getsize(path)
-            ok = False
-            if size > 0:
-                with open(path, "rb") as f:
-                    head = f.read(1024)
-                    f.seek(max(0, size - 1024))
-                    tail = f.read()
-                ok = b"%PDF" in head and b"%%EOF" in tail
-        except Exception:
-            ok = False
-        if not ok:
-            try:
-                import shutil
-                shutil.copyfile(bak, path)
-                logger.warning("[lock] restored %s from .bak after an interrupted save", path)
-            except Exception:
-                logger.exception("[lock] .bak restore failed")
-        try:
-            os.remove(bak)
-        except OSError:
-            pass
 
     def _release_lock(self, session):
         with self._lock:  # pywebview dispatches JS calls on separate threads
@@ -322,13 +285,17 @@ class CoreApi:
         if lock is not None:
             lock.release()
 
+    # ----------------------------------------------------------------------
+    # Open / session lifecycle + materialized-view temp-dir housekeeping
+    # ----------------------------------------------------------------------
     def open(self, session: str = None, path: str = None) -> dict:
         import dataclasses
         lock = None
         if self._should_lock(path):
+            from infra import file_lock
             from infra.file_lock import FileInUseError
             try:
-                lock = self._acquire_lock(path)
+                lock = file_lock.acquire_lock(path)
             except FileInUseError:
                 return {"ok": False, "code": "in_use",
                         "error": "Diese Datei wird bereits bearbeitet und kann nur von "
@@ -427,6 +394,9 @@ class CoreApi:
             s = self._sessions.get(session)
             return s.document.root.name if s else None
 
+    # ----------------------------------------------------------------------
+    # Mutations: dispatch / undo / redo (+ the shared post-mutate hook)
+    # ----------------------------------------------------------------------
     def dispatch(self, session: str, command: dict) -> dict:
         cmd = command_from_dict(command)
         removed = self._removed_node_ids(session, cmd)
@@ -489,6 +459,9 @@ class CoreApi:
     def redo(self, session: str) -> dict:
         return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
 
+    # ----------------------------------------------------------------------
+    # Rendering: whole-doc (IPC/test-only) + windowed + render-cache stats
+    # ----------------------------------------------------------------------
     def render(self, session: str, node_id: str, dpi: int = 100) -> dict:
         """Render a leaf node's effective pages to base64 PNG data-URLs.
 
@@ -661,6 +634,9 @@ class CoreApi:
         return {"ok": True, "session": session, "node": node_id, "first": first,
                 "pages": urls, "compressed": variant is not data}
 
+    # ----------------------------------------------------------------------
+    # Save / persistence (lock-aware in-place save vs. plain save-as)
+    # ----------------------------------------------------------------------
     def save_info(self, session: str) -> dict:
         """Preflight for the save dialog: are there computed compression
         alternatives this save would embed? Lets the UI decide whether to ask
@@ -714,37 +690,12 @@ class CoreApi:
         Guards the non-atomic in-place overwrite with a sibling .bak of the previous bytes,
         removed only after a successful flush."""
         from core.bridge import document_to_storage
+        from infra import file_lock
         data = document_to_storage(document).to_bytes()
         if store_alternatives:
             from services.variant_store import embed_variants_bytes
             data, _ = embed_variants_bytes(data, document, self._engine)
-        bak = path + ".bak"
-        read_ok = True
-        try:
-            prev = lock.read_all()
-        except Exception:
-            prev = b""
-            read_ok = False
-        if not read_ok:
-            # Reading the current bytes through the held handle failed. If the on-disk file
-            # is non-empty, proceeding would overwrite it with NO .bak — losing the only copy
-            # exactly when I/O is already flaky. Abort instead of risking an unrecoverable
-            # truncated write. (A genuinely empty/absent file has nothing to protect → proceed.)
-            try:
-                on_disk = os.path.getsize(path)
-            except OSError:
-                on_disk = 0
-            if on_disk:
-                raise OSError(
-                    f"Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}")
-        if prev:
-            with open(bak, "wb") as f:
-                f.write(prev)
-        lock.overwrite(data)
-        try:
-            os.remove(bak)
-        except OSError:
-            pass
+        file_lock.write_through_lock(lock, path, data)
 
     def _relock_after_save_as(self, session, new_path) -> None:
         """After a normal (unlocked) save to a NEW path while file-lock is on: release the
@@ -756,7 +707,8 @@ class CoreApi:
                 return
         self._release_lock(session)
         try:
-            lock = self._acquire_lock(new_path)
+            from infra import file_lock
+            lock = file_lock.acquire_lock(new_path)
             if lock is not None:
                 with self._lock:
                     self._locks[session] = lock
@@ -805,6 +757,9 @@ class CoreApi:
             self._render_service.prune(self._all_live_node_ids())
         return {"ok": True}
 
+    # ----------------------------------------------------------------------
+    # Export (PDF + TOC) and materialize-subset (tag view → new window)
+    # ----------------------------------------------------------------------
     def export(self, session: str, path: str, node_ids=None, options=None) -> dict:
         """Export to a single PDF. ``node_ids`` exports only those subtrees; otherwise
         the whole document. ``options`` (see toc_export.DEFAULT_EXPORT_OPTIONS) toggles
@@ -898,6 +853,9 @@ class CoreApi:
             self._pending_view_dirs.add(os.path.dirname(path))
         return {"ok": True, "path": path, "count": sum(1 for _ in new_root.iter()) - 1}
 
+    # ----------------------------------------------------------------------
+    # Compression options + import (paths / base64 bytes)
+    # ----------------------------------------------------------------------
     def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
         """Available compression methods for a leaf at ``dpi`` (smallest first)."""
         with self._lock:
@@ -992,6 +950,9 @@ class CoreApi:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    # ----------------------------------------------------------------------
+    # Internals: session helpers, undecided/no-gain baking, response builder
+    # ----------------------------------------------------------------------
     def session_count(self) -> int:
         with self._lock:
             return len(self._sessions)

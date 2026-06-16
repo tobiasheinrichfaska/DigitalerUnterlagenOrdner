@@ -415,30 +415,51 @@ class PDFStorage:
         return node
 
 
+    # These three resolve parent/child overlaps in a selection. Each walks every
+    # selected node's ancestor chain ONCE against an identity (id()) membership set —
+    # O(n·depth) — rather than the former O(n²·depth) all-pairs `_is_descendant_of`
+    # scan (F-5). Identity matches the parent-pointer `is` comparison _is_descendant_of
+    # used, so behaviour is unchanged.
     @staticmethod
     def has_parent_child_conflict(nodes: List[PDFNode]) -> bool:
         """Returns True if any node in the list is an ancestor of another node in the list."""
-        return any(
-            node._is_descendant_of(other)
-            for node in nodes
-            for other in nodes
-            if other is not node
-        )
+        selected = {id(n) for n in nodes}
+        for node in nodes:
+            cur = node.parent
+            while cur is not None:
+                if id(cur) in selected:  # a selected ancestor of `node` → overlap
+                    return True
+                cur = cur.parent
+        return False
 
     @staticmethod
     def filter_keep_ancestors(nodes: List[PDFNode]) -> List[PDFNode]:
         """Keep only root-level selections; remove nodes whose ancestor is also selected."""
-        return [
-            node for node in nodes
-            if not any(node._is_descendant_of(other) for other in nodes if other is not node)
-        ]
+        selected = {id(n) for n in nodes}
+
+        def has_selected_ancestor(node: PDFNode) -> bool:
+            cur = node.parent
+            while cur is not None:
+                if id(cur) in selected:
+                    return True
+                cur = cur.parent
+            return False
+
+        return [node for node in nodes if not has_selected_ancestor(node)]
 
     @staticmethod
     def filter_keep_descendants(nodes: List[PDFNode]) -> List[PDFNode]:
         """Keep only leaf-level selections; remove nodes whose descendant is also selected."""
-        return [
-            node for node in nodes
-            if not any(other._is_descendant_of(node) for other in nodes if other is not node)
-        ]
+        selected = {id(n) for n in nodes}
+        # Mark every selected node that is an ancestor of another selected node — those
+        # have a selected descendant and are the ones to drop.
+        has_selected_descendant = set()
+        for node in nodes:
+            cur = node.parent
+            while cur is not None:
+                if id(cur) in selected:
+                    has_selected_descendant.add(id(cur))
+                cur = cur.parent
+        return [node for node in nodes if id(node) not in has_selected_descendant]
 
 

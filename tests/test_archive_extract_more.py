@@ -9,6 +9,7 @@ for the `.msg` path so it runs without Outlook.
 """
 import io
 import tarfile
+import zipfile
 from email.message import EmailMessage
 
 import pytest
@@ -59,6 +60,27 @@ def test_tar_unreadable_member_becomes_folder():
 def test_tar_invalid_raises():
     with pytest.raises(ValueError, match="TAR"):
         archives.extract_tar_to_structure(b"not a tar archive at all")
+
+
+# ------------------------------------------------- ZIP duplicate member names (F-1)
+def test_zip_duplicate_member_names_keep_distinct_content():
+    # Duplicate names are legal in a zip. Opening by the name string would resolve
+    # every read to the LAST such entry; opening by ZipInfo keeps each member's own
+    # bytes. Two same-named PDFs with different page counts must stay distinct.
+    import warnings
+    one, two = create_valid_pdf(pages=1), create_valid_pdf(pages=3)
+    assert one != two
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("beleg.pdf", one)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # zipfile warns on the deliberate dup name
+            z.writestr("beleg.pdf", two)  # same name, different content
+    struct = archives.extract_zip_to_structure(buf.getvalue())
+    contents = [e["content"].getvalue() for e in struct if "content" in e]
+    assert len(contents) == 2
+    assert all(c.startswith(b"%PDF") for c in contents)
+    assert one in contents and two in contents  # neither member was shadowed
 
 
 # ----------------------------------------------- EML html body + filename inference

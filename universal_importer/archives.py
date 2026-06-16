@@ -74,7 +74,10 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO]) -> Li
             actual_total = 0
             for info in members:
                 name = info.filename
-                with zf.open(name) as f:
+                # Open by the ZipInfo, NOT the name string: duplicate member names are
+                # legal in a zip, and zf.open(name) resolves every read to the LAST such
+                # entry (earlier duplicates would import the wrong bytes).
+                with zf.open(info) as f:
                     remaining = _ARCHIVE_MAX_UNCOMPRESSED_BYTES - actual_total
                     content = f.read(remaining + 1)
                     if len(content) > remaining:

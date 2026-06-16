@@ -196,16 +196,27 @@ class CoreApi:
     def _version_of(self, data):
         """Memoised crc32 of bytes, keyed by object identity (the model is immutable,
         so a given bytes object is stable). The bytes are held in the cache value, so
-        its id can't be reused for different bytes while cached. LRU-bounded."""
+        its id can't be reused for different bytes while cached. LRU-bounded.
+
+        Called from BOTH the caller thread (``page_count``) and the background prefetch
+        worker (``_seed_around.build``), so the ``_vcache`` get→move→set→popitem sequence
+        is guarded by ``self._lock`` (the GIL makes each op atomic but not the sequence —
+        F-2). The crc32 itself runs OUTSIDE the lock so a worker hashing a large PDF can't
+        stall the UI thread."""
         key = id(data)
-        ent = self._vcache.get(key)
-        if ent is not None and ent[0] is data:
+        with self._lock:
+            ent = self._vcache.get(key)
+            if ent is not None and ent[0] is data:
+                self._vcache.move_to_end(key)
+                return ent[1]
+        v = zlib.crc32(data)  # outside the lock — can be a few ms on a large doc
+        with self._lock:
+            # another thread may have inserted the same key while we hashed → same
+            # value, so an overwrite is benign; move_to_end keeps it most-recent.
+            self._vcache[key] = (data, v)
             self._vcache.move_to_end(key)
-            return ent[1]
-        v = zlib.crc32(data)
-        self._vcache[key] = (data, v)
-        if len(self._vcache) > 64:
-            self._vcache.popitem(last=False)
+            if len(self._vcache) > 64:
+                self._vcache.popitem(last=False)
         return v
 
     def _seed_single(self, node_id, version, data, focus_page, dpi):

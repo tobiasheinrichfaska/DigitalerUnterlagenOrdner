@@ -494,6 +494,32 @@ Current tag: **v3.9.3** (beta)
 
 ---
 
+## Known Limitations
+
+Current accepted shortcomings and non-obvious behaviours (lift into release notes as needed).
+Deferred *features* and the full rationale live under **Open / deferred items** below.
+
+- **Windows-only.** PyInstaller `win64`, Edge WebView2 GUI, hard `pywin32`/`pythonnet` deps,
+  COM-based Office import. The PDF core is cross-platform but no port is maintained
+  (community RFC: [`docs/cross-platform-port.md`](docs/cross-platform-port.md)).
+- **Export > 100 pages stays a single PDF.** The auto-split-with-cross-references path exists
+  (`toc_export.export_pdf_split_with_toc`) but is **not wired into the UI export**.
+- **Compression is irreversible after save.** A committed node ("Lesbarkeit geprüft") drops its
+  source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
+- **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
+  off by default; no autosave/recover of unsaved changes, no read-only fallback when in use.
+- **Nested archives are not recursed** — a `.zip`/`.tar` inside an archive/e-mail becomes
+  „nicht importierbar" (anti-amplification choice; recursion is planned — see Open items #12).
+- **No direct Outlook drag-and-drop** — Outlook hands items over as OLE virtual files; import a
+  `.msg`/`.eml` instead. No automatic DATEV check-in on document close (manual re-import in DATEV).
+- **Multicore rasterization is GIL-limited (~1.2× on 4 threads)** — thread parallelism buys
+  fairness/preemption, not throughput; true multicore would need a process pool (deferred).
+- **Variants grow the file** — computed compression variants are embedded in the `.belegtool`
+  (no sidecar). Split parts in **already-saved** files keep the old `no_compression` flag until
+  re-split.
+
+---
+
 ## Open / deferred items
 
 ### Next version — planned features (2026-06-08)
@@ -596,6 +622,13 @@ as **v3.10.0**.
     wording (kills the reverse-template matching). If not done, **new error paths from #1/#5/#6
     must follow the established convention**: raise the static German text as an `en.js` key (+
     full-coverage langs, bump the key-lock), and add a `messages.js` template for any dynamic parts.
+12. **Nested archive extraction.** A `.zip`/`.tar` *inside* another archive (or e-mail) is
+    currently **not** recursed — `UniversalImporter.convert` has no archive branch, so an inner
+    archive degrades to „nicht importierbar". Today this is a deliberate anti-amplification choice
+    (the per-archive bomb caps don't compound). Add **depth-bounded** recursion: route inner
+    archive members back through `archives.extract_*` with a small max-depth (e.g. 3) and a
+    **running, cross-level** decoded-byte/entry budget (not just per-archive) so nesting can't
+    multiply past `infra.limits.BOMB_CAP_BYTES`. (Logged from the 2026-06-16 audit, finding #6.)
 
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.

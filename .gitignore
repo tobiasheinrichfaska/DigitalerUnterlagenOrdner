@@ -16,6 +16,12 @@ dist/
 *.exe
 Installer_*/
 
+# Scratch / temp (project-bound; disposable — workspace convention)
+.tmp/
+
+# Audit reports (local artifacts; keep them off the public repo)
+reports/
+
 # VS Code
 .vscode/
 

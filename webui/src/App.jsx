@@ -14,6 +14,9 @@ import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
 import { useKeyboard } from './hooks/useKeyboard'
+import { useSelection } from './hooks/useSelection'
+import { useDialogs } from './hooks/useDialogs'
+import { useTagView } from './hooks/useTagView'
 import { visibleOrder, rangeIds } from './lib/treeNav'
 import { resolveSelection, mergeableIds } from './lib/selection'
 import { localizeMessage } from './lib/messages'
@@ -38,26 +41,11 @@ export default function App() {
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null) // transient success message (e.g. export)
-  const [selected, setSelected] = useState(null) // primary node (drives the preview)
-  const [selectedIds, setSelectedIds] = useState([]) // multi-selection (Merge / group / multi-move)
-  const [anchorId, setAnchorId] = useState(null) // anchor for shift-range select
+  const { selected, setSelected, selectedIds, setSelectedIds, anchorId, setAnchorId } = useSelection()
   const [pages, setPages] = useState(null) // null = nothing rendered yet, [] = no preview
   const [busy, setBusy] = useState(0) // active async core calls (counter)
-  const [menu, setMenu] = useState(null) // context menu { x, y, node }
-  const [saveAsk, setSaveAsk] = useState(null) // save dialog { mode:'in'|'as', count }
-  const [exportAsk, setExportAsk] = useState(null) // export options dialog { ids }
-  const [helpOpen, setHelpOpen] = useState(false)
-  const [tagsOn, setTagsOn] = useState(false) // tagging off by default; auto-on when a loaded file has tags
-  const toggleTags = () => setTagsOn((v) => !v)
-  const [tagSearch, setTagSearch] = useState('') // view-only filter by name / effective tag
-  const [groupBy, setGroupBy] = useState(false) // view-only: flatten leaves into one folder per tag
-  // A non-identity view (an active search OR group-by-tag). While on, the displayed
-  // positions are virtual → structural ops (reorder, import, delete, add-folder) are
-  // disabled; content edits on existing nodes stay available.
-  const viewActive = tagsOn && (tagSearch.trim() !== '' || groupBy)
-  // A real SUBSET exists only when a tag search is active (group-by alone reshapes the
-  // whole tree). "Open in new window" is offered on that basis — independent of group-by.
-  const filterActive = tagsOn && tagSearch.trim() !== ''
+  const { menu, setMenu, saveAsk, setSaveAsk, exportAsk, setExportAsk, helpOpen, setHelpOpen } = useDialogs()
+  const { tagsOn, setTagsOn, toggleTags, tagSearch, setTagSearch, groupBy, setGroupBy, viewActive, filterActive } = useTagView()
   const [zoom, setZoom] = useState(1) // preview zoom factor
   const [config, setConfig] = useState(null) // fixed core defaults (e.g. default_dpi)
   const [previewReq, setPreviewReq] = useState(null) // {dpi, method} → transient compressed preview; null → plain
@@ -212,7 +200,7 @@ export default function App() {
         if (selected) setSelected(findNode(resp.tree, selected.id))
       }
     },
-    [apply, selected],
+    [apply, selected, setSelected, setSelectedIds],
   )
 
   const dispatch = useCallback(
@@ -338,7 +326,7 @@ export default function App() {
     setAnchorId(node.id)
     setPages(null)
     setPreviewReq(null) // PreviewControls re-sets it on mount for a leaf
-  }, [selectedIds, state, anchorId, viewActive, treeForView])
+  }, [selectedIds, state, anchorId, viewActive, treeForView, setSelected, setSelectedIds, setAnchorId])
 
   // --- folder collapse/expand (persisted: SetCollapsed / SetAllCollapsed) ---
   const setCollapsedFor = useCallback((id, val) => dispatch({ type: 'SetCollapsed', node_id: id, collapsed: val }), [dispatch])
@@ -392,7 +380,7 @@ export default function App() {
         setPreviewReq(null)
       }
     })
-  }, [selectedIds, selected, state, session, run, apply, resolveSel, viewActive])
+  }, [selectedIds, selected, state, session, run, apply, resolveSel, viewActive, setSelected, setSelectedIds])
 
 
   // 2+ selected sibling leaves → the ids that can be merged into one PDF, in

@@ -15,7 +15,10 @@ Windows-only (pywin32). The lock is off by default; only enabled via settings.
 
 from __future__ import annotations
 
+import os
 import sys
+
+from infra.log_config import logger
 
 
 class FileInUseError(Exception):
@@ -99,3 +102,85 @@ class FileLock:
             written += n
         win32file.SetEndOfFile(self._handle)
         win32file.FlushFileBuffers(self._handle)
+
+
+# -- single-writer disk-I/O policy (stateless; extracted from CoreApi, audit S-1) ----
+# These wrap FileLock with the .bak crash-recovery policy. They hold no application
+# state, so they live here next to the primitive they build on rather than on CoreApi.
+
+def restore_from_bak(path: str) -> None:
+    """If a locked save was interrupted, ``path`` may be truncated/invalid while a sibling
+    ``.bak`` holds the previous good bytes — restore it before opening. A save interrupted
+    AFTER the %PDF header but before the trailer leaves a truncated file a header-only check
+    would wrongly accept (→ silent data loss), so require BOTH a %PDF header and a %%EOF
+    trailer; otherwise restore from .bak. The .bak is removed either way."""
+    bak = path + ".bak"
+    if not os.path.exists(bak):
+        return
+    try:
+        size = os.path.getsize(path)
+        ok = False
+        if size > 0:
+            with open(path, "rb") as f:
+                head = f.read(1024)
+                f.seek(max(0, size - 1024))
+                tail = f.read()
+            ok = b"%PDF" in head and b"%%EOF" in tail
+    except Exception:
+        ok = False
+    if not ok:
+        try:
+            import shutil
+            shutil.copyfile(bak, path)
+            logger.warning("[lock] restored %s from .bak after an interrupted save", path)
+        except Exception:
+            logger.exception("[lock] .bak restore failed")
+    try:
+        os.remove(bak)
+    except OSError:
+        pass
+
+
+def acquire_lock(path: str):
+    """Restore from a leftover ``.bak`` (truncated interrupted save), then acquire the
+    single-writer lock. Returns a held ``FileLock``; re-raises ``FileInUseError`` if the
+    file is already locked; returns ``None`` on non-Windows / unexpected errors (best-effort:
+    open without a lock rather than block the user)."""
+    restore_from_bak(path)
+    try:
+        return FileLock(path).acquire()
+    except FileInUseError:
+        raise
+    except Exception:
+        logger.warning("[lock] acquire failed; opening without a lock", exc_info=True)
+        return None
+
+
+def write_through_lock(lock: "FileLock", path: str, data: bytes) -> None:
+    """Overwrite ``path`` **through the held handle** (the lock denies our own ``open('wb')``),
+    guarding the non-atomic in-place write with a sibling ``.bak`` of the previous bytes,
+    removed only after a successful flush. If the current bytes can't be read AND the on-disk
+    file is non-empty, abort rather than risk an unrecoverable truncated write."""
+    bak = path + ".bak"
+    read_ok = True
+    try:
+        prev = lock.read_all()
+    except Exception:
+        prev = b""
+        read_ok = False
+    if not read_ok:
+        try:
+            on_disk = os.path.getsize(path)
+        except OSError:
+            on_disk = 0
+        if on_disk:
+            raise OSError(
+                f"Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}")
+    if prev:
+        with open(bak, "wb") as f:
+            f.write(prev)
+    lock.overwrite(data)
+    try:
+        os.remove(bak)
+    except OSError:
+        pass

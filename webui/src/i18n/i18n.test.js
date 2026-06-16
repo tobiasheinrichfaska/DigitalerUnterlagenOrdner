@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { translate, resolveInitialLang, SUPPORTED, LANGUAGE_NAMES, DEFAULT_LANG, TRANSLATIONS } from './index'
 import { en } from './en'
 
@@ -92,10 +93,13 @@ describe('translation coverage', () => {
                  'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'lib/status.js']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
+  // Resolve from THIS file's location (src/i18n/) → src/, not process.cwd(), so the
+  // scan is invocation-independent (F-6).
+  const srcDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const used = new Set()
   for (const f of files) {
     try {
-      const src = readFileSync(resolve(process.cwd(), 'src', f), 'utf8')
+      const src = readFileSync(resolve(srcDir, f), 'utf8')
       let m
       while ((m = re.exec(src))) used.add(m[2])
     } catch {

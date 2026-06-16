@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { localizeMessage, MESSAGE_TEMPLATES } from './messages'
 import { translate } from '../i18n/index'
 import { en } from '../i18n/en'
@@ -65,8 +66,11 @@ describe('localizeMessage (host-level backend messages)', () => {
   it('templates match what the backend actually formats (drift lock)', () => {
     // The static fragments of each template must appear verbatim in the source
     // that produces the message (core/api.py, or App.jsx for the composite).
-    const src = readFileSync(resolve(process.cwd(), '..', 'core', 'api.py'), 'utf8')
-      + readFileSync(resolve(process.cwd(), 'src', 'App.jsx'), 'utf8')
+    // Resolve from THIS file's location (src/lib/), not process.cwd(), so the test
+    // is invocation-independent (F-6).
+    const here = dirname(fileURLToPath(import.meta.url))
+    const src = readFileSync(resolve(here, '..', '..', '..', 'core', 'api.py'), 'utf8')
+      + readFileSync(resolve(here, '..', 'App.jsx'), 'utf8')
     for (const { tpl } of MESSAGE_TEMPLATES) {
       for (const frag of tpl.split(/\{\w+\}/).filter((f) => f.trim().length > 3)) {
         expect(src.includes(frag), `${tpl} :: missing fragment "${frag}"`).toBe(true)

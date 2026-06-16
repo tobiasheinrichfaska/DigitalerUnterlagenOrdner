@@ -76,3 +76,17 @@ def test_filter_descendants_single_node():
     _, _, child1, _ = make_tree()
     result = PDFStorage.filter_keep_descendants([child1])
     assert result == [child1]
+
+
+# --- multi-level skip (intermediate node NOT selected): root + grandchild only,
+#     folder excluded. Locks the O(n*depth) ancestor-walk across an unselected level.
+def test_filter_descendants_drops_grandancestor_skipping_unselected_level():
+    root, _, child1, _ = make_tree()
+    result = PDFStorage.filter_keep_descendants([root, child1])
+    assert result == [child1]  # root dropped (has a selected descendant 2 levels down)
+
+
+def test_filter_ancestors_keeps_grandancestor_skipping_unselected_level():
+    root, _, child1, _ = make_tree()
+    result = PDFStorage.filter_keep_ancestors([root, child1])
+    assert result == [root]  # child1 dropped (a selected ancestor 2 levels up)

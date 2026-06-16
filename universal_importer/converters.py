@@ -20,6 +20,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
+from infra.limits import BOMB_CAP_BYTES
 from infra.log_config import logger
 
 
@@ -53,7 +54,14 @@ def modern_image(path: str) -> ConvertedPDF:
 
 def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     if isinstance(text, bytes):
+        # Cap before decode/render: an oversized text file would otherwise pin the
+        # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
+        # the archive/email bomb cap so a single huge .txt can't DoS the import.
+        if len(text) > BOMB_CAP_BYTES:
+            raise ValueError("Textdatei zu groß")
         text = text.decode("utf-8", errors="replace")
+    elif len(text) > BOMB_CAP_BYTES:
+        raise ValueError("Textdatei zu groß")
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -67,17 +75,20 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     def _wrap(line: str) -> list:
         # Wrap by MEASURED width, not a fixed character count — a long line (e.g. a
         # plain-text e-mail body) must neither be truncated nor run off the page edge
-        # (off-page glyphs are clipped → effectively lost). Char-level greedy wrap keeps
-        # every character verbatim; an empty line stays one blank row.
+        # (off-page glyphs are clipped → effectively lost). An empty line stays one
+        # blank row. Width is accumulated PER CHARACTER (Helvetica has no kerning in
+        # reportlab's canvas, so stringWidth is additive) — O(n), not the O(n²) of
+        # re-measuring the whole prefix each step.
         if not line:
             return [""]
-        out, cur = [], ""
+        out, cur, cur_w = [], "", 0.0
         for ch in line:
-            if c.stringWidth(cur + ch, font_name, font_size) <= max_width:
-                cur += ch
-            else:
+            ch_w = c.stringWidth(ch, font_name, font_size)
+            if cur and cur_w + ch_w > max_width:
                 out.append(cur)
-                cur = ch
+                cur, cur_w = "", 0.0
+            cur += ch
+            cur_w += ch_w
         out.append(cur)
         return out
 
@@ -115,6 +126,8 @@ def block_remote_link(uri: str, rel: str):
 
 
 def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:
+    if len(html) > BOMB_CAP_BYTES:  # bound the parse/render like txt_to_pdf
+        raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
         html = html.decode("utf-8", errors="replace")
 

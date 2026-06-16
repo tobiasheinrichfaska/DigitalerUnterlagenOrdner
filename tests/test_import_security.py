@@ -102,3 +102,37 @@ def test_path_import_still_accepts_a_real_file(tmp_path):
     f.write_bytes(create_valid_pdf(pages=1))
     result = UniversalImporter.convert(str(f))
     assert result.data.getvalue().startswith(b"%PDF")
+
+
+# --- text/HTML render bound (audit 2026-06-16, finding #1) ----------------
+from infra.limits import BOMB_CAP_BYTES
+from universal_importer.converters import html_to_pdf, txt_to_pdf
+
+
+def test_txt_to_pdf_rejects_oversized_input():
+    # An oversized text file must be refused, not pin the worker. Build a string
+    # one byte over the cap without materialising 500 MB of distinct content.
+    huge = "a" * (BOMB_CAP_BYTES + 1)
+    with pytest.raises(ValueError, match="zu groß"):
+        txt_to_pdf(huge)
+    with pytest.raises(ValueError, match="zu groß"):
+        txt_to_pdf(huge.encode("ascii"))
+
+
+def test_html_to_pdf_rejects_oversized_input():
+    huge = b"<p>" + b"a" * (BOMB_CAP_BYTES + 1)
+    with pytest.raises(ValueError, match="zu groß"):
+        html_to_pdf(huge)
+
+
+def test_txt_to_pdf_wraps_long_line_without_truncation():
+    # A long single line (no spaces) must wrap onto multiple rows, keeping every
+    # character — and finish quickly (the wrap is O(n), not O(n²)).
+    line = "X" * 20_000
+    result = txt_to_pdf(line)
+    pdf = result.data.getvalue()
+    assert pdf.startswith(b"%PDF")
+    import fitz  # PyMuPDF
+    with fitz.open(stream=pdf, filetype="pdf") as doc:
+        text = "".join(page.get_text() for page in doc)
+    assert text.count("X") == 20_000  # nothing dropped off the page edge

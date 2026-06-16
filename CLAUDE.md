@@ -126,6 +126,15 @@ method-name mapping and the `pywebviewready` wait/fail-fast). **Manual tests:**
   `App.moveresolver.test.jsx`), the dialogs (`ExportDialog`/`SaveDialog`/`HelpModal`), and
   `StatusBar`/`PreviewPane`/`TagEditor`/`TagViewBar`. Vitest's `include` is pinned to
   `src/**` so it never picks up the e2e specs.
+  - ⚠️ **No `vi.mock()` in this project's tests.** The `forks`/`threads` pools crash on this
+    toolchain (vitest 4.1.8 + Node 24 + Vite 8 → *"failed to find the current suite"*), so
+    `vite.config.js` forces `pool: 'vmThreads'` — and **`vi.mock()` does not take effect under
+    `vmThreads`** (the real module loads instead, silently). Mock the **`window.pywebview.api`
+    bridge** (the Proxy pattern in `test-setup.js`) and pass real child components / props
+    instead. History: `StatusBar.test.jsx` + `PreviewPane.test.jsx` were added on 2026-06-15
+    using `vi.mock` and **never passed** under `vmThreads` (7 red), yet were reported green by
+    inheriting the count — rewritten `vi.mock`-free on 2026-06-16. See the workspace
+    **Test-result integrity** rule.
 - **Playwright e2e** ([`e2e/`](webui/e2e), `npm run test:e2e`, real Chromium) — covers the
   two layout-dependent things jsdom can't: **scroll virtualization** in [`Preview.jsx`](webui/src/Preview.jsx)
   (binary-search on real `offsetTop`/`scrollTop`) and the **HTML5 drag-and-drop** handshake

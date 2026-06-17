@@ -1,6 +1,7 @@
 // Scottish Gaelic (Gàidhlig): German source → Gaelic, full coverage best-effort. A
 // native review is still welcome (corrections via the in-app report links).
 export const gd = {
+  'Kontextmenü': 'Clàr co-theacsail',
   'Verbinde mit Core…': 'A’ ceangal ris a’ chridhe…',
   'Arbeite…': 'Ag obair…',
   'Sprache': 'Cànan',

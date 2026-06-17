@@ -1,6 +1,7 @@
 // Latin translations: German source text → Latin (best-effort; modern computing
 // terms rendered with classical approximations).
 export const la = {
+  'Kontextmenü': 'Index contextualis',
   'Verbinde mit Core…': 'Nucleo conectens…',
   'Arbeite…': 'Laborans…',
   'Sprache': 'Lingua',

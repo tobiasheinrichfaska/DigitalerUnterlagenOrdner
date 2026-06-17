@@ -1,5 +1,6 @@
 // Ukrainian translations: German source text → Ukrainian.
 export const uk = {
+  'Kontextmenü': 'Контекстне меню',
   'Verbinde mit Core…': 'Підключення до ядра…',
   'Arbeite…': 'Обробка…',
   'Sprache': 'Мова',

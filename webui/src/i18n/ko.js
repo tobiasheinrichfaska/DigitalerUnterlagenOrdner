@@ -1,5 +1,6 @@
 // Korean translations: German source text → Korean.
 export const ko = {
+  'Kontextmenü': '컨텍스트 메뉴',
   'Verbinde mit Core…': '코어에 연결 중…',
   'Arbeite…': '처리 중…',
   'Sprache': '언어',

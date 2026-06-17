@@ -1,5 +1,6 @@
 // Catalan translations: German source text → Catalan.
 export const ca = {
+  'Kontextmenü': 'Menú contextual',
   'Verbinde mit Core…': 'Connectant amb el nucli…',
   'Arbeite…': 'Processant…',
   'Sprache': 'Idioma',

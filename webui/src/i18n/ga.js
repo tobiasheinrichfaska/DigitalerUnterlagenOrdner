@@ -1,6 +1,7 @@
 // Irish (Gaeilge): German source → Irish, full coverage best-effort. A native
 // review is still welcome (corrections via the in-app report links).
 export const ga = {
+  'Kontextmenü': 'Roghchlár comhthéacsach',
   'Verbinde mit Core…': 'Ag nascadh leis an gcroí…',
   'Arbeite…': 'Ag obair…',
   'Sprache': 'Teanga',

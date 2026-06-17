@@ -1,5 +1,6 @@
 // Russian translations: German source text → Russian.
 export const ru = {
+  'Kontextmenü': 'Контекстное меню',
   'Verbinde mit Core…': 'Подключение к ядру…',
   'Arbeite…': 'Обработка…',
   'Sprache': 'Язык',

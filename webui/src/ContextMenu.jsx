@@ -114,10 +114,7 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose() }}
       />
-      {/* aria-label is the German source string directly (not via t()): a single
-          a11y label isn't worth threading a new key through all 19 full-coverage
-          i18n files + the key-lock. */}
-      <div ref={menuRef} className="context-menu" role="menu" aria-label="Kontextmenü"
+      <div ref={menuRef} className="context-menu" role="menu" aria-label={t('Kontextmenü')}
         tabIndex={-1} onKeyDown={onMenuKey}
         style={{ left: pos ? pos.left : x, top: pos ? pos.top : y }}>
         {!editLocked && (mergeHere || groupHere) && (

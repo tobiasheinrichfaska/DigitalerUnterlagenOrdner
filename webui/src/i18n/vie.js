@@ -1,6 +1,7 @@
 // Viennese (Wienerisch): full German source → Wienerisch. Anything still missing
 // falls back to standard German. Oida, passt scho.
 export const vie = {
+  'Kontextmenü': 'Kontextmenü',
   'Verbinde mit Core…': 'Vabind mi mit Core…',
   'Arbeite…': 'Hackl grod…',
   'Sprache': 'Sproch',

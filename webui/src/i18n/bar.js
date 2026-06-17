@@ -1,6 +1,7 @@
 // Bavarian (Boarisch): full German source → Bavarian flavour. Anything still missing
 // falls back to standard German, which a Bavarian reads just fine.
 export const bar = {
+  'Kontextmenü': 'Kontextmenü',
   'Verbinde mit Core…': 'Vabinde mi mit Core…',
   'Arbeite…': 'Schaff grod…',
   'Sprache': 'Sproch',

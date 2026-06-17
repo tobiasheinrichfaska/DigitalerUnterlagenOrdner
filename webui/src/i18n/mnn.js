@@ -2,6 +2,7 @@
 // A joke language — not a real one — so "accuracy" is just vibes. Placeholders
 // ({n}, {count}, …) are preserved so the UI still works. Bello!
 export const mnn = {
+  'Kontextmenü': 'Kontext-menú 🍌',
   'Verbinde mit Core…': 'Bello core… link-o!',
   'Arbeite…': 'Bananaaa… work-o!',
   'Sprache': 'Blabla',

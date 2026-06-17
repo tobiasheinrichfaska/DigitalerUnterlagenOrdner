@@ -1,5 +1,6 @@
 // Croatian translations: German source text → Croatian.
 export const hr = {
+  'Kontextmenü': 'Kontekstni izbornik',
   'Verbinde mit Core…': 'Povezivanje s jezgrom…',
   'Arbeite…': 'Obrada…',
   'Sprache': 'Jezik',

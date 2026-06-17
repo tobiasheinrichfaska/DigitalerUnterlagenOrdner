@@ -1,6 +1,7 @@
 // Low German (Plattdüütsch): full German source → Plattdüütsch. Anything still
 // missing falls back to standard German.
 export const nds = {
+  'Kontextmenü': 'Kontextmenü',
   'Verbinde mit Core…': 'Verbinn mit Core…',
   'Arbeite…': 'Arbeit…',
   'Sprache': 'Spraak',

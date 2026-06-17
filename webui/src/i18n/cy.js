@@ -1,6 +1,7 @@
 // Welsh (Cymraeg): German source → Welsh, full coverage best-effort. A native
 // review is still welcome (corrections via the in-app report links).
 export const cy = {
+  'Kontextmenü': 'Dewislen cyd-destun',
   'Verbinde mit Core…': 'Cysylltu â’r craidd…',
   'Arbeite…': 'Yn gweithio…',
   'Sprache': 'Iaith',

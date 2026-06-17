@@ -1,5 +1,6 @@
 // French translations: German source text → French.
 export const fr = {
+  'Kontextmenü': 'Menu contextuel',
   'Verbinde mit Core…': 'Connexion au cœur…',
   'Arbeite…': 'Traitement…',
   'Sprache': 'Langue',

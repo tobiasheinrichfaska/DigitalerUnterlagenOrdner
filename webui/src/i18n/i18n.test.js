@@ -43,11 +43,12 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 124 UI strings (incl. the 3 Tree.jsx drag-ghost keys)
-    // + 13 backend command-error messages + 14 host-level error/warning strings
-    // (host.py + core/api.py + lib/messages.js). If a string is added, bump this
-    // deliberately — and add it to every full-coverage language file.
-    expect(Object.keys(en).length).toBe(151)
+    // Canonical key count = 125 UI strings (incl. the 3 Tree.jsx drag-ghost keys
+    // and the ContextMenu aria-label) + 13 backend command-error messages + 14
+    // host-level error/warning strings (host.py + core/api.py + lib/messages.js). If
+    // a string is added, bump this deliberately — and add it to every full-coverage
+    // language file.
+    expect(Object.keys(en).length).toBe(152)
   })
 })
 

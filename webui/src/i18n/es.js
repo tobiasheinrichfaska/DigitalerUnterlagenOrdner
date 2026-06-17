@@ -1,5 +1,6 @@
 // Spanish translations: German source text → Spanish.
 export const es = {
+  'Kontextmenü': 'Menú contextual',
   'Verbinde mit Core…': 'Conectando con el núcleo…',
   'Arbeite…': 'Procesando…',
   'Sprache': 'Idioma',

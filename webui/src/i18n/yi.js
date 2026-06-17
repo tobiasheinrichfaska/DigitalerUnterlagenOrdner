@@ -2,6 +2,7 @@
 // best-effort. Yiddish is Germanic, so it stays readable; a native speaker should
 // review before relying on it (corrections via the in-app report links).
 export const yi = {
+  'Kontextmenü': 'קאָנטעקסט־מעניו',
   'Verbinde mit Core…': 'פֿאַרבינדן מיטן קערן…',
   'Arbeite…': 'אַרבעט…',
   'Sprache': 'שפּראַך',

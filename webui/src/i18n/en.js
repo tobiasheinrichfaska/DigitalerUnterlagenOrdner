@@ -3,6 +3,7 @@
 // (e.g. 'Status', 'Export PDF') are listed on purpose so coverage is explicit.
 export const en = {
   // app shell
+  'Kontextmenü': 'Context menu',
   'Verbinde mit Core…': 'Connecting to core…',
   'Arbeite…': 'Working…',
   'Sprache': 'Language',

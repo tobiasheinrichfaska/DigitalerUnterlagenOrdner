@@ -46,11 +46,29 @@ function dropZone(e, isFolder) {
 
 function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
+  const rowRef = useRef(null)
   const { t } = useT()
 
   // Clear the rename timer on unmount so a stale callback never fires for a node
   // that is no longer mounted (e.g. navigated away with ↓ before the 350 ms elapsed).
   useEffect(() => () => clearTimeout(renameTimerRef.current), [renameTimerRef])
+
+  // Move DOM focus to the primary row so the OS context-menu key (▤ Menu / Shift+F10)
+  // targets it. A mouse click focuses the tabIndex=-1 row implicitly; keyboard navigation
+  // only updated React state, so the context-menu key fired off-target and nothing opened
+  // (documented bug). Don't steal focus from an input (rename / search) or an open
+  // dialog/menu.
+  useEffect(() => {
+    if (node.id !== primaryId || editing === node.id) return
+    const ae = document.activeElement
+    if (ae) {
+      const tag = ae.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || ae.isContentEditable) return
+      if (ae.closest && ae.closest('[role="dialog"], [role="menu"]')) return
+    }
+    const el = rowRef.current
+    if (el && ae !== el && !el.contains(ae)) el.focus()
+  }, [primaryId, node.id, editing])
 
   const handleDragOver = (e) => {
     if (reorderDisabled) return // filtered view: positions are virtual, no drops
@@ -108,6 +126,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   return (
     <li>
       <div
+        ref={rowRef}
         className={cls.join(' ')}
         role="treeitem"
         aria-selected={selectedIds.includes(node.id)}
@@ -139,7 +158,14 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
           } else onSelect(node, mods)
         }}
         onDoubleClick={() => clearTimeout(renameTimerRef.current)}
-        onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, node) }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          // The OS context-menu key (▤ Menu / Shift+F10) fires contextmenu with no real
+          // pointer position (0/negative coords). Anchor the menu at the row instead.
+          let x = e.clientX, y = e.clientY
+          if (x <= 0 && y <= 0) { const r = e.currentTarget.getBoundingClientRect(); x = r.left + 24; y = r.bottom }
+          onContext(x, y, node)
+        }}
       >
         <span className="alt-slot">
           {undecided && (

@@ -128,7 +128,7 @@ def _open_window(core, startup_path=None):
     api = HostApi(core)
     api._startup_path = startup_path
     win = webview.create_window(
-        get_full_title(), _entry(), js_api=api,   # title bar shows "… 3.9.3"
+        get_full_title(), _entry(), js_api=api,   # title bar shows "… 3.9.4"
         width=1280, height=820, min_size=(900, 600))
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     _bind_close(win, api)

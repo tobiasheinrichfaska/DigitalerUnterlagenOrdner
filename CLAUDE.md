@@ -518,22 +518,10 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   (no sidecar). Split parts in **already-saved** files keep the old `no_compression` flag until
   re-split.
 
-### Known bugs
-
-- **🐞 Context-menu key needs a prior mouse selection (keyboard-only selection doesn't arm it).**
-  *Reported 2026-06-18 (clean-Sandbox test).* Selecting a node **by keyboard** (↑/↓ arrows) and
-  then pressing the OS **context-menu key** (the ▤ Menu key / Shift+F10) does **nothing**; the
-  right-click menu only opens via that key if the node was **first selected with the mouse**.
-  - **Root cause:** the tree row is `tabIndex={-1}` ([`Tree.jsx`](webui/src/Tree.jsx) row `<div>`,
-    ~L115) and keyboard navigation updates React selection state + CSS classes but **never moves
-    DOM focus** to the row. The browser dispatches the context-menu key's `contextmenu` event at
-    the *focused* element, so the row's `onContextMenu` ([`Tree.jsx`](webui/src/Tree.jsx) ~L142,
-    `onContext(e.clientX, e.clientY, node)`) never fires. A **mouse click focuses** the
-    `tabIndex=-1` row, which is why the key works afterwards.
-  - **Fix direction:** on keyboard nav, `.focus()` the primary row (a ref keyed by node id), and/or
-    handle `contextmenu`/Shift+F10/Menu at the tree-container level using the current `primaryId`
-    to position+open the menu (anchor at the row's bounding rect when there's no mouse point).
-    Pairs with the F-3 keyboard/ARIA menu work already shipped.
+> *Fixed 2026-06-18:* the keyboard-only context-menu bug (keyboard selection didn't arm the ▤ Menu /
+> Shift+F10 key) — the primary row now takes DOM focus on selection ([`Tree.jsx`](webui/src/Tree.jsx)),
+> and `onContextMenu` anchors at the row rect when the key supplies no pointer coords. Covered by
+> `Tree.test.jsx` (focus moves to primary; input focus not stolen; coordless contextmenu still opens).
 
 ---
 

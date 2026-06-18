@@ -130,4 +130,31 @@ describe('Tree', () => {
     const folderB = [...b.container.querySelectorAll('.row[role="treeitem"]')].find((r) => r.textContent.includes('Ordner'))
     expect(folderB).toHaveAttribute('aria-expanded', 'true') // children are actually visible
   })
+
+  // --- keyboard context-menu bug fix: the primary row must take DOM focus so the OS
+  //     context-menu key (Menu / Shift+F10) targets it (mouse click did this implicitly).
+  it('moves DOM focus to the primary row', () => {
+    const { container } = renderTree({ selectedIds: ['L2'], primaryId: 'L2' })
+    const primary = container.querySelector('.row.primary')
+    expect(primary).toBeTruthy()
+    expect(document.activeElement).toBe(primary)
+  })
+
+  it('does not steal focus from an active input (rename / search box)', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    renderTree({ selectedIds: ['L2'], primaryId: 'L2' })
+    expect(document.activeElement).toBe(input)
+    input.remove()
+  })
+
+  it('context-menu key with no pointer coords still opens the menu for the row', () => {
+    const { onContext, container } = renderTree({ primaryId: 'L2' })
+    const primary = container.querySelector('.row.primary')
+    fireEvent.contextMenu(primary, { clientX: 0, clientY: 0 })
+    expect(onContext).toHaveBeenCalledWith(
+      expect.any(Number), expect.any(Number), expect.objectContaining({ id: 'L2' }),
+    )
+  })
 })

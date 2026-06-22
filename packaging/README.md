@@ -99,6 +99,34 @@ system component, not a Store framework package. So:
 - For guaranteed coverage on minimal/Win10 machines, **bundle a fixed-version WebView2
   runtime** in the package and point pywebview at it — an optional later enhancement.
 
+## Machine-wide install (RDS / multi-user) — `install-machinewide.ps1`
+
+An alternative to MSIX for **shared / Remote Desktop session hosts**, where a per-user MSIX
+or sideload roams badly (e.g. under FSLogix profile containers: the per-user package state
+isn't carried, so the `.belegtool` association breaks at logoff / shows "package not found").
+
+`install-machinewide.ps1` installs the **onedir** build to a machine-wide location and
+registers the file type in **HKLM**, so the association is identical for every user, has no
+per-user state, and survives logoff:
+
+```powershell
+# build first, then (elevated, on the target host):
+powershell -ExecutionPolicy Bypass -File build.ps1
+powershell -ExecutionPolicy Bypass -File packaging\install-machinewide.ps1 -Source .\dist\BelegTool
+# remove:
+powershell -ExecutionPolicy Bypass -File packaging\install-machinewide.ps1 -Uninstall
+```
+
+It copies the onedir to `C:\Program Files\BelegTool` (robocopy `/MIR` = clean update),
+registers `HKLM\Software\Classes\.belegtool` → ProgID `BelegTool.Document` →
+`"…\BelegTool.exe" "%1"` (+ DefaultIcon, a tidy `Applications\BelegTool.exe` "Open with"
+entry, and a Programs & Features uninstall entry), warns if the **WebView2 Runtime** is
+missing, and refreshes the shell. Idempotent; keeps a copy of itself in the install dir so
+**Uninstall** works from Programs & Features.
+
+⚠️ Per-user `UserChoice` for `.belegtool` outranks HKLM — clear any stale per-user
+association first, or it overrides this machine-wide handler.
+
 ## Notes / gotchas
 - Full-trust PyInstaller app → `EntryPoint="Windows.FullTrustApplication"` + `Executable=`
   the onedir exe. No `desktop6`/`desktop2` extensions needed.

@@ -642,6 +642,18 @@ as **v3.10.0**.
     **running, cross-level** decoded-byte/entry budget (not just per-archive) so nesting can't
     multiply past `infra.limits.BOMB_CAP_BYTES`. (Logged from the 2026-06-16 audit, finding #6.)
 
+### Build hygiene — embed the version resource in BelegTool.exe (noted 2026-06-25)
+
+The PyInstaller onedir **`BelegTool.exe` carries no Windows version resource** — Properties →
+Details shows blank ProductVersion/FileVersion, and fleet recon / `Get-Item …VersionInfo`
+reads nothing; the version is only tracked via `version_info.py` and the machine-wide
+installer's Programs & Features entry. **Future builds should embed it:** generate a
+PyInstaller `version_info.txt` (`VSVersionInfo`) from `version_info.VERSION` and reference it
+in `belegtool.spec` via `EXE(…, version='version_info.txt')`, so the exe self-reports its
+version (helps support, fleet inventory, and RDS deploys that key on the file version).
+Surfaced 2026-06-25 verifying the RDS install (read v3.9.4 from P&F, but the exe reported no
+embedded version). Low effort; do it on the next build bump.
+
 ### Planned work — sequenced (decided 2026-06-07)
 **Order: (1) update-checker, then (2) file lock.** Both deferred for now; recorded so the design survives the gap.
 

@@ -9,6 +9,12 @@ path, with the invariant:
 
 so a session is fully reconstructable / persistable from its initial document
 plus its command log (the basis for the core service's audit / sync).
+
+``apply_silent`` is the one deliberate exception: it applies a *derived* fact (the
+compression "no gain" verdict) straight onto the current document without touching
+undo/redo, the dirty flag, or the log. The replay invariant therefore holds only up
+to those derived fields — they are recomputable from the bytes, so losing them on
+replay/undo is harmless.
 """
 
 from __future__ import annotations
@@ -66,6 +72,14 @@ class DocumentSession:
         self._redo.clear()
         self._dirty = True
         return new
+
+    def apply_silent(self, cmd: Command) -> Document:
+        """Apply a DERIVED, non-user mutation (the no-gain verdict) onto the current
+        document WITHOUT recording undo/redo, marking dirty, or logging it. Use only
+        for facts recomputable from the bytes — it intentionally relaxes the replay
+        invariant for those fields (see module docstring)."""
+        self._doc = apply(self._doc, cmd, self._engine)
+        return self._doc
 
     def undo(self) -> Document:
         if not self._undo:

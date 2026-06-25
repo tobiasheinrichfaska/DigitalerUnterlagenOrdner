@@ -134,8 +134,9 @@ export default function App() {
   // Proactive no-gain sweep: once per opened document, evaluate the CHEAP (≤5-page)
   // undecided leaves in the background — reusing the same compressOptions call as
   // auto-compute — so their front "undecided" dot resolves without needing a view.
-  // Sequential + cancellable so it yields to interaction; large nodes stay lazy. The
-  // verdict persists at save (these calls warm the engine memo _bake_no_gain reads).
+  // Sequential + cancellable so it yields to interaction; large nodes stay lazy. Each
+  // compressOptions call that finds no gain makes the backend record the verdict live
+  // (silent SetNoGain → Node.compression_no_gain), so it persists across moves and reopen.
   useEffect(() => {
     if (!session || !state?.tree) return undefined
     const ids = sweepCandidates(state.tree)

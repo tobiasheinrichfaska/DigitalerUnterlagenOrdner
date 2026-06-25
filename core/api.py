@@ -880,14 +880,36 @@ class CoreApi:
         if not data:
             return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                     "original_size": 0, "options": []}
+        token = self._cancel_token(node_id)
         with self._compressing():
-            sizes = self._engine.compress_methods(data, dpi, cancel=self._cancel_token(node_id).is_set)
+            sizes = self._engine.compress_methods(data, dpi, cancel=token.is_set)
         options = sorted(
             ({"method": m, "size": sz} for m, sz in sizes.items()),
             key=lambda o: o["size"],
         )
+        if not options and not token.is_set():
+            # Genuinely evaluated, nothing smaller -> persist the derived 'no gain'
+            # verdict so the red 'undecided' dot stays resolved across moves/reopen.
+            # A cancelled run (token set) ALSO yields no options but wasn't evaluated,
+            # so it is skipped. Silent: this is not a human edit (no undo, no dirty).
+            self._mark_no_gain(session, node_id)
         return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                 "original_size": len(data), "options": options}
+
+    def _mark_no_gain(self, session: str, node_id: str) -> None:
+        """Record the derived 'nothing smaller found' verdict on a still-compressible
+        leaf (no source dropped, not already applied/blocked/decided). Applied silently
+        so it neither enters undo/redo nor marks the document dirty."""
+        from core.commands import SetNoGain
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return
+            node = s.document.find(node_id)
+            if (node is not None and not node.is_folder and node.original_data is not None
+                    and not node.is_compressed and not node.no_compression
+                    and not node.compression_no_gain):
+                s.apply_silent(SetNoGain((node_id,)))
 
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:

@@ -287,9 +287,16 @@ Status values: `""` (**no status — the new default**, no dot), `zu erfassen` (
   applied (`is_compressed` = "Lesbarkeit geprüft"), `no_compression`, or auto-confirmed
   no-gain. Folder rows show it if any descendant leaf is undecided.
 - **Persisted no-gain:** `Node.compression_no_gain` — when evaluation finds nothing smaller,
-  the decision is **baked at save** (`CoreApi._bake_no_gain`), round-trips in the `.belegtool`,
-  and is **cleared on rotate**. So a "nothing smaller" node is not re-evaluated on load and
-  shows no red dot. Auto-compute on view skips these.
+  the decision is written **live into the document** the moment `compress_options` returns no
+  options, via the silent `SetNoGain` command (`CoreApi._mark_no_gain` →
+  `DocumentSession.apply_silent`: **no undo/redo, no dirty, not in the event log** — it is a
+  derived verdict, not a human edit). It round-trips in the `.belegtool` and is **cleared on
+  rotate**. So a "nothing smaller" node is not re-evaluated on load and shows no red dot.
+  Auto-compute on view skips these. `CoreApi._bake_no_gain` still runs at save as a fallback.
+  ⚠ **Fixed 2026-06-25:** before this, the verdict lived only in the engine's **bounded
+  16-entry variant cache** (`evaluated()`), so on a document with >16 incompressible leaves the
+  earliest verdicts were evicted → the red dot **reappeared on move / reopen**. The live
+  `SetNoGain` write makes it durable. Cancelled evaluations (token set) are **not** flagged.
 - **Proactive sweep:** after a document loads, [`App.jsx`](webui/src/App.jsx) evaluates the
   **cheap (≤5-page) undecided leaves** in the background — sequential + cancellable, reusing the
   same `compressOptions` call as auto-compute — so their front dot resolves **without needing a

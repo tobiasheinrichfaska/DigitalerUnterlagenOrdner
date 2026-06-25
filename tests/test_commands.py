@@ -29,6 +29,43 @@ def doc() -> Document:
     return Document(Node(name="root", id="root", is_folder=True, children=(a, f)))
 
 
+# --- SetNoGain (derived 'nothing smaller found' verdict; applied silently) ---
+
+def test_set_no_gain_flags_listed_leaves():
+    out = apply(doc(), command_from_dict({"type": "SetNoGain", "node_ids": ["a", "b"]}))
+    assert out.find("a").compression_no_gain is True
+    assert out.find("b").compression_no_gain is True
+
+
+def test_set_no_gain_ignores_folders_and_missing_ids():
+    # a folder id and a stale/missing id must be skipped, not crash; only leaves flagged.
+    out = apply(doc(), command_from_dict({"type": "SetNoGain", "node_ids": ["a", "f", "gone"]}))
+    assert out.find("a").compression_no_gain is True
+    assert out.find("f").compression_no_gain is False   # folders carry no verdict
+    assert out.find("b").compression_no_gain is False   # untouched
+
+
+def test_set_no_gain_touches_no_other_field():
+    d0 = Document(Node(name="root", id="root", is_folder=True,
+                       children=(Node(name="a", id="a", status=STATUS_DONE, tags=("x",)),)))
+    out = apply(d0, command_from_dict({"type": "SetNoGain", "node_ids": ["a"]}))
+    n = out.find("a")
+    assert n.compression_no_gain is True
+    assert n.status == STATUS_DONE and n.tags == ("x",) and n.name == "a"
+
+
+def test_set_no_gain_empty_list_is_noop():
+    d0 = doc()
+    out = apply(d0, command_from_dict({"type": "SetNoGain", "node_ids": []}))
+    assert out.to_dict() == d0.to_dict()
+
+
+def test_set_no_gain_roundtrips_through_dict():
+    cmd = command_from_dict({"type": "SetNoGain", "node_ids": ["a", "b"]})
+    assert command_to_dict(cmd)["type"] == "SetNoGain"
+    assert command_from_dict(command_to_dict(cmd)) == cmd   # round-trip identity
+
+
 # --- AddFolder -------------------------------------------------------------
 
 def test_add_folder_appends_and_is_pure():

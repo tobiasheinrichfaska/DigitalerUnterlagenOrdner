@@ -65,7 +65,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>dpi_original</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI the original was captured at.</td></tr>
 <tr><td><code>dpi_current</code></td><td>int | None</td><td class="opt">opt</td><td>None</td><td>DPI of the current/compressed data.</td></tr>
 <tr><td><code>no_compression</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Node must not be (re-)compressed (e.g. split parts).</td></tr>
-<tr><td><code>compression_no_gain</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Evaluated and nothing smaller found → compression decided (no red "undecided" dot). Baked at save from engine state; cleared on rotate.</td></tr>
+<tr><td><code>compression_no_gain</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Evaluated and nothing smaller found → compression decided (no red "undecided" dot). Set live via the silent <code>SetNoGain</code> command the moment an evaluation finds no gain (durable across moves/reopen, independent of the engine's bounded variant cache); also baked at save as a fallback; cleared on rotate.</td></tr>
 <tr><td><code>collapsed</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder is collapsed in the tree view. Persisted; set via <code>SetCollapsed</code>/<code>SetAllCollapsed</code>.</td></tr>
 <tr><td><code>compression_method</code></td><td>str | None</td><td class="opt">opt</td><td>None</td><td>Method that produced <code>current_data</code> (<code>jpg</code>/<code>png</code>/<code>pikepdf</code>); None if uncompressed.</td></tr>
 <tr><td><code>tags</code></td><td>tuple[str]</td><td class="opt">opt</td><td>()</td><td>Free-form labels (folders &amp; leaves); set via <code>SetTags</code>. Stored per-node; for search/group, <em>effective</em> tags = own ∪ ancestor-folder tags (computed in the view).</td></tr>
@@ -160,6 +160,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>AddFolder</code></td><td>parent_id, name, index?, new_id?</td><td>Insert a new folder under a folder parent.</td></tr>
 <tr><td><code>Rename</code></td><td>node_id, name</td><td>Set <code>name</code> (non-empty).</td></tr>
 <tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status, incl. <code>""</code> = no status). On a <b>folder</b> it cascades to every descendant document.</td></tr>
+<tr><td><code>SetNoGain</code></td><td>node_ids</td><td>Flag each existing leaf <code>compression_no_gain=True</code> (folders/missing ids skipped; idempotent). A <b>derived</b> verdict, not a human edit: the API applies it <b>silently</b> (<code>DocumentSession.apply_silent</code> → no undo/redo, no dirty, not in the log) when a compression evaluation finds nothing smaller, so the red "undecided" dot stays resolved across moves and reopen.</td></tr>
 <tr><td><code>SetCollapsed</code></td><td>node_id, collapsed</td><td>Folder only → set <code>collapsed</code> (rejects leaves).</td></tr>
 <tr><td><code>SetAllCollapsed</code></td><td>collapsed</td><td>Set <code>collapsed</code> on every folder at once (one undo step).</td></tr>
 <tr><td><code>SetPeriod</code></td><td>node_id, vz_start, vz_end</td><td>Set the accounting period.</td></tr>

@@ -7,8 +7,13 @@ from core.commands import (
     Move,
     Rename,
     apply_all,
+    command_from_dict,
 )
 from core.session import DocumentSession
+
+
+def _set_no_gain(*ids):
+    return command_from_dict({"type": "SetNoGain", "node_ids": list(ids)})
 
 
 class _NoGainEngine:
@@ -83,3 +88,48 @@ def test_replay_invariant_holds_through_undo_redo():
     replayed = apply_all(s.initial, s.log)
     assert replayed.to_dict() == s.document.to_dict()
     assert [type(c).__name__ for c in s.log] == ["AddFolder", "Move", "Rename"]
+
+
+# --- apply_silent: the derived no-gain verdict, applied WITHOUT undo/dirty ---
+
+def test_apply_silent_updates_doc_without_undo_or_dirty():
+    s = DocumentSession(doc())
+    s.apply_silent(_set_no_gain("a"))
+    assert s.document.find("a").compression_no_gain is True
+    assert not s.can_undo()          # not a human edit → no undo entry
+    assert not s.dirty               # not a human edit → does not dirty the document
+    assert s.log == []               # not part of the replayable command log
+
+
+def test_apply_silent_verdict_survives_a_real_command_and_its_undo():
+    s = DocumentSession(doc())
+    s.apply_silent(_set_no_gain("a"))         # verdict set before any history exists
+    s.dispatch(Rename("a", "A!"))             # a real, undoable edit afterwards
+    assert s.document.find("a").compression_no_gain is True
+    s.undo()                                  # back to the pre-rename snapshot
+    # the undo snapshot was captured AFTER the silent verdict → it is preserved
+    assert s.document.find("a").compression_no_gain is True
+    assert s.document.find("a").name == "a"
+
+
+def test_apply_silent_does_not_break_a_later_real_dispatch():
+    s = DocumentSession(doc())
+    s.apply_silent(_set_no_gain("a"))
+    s.dispatch(Rename("a", "A!"))
+    assert s.can_undo() and s.dirty
+    assert [type(c).__name__ for c in s.log] == ["Rename"]   # silent op stays out of the log
+
+
+def test_replay_invariant_relaxed_only_for_no_gain():
+    # Replaying the logged commands reproduces the document EXCEPT for the derived
+    # compression_no_gain field, which is applied silently (out of the log by design).
+    s = DocumentSession(doc())
+    s.apply_silent(_set_no_gain("a"))
+    s.dispatch(Rename("a", "A!"))
+
+    replayed = apply_all(s.initial, s.log)
+    assert replayed.find("a").compression_no_gain is False        # log alone never sets it
+    assert replayed.find("a").name == "A!"                        # everything else matches
+    # re-applying the silent verdict on top of the replay reproduces the live document
+    reconstructed = apply_all(replayed, [_set_no_gain("a")])
+    assert reconstructed.to_dict() == s.document.to_dict()

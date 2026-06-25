@@ -85,6 +85,20 @@ class SetTags:
 
 
 @dataclass(frozen=True)
+class SetNoGain:
+    """Mark leaves as 'evaluated, nothing smaller found' (compression_no_gain=True).
+    This is a DERIVED verdict, not a human edit: the API dispatches it SILENTLY (no
+    undo, no dirty — see DocumentSession.apply_silent) once a compression evaluation
+    yields no smaller variant, so the red 'undecided' dot stays resolved across moves
+    and reopen instead of relying on the engine's bounded variant cache."""
+    node_ids: Tuple[str, ...]
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
 class Delete:
     node_id: str
 
@@ -201,14 +215,14 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
-                Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
+                SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
                 Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, Delete, DeleteMany,
-    Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
+    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, SetNoGain,
+    Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
 _ROTATE_ANGLES = {"right": 90, "left": -90, "180": 180}
@@ -377,6 +391,18 @@ def _set_tags(doc: Document, cmd: SetTags, engine=None) -> Document:
     clean = tuple(dict.fromkeys(
         t.strip() for t in cmd.tags if isinstance(t, str) and t.strip()))
     return doc.update_node(cmd.node_id, tags=clean)
+
+
+@_handler(SetNoGain)
+def _set_no_gain(doc: Document, cmd: SetNoGain, engine=None) -> Document:
+    """Flag each existing LEAF as compression_no_gain=True (folders / missing ids are
+    skipped, not errors — the verdict is applied opportunistically from background
+    evaluation against a possibly-stale id set). Idempotent."""
+    for nid in dict.fromkeys(cmd.node_ids):
+        node = doc.find(nid)
+        if node is not None and not node.is_folder and not node.compression_no_gain:
+            doc = doc.update_node(nid, compression_no_gain=True)
+    return doc
 
 
 @_handler(Delete)

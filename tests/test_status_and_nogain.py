@@ -21,6 +21,26 @@ def _pdf(n=1):
     return data
 
 
+def _updf(tag):
+    """A tiny, UNIQUE, incompressible single-page PDF (distinct bytes per tag, so each
+    gets its own engine digest — needed to exercise the per-(digest,dpi) cache)."""
+    doc = fitz.open()
+    doc.new_page(width=300, height=300).insert_text((40, 60), f"uniq-{tag}")
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _import_updfs(api, sid, tmp_path, n):
+    paths = []
+    for i in range(n):
+        p = tmp_path / f"u{i}.pdf"
+        p.write_bytes(_updf(i))
+        paths.append(str(p))
+    api.import_paths(sid, paths)
+    return [n for n in api._sessions[sid].document.root.iter() if not n.is_folder]
+
+
 def _do(doc, cmd, engine=None):
     return apply(doc, command_from_dict(cmd), engine=engine)
 
@@ -181,3 +201,80 @@ def test_no_gain_is_baked_on_save_and_persists(tmp_path):
     leaf2 = next(n for n in api2._sessions[sid2].document.root.iter() if not n.is_folder)
     assert leaf2.compression_no_gain is True
     assert _flag(api2, sid2, leaf2.id) is False               # not rebuilt, no red dot
+
+
+# --- no-gain verdict is durable: it must survive cache eviction, moves, reopen ---
+# Regression for: red dots reappear on incompressible docs when moving nodes / reopening.
+# Root cause was that the verdict lived only in the engine's bounded (16-entry) variant
+# cache; once >16 leaves were evaluated the earliest verdicts were evicted.
+
+def test_compress_options_marks_no_gain_in_document_without_dirtying(tmp_path):
+    api = CoreApi()
+    sid = api.open()["session"]
+    (leaf,) = _import_updfs(api, sid, tmp_path, 1)
+    api._sessions[sid].mark_saved()                           # as if opened from a saved file
+    api.compress_options(sid, leaf.id, 150)                   # nothing smaller -> no-gain
+    node = api._sessions[sid].document.find(leaf.id)
+    assert node.compression_no_gain is True                   # verdict written into the model
+    assert api._sessions[sid].dirty is False                  # derived fact -> did NOT re-dirty
+    assert _flag(api, sid, leaf.id) is False                  # no red dot
+
+
+def test_no_gain_verdict_survives_eviction_and_move(tmp_path):
+    # 20 distinct incompressible leaves > the 16-entry engine cache: the FIRST one's
+    # verdict gets evicted from the cache, but must stay decided (in the model).
+    api = CoreApi()
+    sid = api.open()["session"]
+    leaves = _import_updfs(api, sid, tmp_path, 20)
+    for lf in leaves:
+        api.compress_options(sid, lf.id, 150)
+    first = leaves[0]
+    assert _flag(api, sid, first.id) is False                 # would regress to True (evicted)
+
+    # moving it (what re-rendered the dot in the bug report) keeps it decided
+    api.dispatch(sid, {"type": "AddFolder", "parent_id": api._sessions[sid].document.root.id,
+                       "name": "F", "new_id": "F"})
+    api.dispatch(sid, {"type": "Move", "node_id": first.id, "new_parent_id": "F"})
+    assert _flag(api, sid, first.id) is False
+
+
+def test_all_no_gain_verdicts_persist_on_save_at_scale(tmp_path):
+    api = CoreApi()
+    sid = api.open()["session"]
+    leaves = _import_updfs(api, sid, tmp_path, 20)
+    for lf in leaves:
+        api.compress_options(sid, lf.id, 150)
+
+    bel = str(tmp_path / "scale.belegtool")
+    assert api.save(sid, bel)["ok"]
+
+    api2 = CoreApi()
+    sid2 = api2.open(path=bel)["session"]
+    reopened = [n for n in api2._sessions[sid2].document.root.iter() if not n.is_folder]
+    assert len(reopened) == 20
+    assert all(n.compression_no_gain is True for n in reopened)   # not just the last <=16
+    assert all(_flag(api2, sid2, n.id) is False for n in reopened)
+
+
+def test_compressible_leaf_is_not_marked_no_gain(tmp_path):
+    # Negative control: a leaf WITH a smaller variant must NOT be flagged no-gain and
+    # must keep its red dot (a decision is pending — the smaller version isn't applied).
+    api = CoreApi()
+    sid = api.open()["session"]
+    (leaf,) = _import_updfs(api, sid, tmp_path, 1)
+    api._engine.seed_variants(leaf.original_data, {150: {"jpg": _pdf()}})
+    res = api.compress_options(sid, leaf.id, 150)
+    assert res["options"]                                      # a smaller method exists
+    assert api._sessions[sid].document.find(leaf.id).compression_no_gain is False
+    assert _flag(api, sid, leaf.id) is True                    # pending -> red dot stays
+
+
+def test_rotate_clears_no_gain_and_restores_dot(tmp_path):
+    api = CoreApi()
+    sid = api.open()["session"]
+    (leaf,) = _import_updfs(api, sid, tmp_path, 1)
+    api.compress_options(sid, leaf.id, 150)
+    assert _flag(api, sid, leaf.id) is False
+    api.dispatch(sid, {"type": "Rotate", "node_id": leaf.id, "direction": "right"})
+    assert api._sessions[sid].document.find(leaf.id).compression_no_gain is False
+    assert _flag(api, sid, leaf.id) is True                    # new bytes, unevaluated -> dot

@@ -1,6 +1,6 @@
 # Beta Testing BelegTool 🧪
 
-Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.9.4** — a
+Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.9.5** — a
 Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
 archives into one foldered tree, then compresses, previews and exports the whole
 thing as a single bookmarked PDF with a table of contents.
@@ -25,7 +25,7 @@ and e-mails still works fine.
 ## 1. Get & run the app
 
 ### Path A — Prebuilt download (easiest, no Python/Node)
-1. Download **`BelegTool-v3.9.4-win64.zip`** from the
+1. Download **`BelegTool-v3.9.5-win64.zip`** from the
    [**latest release**](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/releases/latest).
 2. Unzip it anywhere.
 3. Double-click **`BelegTool\BelegTool.exe`**. That's it — no installation.

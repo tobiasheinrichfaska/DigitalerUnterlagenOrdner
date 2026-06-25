@@ -136,3 +136,31 @@ still present (not yet saved+reopened).
   any PDF viewer (the variants are attachments, not pages); a committed node has no
   source and stores no variants.
 
+---
+
+## MT-47: Red "undecided" dot stays gone for incompressible docs (move + reopen)
+
+**Preconditions:** A document with **many (≥ 20) low-resolution / already-small leaf
+documents** that have **no worthwhile compression** — e.g. a folder full of small,
+mostly-text single-page PDFs. (Each shows a **red dot at the front of its row** until
+its compression has been evaluated.)
+
+**Steps:**
+1. Open the document and **wait a few seconds** without clicking — the background sweep
+   evaluates the small leaves. Watch the red front dots disappear as each resolves.
+2. Once the red dots are gone, **drag one of those leaves** to a different folder /
+   position (or use Insert to move it).
+3. **Save** (💾), close the app, and **reopen** the same file.
+
+**Expected:**
+- After the sweep, the incompressible leaves show **no red front dot** (nothing smaller
+  was found → the decision is made).
+- **Moving** a leaf does **not** bring its red dot back — and crucially, moving one does
+  not make *other* already-resolved leaves light up again. *(This was the bug fixed in
+  v3.9.5: with more than ~16 such documents the verdict used to be forgotten, so the red
+  dots reappeared on move or reopen.)*
+- After **reopen**, the incompressible leaves are **still dot-free** without any new wait
+  — the "nothing smaller found" verdict was saved in the file.
+- *Contrast:* a leaf that **does** have a smaller variant available but not yet applied
+  **keeps** its red dot (a decision is still pending) — that is correct, not a bug.
+

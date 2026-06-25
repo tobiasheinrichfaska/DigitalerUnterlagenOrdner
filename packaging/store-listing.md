@@ -34,11 +34,11 @@ Copy these into Partner Center. Two listing languages: **de-DE** (primary) and *
 > Open Source (AGPLv3). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
 > ablegen wollen.
 
-**Was ist neu (v3.9.4):**
-> Bedienung & Stabilität: Das Rechtsklick-Menü lässt sich jetzt vollständig per
-> Tastatur bedienen (Pfeiltasten, Eingabe, Esc) und ist für Screenreader beschriftet.
-> Der Import verarbeitet Archive mit gleichnamigen Dateien korrekt und sehr große
-> Text-/HTML-Dateien sicher. Dazu interne Leistungs- und Stabilitätsverbesserungen.
+**Was ist neu (v3.9.5):**
+> Fehlerbehebung: Bei Dokumenten ohne sinnvolle Komprimierung kam der rote
+> „noch nicht geprüft"-Punkt nach dem Verschieben von Knoten oder erneutem Öffnen
+> wieder zum Vorschein. Die Entscheidung „nichts Kleineres gefunden" wird jetzt
+> dauerhaft im Dokument gespeichert und bleibt erhalten.
 
 **Suchbegriffe:** Belege, PDF zusammenfügen, Dokumente, Scannen, Steuer, Buchhaltung,
 Inhaltsverzeichnis
@@ -73,11 +73,10 @@ Inhaltsverzeichnis
 >
 > Open source (AGPLv3). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
 
-**What's new (v3.9.4):**
-> Usability & stability: the right-click menu is now fully keyboard-operable (arrow
-> keys, Enter, Esc) and labelled for screen readers. Import now handles archives that
-> contain same-named files correctly and very large text/HTML files safely, plus
-> internal performance and stability improvements.
+**What's new (v3.9.5):**
+> Bug fix: for documents with no worthwhile compression, the red "not yet checked"
+> dot reappeared after moving nodes or reopening the file. The "nothing smaller
+> found" decision is now stored durably in the document and stays resolved.
 
 **Search terms:** receipts, merge PDF, documents, scan, tax, bookkeeping, table of contents
 
@@ -99,8 +98,8 @@ Use real-looking but **non-personal** sample documents (the `tests/data/input/*.
 ## Submission checklist (Partner Center)
 
 - [ ] New submission for app **BelegTool** (Store ID `9PL4D25N00XD`).
-- [ ] **Packages:** upload `packaging/out/BelegTool-3.9.4.0-x64.msix` (unsigned; MS re-signs) —
-      replaces the earlier 3.9.1.0 package.
+- [ ] **Packages:** upload `packaging/out/BelegTool-3.9.5.0-x64.msix` (unsigned; MS re-signs) —
+      replaces the earlier 3.9.4.0 package.
 - [ ] **Properties:** category **Productivity**; paste the **broadFileSystemAccess
       justification** (see `packaging/README.md`) into restricted-capability / "Notes for
       certification".

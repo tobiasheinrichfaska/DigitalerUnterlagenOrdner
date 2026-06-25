@@ -110,7 +110,7 @@ if ($PSCmdlet.ShouldProcess($InstallDir, "Install BelegTool onedir + register .b
   New-ItemProperty -Path 'HKLM:\SOFTWARE\Classes\Applications\BelegTool.exe\SupportedTypes' -Name '.belegtool' -Value '' -PropertyType String -Force | Out-Null
 
   # 5. Programs & Features entry
-  $ver = '3.9.4'
+  $ver = '3.9.5'
   $vinfo = Join-Path $PSScriptRoot '..\version_info.py'
   if (Test-Path $vinfo) { $m = (Get-Content $vinfo | Select-String 'VERSION\s*=\s*"([^"]+)"'); if ($m) { $ver = $m.Matches[0].Groups[1].Value } }
   New-Item -Path $UninstKey -Force | Out-Null

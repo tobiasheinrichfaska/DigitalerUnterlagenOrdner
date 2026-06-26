@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findNode, findParent, depthOf, isAncestorOf, afterLevels } from './tree'
+import { findNode, findParent, depthOf, isAncestorOf, afterLevels, newFolderTarget } from './tree'
 
 // root → [a, f → [b, g → [c]]]
 const root = {
@@ -37,5 +37,24 @@ describe('lib/tree', () => {
     expect(lvls).toEqual(['g', 'f', 'root'])
     // a is not a last child within a deep chain → just its own level
     expect(afterLevels(root, 'a').map((l) => l.parentId)).toEqual(['root'])
+  })
+})
+
+describe('newFolderTarget (v3.10.0 #8)', () => {
+  it('targets the ROOT with no/invalid selection', () => {
+    expect(newFolderTarget(root, null)).toEqual({ parentId: 'root', index: null })
+    expect(newFolderTarget(root, 'ghost')).toEqual({ parentId: 'root', index: null })
+  })
+  it('targets INSIDE a selected folder', () => {
+    expect(newFolderTarget(root, 'f')).toEqual({ parentId: 'f', index: null })
+    expect(newFolderTarget(root, 'g')).toEqual({ parentId: 'g', index: null })
+  })
+  it('targets a SIBLING right after a selected leaf', () => {
+    expect(newFolderTarget(root, 'a')).toEqual({ parentId: 'root', index: 1 })
+    expect(newFolderTarget(root, 'b')).toEqual({ parentId: 'f', index: 1 })
+    expect(newFolderTarget(root, 'c')).toEqual({ parentId: 'g', index: 1 })
+  })
+  it('is null-safe without a tree', () => {
+    expect(newFolderTarget(null, 'a')).toEqual({ parentId: null, index: null })
   })
 })

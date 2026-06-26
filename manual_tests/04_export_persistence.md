@@ -38,16 +38,19 @@ folders, and at least one compressed node.
 **Steps:**
 1. Press **💾 Speichern** (or **Strg+S**). On a document that has **no path yet**, this
    prompts for a location (Save-as); afterwards it saves **in place** without asking.
-2. Close the window.
-3. **📂 Öffnen** the `.belegtool` file you just saved.
+2. Click the small **caret (▾)** on the right of the Save button → a dropdown with
+   **„Speichern unter…"** appears; choose it and pick a new location.
+3. Close the window.
+4. **📂 Öffnen** the `.belegtool` file you just saved.
 
 **Expected:**
 - The tree comes back **exactly as before**: same folder structure, names, order, **node
   ids**, statuses (dots), **collapsed** folders, tags, and compression state.
 - Previews render again (a striped placeholder may flash first).
-- *Not obvious:* **Speichern** clears the **"•"** dirty marker and shows a green
-  **"✓ Gespeichert"** notice; the title bar reflects the saved state. There is one Save
-  button — it only prompts when the document has never been saved.
+- *Not obvious:* the Save control is a **split-button** — the main part saves in place
+  (and clears the **"•"** dirty marker, showing a green **"✓ Gespeichert"** notice), the
+  **caret** opens the dropdown with **„Speichern unter…"** (always prompts for a new path).
+  The dropdown closes on **Esc**, on a click outside, or after you pick the entry.
 
 ---
 

@@ -17,6 +17,7 @@ describe('Toolbar accessibility', () => {
     )
     expect(screen.getByLabelText('Rückgängig')).toBeInTheDocument()
     expect(screen.getByLabelText('Wiederholen')).toBeInTheDocument()
-    expect(screen.getByLabelText('Speichern unter…')).toBeInTheDocument()
+    // Save-as moved into the split-button's dropdown; the caret carries the label.
+    expect(screen.getByLabelText('Weitere Speicheroptionen')).toBeInTheDocument()
   })
 })

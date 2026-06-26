@@ -43,13 +43,13 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 127 UI strings (incl. the 3 Tree.jsx drag-ghost keys,
-    // the ContextMenu aria-label, and the two #7 multi-select labels "{n} markiert" /
-    // "nur auf einigen markiert") + 13 backend command-error messages + 14 host-level
-    // error/warning strings (host.py + core/api.py + lib/messages.js). If a string is
-    // added, bump this deliberately — and add it to every full-coverage language file
-    // (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(154)
+    // Canonical key count = 128 UI strings (incl. the 3 Tree.jsx drag-ghost keys,
+    // the ContextMenu aria-label, the two #7 multi-select labels, and the #3 Save
+    // split-button "Weitere Speicheroptionen") + 13 backend command-error messages + 14
+    // host-level error/warning strings (host.py + core/api.py + lib/messages.js). If a
+    // string is added, bump this deliberately — and add it to every full-coverage
+    // language file (or PENDING_TRANSLATIONS).
+    expect(Object.keys(en).length).toBe(155)
   })
 })
 
@@ -63,7 +63,7 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  const PENDING_TRANSLATIONS = new Set(['{n} markiert', 'nur auf einigen markiert'])
+  const PENDING_TRANSLATIONS = new Set(['{n} markiert', 'nur auf einigen markiert', 'Weitere Speicheroptionen'])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently
@@ -105,8 +105,8 @@ describe('translation coverage', () => {
   // Scan the components for literal t('…') / t("…") calls and require an English
   // entry for each — so a newly-added German string can't ship untranslated.
   const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
-                 'Toolbar.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx', 'HelpModal.jsx',
-                 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'lib/status.js']
+                 'Toolbar.jsx', 'SaveSplitButton.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx',
+                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'lib/status.js']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   // Resolve from THIS file's location (src/i18n/) → src/, not process.cwd(), so the

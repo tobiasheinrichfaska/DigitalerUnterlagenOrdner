@@ -14,8 +14,9 @@
 // `previewReq` switches the source: null → plain bytes (renderWindow); {dpi, method}
 // → a transient compressed variant (renderCompressedWindow). Both go through the
 // same RenderService cache. Scroll position is remembered per node.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { core } from './lib/core'
+import { pageFraction, scrollForAnchor } from './lib/zoomAnchor'
 import { useT } from './i18n/LanguageProvider'
 
 const scrollMemory = new Map() // nodeId -> scrollTop (survives remounts)
@@ -43,6 +44,12 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   const raf = useRef(0)
   const pagesRef = useRef({}) // mirror of `pages` for stale-free "already loaded?" checks
   useEffect(() => { pagesRef.current = pages }, [pages])
+
+  // #9 zoom re-anchoring: remember the logical document position at the viewport top
+  // (which page + how far down it) so a zoom change can keep it fixed instead of the
+  // raw pixel scrollTop. anchorRef is refreshed every frame we scroll / (re)lay out.
+  const anchorRef = useRef(null)
+  const firstZoom = useRef(true)
 
   // page count + dims depend only on the node (a variant has the same geometry).
   // Restore from a small geometry cache instantly, then refresh in the background —
@@ -144,6 +151,18 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     return [firstV, lastV]
   }, [count])
 
+  // Capture the current top-of-viewport anchor (cheap: reuses the O(log n) visible
+  // range + one element read). Stored for the next zoom change to re-apply (#9).
+  const captureAnchor = useCallback(() => {
+    const root = scrollRef.current
+    if (!root || count === 0) return
+    const vr = visibleRange()
+    if (!vr) return
+    const el = pageEls.current[vr[0]]
+    if (!el) return
+    anchorRef.current = { index: vr[0], fraction: pageFraction(root.scrollTop, el.offsetTop, el.offsetHeight) }
+  }, [visibleRange, count])
+
   // fetch the visible page(s) first (only what's missing), then the immediate ±1
   // neighbours so a single-page scroll lands on a ready page. The broader window
   // (and neighbouring nodes) is warmed by the middleware — see CoreApi._seed_around.
@@ -166,8 +185,8 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
       if (scrollMemory.size > 64) scrollMemory.delete(scrollMemory.keys().next().value)
     }
     if (raf.current) return
-    raf.current = requestAnimationFrame(() => { raf.current = 0; update() })
-  }, [nodeId, update])
+    raf.current = requestAnimationFrame(() => { raf.current = 0; captureAnchor(); update() })
+  }, [nodeId, update, captureAnchor])
 
   // Cancel any pending rAF on unmount to avoid calling update() on an unmounted component.
   useEffect(() => () => { if (raf.current) cancelAnimationFrame(raf.current) }, [])
@@ -180,9 +199,24 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     const root = scrollRef.current
     if (!root || count === 0) return
     root.scrollTop = scrollMemory.get(nodeId) || 0
-    const id = requestAnimationFrame(() => update())
+    const id = requestAnimationFrame(() => { captureAnchor(); update() })
     return () => cancelAnimationFrame(id)
   }, [count, node, reqKey, update]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // #9: when the zoom changes the page boxes relayout (heights scale with zoom).
+  // Re-apply the captured anchor against the NEW geometry so the document position
+  // at the viewport top stays put instead of the pixel scrollTop. Skip the first
+  // run (initial mount has no prior position to preserve — top-anchored is fine).
+  useLayoutEffect(() => {
+    if (firstZoom.current) { firstZoom.current = false; return }
+    const root = scrollRef.current
+    const a = anchorRef.current
+    if (!root || !a) return
+    const el = pageEls.current[a.index]
+    if (!el) return
+    root.scrollTop = scrollForAnchor(el.offsetTop, el.offsetHeight, a.fraction)
+    if (nodeId) scrollMemory.set(nodeId, root.scrollTop)
+  }, [zoom]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!nodeId) return null
   if (count === 0) return <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>

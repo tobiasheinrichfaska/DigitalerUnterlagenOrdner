@@ -43,12 +43,13 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 126 UI strings (incl. the 3 Tree.jsx drag-ghost keys,
-    // the ContextMenu aria-label, and the #7 "{n} markiert" multi-select label) + 13
-    // backend command-error messages + 14 host-level error/warning strings (host.py +
-    // core/api.py + lib/messages.js). If a string is added, bump this deliberately —
-    // and add it to every full-coverage language file (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(153)
+    // Canonical key count = 127 UI strings (incl. the 3 Tree.jsx drag-ghost keys,
+    // the ContextMenu aria-label, and the two #7 multi-select labels "{n} markiert" /
+    // "nur auf einigen markiert") + 13 backend command-error messages + 14 host-level
+    // error/warning strings (host.py + core/api.py + lib/messages.js). If a string is
+    // added, bump this deliberately — and add it to every full-coverage language file
+    // (or PENDING_TRANSLATIONS).
+    expect(Object.keys(en).length).toBe(154)
   })
 })
 
@@ -62,7 +63,7 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  const PENDING_TRANSLATIONS = new Set(['{n} markiert'])
+  const PENDING_TRANSLATIONS = new Set(['{n} markiert', 'nur auf einigen markiert'])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently

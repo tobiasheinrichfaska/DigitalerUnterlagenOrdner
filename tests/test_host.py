@@ -107,9 +107,20 @@ def test_entry_for_kind_selects_surface(monkeypatch):
     monkeypatch.delenv("BELEG_DEV", raising=False)
     assert host._entry_for_kind("belegtool") == host.PROD_INDEX
     assert host._entry_for_kind("pdf") == host.PROD_PDFTOOL
+    assert host._entry_for_kind("node") == host.PROD_PDFTOOL   # node binding → PDF-Tool too
     monkeypatch.setenv("BELEG_DEV", "1")
     assert host._entry_for_kind("belegtool") == host.DEV_URL
     assert host._entry_for_kind("pdf") == f"{host.DEV_URL}/pdf-tool.html"
+    assert host._entry_for_kind("node") == f"{host.DEV_URL}/pdf-tool.html"
+
+
+def test_config_exposes_startup_session_for_node():
+    api = host.HostApi(CoreApi())
+    api._startup_session = "pt-session-1"
+    api._startup_kind = "node"
+    cfg = api.config()
+    assert cfg["startup_session"] == "pt-session-1" and cfg["startup_kind"] == "node"
+    assert "startup_path" not in cfg
 
 
 def test_config_exposes_startup_kind_for_pdf():

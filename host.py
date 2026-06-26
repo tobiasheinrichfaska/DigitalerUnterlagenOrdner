@@ -96,10 +96,10 @@ def _entry():
 
 
 def _entry_for_kind(kind):
-    """Front-end surface for a launch target: 'pdf' → the PDF-Tool surface,
-    anything else → the organizer. Dev serves both HTML entries off one Vite
+    """Front-end surface for a launch target: 'pdf' (file) or 'node' → the PDF-Tool
+    surface, anything else → the organizer. Dev serves both HTML entries off one Vite
     server; prod loads the built files (see docs/pdf-tool.md)."""
-    if kind != "pdf":
+    if kind not in ("pdf", "node"):
         return _entry()
     return f"{DEV_URL}/pdf-tool.html" if os.environ.get("BELEG_DEV") else PROD_PDFTOOL
 
@@ -118,6 +118,11 @@ def _bind_close(win, api):
         except Exception:
             pass
         try:
+            if api._pdftool_session:
+                # node-bound PDF-Tool window: release the node lock + free the bound
+                # session. (Save-back-on-close prompt is a deferred GUI item — see
+                # docs/pdf-tool.md; closing currently discards unsaved pdf-tool edits.)
+                api._core.close_pdftool(api._pdftool_session)
             if api._session:
                 api._core.release(api._session)  # free the file lock for this window
                 # free the session itself (document bytes, undo log, caches, temp view)
@@ -130,14 +135,17 @@ def _bind_close(win, api):
     win.events.closing += _on_closing
 
 
-def _open_window(core, startup_path=None, startup_kind="belegtool"):
+def _open_window(core, startup_path=None, startup_kind="belegtool", startup_session=None):
     """Open a document window with its own HostApi (sharing one CoreApi — sessions
     are independent per window). Used for the first window and every 'new window'.
-    ``startup_path`` (only the first window) is opened by the surface on load.
-    ``startup_kind`` selects the surface: 'pdf' → the PDF-Tool, else the organizer."""
+    ``startup_path`` (or ``startup_session`` for a node binding) is opened by the
+    surface on load. ``startup_kind`` selects the surface: 'pdf'/'node' → the PDF-Tool,
+    else the organizer."""
     api = HostApi(core)
     api._startup_path = startup_path
     api._startup_kind = startup_kind
+    api._startup_session = startup_session
+    api._pdftool_session = startup_session if startup_kind == "node" else None
     win = webview.create_window(
         get_full_title(), _entry_for_kind(startup_kind), js_api=api,  # title bar shows "… 3.9.5"
         width=1280, height=820, min_size=(900, 600))
@@ -156,7 +164,9 @@ class HostApi:
         self._uid = uid
         self._dirty = False  # pushed from the React app for the close guard
         self._startup_path = None  # file to open on load (first window only)
-        self._startup_kind = "belegtool"  # 'belegtool' → organizer surface, 'pdf' → PDF-Tool
+        self._startup_kind = "belegtool"  # 'belegtool' → organizer, 'pdf'/'node' → PDF-Tool
+        self._startup_session = None  # a pre-bound session (node binding) the surface fetches
+        self._pdftool_session = None  # a node-bound pdf-tool session to release on close
         self._session = None  # this window's session id (for the close-time lock release)
 
     def set_dirty(self, value):
@@ -197,12 +207,32 @@ class HostApi:
         if self._startup_path:
             cfg["startup_path"] = self._startup_path  # the surface opens this on load
             cfg["startup_kind"] = self._startup_kind  # 'belegtool' | 'pdf'
+        if self._startup_session:
+            cfg["startup_session"] = self._startup_session  # node binding: fetch its bytes
+            cfg["startup_kind"] = self._startup_kind  # 'node'
         cfg["dev"] = bool(os.environ.get("BELEG_DEV"))  # gate dev-only UI (Testmodus)
         return cfg
 
     def get_pdf_bytes(self, session):
         """PDF bytes of a PDF-bound session (base64) for the PDF-Tool surface."""
         return self._core.get_pdf_bytes(session)
+
+    # PDF-Tool node binding (docs/pdf-tool.md)
+    def open_node_in_pdftool(self, session, node_id):
+        """Lock a node and open it in a new PDF-Tool window bound to it."""
+        try:
+            res = self._core.open_node_in_pdftool(session, node_id)
+            if not res.get("ok"):
+                return res
+            return _open_window(self._core, startup_kind="node", startup_session=res["session"])
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_node_back(self, pdftool_session):
+        return self._core.save_node_back(pdftool_session)
+
+    def break_node_binding(self, session, node_id):
+        return self._core.break_node_binding(session, node_id)
 
     def open(self, session=None, path=None):
         resp = self._core.open(session, path)

@@ -41,7 +41,11 @@ async function resolveDocumentArgs() {
   const api = await getBridge()
   const cfg = api ? await api.config() : null
   const src = chooseSource({ hasBridge: !!api, cfg, fileParam })
-  if (src.mode === 'bridge') {
+  if (src.mode === 'session') {
+    // node binding: the host already opened the bound session; just fetch its bytes
+    const res = await api.get_pdf_bytes(src.session)
+    if (res?.ok) return { data: base64ToUint8(res.data_b64) }
+  } else if (src.mode === 'bridge') {
     const opened = await api.open(null, src.path)
     if (opened?.ok) {
       const res = await api.get_pdf_bytes(opened.session)

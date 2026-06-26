@@ -177,4 +177,7 @@ export const ru = {
   'in {target}': 'в {target}',
   '📥 importieren': '📥 импортировать',
   '{n} Elemente': 'элементов: {n}',
+  '{n} markiert': 'Выбрано: {n}',
+  'nur auf einigen markiert': 'только у некоторых',
+  'Weitere Speicheroptionen': 'Другие параметры сохранения',
 }

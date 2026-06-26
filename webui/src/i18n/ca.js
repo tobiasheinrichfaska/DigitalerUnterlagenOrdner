@@ -177,4 +177,7 @@ export const ca = {
   'in {target}': 'a {target}',
   '📥 importieren': '📥 importar',
   '{n} Elemente': '{n} elements',
+  '{n} markiert': '{n} seleccionat(s)',
+  'nur auf einigen markiert': 'només en alguns',
+  'Weitere Speicheroptionen': 'Més opcions de desament',
 }

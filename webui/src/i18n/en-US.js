@@ -9,4 +9,7 @@ export const enUS = {
   'Zu Favoriten': 'Add to favorites',
   'Aus Favoriten entfernen': 'Remove from favorites',
   'Favorit hinzufügen': 'Add favorite',
+  '{n} markiert': '{n} selected',
+  'nur auf einigen markiert': 'on only some of the selection',
+  'Weitere Speicheroptionen': 'More save options',
 }

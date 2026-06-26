@@ -179,4 +179,7 @@ export const nds = {
   'in {target}': 'in {target}',
   '📥 importieren': '📥 importeren',
   '{n} Elemente': '{n} Elementen',
+  '{n} markiert': '{n} markeert',
+  'nur auf einigen markiert': 'bloots bi welk',
+  'Weitere Speicheroptionen': 'Mehr Spieker-Optschonen',
 }

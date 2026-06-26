@@ -9,4 +9,7 @@ export const enGB = {
   'JPEG (Farbe)': 'JPEG (colour)',
   'PNG (Graustufen)': 'PNG (greyscale)',
   'Struktur (Farbe erhalten)': 'Structural (colour preserved)',
+  '{n} markiert': '{n} selected',
+  'nur auf einigen markiert': 'on only some of the selection',
+  'Weitere Speicheroptionen': 'More save options',
 }

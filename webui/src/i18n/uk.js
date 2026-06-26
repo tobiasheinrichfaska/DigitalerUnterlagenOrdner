@@ -177,4 +177,7 @@ export const uk = {
   'in {target}': 'у {target}',
   '📥 importieren': '📥 імпортувати',
   '{n} Elemente': 'елементів: {n}',
+  '{n} markiert': 'Вибрано: {n}',
+  'nur auf einigen markiert': 'лише в деяких',
+  'Weitere Speicheroptionen': 'Інші параметри збереження',
 }

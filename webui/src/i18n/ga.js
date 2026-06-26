@@ -179,4 +179,7 @@ export const ga = {
   'in {target}': 'isteach i {target}',
   '📥 importieren': '📥 iompórtáil',
   '{n} Elemente': '{n} mír',
+  '{n} markiert': '{n} roghnaithe',
+  'nur auf einigen markiert': 'ar chuid acu amháin',
+  'Weitere Speicheroptionen': 'Tuilleadh roghanna sábhála',
 }

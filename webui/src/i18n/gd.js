@@ -179,4 +179,7 @@ export const gd = {
   'in {target}': 'a-steach do {target}',
   '📥 importieren': '📥 ion-phortaich',
   '{n} Elemente': '{n} nithean',
+  '{n} markiert': '{n} air an taghadh',
+  'nur auf einigen markiert': 'air cuid a-mhàin',
+  'Weitere Speicheroptionen': 'Barrachd roghainnean sàbhalaidh',
 }

@@ -180,4 +180,7 @@ export const yi = {
   'in {target}': 'אין {target}',
   '📥 importieren': '📥 אַרײַנברענגען',
   '{n} Elemente': '{n} עלעמענטן',
+  '{n} markiert': '{n} מאַרקירט',
+  'nur auf einigen markiert': 'נאָר אויף עטלעכע',
+  'Weitere Speicheroptionen': 'מער היט-אָפּציעס',
 }

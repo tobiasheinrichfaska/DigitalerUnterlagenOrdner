@@ -177,4 +177,7 @@ export const ko = {
   'in {target}': '{target} 안으로',
   '📥 importieren': '📥 가져오기',
   '{n} Elemente': '항목 {n}개',
+  '{n} markiert': '{n}개 선택됨',
+  'nur auf einigen markiert': '일부에만 적용됨',
+  'Weitere Speicheroptionen': '추가 저장 옵션',
 }

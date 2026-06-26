@@ -160,6 +160,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>AddFolder</code></td><td>parent_id, name, index?, new_id?</td><td>Insert a new folder under a folder parent.</td></tr>
 <tr><td><code>Rename</code></td><td>node_id, name</td><td>Set <code>name</code> (non-empty).</td></tr>
 <tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status, incl. <code>""</code> = no status). On a <b>folder</b> it cascades to every descendant document.</td></tr>
+<tr><td><code>SetStatusMany</code></td><td>node_ids, status</td><td>Set <code>status</code> on several nodes as one undo step; a folder in the selection cascades to its documents. Ids de-duped, missing ids skipped.</td></tr>
 <tr><td><code>SetNoGain</code></td><td>node_ids</td><td>Flag each existing leaf <code>compression_no_gain=True</code> (folders/missing ids skipped; idempotent). A <b>derived</b> verdict, not a human edit: the API applies it <b>silently</b> (<code>DocumentSession.apply_silent</code> → no undo/redo, no dirty, not in the log) when a compression evaluation finds nothing smaller, so the red "undecided" dot stays resolved across moves and reopen.</td></tr>
 <tr><td><code>SetCollapsed</code></td><td>node_id, collapsed</td><td>Folder only → set <code>collapsed</code> (rejects leaves).</td></tr>
 <tr><td><code>SetAllCollapsed</code></td><td>collapsed</td><td>Set <code>collapsed</code> on every folder at once (one undo step).</td></tr>
@@ -167,6 +168,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>SetTags</code></td><td>node_id, tags</td><td>Replace a node's whole <code>tags</code> set (folders &amp; leaves); normalised: trimmed, empties dropped, de-duplicated first-seen.</td></tr>
 <tr><td><code>TagMany</code></td><td>node_ids, tag, add</td><td>Add (<code>add=True</code>) or remove ONE <code>tag</code> across several nodes as one undo step, keeping each node's other tags. Ids de-duped, missing ids skipped, empty tag a no-op; adding an already-present tag (or removing an absent one) leaves that node unchanged. Powers multi-select tagging.</td></tr>
 <tr><td><code>Delete</code></td><td>node_id</td><td>Remove the node + its whole subtree (not the root).</td></tr>
+<tr><td><code>DeleteMany</code></td><td>node_ids</td><td>Remove several nodes + their subtrees as one undo step; nested members de-duplicated (a node already inside a selected ancestor is skipped).</td></tr>
 <tr><td><code>Move</code></td><td>node_id, new_parent_id, index?</td><td>Relocate a node + subtree under a folder; not into its own subtree, not the root.</td></tr>
 <tr><td><code>MoveMany</code></td><td>node_ids, new_parent_id, index?</td><td>Move several nodes (any depth) under one folder, order-preserving; nested members de-duplicated.</td></tr>
 <tr><td><code>GroupIntoFolder</code></td><td>node_ids, parent_id, name, index?</td><td>Create a folder and move all selected nodes into it (the non-concatenating counterpart to Merge).</td></tr>

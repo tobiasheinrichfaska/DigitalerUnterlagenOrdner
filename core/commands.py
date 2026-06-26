@@ -85,6 +85,20 @@ class SetTags:
 
 
 @dataclass(frozen=True)
+class TagMany:
+    """Add or remove ONE tag across several nodes at once (one undo step), keeping
+    each node's other tags. Powers multi-select tagging — SetTags replaces a whole
+    set and only ever targeted a single node."""
+    node_ids: Tuple[str, ...]
+    tag: str
+    add: bool  # True = add the tag to each node, False = remove it from each
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
 class SetNoGain:
     """Mark leaves as 'evaluated, nothing smaller found' (compression_no_gain=True).
     This is a DERIVED verdict, not a human edit: the API dispatches it SILENTLY (no
@@ -215,13 +229,13 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
-                SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
+                TagMany, SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
                 Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, SetNoGain,
+    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, TagMany, SetNoGain,
     Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
@@ -391,6 +405,28 @@ def _set_tags(doc: Document, cmd: SetTags, engine=None) -> Document:
     clean = tuple(dict.fromkeys(
         t.strip() for t in cmd.tags if isinstance(t, str) and t.strip()))
     return doc.update_node(cmd.node_id, tags=clean)
+
+
+@_handler(TagMany)
+def _tag_many(doc: Document, cmd: TagMany, engine=None) -> Document:
+    """Add or remove ONE tag across several nodes (one undo step), keeping each
+    node's other tags. Ids are de-duped; ids already gone (stale selection) are
+    skipped; an empty/whitespace tag is a no-op. Adding an already-present tag (or
+    removing an absent one) leaves that node unchanged — no duplicates, no churn."""
+    tag = (cmd.tag or "").strip()
+    if not tag:
+        return doc
+    for nid in dict.fromkeys(cmd.node_ids):
+        node = doc.find(nid)
+        if node is None:
+            continue
+        cur = tuple(node.tags or ())
+        if cmd.add:
+            if tag not in cur:
+                doc = doc.update_node(nid, tags=cur + (tag,))
+        elif tag in cur:
+            doc = doc.update_node(nid, tags=tuple(t for t in cur if t != tag))
+    return doc
 
 
 @_handler(SetNoGain)

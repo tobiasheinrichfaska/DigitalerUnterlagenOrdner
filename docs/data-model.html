@@ -164,6 +164,8 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>SetCollapsed</code></td><td>node_id, collapsed</td><td>Folder only → set <code>collapsed</code> (rejects leaves).</td></tr>
 <tr><td><code>SetAllCollapsed</code></td><td>collapsed</td><td>Set <code>collapsed</code> on every folder at once (one undo step).</td></tr>
 <tr><td><code>SetPeriod</code></td><td>node_id, vz_start, vz_end</td><td>Set the accounting period.</td></tr>
+<tr><td><code>SetTags</code></td><td>node_id, tags</td><td>Replace a node's whole <code>tags</code> set (folders &amp; leaves); normalised: trimmed, empties dropped, de-duplicated first-seen.</td></tr>
+<tr><td><code>TagMany</code></td><td>node_ids, tag, add</td><td>Add (<code>add=True</code>) or remove ONE <code>tag</code> across several nodes as one undo step, keeping each node's other tags. Ids de-duped, missing ids skipped, empty tag a no-op; adding an already-present tag (or removing an absent one) leaves that node unchanged. Powers multi-select tagging.</td></tr>
 <tr><td><code>Delete</code></td><td>node_id</td><td>Remove the node + its whole subtree (not the root).</td></tr>
 <tr><td><code>Move</code></td><td>node_id, new_parent_id, index?</td><td>Relocate a node + subtree under a folder; not into its own subtree, not the root.</td></tr>
 <tr><td><code>MoveMany</code></td><td>node_ids, new_parent_id, index?</td><td>Move several nodes (any depth) under one folder, order-preserving; nested members de-duplicated.</td></tr>

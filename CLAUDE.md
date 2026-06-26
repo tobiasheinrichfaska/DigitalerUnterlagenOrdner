@@ -614,10 +614,17 @@ as **v3.10.0**.
    **rotate/split/merge drop editor mode** — the result becomes a plain rebuilt PDF
    (`editor_based=False`), avoiding "rebuild un-rotates the page" surprises. Plain-text first;
    rich text later if wanted.
-7. **Multi-select tagging.** When **more than one node is selected**, applying/removing a tag
-   should affect **all selected nodes** (today the tag editor acts on the single context-menu
-   node). Apply over `selectedIds` (resolve folder/child overlaps like the other multi-ops) as
-   one undoable step.
+7. **Multi-select tagging. — DONE (2026-06-26).** When **more than one node is selected**, the tag
+   editor applies/removes a tag across **all** of them as one undo step via a new
+   **`TagMany(node_ids, tag, add)`** command ([`core/commands.py`](core/commands.py)) — it adds or
+   removes ONE tag per node, keeping each node's other tags (ids de-duped, missing ids skipped,
+   empty tag a no-op). Single-select still uses `SetTags` (whole-set replace) unchanged. The editor
+   ([`TagEditor.jsx`](webui/src/TagEditor.jsx)) shows the **union** of the selected nodes' tags with
+   a count badge; a tag not on every node is **partial** (`te-chip-partial`, hollow) and re-adding it
+   completes it across the selection. Pure union logic in
+   [`lib/tags.js`](webui/src/lib/tags.js) (`tagSelectionState`/`tagsOnAll`). Tests:
+   `tests/test_tag_many.py` (8), `lib/tags.test.js` (+5), `TagEditor.test.jsx` (+5). New i18n key
+   `{n} markiert` (en done; other languages via PENDING_TRANSLATIONS batch).
 8. **„Neuer Ordner" — insert at the selection + naming dialog. — DONE (v3.10.0).** The toolbar
    „Ordner" button now creates the folder **inside a selected folder / as a sibling after a
    selected leaf / at the root** (pure `newFolderTarget` in [`lib/tree.js`](webui/src/lib/tree.js),

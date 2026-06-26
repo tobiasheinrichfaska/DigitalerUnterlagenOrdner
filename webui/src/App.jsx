@@ -388,6 +388,9 @@ export default function App() {
   // DOCUMENT order (else null) — pure logic in lib/selection.js (unit-tested there)
   const mergeable = mergeableIds(state?.tree, selectedIds)
 
+  // the selected node objects (for the multi-select tag editor, #7)
+  const selectedNodes = state?.tree ? selectedIds.map((id) => findNode(state.tree, id)).filter(Boolean) : []
+
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
   // their common parent if they share one, else at the root (always safe).
   const groupable = (() => {
@@ -564,7 +567,7 @@ export default function App() {
         </div>
         <div className="splitter" onMouseDown={startResize} title={t('Breite der Baumansicht ziehen')} />
         <PreviewPane
-          previewRef={previewRef} tagsOn={tagsOn} selected={selected}
+          previewRef={previewRef} tagsOn={tagsOn} selected={selected} selectedNodes={selectedNodes}
           docTags={allTags(state?.tree)} dispatch={dispatch} session={session}
           onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150}
           onCompressionResolved={setUndecided}

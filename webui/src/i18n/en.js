@@ -111,6 +111,7 @@ export const en = {
   'Zu Favoriten': 'Add to favourites',
   'Aus Favoriten entfernen': 'Remove from favourites',
   'Favorit hinzufügen': 'Add favourite',
+  '{n} markiert': '{n} selected',
 
   // tag view bar (search / filtered view / group by tag)
   'Tags suchen…': 'Search tags…',

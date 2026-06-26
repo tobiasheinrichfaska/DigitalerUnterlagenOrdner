@@ -76,6 +76,11 @@ positioning is exercised in detail in `05_react_ui.md` MT-31.)
 **Expected:**
 - The archive's **folder structure is preserved** as nested folder nodes; files
   inside become nodes with previews.
+- *Not obvious:* a subfolder becomes a real **folder node** — a member
+  `rechnungen/2024/beleg.pdf` shows as **Ordner `rechnungen` › Ordner `2024` ›
+  `beleg.pdf`**, NOT a single document literally named `rechnungen/2024/beleg.pdf`.
+  Two files with the same name in different subfolders stay distinct (one isn't
+  dropped). Members sharing a folder are merged under one folder node.
 - *Not obvious:* a hostile archive is bounded — too many members or a combined
   unpacked size over the limit is refused (zip-bomb guard) rather than exhausting memory.
 

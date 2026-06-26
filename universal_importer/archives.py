@@ -137,6 +137,38 @@ def _member_result(content: bytes, name: str, depth: int, budget: "_Budget") -> 
         return _not_importable(name)
 
 
+def _split_member_path(name: str):
+    """Split an archive member path into (folder_parts, basename). Honors both
+    POSIX and Windows separators. ``"rechnungen/2024/beleg.pdf"`` →
+    ``(["rechnungen", "2024"], "beleg.pdf")``; a bare name → ``([], name)``."""
+    parts = [p for p in (name or "").replace("\\", "/").split("/") if p]
+    if not parts:
+        return [], (name or "")
+    return parts[:-1], parts[-1]
+
+
+def _ensure_folder(children: List[Dict[str, Any]], folder_name: str) -> Dict[str, Any]:
+    """Find an existing folder dict named ``folder_name`` in ``children`` (so siblings
+    merge under one folder), else create and append one. Returns the folder dict."""
+    for c in children:
+        if "children" in c and c.get("name") == folder_name:
+            return c
+    folder = {"name": folder_name, "children": []}
+    children.append(folder)
+    return folder
+
+
+def _insert_by_path(root_children: List[Dict[str, Any]], folder_parts: List[str],
+                    node: Dict[str, Any]) -> None:
+    """Place ``node`` under the nested folders named by ``folder_parts`` (created /
+    merged on demand), so an archive's own subfolders become real folder nodes
+    instead of a path baked into the leaf name."""
+    cur = root_children
+    for part in folder_parts:
+        cur = _ensure_folder(cur, part)["children"]
+    cur.append(node)
+
+
 def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                              _depth: int = 0, _budget: Optional["_Budget"] = None) -> List[Dict[str, Any]]:
     result = []
@@ -170,7 +202,9 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
             # file_size oben ist nur ein billiger Vorab-Check; ein Eintrag kann eine
             # kleine Größe angeben und beim Lesen trotzdem aufblähen.
             for info in members:
-                name = info.filename
+                # A member path like "ordner/datei.pdf" becomes a folder node + leaf,
+                # not a leaf literally named "ordner/datei.pdf"; siblings merge.
+                folders, base = _split_member_path(info.filename)
                 if not budget.can_take_member():
                     result.append(_not_importable("Weitere Einträge", reason="Limit überschritten"))
                     break
@@ -187,7 +221,7 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                             f"{budget.max_bytes // (1024 * 1024)} MB."
                         )
                     budget.take_bytes(len(content))
-                result.append(_member_result(content, name, _depth, budget))
+                _insert_by_path(result, folders, _member_result(content, base, _depth, budget))
     except zipfile.BadZipFile as e:
         raise ValueError("Ungültiges ZIP-Archiv") from e
 
@@ -225,7 +259,9 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                 )
 
             for member in file_members:
-                name = os.path.basename(member.name) or member.name
+                # Keep the tar's own subfolders as folder nodes (and distinct basenames
+                # across folders) instead of flattening every member to its basename.
+                folders, base = _split_member_path(member.name)
                 if not budget.can_take_member():
                     result.append(_not_importable("Weitere Einträge", reason="Limit überschritten"))
                     break
@@ -233,7 +269,7 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                 try:
                     f = tf.extractfile(member)
                     if f is None:
-                        result.append(_not_importable(name))
+                        _insert_by_path(result, folders, _not_importable(base))
                         continue
                     remaining = budget.bytes_remaining
                     content = f.read(remaining + 1)
@@ -243,11 +279,11 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                             f"{budget.max_bytes // (1024 * 1024)} MB."
                         )
                     budget.take_bytes(len(content))
-                    result.append(_member_result(content, name, _depth, budget))
+                    _insert_by_path(result, folders, _member_result(content, base, _depth, budget))
                 except _ArchiveTooLarge:
                     raise
                 except Exception:
-                    result.append(_not_importable(name))
+                    _insert_by_path(result, folders, _not_importable(base))
     except tarfile.TarError as e:
         raise ValueError("Ungültiges TAR-Archiv") from e
 

@@ -662,6 +662,13 @@ as **v3.10.0**.
     cross-kind recursion, depth bound, shared byte+member budget, corrupt-nested degrade); existing
     `test_archive_*` unchanged. (Logged from the 2026-06-16 audit, finding #6; extended to nested
     mail 2026-06-26.)
+    **Follow-up (2026-06-26): archive subfolders are now honored as folder nodes.** A zip/tar
+    member path like `rechnungen/2024/beleg.pdf` builds `Ordner rechnungen › Ordner 2024 ›
+    beleg.pdf` (helpers `_split_member_path`/`_ensure_folder`/`_insert_by_path` in `archives.py`),
+    merging siblings under shared folders — fixing the old zip **path-in-the-leaf-name** and the tar
+    **basename-flatten** (which also dropped same-named files in different folders). Composes with
+    the nesting above (a container at `sub/inner.zip` → `Ordner sub › Ordner inner.zip › …`). Tests:
+    `tests/test_archive_subfolders.py` (6).
 13. **Configurable export split (promoted 2026-06-26).** Today export is always a single PDF; the
     auto-split-with-cross-references path exists (`toc_export.export_pdf_split_with_toc`) but is
     **not wired into the UI**. Promote it to a **user-configurable** option in the export dialog

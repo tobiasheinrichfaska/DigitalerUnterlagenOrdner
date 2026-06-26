@@ -911,6 +911,21 @@ class CoreApi:
                     and not node.compression_no_gain):
                 s.apply_silent(SetNoGain((node_id,)))
 
+    def get_pdf_bytes(self, session: str) -> dict:
+        """Effective PDF bytes of a PDF-bound session (a single-leaf document, as
+        produced by opening a plain .pdf) as base64 — handed to PDF.js in the
+        PDF-Tool surface. Returns the first leaf's current (else original) bytes."""
+        import base64
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            leaves = [n for n in s.document.root.iter() if not n.is_folder]
+            data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+        if not data:
+            return {"ok": False, "error": "no pdf bytes in session"}
+        return {"ok": True, "data_b64": base64.b64encode(data).decode("ascii")}
+
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:
         """Import one file from disk into immutable Node(s) — mirrors the Tk import:

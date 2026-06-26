@@ -73,6 +73,7 @@ HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file_
 # If webui's dev script ever pins a port, update this in the same change.
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
+PROD_PDFTOOL = os.path.join(HERE, "webui", "dist", "pdf-tool.html")  # the PDF-Tool surface
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")
 
 
@@ -92,6 +93,15 @@ def _import_file_types():
 
 def _entry():
     return DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
+
+
+def _entry_for_kind(kind):
+    """Front-end surface for a launch target: 'pdf' → the PDF-Tool surface,
+    anything else → the organizer. Dev serves both HTML entries off one Vite
+    server; prod loads the built files (see docs/pdf-tool.md)."""
+    if kind != "pdf":
+        return _entry()
+    return f"{DEV_URL}/pdf-tool.html" if os.environ.get("BELEG_DEV") else PROD_PDFTOOL
 
 
 def _bind_close(win, api):
@@ -120,15 +130,16 @@ def _bind_close(win, api):
     win.events.closing += _on_closing
 
 
-def _open_window(core, startup_path=None):
+def _open_window(core, startup_path=None, startup_kind="belegtool"):
     """Open a document window with its own HostApi (sharing one CoreApi — sessions
     are independent per window). Used for the first window and every 'new window'.
-    ``startup_path`` (only the first window) is a .belegtool the React app opens on
-    load — used when the legacy GUI hands a document over via 'open in new GUI'."""
+    ``startup_path`` (only the first window) is opened by the surface on load.
+    ``startup_kind`` selects the surface: 'pdf' → the PDF-Tool, else the organizer."""
     api = HostApi(core)
     api._startup_path = startup_path
+    api._startup_kind = startup_kind
     win = webview.create_window(
-        get_full_title(), _entry(), js_api=api,   # title bar shows "… 3.9.5"
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api,  # title bar shows "… 3.9.5"
         width=1280, height=820, min_size=(900, 600))
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     _bind_close(win, api)
@@ -144,7 +155,8 @@ class HostApi:
         self._core = core
         self._uid = uid
         self._dirty = False  # pushed from the React app for the close guard
-        self._startup_path = None  # .belegtool to open on load (first window only)
+        self._startup_path = None  # file to open on load (first window only)
+        self._startup_kind = "belegtool"  # 'belegtool' → organizer surface, 'pdf' → PDF-Tool
         self._session = None  # this window's session id (for the close-time lock release)
 
     def set_dirty(self, value):
@@ -183,9 +195,14 @@ class HostApi:
     def config(self):
         cfg = dict(self._core.config())
         if self._startup_path:
-            cfg["startup_path"] = self._startup_path  # React opens this on load
+            cfg["startup_path"] = self._startup_path  # the surface opens this on load
+            cfg["startup_kind"] = self._startup_kind  # 'belegtool' | 'pdf'
         cfg["dev"] = bool(os.environ.get("BELEG_DEV"))  # gate dev-only UI (Testmodus)
         return cfg
+
+    def get_pdf_bytes(self, session):
+        """PDF bytes of a PDF-bound session (base64) for the PDF-Tool surface."""
+        return self._core.get_pdf_bytes(session)
 
     def open(self, session=None, path=None):
         resp = self._core.open(session, path)
@@ -378,7 +395,7 @@ def _warn_clr_load_failed(exc):
         print(msg)
 
 
-def main(startup_path=None):
+def main(startup_target=None):
     # Fail loudly, not blank: without the WebView2 Runtime the window renders empty.
     # (BELEG_SKIP_WEBVIEW2_CHECK=1 bypasses, in case detection ever false-negatives.)
     skip = os.environ.get("BELEG_SKIP_WEBVIEW2_CHECK", "").lower() not in ("", "0", "false", "no")
@@ -386,7 +403,10 @@ def main(startup_path=None):
         _warn_missing_webview2()
         return
     core = CoreApi()  # shared across all windows; sessions are per window
-    _open_window(core, startup_path)
+    if startup_target:
+        _open_window(core, startup_target["path"], startup_target["kind"])
+    else:
+        _open_window(core)
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     # Pin a safe http port so the file server never lands on a Chromium-blocked one.
@@ -403,18 +423,24 @@ def main(startup_path=None):
         raise
 
 
-def _startup_path_from_argv(argv):
-    """A .belegtool handed on the command line (file association / 'open with' /
-    BelegTool.exe <file>). Honor only an existing .belegtool — open() loads via
-    load_belegtool; other types belong on the import path, not startup. Returns
-    None when there's nothing valid to open."""
+def _startup_target_from_argv(argv):
+    """A document handed on the command line (file association / 'open with' /
+    BelegTool.exe <file>): a .belegtool opens the organizer; a .pdf opens the
+    PDF-Tool bound to that file (see docs/pdf-tool.md). Returns
+    ``{'path': str, 'kind': 'belegtool'|'pdf'}`` or None when there is nothing
+    valid to open."""
     if len(argv) < 2:
         return None
     path = argv[1]
-    if path.lower().endswith(".belegtool") and os.path.isfile(path):
-        return path
+    if not os.path.isfile(path):
+        return None
+    low = path.lower()
+    if low.endswith(".belegtool"):
+        return {"path": path, "kind": "belegtool"}
+    if low.endswith(".pdf"):
+        return {"path": path, "kind": "pdf"}
     return None
 
 
 if __name__ == "__main__":
-    main(_startup_path_from_argv(sys.argv))
+    main(_startup_target_from_argv(sys.argv))

@@ -179,4 +179,7 @@ export const vie = {
   'in {target}': 'in {target}',
   '📥 importieren': '📥 importiern',
   '{n} Elemente': '{n} Sochn',
+  '{n} markiert': '{n} markiert',
+  'nur auf einigen markiert': 'nur bei a poar',
+  'Weitere Speicheroptionen': 'Mehr Speicheroptionen',
 }

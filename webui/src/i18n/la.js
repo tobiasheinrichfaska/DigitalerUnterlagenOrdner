@@ -178,4 +178,7 @@ export const la = {
   'in {target}': 'in {target}',
   '📥 importieren': '📥 importare',
   '{n} Elemente': '{n} elementa',
+  '{n} markiert': '{n} notata',
+  'nur auf einigen markiert': 'in nonnullis tantum',
+  'Weitere Speicheroptionen': 'Plures optiones servandi',
 }

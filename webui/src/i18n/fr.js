@@ -177,4 +177,7 @@ export const fr = {
   'in {target}': 'dans {target}',
   '📥 importieren': '📥 importer',
   '{n} Elemente': '{n} éléments',
+  '{n} markiert': '{n} sélectionné(s)',
+  'nur auf einigen markiert': 'uniquement sur certains',
+  'Weitere Speicheroptionen': 'Autres options d’enregistrement',
 }

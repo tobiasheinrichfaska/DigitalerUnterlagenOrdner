@@ -63,7 +63,7 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  const PENDING_TRANSLATIONS = new Set(['{n} markiert', 'nur auf einigen markiert', 'Weitere Speicheroptionen'])
+  const PENDING_TRANSLATIONS = new Set([])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently

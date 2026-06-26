@@ -177,4 +177,7 @@ export const es = {
   'in {target}': 'en {target}',
   '📥 importieren': '📥 importar',
   '{n} Elemente': '{n} elementos',
+  '{n} markiert': '{n} seleccionado(s)',
+  'nur auf einigen markiert': 'solo en algunos',
+  'Weitere Speicheroptionen': 'Más opciones de guardado',
 }

@@ -179,4 +179,7 @@ export const cy = {
   'in {target}': 'i {target}',
   '📥 importieren': '📥 mewnforio',
   '{n} Elemente': '{n} eitem',
+  '{n} markiert': '{n} wedi’u dewis',
+  'nur auf einigen markiert': 'ar rai yn unig',
+  'Weitere Speicheroptionen': 'Rhagor o opsiynau cadw',
 }

@@ -177,4 +177,7 @@ export const hr = {
   'in {target}': 'u {target}',
   '📥 importieren': '📥 uvezi',
   '{n} Elemente': 'stavki: {n}',
+  '{n} markiert': 'Označeno: {n}',
+  'nur auf einigen markiert': 'samo na nekima',
+  'Weitere Speicheroptionen': 'Više opcija spremanja',
 }

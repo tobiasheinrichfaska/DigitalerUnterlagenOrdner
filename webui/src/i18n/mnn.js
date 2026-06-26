@@ -179,4 +179,7 @@ export const mnn = {
   'in {target}': 'in {target}',
   '📥 importieren': '📥 bringa in',
   '{n} Elemente': '{n} thingies',
+  '{n} markiert': '{n} pika!',
+  'nur auf einigen markiert': 'solo on poco',
+  'Weitere Speicheroptionen': 'Más savaa-opciones',
 }

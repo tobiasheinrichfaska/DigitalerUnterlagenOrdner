@@ -516,8 +516,12 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
 - **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
   off by default; no autosave/recover of unsaved changes, no read-only fallback when in use.
-- **Nested archives are not recursed** — a `.zip`/`.tar` inside an archive/e-mail becomes
-  „nicht importierbar" (anti-amplification choice; recursion is planned — see Open items #12).
+- **Nested containers are recursed, but bounded** *(since 2026-06-26, Open items #12)* — a
+  `.zip`/`.tar`/`.tgz`/`.eml`/`.msg` inside another container is extracted into a sub-folder.
+  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 3`** (a deeper container shows
+  „… zu tief verschachtelt"); the bomb budget is **shared across levels**, so when it is exhausted
+  mid-way a still-unread inner container degrades to „nicht importierbar" and **its already-decoded
+  children are not kept** (the whole inner container is dropped, never the import).
 - **No direct Outlook drag-and-drop** — Outlook hands items over as OLE virtual files; import a
   `.msg`/`.eml` instead. No automatic DATEV check-in on document close (manual re-import in DATEV).
 - **Multicore rasterization is GIL-limited (~1.2× on 4 threads)** — thread parallelism buys
@@ -638,17 +642,19 @@ as **v3.10.0**.
     wording (kills the reverse-template matching). If not done, **new error paths from #1/#5/#6
     must follow the established convention**: raise the static German text as an `en.js` key (+
     full-coverage langs, bump the key-lock), and add a `messages.js` template for any dynamic parts.
-12. **Nested archive *and mail* extraction.** A `.zip`/`.tar` **or a `.msg`/`.eml`** nested
-    *inside* another archive or e-mail is currently **not** recursed — `UniversalImporter.convert`
-    has no archive/mail branch, so an inner archive **or an attached/forwarded e-mail** degrades to
-    „nicht importierbar". Today this is a deliberate anti-amplification choice (the per-archive bomb
-    caps don't compound). Add **depth-bounded** recursion covering **both** kinds: route inner
-    archive members back through `archives.extract_*` **and inner e-mails back through the mail
-    extractor** (a forwarded mail's own attachments, a `.msg` in a `.zip`, etc.), with a small
-    max-depth (e.g. 3) and a **running, cross-level** decoded-byte/entry budget (not just
-    per-archive/per-mail) so nesting can't multiply past `infra.limits.BOMB_CAP_BYTES`. Preserve the
-    tree structure (archive → mail → attachment). (Logged from the 2026-06-16 audit, finding #6;
-    extended to nested mail 2026-06-26.)
+12. **Nested archive *and mail* extraction. — DONE (2026-06-26).** A `.zip`/`.tar`/`.tgz` **or a
+    `.msg`/`.eml`** nested *inside* another container is now **recursed** into a FOLDER of its
+    extracted members instead of degrading to „nicht importierbar". `archives._member_result` /
+    `_extract_nested` route an inner container back through the matching `extract_*` (cross-kind:
+    a `.msg` in a `.zip`, a `.zip` attached to an `.eml`, …), preserving the tree
+    (archive → mail → attachment). Recursion is bounded by **`_ARCHIVE_MAX_DEPTH = 3`** (anti
+    zip-quine → „zu tief verschachtelt"), and the bomb caps are now a **shared `_Budget`** (decoded
+    bytes + member count) threaded through every level, so nesting can't compound past
+    `infra.limits.BOMB_CAP_BYTES`/`BOMB_CAP_ENTRIES`. A corrupt/oversized inner container degrades to
+    „nicht importierbar" without aborting the import. Tests: `tests/test_archive_nested.py` (9 cases:
+    cross-kind recursion, depth bound, shared byte+member budget, corrupt-nested degrade); existing
+    `test_archive_*` unchanged. (Logged from the 2026-06-16 audit, finding #6; extended to nested
+    mail 2026-06-26.)
 13. **Configurable export split (promoted 2026-06-26).** Today export is always a single PDF; the
     auto-split-with-cross-references path exists (`toc_export.export_pdf_split_with_toc`) but is
     **not wired into the UI**. Promote it to a **user-configurable** option in the export dialog

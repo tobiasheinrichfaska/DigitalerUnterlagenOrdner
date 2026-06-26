@@ -111,6 +111,64 @@ def test_zip_in_tar_is_recursed():
     assert any(c.get("name") == "x.pdf" for c in _walk(folder["children"]))
 
 
+# --------------------------------------------------------- tar in zip (mixed)
+def test_tar_in_zip_is_recursed():
+    pdf = create_valid_pdf(pages=1)
+    inner = _tar_bytes({"t.pdf": pdf})
+    outer = _zip_bytes({"inner.tar": inner})
+
+    struct = archives.extract_zip_to_structure(outer)
+    folder = next(n for n in struct if n["name"] == "inner.tar")
+    assert "children" in folder
+    assert any(c.get("name") == "t.pdf" for c in _walk(folder["children"]))
+
+
+# ------------------------------------------------ forwarded mail (.eml in .eml)
+def test_forwarded_eml_attachment_is_recursed():
+    from email.message import EmailMessage
+    pdf = create_valid_pdf(pages=1)
+    inner = _eml_bytes(subject="Inner", attachments=[("rg.pdf", pdf, ("application", "pdf"))])
+    outer = EmailMessage()
+    outer["Subject"] = "Outer"
+    outer["From"] = "a@b.test"
+    outer.set_content("siehe Weiterleitung")
+    # attach the inner mail as a .eml file → recursion must open it and reach its pdf
+    outer.add_attachment(inner, maintype="application", subtype="octet-stream",
+                         filename="weiterleitung.eml")
+
+    struct = archives.extract_email_to_structure(outer.as_bytes())
+    folder = next((n for n in _walk(struct) if n.get("name") == "weiterleitung.eml"), None)
+    assert folder is not None and "children" in folder
+    assert any(c.get("name") == "rg.pdf" for c in _walk(folder["children"]))
+
+
+# ----------------------------------------------- cross kind: zip inside a .msg
+def test_zip_attachment_in_msg_is_recursed(monkeypatch):
+    pdf = create_valid_pdf(pages=1)
+    inner = _zip_bytes({"m.pdf": pdf})
+
+    class _Att:
+        longFilename = "anhang.zip"
+        shortFilename = None
+        data = inner
+
+    class _Msg:
+        subject = "Mit Zip"
+        date = "2024-01-01"
+        htmlBody = None
+        body = "Text"
+        rtfBody = None
+        attachments = [_Att()]
+
+    # bytes must NOT contain Content-Type:/From: so routing picks the .msg branch
+    monkeypatch.setattr(archives.extract_msg, "Message", lambda *a, **k: _Msg())
+    struct = archives.extract_email_to_structure(b"\xd0\xcf\x11\xe0not-an-eml")
+
+    folder = next((n for n in _walk(struct) if n.get("name") == "anhang.zip"), None)
+    assert folder is not None and "children" in folder
+    assert any(c.get("name") == "m.pdf" for c in _walk(folder["children"]))
+
+
 # ------------------------------------------------------------- depth bounding
 def test_recursion_is_depth_bounded():
     pdf = create_valid_pdf(pages=1)

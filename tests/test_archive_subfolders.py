@@ -92,6 +92,21 @@ def test_zip_nested_container_under_a_subfolder():
     assert _byname(nested["children"], "doc.pdf") is not None
 
 
+# --------------------------------------------- pathological deep path (guard)
+def test_pathological_deep_path_is_depth_capped():
+    pdf = create_valid_pdf(pages=1)
+    deep = "/".join(["a"] * 50) + "/x.pdf"   # 50 nested folders + a pdf
+    struct = archives.extract_zip_to_structure(_zip_bytes({deep: pdf}))
+    depth = 0
+    cur = struct
+    while cur and "children" in cur[0]:
+        depth += 1
+        cur = cur[0]["children"]
+    assert depth <= archives._MAX_PATH_DEPTH            # bounded, not 50
+    leaf = cur[0]
+    assert "content" in leaf and leaf["content"].getvalue().startswith(b"%PDF")  # pdf survives
+
+
 # ------------------------------------------------------------------- tar
 def test_tar_subfolders_nest_and_keep_distinct_basenames():
     pdf = create_valid_pdf(pages=1)

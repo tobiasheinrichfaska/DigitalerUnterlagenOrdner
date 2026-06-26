@@ -118,15 +118,80 @@ BelegTool's compression, so the rules are:
    the **image streams** (downsample / re-JPEG) and keep the invisible text objects (cf.
    `ocrmypdf --optimize`, pikepdf/mutool). It only re-encodes the image, so the text stays
    aligned.
-3. **Warn/block, don't predict.** The deterministic guard: if a chosen compression method
-   would **drop an existing OCR text layer**, **warn or block** and steer to the preserving
-   method. We do **not** build a "would it still OCR correctly?" quality gate (re-OCR +
-   confidence compare) — over-engineering, since a preserved layer never needs re-OCR. Surface
-   **"OCR-Textebene erhalten ✓/✗"** in the existing human "Lesbarkeit geprüft" step instead.
+3. **Layer-preservation guard (deterministic).** If a chosen compression method would
+   **drop an existing OCR text layer**, **warn or block** and steer to the preserving method.
+   Surface **"OCR-Textebene erhalten ✓/✗"** at the "Lesbarkeit geprüft" step.
+4. **Re-OCR as a readability *aid* (not a verdict).** Separately from preservation, re-OCR
+   the **compressed candidate** and **compare to the baseline OCR text** (we already have the
+   baseline from the uncompressed source): high agreement ⇒ a signal the compressed image is
+   **probably still human-legible**; a sharp drop ⇒ flag "Komprimierung könnte die Lesbarkeit
+   beeinträchtigen." This **assists** the human "Lesbarkeit geprüft" decision — it does not
+   replace it. *(This is the intended purpose of re-OCR — a legibility proxy — superseding the
+   earlier note that dismissed it.)* Caveats: OCR-legibility correlates with but ≠ human
+   legibility (OCR can miss stylized/handwritten text a human reads, or read text too small to
+   read comfortably). **Cost:** run it only on the **candidate being committed**, not across
+   the whole multi-method/DPI sweep.
 
 Net: **OCR first → text-preserving compression on OCR'd docs → warn/block layer-dropping
-methods.** Needs a structural image-recompress method added to / selected in
-`compress_pdf_bytes` for OCR'd nodes (step 4/5).
+methods → show a baseline-vs-recompressed OCR agreement score as a Lesbarkeit aid.** Needs a
+structural image-recompress method in `compress_pdf_bytes` for OCR'd nodes (step 4/5).
+
+### OCR engine — pluggable port (decided 2026-06-26)
+
+OCR must be a **pluggable engine port** (like `core/engine.Engine`), selected by config — so
+upgrading the recognizer later is a config swap, not a rewrite. Implementations:
+
+- **Tesseract / `ocrmypdf` (default, now)** — local, offline, deterministic, free. Produces
+  the searchable-PDF text layer. Good enough for clean printed scans.
+- **Own local AI (later)** — a local vision/transformer OCR (e.g. TrOCR or a local VLM) for
+  the hard cases Tesseract struggles with (handwriting, dense layout, poor scans). Runs
+  **on-device** (cf. the RTX-4090 in `BelegKI-FuE`) → privacy-safe, no cloud. Potential
+  cross-project synergy with the local-AI infrastructure there (kept independent for now).
+- **Any configured AI (optional, gated)** — a configurable backend (cloud vision/LLM OCR, or
+  a self-hosted model endpoint). **External AI sends document images off the machine**, so it
+  is **opt-in, DSGVO-disclosed, and must pass the workspace anonymization/consent gate** used
+  by the other tax projects (cf. OPOS's anon gate, BelegKI's local-only data path). For
+  Belege/§203 material, **prefer local**; treat cloud OCR as an explicit, per-use choice.
+
+**Decision:** ship behind the port with Tesseract; design the interface
+(`OcrEngine.ocr(bytes, lang, opts) -> searchable_pdf`) so local-AI and configured-AI engines
+drop in. The **re-OCR readability aid** uses whatever engine is selected.
+
+### Image enhancement — PARKED for the future (2026-06-26)
+
+A local **image-enhancement** step (super-resolution / deblur) before OCR is **deferred**. OCR
+is *not* enhancement: classic OCR only pre-processes throwaway; neural/VLM OCR is internally
+robust but returns text, not a cleaner image. Enhancement is a **separate, opt-in** model — and
+risky, because it can **hallucinate** (turn a smudged „3" into a confident „8"), which is
+unacceptable for evidentiary Belege.
+
+**When revisited, the safeguard is an OCR-divergence check:** OCR the **original** (baseline) →
+enhance → **re-OCR the enhanced** image → **diff** the two text results. If they differ, the
+enhancement may have altered content → **show the differences to a human** to accept/reject.
+Always keep the **original bytes**; the enhanced image is a derived reading aid, never the
+source of truth. *(Shared idea — also parked as candidate **C-OCR-ENH** in the BelegKI-FuE
+project, framed as a measurable C-OCR extension.)*
+
+**Privacy constraint — why local is the answer.** OCR must *see* the pixels to recognize
+text, so you **cannot anonymize-before-OCR** (recognizing is the point) — the OPOS pattern of
+sending only de-identified numbers does **not** transfer here. "Turn the page into numbers"
+(pixels / embeddings / split-inference features) does **not** hide it — those are
+reconstructable (model inversion). True "compute-but-don't-see" needs encryption: homomorphic
+encryption / MPC are **impractical** for deep OCR today; only a **TEE / confidential-compute**
+service (attested secure hardware) is deployable, and that is bespoke + trust-in-hardware. So
+for Belege/§203 the robust route is **local OCR** (bring the model to the data): Tesseract now,
+a **local VLM/TrOCR on-device** later. External OCR stays opt-in behind the anonymization/
+consent gate, accepting that the provider (or its hardware) sees the content.
+
+*Word-shredding considered (and rejected for sensitive data):* segment words locally, shuffle,
+and send isolated word-images (random ids) to a cloud OCR. It hides **layout/order/structure**,
+but the **sensitive data in a Beleg is the individual tokens** (name, IBAN, tax-ID, amount) —
+which are exactly what gets sent — and a bag of rare co-occurring tokens is **re-identifiable
+by aggregation**. So it is **obfuscation, not anonymization**: the cloud still *processes*
+personal data (AVV/legal basis still required). Acceptable only for **non-sensitive docs** or as
+**defence-in-depth** atop a TEE/contracted processor. A **hybrid** (sensitive-looking tokens →
+local OCR, rest → cloud) needs to know which tokens are sensitive *before* OCR — chicken-and-egg,
+so you'd finish locally anyway.
 
 ### Interaction with the existing source/compression model (open item)
 

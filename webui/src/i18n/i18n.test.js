@@ -57,14 +57,28 @@ describe('full-coverage languages', () => {
   const PARTIAL = ['tlh', 'qya', 'sjn']
   const FULL = Object.keys(TRANSLATIONS).filter((c) => !PARTIAL.includes(c))
 
-  it.each(FULL)('"%s" has exactly the same key set as the en base', (code) => {
+  // Batch-translate policy (CLAUDE.md i18n): a NEW UI string ships in de + en only;
+  // the other full-coverage languages are translated later in one batch. A key listed
+  // here MUST exist in en.js (still enforced below) but is exempt from the
+  // full-coverage assertion until translated. It falls back to German meanwhile.
+  // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
+  const PENDING_TRANSLATIONS = new Set([])
+
+  it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently
     // missing from one map would otherwise just fall back to German unnoticed.
     const keys = new Set(Object.keys(TRANSLATIONS[code]))
-    const missing = Object.keys(en).filter((k) => !keys.has(k))
+    const missing = Object.keys(en).filter((k) => !keys.has(k) && !PENDING_TRANSLATIONS.has(k))
     const extra = [...keys].filter((k) => !(k in en))
     expect(missing, `missing in ${code}`).toEqual([])
     expect(extra, `extra in ${code} (not in en)`).toEqual([])
+  })
+
+  it('every PENDING_TRANSLATIONS key still exists in the en base', () => {
+    // A pending key may skip the other languages, but must never be untranslated in en
+    // (that would ship a raw German t() string in English) — guards misuse of the set.
+    const notInEn = [...PENDING_TRANSLATIONS].filter((k) => !(k in en))
+    expect(notInEn, 'pending keys must be present in en.js').toEqual([])
   })
 })
 

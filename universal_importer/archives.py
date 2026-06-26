@@ -137,13 +137,24 @@ def _member_result(content: bytes, name: str, depth: int, budget: "_Budget") -> 
         return _not_importable(name)
 
 
+# Guard the folder depth built from a single member path. A crafted member name
+# (zip names allow up to 64 KB) like "a/a/.../x.pdf" would otherwise spawn thousands
+# of nested folder nodes from ONE member — amplification the byte/member bomb caps
+# don't catch — and could blow the recursion limit in from_recursive_array. Beyond
+# the cap the overflow collapses back into the leaf name (no data lost, depth bounded).
+_MAX_PATH_DEPTH = 24
+
+
 def _split_member_path(name: str):
     """Split an archive member path into (folder_parts, basename). Honors both
     POSIX and Windows separators. ``"rechnungen/2024/beleg.pdf"`` →
-    ``(["rechnungen", "2024"], "beleg.pdf")``; a bare name → ``([], name)``."""
+    ``(["rechnungen", "2024"], "beleg.pdf")``; a bare name → ``([], name)``.
+    Folder depth is capped at ``_MAX_PATH_DEPTH`` (overflow folded into the name)."""
     parts = [p for p in (name or "").replace("\\", "/").split("/") if p]
     if not parts:
         return [], (name or "")
+    if len(parts) > _MAX_PATH_DEPTH:
+        return parts[:_MAX_PATH_DEPTH - 1], "/".join(parts[_MAX_PATH_DEPTH - 1:])
     return parts[:-1], parts[-1]
 
 

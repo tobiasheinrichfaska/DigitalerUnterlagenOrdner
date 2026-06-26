@@ -619,13 +619,14 @@ as **v3.10.0**.
    selected leaf / at the root** (pure `newFolderTarget` in [`lib/tree.js`](webui/src/lib/tree.js),
    unit-tested) and opens a **naming dialog** (default „Neuer Ordner" pre-filled) first. Wiring
    covered by `App.addfolder.test.jsx`.
-9. **Zoom should keep the document position, not the viewframe position.** *(Finding from a
-   check — current behaviour:)* the preview lays pages out at `width = 560 * zoom`
-   ([`Preview.jsx`](webui/src/Preview.jsx)), so page heights scale with zoom, but **`scrollTop`
-   is not re-anchored** (no effect depends on `zoom`). Result: the pixel scroll position stays
-   fixed → the **document position drifts** when zooming while scrolled down (top-anchored zoom
-   is fine). Fix: before changing zoom, capture the anchor (visible page index + intra-page
-   fraction at the viewport top, or `scrollTop/scrollHeight`) and reapply it after the relayout.
+9. **Zoom should keep the document position, not the viewframe position. — DONE (v3.10.0).**
+   [`Preview.jsx`](webui/src/Preview.jsx) lays pages out at `width = 560 * zoom`, so page heights
+   scale with zoom. It now captures a **logical anchor** (visible page index + intra-page fraction
+   at the viewport top) every scroll/relayout frame and re-applies it in a `useLayoutEffect([zoom])`
+   after the relayout, so the document position at the viewport top stays put. Anchor math is the
+   pure [`lib/zoomAnchor.js`](webui/src/lib/zoomAnchor.js) (`pageFraction` / `scrollForAnchor`),
+   unit-tested in `lib/zoomAnchor.test.js`; the visual behaviour is covered by `manual_tests`
+   MT-10 (jsdom has no layout, so the integration is verified by hand).
 10. **Reusable accessible menu (keyboard nav).** *(Deferred audit item, folded here.)* Build one
     accessible-menu pattern — `role="menu"`/`menuitem`, roving focus, ↑/↓ to move, Enter/Space to
     activate, Esc to close, focus-first-on-open — and have **`ContextMenu.jsx` AND the planned #3

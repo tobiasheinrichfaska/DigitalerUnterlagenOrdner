@@ -510,7 +510,8 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   COM-based Office import. The PDF core is cross-platform but no port is maintained
   (community RFC: [`docs/cross-platform-port.md`](docs/cross-platform-port.md)).
 - **Export > 100 pages stays a single PDF.** The auto-split-with-cross-references path exists
-  (`toc_export.export_pdf_split_with_toc`) but is **not wired into the UI export**.
+  (`toc_export.export_pdf_split_with_toc`) but is **not wired into the UI export**. **Promoted to a
+  configurable feature — see Open items #13** (page threshold + break level in the export dialog).
 - **Compression is irreversible after save.** A committed node ("Lesbarkeit geprüft") drops its
   source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
 - **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
@@ -634,13 +635,30 @@ as **v3.10.0**.
     wording (kills the reverse-template matching). If not done, **new error paths from #1/#5/#6
     must follow the established convention**: raise the static German text as an `en.js` key (+
     full-coverage langs, bump the key-lock), and add a `messages.js` template for any dynamic parts.
-12. **Nested archive extraction.** A `.zip`/`.tar` *inside* another archive (or e-mail) is
-    currently **not** recursed — `UniversalImporter.convert` has no archive branch, so an inner
-    archive degrades to „nicht importierbar". Today this is a deliberate anti-amplification choice
-    (the per-archive bomb caps don't compound). Add **depth-bounded** recursion: route inner
-    archive members back through `archives.extract_*` with a small max-depth (e.g. 3) and a
-    **running, cross-level** decoded-byte/entry budget (not just per-archive) so nesting can't
-    multiply past `infra.limits.BOMB_CAP_BYTES`. (Logged from the 2026-06-16 audit, finding #6.)
+12. **Nested archive *and mail* extraction.** A `.zip`/`.tar` **or a `.msg`/`.eml`** nested
+    *inside* another archive or e-mail is currently **not** recursed — `UniversalImporter.convert`
+    has no archive/mail branch, so an inner archive **or an attached/forwarded e-mail** degrades to
+    „nicht importierbar". Today this is a deliberate anti-amplification choice (the per-archive bomb
+    caps don't compound). Add **depth-bounded** recursion covering **both** kinds: route inner
+    archive members back through `archives.extract_*` **and inner e-mails back through the mail
+    extractor** (a forwarded mail's own attachments, a `.msg` in a `.zip`, etc.), with a small
+    max-depth (e.g. 3) and a **running, cross-level** decoded-byte/entry budget (not just
+    per-archive/per-mail) so nesting can't multiply past `infra.limits.BOMB_CAP_BYTES`. Preserve the
+    tree structure (archive → mail → attachment). (Logged from the 2026-06-16 audit, finding #6;
+    extended to nested mail 2026-06-26.)
+13. **Configurable export split (promoted 2026-06-26).** Today export is always a single PDF; the
+    auto-split-with-cross-references path exists (`toc_export.export_pdf_split_with_toc`) but is
+    **not wired into the UI**. Promote it to a **user-configurable** option in the export dialog
+    ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)):
+    - **Threshold — pages per split** (e.g. „aufteilen ab N Seiten" / „max. N Seiten pro Datei"),
+      default the current 100; off = single PDF.
+    - **Break level / boundary** — *at what tree level the split is allowed to break*: split only at
+      top-level folders, at any folder boundary, or strictly by page count (mid-document). I.e. keep
+      a folder's documents together until the threshold forces a cut, vs. a hard page-count cut.
+    Flow mirrors the existing options: `ExportDialog → export_dialog → CoreApi.export(options) →
+    toc_export`. Wire `export_pdf_split_with_toc`, carry the page-numbering/cross-reference offsets
+    across parts, and name parts predictably (`<name> (1von3).pdf`). Update the beta-tester
+    „known gaps" checkbox + BETA_TESTING once shipped (it currently lists this as a non-bug gap).
 
 ### Build hygiene — embed the version resource in BelegTool.exe (noted 2026-06-25)
 
@@ -780,6 +798,17 @@ key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
 renders `LANGUAGE_NAMES`.
+
+- **Batch-translate policy (2026-06-26):** to keep UI feature work from being blocked on ~18
+  language files per string, **new UI strings ship in de (source) + en only**; the other
+  full-coverage languages are translated **later, in one batch**. The mechanism is a
+  **`PENDING_TRANSLATIONS`** set in [`i18n.test.js`](webui/src/i18n/i18n.test.js): a key listed
+  there must exist in `en.js` (still enforced — never ship an untranslated `t()`), but is
+  **exempt from the full-coverage assertion** until translated. Workflow: (1) add the German
+  `t()` literal, (2) add the `en.js` entry **and bump the en key-count**, (3) add the key to
+  `PENDING_TRANSLATIONS`. The batch pass translates them into every language and **empties the
+  pending set**. Until a key falls back to German in the untranslated languages, which is
+  acceptable in the interim.
 
 - **Localized errors (2026-06-08):** core `CommandError` messages are raised in **German**
   (the source language) and surfaced via `t(error)` in [`App.jsx`](webui/src/App.jsx), so they

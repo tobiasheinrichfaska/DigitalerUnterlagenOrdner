@@ -32,6 +32,14 @@ describe('chooseSource', () => {
     expect(chooseSource({ hasBridge: true, cfg: { startup_kind: 'pdf' }, fileParam: null }))
       .toEqual({ mode: 'url', url: '/spike-form.pdf' })
   })
+
+  it('uses the pre-bound session for a node binding', () => {
+    expect(chooseSource({
+      hasBridge: true,
+      cfg: { startup_kind: 'node', startup_session: 'sess-123' },
+      fileParam: null,
+    })).toEqual({ mode: 'session', session: 'sess-123' })
+  })
 })
 
 describe('base64ToUint8', () => {

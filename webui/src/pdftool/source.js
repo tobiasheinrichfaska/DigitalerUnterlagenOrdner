@@ -4,8 +4,15 @@
 // Decide where the PDF bytes come from. In the host with a bound .pdf, fetch the
 // bytes over the bridge; otherwise (dev / browser / e2e, or no bound pdf) load a URL.
 export function chooseSource({ hasBridge, cfg, fileParam }) {
-  if (hasBridge && cfg && cfg.startup_kind === 'pdf' && cfg.startup_path) {
-    return { mode: 'bridge', path: cfg.startup_path }
+  if (hasBridge && cfg) {
+    // a node opens a PRE-BOUND pdf-tool session (no file path) — fetch its bytes directly
+    if (cfg.startup_kind === 'node' && cfg.startup_session) {
+      return { mode: 'session', session: cfg.startup_session }
+    }
+    // a .pdf opens bound to the file — open it, then fetch its bytes
+    if (cfg.startup_kind === 'pdf' && cfg.startup_path) {
+      return { mode: 'bridge', path: cfg.startup_path }
+    }
   }
   return { mode: 'url', url: fileParam || '/spike-form.pdf' }
 }

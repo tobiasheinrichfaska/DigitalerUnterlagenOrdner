@@ -9,7 +9,7 @@ import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
-import { findNode, findParent, isAncestorOf, afterLevels } from './lib/tree'
+import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
@@ -408,6 +408,17 @@ export default function App() {
     dispatch({ type: 'GroupIntoFolder', node_ids: ids, parent_id: parentId, name, new_id: null, index: null })
   }
 
+  // New folder at the selection (planned #8): inside a selected folder, as a sibling
+  // after a selected leaf, else at the root — with a naming dialog (default pre-filled).
+  const addFolderAtSelection = () => {
+    if (viewActive || !state?.tree) return
+    const target = newFolderTarget(state.tree, selected?.id)
+    const raw = window.prompt(t('Name des neuen Ordners'), t('Neuer Ordner'))
+    const name = raw != null ? raw.trim() : null
+    if (!name) return
+    dispatch({ type: 'AddFolder', parent_id: target.parentId, name, index: target.index, new_id: null })
+  }
+
   const openFile = () => {
     if (dirty && !window.confirm(t('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?'))) return
     run(core.openFile(session)).then((resp) => {
@@ -502,7 +513,7 @@ export default function App() {
           onSave={saveFile}
           onSaveAs={saveFileAs}
           onExport={() => exportPdf(selectedIds.length ? selectedIds : null)}
-          onAddFolder={() => dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })}
+          onAddFolder={addFolderAtSelection}
           onUndo={undo} onRedo={redo} onToggleTags={toggleTags}
           onHelp={() => setHelpOpen(true)}
           lang={lang} setLang={setLang}

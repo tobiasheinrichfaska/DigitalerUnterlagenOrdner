@@ -40,6 +40,20 @@ export function isAncestorOf(root, ancestorId, descId) {
   return false
 }
 
+/** Where a new folder should be inserted relative to the current selection
+ *  (planned item #8): INSIDE a selected folder, as a SIBLING right after a selected
+ *  leaf, else at the ROOT (no/invalid selection). Returns { parentId, index } for an
+ *  AddFolder command (index null = append). Pure. */
+export function newFolderTarget(root, selectedId) {
+  if (!root) return { parentId: null, index: null }
+  const sel = selectedId ? findNode(root, selectedId) : null
+  if (!sel) return { parentId: root.id, index: null }
+  if (sel.is_folder) return { parentId: sel.id, index: null }
+  const parent = findParent(root, sel.id) || root
+  const idx = (parent.children ?? []).findIndex((c) => c.id === sel.id)
+  return { parentId: parent.id, index: idx >= 0 ? idx + 1 : null }
+}
+
 /** Drop levels for the gap AFTER `id`: deepest first (insert right after the row,
  *  at its own level), then — only while the row is the *last child* of its parent —
  *  each shallower ancestor level, up to the root. Each entry = { parentId, index,

@@ -193,6 +193,20 @@ describe('PreviewControls — no_compression / no_source locks', () => {
   })
 })
 
+describe('PreviewControls — rotate button order (v3.10.0 #4)', () => {
+  it('renders left-then-right (↺ before ↻)', () => {
+    window.pywebview = {
+      api: new Proxy({}, { get(_, prop) { if (prop === 'then') return undefined; return () => Promise.resolve({ ok: true, options: [] }) } }),
+    }
+    const node = makeNode({ pdf_length: 10 }) // large → no auto-compute noise
+    setup(node)
+    const left = screen.getByTitle('links drehen')
+    const right = screen.getByTitle('rechts drehen')
+    // left must appear BEFORE right in document order
+    expect(left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
 describe('PreviewControls — loadOptions .catch guard', () => {
   it('clears loading state when compress_options rejects', async () => {
     window.pywebview = {

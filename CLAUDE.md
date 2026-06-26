@@ -565,8 +565,8 @@ as **v3.10.0**.
 3. **„Speichern" as a split-button.** A normal click saves in place; a small dropdown caret on
    the same button opens a menu with **„Speichern unter…"**. **Decided:** build the split-button
    and evaluate it in use.
-4. **Rotate controls — swap display order.** In [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
-   reorder the two rotate buttons to **left-then-right** (currently right before left).
+4. **Rotate controls — swap display order. — DONE (v3.10.0).** [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
+   now renders the rotate buttons **left-then-right** (↺ before ↻); locked by `PreviewControls.test.jsx`.
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
    into **another** → **copy** by default (source keeps its node). Distinct from the Outlook
    drag-in (still won't-do; OLE virtual files).
@@ -614,9 +614,11 @@ as **v3.10.0**.
    should affect **all selected nodes** (today the tag editor acts on the single context-menu
    node). Apply over `selectedIds` (resolve folder/child overlaps like the other multi-ops) as
    one undoable step.
-8. **„Neuer Ordner" — insert at the selection + naming dialog.** New folder should be created
-   **at the selected node's position / parent**, not always at the root; and it should open a
-   **naming dialog** first (default name pre-filled) instead of creating an unnamed folder.
+8. **„Neuer Ordner" — insert at the selection + naming dialog. — DONE (v3.10.0).** The toolbar
+   „Ordner" button now creates the folder **inside a selected folder / as a sibling after a
+   selected leaf / at the root** (pure `newFolderTarget` in [`lib/tree.js`](webui/src/lib/tree.js),
+   unit-tested) and opens a **naming dialog** (default „Neuer Ordner" pre-filled) first. Wiring
+   covered by `App.addfolder.test.jsx`.
 9. **Zoom should keep the document position, not the viewframe position.** *(Finding from a
    check — current behaviour:)* the preview lays pages out at `width = 560 * zoom`
    ([`Preview.jsx`](webui/src/Preview.jsx)), so page heights scale with zoom, but **`scrollTop`

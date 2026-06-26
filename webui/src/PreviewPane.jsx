@@ -8,13 +8,13 @@ import { TagEditor } from './TagEditor'
 import { useT } from './i18n/LanguageProvider'
 
 export function PreviewPane({
-  previewRef, tagsOn, selected, docTags, dispatch, session, onPreview, defaultDpi,
+  previewRef, tagsOn, selected, selectedNodes, docTags, dispatch, session, onPreview, defaultDpi,
   onCompressionResolved, windowed, pages, pageInfo, zoom, setZoom, previewReq, onPageInfo, busy,
 }) {
   const { t } = useT()
   return (
     <div className="pane preview-pane" ref={previewRef}>
-      {tagsOn && selected && <TagEditor node={selected} docTags={docTags} dispatch={dispatch} />}
+      {tagsOn && selected && <TagEditor node={selected} nodes={selectedNodes} docTags={docTags} dispatch={dispatch} />}
       {selected && <PreviewControls key={selected.id} node={selected} session={session} dispatch={dispatch} onPreview={onPreview} defaultDpi={defaultDpi} onResolved={onCompressionResolved} />}
       {selected && (windowed || pages?.length > 0) && (
         <div className="zoom-bar">

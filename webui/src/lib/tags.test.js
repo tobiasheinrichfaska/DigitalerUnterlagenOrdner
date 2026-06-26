@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { allTags, effectiveTagsOf, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './tags'
+import { allTags, effectiveTagsOf, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds, tagSelectionState, tagsOnAll } from './tags'
 
 // root → [a(Steuer,2023), f[Steuer] → [b(Spende), c()]]
 const tree = {
@@ -107,5 +107,41 @@ describe('realSelectionIds', () => {
   it('handles null / empty', () => {
     expect(realSelectionIds(null)).toEqual([])
     expect(realSelectionIds([])).toEqual([])
+  })
+})
+
+describe('tagSelectionState / tagsOnAll (multi-select tagging, #7)', () => {
+  const A = { id: 'A', tags: ['Steuer', '2024'] }
+  const B = { id: 'B', tags: ['Steuer'] }
+  const C = { id: 'C', tags: [] }
+
+  it('unions tags in first-seen order and flags onAll', () => {
+    expect(tagSelectionState([A, B])).toEqual([
+      { tag: 'Steuer', onAll: true },   // on both
+      { tag: '2024', onAll: false },    // only on A → partial
+    ])
+  })
+  it('a tag missing from one node is partial', () => {
+    expect(tagSelectionState([A, B, C])).toEqual([
+      { tag: 'Steuer', onAll: false },  // C lacks it
+      { tag: '2024', onAll: false },
+    ])
+  })
+  it('single node: every own tag is onAll', () => {
+    expect(tagSelectionState([A])).toEqual([
+      { tag: 'Steuer', onAll: true },
+      { tag: '2024', onAll: true },
+    ])
+  })
+  it('null / empty / untagged selections are safe', () => {
+    expect(tagSelectionState(null)).toEqual([])
+    expect(tagSelectionState([])).toEqual([])
+    expect(tagSelectionState([C])).toEqual([])
+    expect(tagSelectionState([null, A])).toEqual([{ tag: 'Steuer', onAll: true }, { tag: '2024', onAll: true }])
+  })
+  it('tagsOnAll returns only the tags shared by every node', () => {
+    expect(tagsOnAll([A, B])).toEqual(['Steuer'])
+    expect(tagsOnAll([A, B, C])).toEqual([])
+    expect(tagsOnAll([A])).toEqual(['Steuer', '2024'])
   })
 })

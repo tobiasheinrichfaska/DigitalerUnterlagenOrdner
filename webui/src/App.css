@@ -344,6 +344,14 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   padding: 0 3px; font-size: 0.95em; line-height: 1;
 }
 .te-chip .te-x { font-size: 1.1em; }
+/* multi-select tagging (#7): a count badge + a "partial" chip (tag on only SOME
+   of the selected nodes) rendered hollow so it reads differently from a full tag. */
+.te-multi { opacity: 0.7; font-size: 0.8em; font-style: italic; margin-right: 2px; }
+.te-chip.te-chip-partial {
+  background: transparent; color: var(--accent, #2b6cb0);
+  border: 1px dashed var(--accent, #2b6cb0);
+}
+.te-chip.te-chip-partial .te-star, .te-chip.te-chip-partial .te-x { color: var(--accent, #2b6cb0); }
 .te-input { min-width: 90px; flex: 0 1 140px; padding: 2px 6px; }
 .te-favs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .te-fav {

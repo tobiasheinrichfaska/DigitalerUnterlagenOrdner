@@ -10,7 +10,9 @@ Keep in sync with `CLAUDE.md` and the `manual_tests/` files.
 - **PDF / .belegtool**: a PDF becomes a leaf under the drop target / selected folder;
   a `.belegtool` restores its full tree. **Images / Office / Archives / Email** convert
   as before (image→PDF, COM→PDF, archive→nested folders with a zip-bomb guard,
-  email→body+attachments subtree).
+  email→body+attachments subtree). A container **nested inside another** (a zip in a zip,
+  a `.msg`/`.eml` in a zip, a zip attached to a mail) is **recursed** into a sub-folder,
+  depth-bounded (`_ARCHIVE_MAX_DEPTH`) with a **shared** bomb budget across levels (#12).
 - Acceptance: new nodes appear; the document is **dirty** (Save offered); the render
   cache **starts warming on its own** (no node click needed).
 

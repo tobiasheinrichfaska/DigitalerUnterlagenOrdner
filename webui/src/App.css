@@ -94,6 +94,25 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
 
+/* Save split-button (#3): main part + caret look like one button; the caret
+   opens a small dropdown menu (Speichern unter…). */
+.save-split { position: relative; display: inline-flex; }
+.save-split .save-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.save-split .save-caret {
+  border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none;
+  padding-left: 7px; padding-right: 7px;
+}
+.save-menu {
+  position: absolute; top: 100%; left: 0; margin-top: 3px; z-index: 50;
+  background: #fff; border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); padding: 4px; min-width: max-content;
+}
+.save-menu-item {
+  display: block; width: 100%; text-align: left; white-space: nowrap;
+  background: none; border: none; border-radius: 4px; padding: 6px 12px;
+}
+.save-menu-item:hover, .save-menu-item:focus { background: #eef4fb; border-color: transparent; outline: none; }
+
 ul.tree { user-select: none; } /* so Shift-click range-select doesn't highlight text */
 /* No list indentation: rows span the full width (so dragging left to pop out a
    level stays over the row), and each row indents its own content via padding-left. */

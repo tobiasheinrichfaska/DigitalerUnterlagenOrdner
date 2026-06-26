@@ -25,6 +25,7 @@ export const en = {
   'Importieren': 'Import',
   'Speichern': 'Save',
   'Speichern unter…': 'Save as…',
+  'Weitere Speicheroptionen': 'More save options',
   'Export PDF': 'Export PDF',
   // save dialog (compression alternatives)
   'Komprimierungs-Alternativen speichern?': 'Save compression alternatives?',

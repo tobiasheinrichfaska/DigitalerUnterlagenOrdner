@@ -566,9 +566,14 @@ as **v3.10.0**.
 2. **Toolbar redesign — smaller icon buttons.** Shrink the toolbar to compact, recognisable
    icons for Open / Import / Help / Save (+ Export, New window, Undo/Redo). Tooltips carry the
    text labels; keep an `aria-label` per button.
-3. **„Speichern" as a split-button.** A normal click saves in place; a small dropdown caret on
-   the same button opens a menu with **„Speichern unter…"**. **Decided:** build the split-button
-   and evaluate it in use.
+3. **„Speichern" as a split-button. — DONE (2026-06-26).** The toolbar's two Save buttons are now
+   one split-button ([`SaveSplitButton.jsx`](webui/src/SaveSplitButton.jsx)): the main part saves in
+   place (shows the dirty „•"), a caret opens a small dropdown with **„Speichern unter…"**.
+   Accessible: `aria-haspopup`/`aria-expanded`, `role="menu"`/`menuitem`, closes on Escape and
+   outside-click, focus moves to the item on open. Covered by `SaveSplitButton.test.jsx` (8).
+   New i18n key `Weitere Speicheroptionen` (en done; others via PENDING_TRANSLATIONS batch).
+   **Note:** this is a focused dropdown; generalizing it into the **shared reusable menu of #10**
+   (and migrating `ContextMenu.jsx` onto it) is still open.
 4. **Rotate controls — swap display order. — DONE (v3.10.0).** [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
    now renders the rotate buttons **left-then-right** (↺ before ↻); locked by `PreviewControls.test.jsx`.
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window

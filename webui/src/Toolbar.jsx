@@ -3,6 +3,7 @@
 // tags on, busy) and the current language.
 import { useT } from './i18n/LanguageProvider'
 import { LANGUAGE_NAMES } from './i18n/index'
+import { SaveSplitButton } from './SaveSplitButton'
 
 export function Toolbar({
   onOpen, onNewWindow, onImport, onSave, onSaveAs, onExport, onAddFolder,
@@ -16,8 +17,7 @@ export function Toolbar({
       <button onClick={onOpen}>📂 {t('Öffnen')}</button>
       <button onClick={onNewWindow} title={t('Weiteres Dokument in neuem Fenster')}>🗗 {t('Neues Fenster')}</button>
       <button onClick={onImport} disabled={editLocked} title={lockTitle}>📥 {t('Importieren')}</button>
-      <button onClick={onSave}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
-      <button onClick={onSaveAs} title={t('Speichern unter…')} aria-label={t('Speichern unter…')}>💾…</button>
+      <SaveSplitButton onSave={onSave} onSaveAs={onSaveAs} dirty={dirty} />
       <button onClick={onExport} title={t('Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)')}>
         ⬇ {t('Export PDF')}{selectedCount ? ` (${t('Auswahl')} ${selectedCount})` : ''}
       </button>

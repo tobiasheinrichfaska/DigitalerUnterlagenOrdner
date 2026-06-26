@@ -55,7 +55,8 @@ export function TagEditor({ node, nodes = null, docTags = [], dispatch }) {
       <span className="te-label">🏷️</span>
       {multi && <span className="te-multi">{t('{n} markiert', { n: selected.length })}</span>}
       {chips.map(({ tag, onAll }) => (
-        <span key={tag} className={onAll ? 'te-chip' : 'te-chip te-chip-partial'}>
+        <span key={tag} className={onAll ? 'te-chip' : 'te-chip te-chip-partial'}
+          title={onAll ? undefined : t('nur auf einigen markiert')}>
           {tag}
           <button className="te-star" title={favs.includes(tag) ? t('Aus Favoriten entfernen') : t('Zu Favoriten')}
             onClick={() => toggleFav(tag)}>{favs.includes(tag) ? '★' : '☆'}</button>

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BelegTool — PDF-Tool (spike)</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      /* PDF.js PDFViewer requires an absolutely-positioned, scrollable container. */
+      #viewerContainer { position: absolute; inset: 0; overflow: auto; background: #525659; }
+    </style>
+  </head>
+  <body>
+    <div id="viewerContainer"><div id="viewer" class="pdfViewer"></div></div>
+    <script type="module" src="/src/pdftool/main.js"></script>
+  </body>
+</html>

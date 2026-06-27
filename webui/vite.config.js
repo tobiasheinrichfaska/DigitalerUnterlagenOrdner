@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,6 +7,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  build: {
+    // Two front-end surfaces share one app (see docs/pdf-viewer-surface.md):
+    // index.html = organizer, pdf-tool.html = PDF-Tool (PDF.js).
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        pdftool: fileURLToPath(new URL('./pdf-tool.html', import.meta.url)),
+      },
+    },
+  },
   test: {
     // core.js touches window + the pywebviewready event; jsdom provides them.
     environment: 'jsdom',

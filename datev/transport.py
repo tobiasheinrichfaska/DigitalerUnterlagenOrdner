@@ -1,7 +1,9 @@
-"""HTTP transports for the probe:
-  • make_urllib_transport  — stdlib urllib + Basic (the client adds the Basic header);
+"""HTTP transports for the DATEVconnect client:
   • make_curl_sso_transport — Windows SSO (Negotiate) as the current user via curl.exe,
-    matching how the other DATEV programs authenticate (no username/password needed).
+    matching how the other DATEV programs authenticate (no username/password needed). This is
+    the transport the **in-app** DatevService builds (datev/inapp.py connect()).
+  • make_urllib_transport  — stdlib urllib + Basic (the client adds the Basic header); used by
+    the standalone probe.
 Both tolerate DATEVconnect's self-signed localhost cert when asked. HTTP is injected, so
 the client stays testable; the curl ARG construction is a pure, tested helper."""
 import os

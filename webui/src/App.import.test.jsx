@@ -59,7 +59,7 @@ afterEach(() => { delete window.pywebview; vi.restoreAllMocks() })
 describe('App import — toolbar button', () => {
   it('imports into the root when nothing/leaf is selected, and shows the new nodes', async () => {
     const calls = await renderApp()
-    fireEvent.click(screen.getByText(/Importieren/))
+    fireEvent.click(screen.getByRole('button', { name: /Importieren/ }))
     await waitFor(() => expect(callsOf(calls, 'import_dialog').length).toBe(1))
     expect(callsOf(calls, 'import_dialog')[0].args[1]).toBeNull()  // target = null (root)
     expect(await screen.findByText(/eins\.pdf/)).toBeInTheDocument()
@@ -69,7 +69,7 @@ describe('App import — toolbar button', () => {
   it('imports into the selected folder', async () => {
     const calls = await renderApp()
     fireEvent.click(screen.getByText(/Gruppe/))   // select the folder
-    fireEvent.click(screen.getByText(/Importieren/))
+    fireEvent.click(screen.getByRole('button', { name: /Importieren/ }))
     await waitFor(() => expect(callsOf(calls, 'import_dialog').length).toBe(1))
     expect(callsOf(calls, 'import_dialog')[0].args[1]).toBe('F')
   })
@@ -81,7 +81,7 @@ describe('App import — partial import warning', () => {
       import_dialog: () => ({ ok: true, session: 's', tree: TREE_AFTER, can_undo: true, can_redo: false,
         warning: 'geheim.pdf: Datei ist passwortgeschützt' }),
     })
-    fireEvent.click(screen.getByText(/Importieren/))
+    fireEvent.click(screen.getByRole('button', { name: /Importieren/ }))
     await waitFor(() => expect(callsOf(calls, 'import_dialog').length).toBe(1))
     // default language is German (the source), so the composite renders as-is;
     // the English mapping of these templates is locked in lib/messages.test.js
@@ -103,7 +103,7 @@ describe('App — always-mounted aria-live regions', () => {
     expect(errRegion).toHaveTextContent('')        // empty (visually collapsed via :empty CSS)
     expect(noticeRegion).toHaveTextContent('')
 
-    fireEvent.click(screen.getByText(/Importieren/))
+    fireEvent.click(screen.getByRole('button', { name: /Importieren/ }))
     await waitFor(() => expect(errRegion).toHaveTextContent('nichts importiert'))
     // the SAME node received the text (it was never unmounted/remounted)
     expect(container.querySelector('p.error[aria-live="polite"]')).toBe(errRegion)
@@ -115,7 +115,7 @@ describe('App — bridge REJECTION surfaces as a visible error', () => {
     // regression: run() had no .catch → an api-level throw was an unhandled
     // rejection; the spinner cleared and the user saw nothing.
     await renderApp({ import_dialog: () => { throw new Error('Bridge weg') } })
-    fireEvent.click(screen.getByText(/Importieren/))
+    fireEvent.click(screen.getByRole('button', { name: /Importieren/ }))
     const err = await screen.findByText(/Bridge weg/)
     expect(err.closest('p.error')).toHaveAttribute('aria-live', 'polite')
   })

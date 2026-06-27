@@ -18,7 +18,7 @@ from .client import DatevConnectClient
 from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
 from .synthetic_pdf import make_test_pdf
 from .transport import make_curl_sso_transport, make_urllib_transport
-from .types import DatevConfig, program_keeps_revisions
+from .types import DatevConfig, DatevError, program_keeps_revisions
 
 DEFAULT_BASE = "https://localhost:58452/datev/api/dms/v2"
 TEST_DESC = "ZZZ TEST – DATEV-Probe – bitte löschen"
@@ -148,6 +148,16 @@ class ProbeApp:
         ttk.Entry(w, textvariable=self.file_id, width=14).grid(row=4, column=1, sticky="w", **pad)
         ttk.Button(w, text="Datei prüfen (Bytes)", command=self.check_file_id).grid(
             row=4, column=2, **pad)
+        # state + user are MANDATORY for create (spec "Required Elements"); copy valid ids from
+        # an existing document of this Mandant so they are guaranteed valid on this install.
+        ttk.Label(w, text="State-ID").grid(row=5, column=0, sticky="e")
+        self.state_id = tk.StringVar()
+        ttk.Entry(w, textvariable=self.state_id, width=8).grid(row=5, column=1, sticky="w", **pad)
+        ttk.Label(w, text="User-GUID").grid(row=5, column=2, sticky="e")
+        self.user_id = tk.StringVar()
+        ttk.Entry(w, textvariable=self.user_id, width=40).grid(row=5, column=3, columnspan=2, sticky="we", **pad)
+        ttk.Button(w, text="Vorlage holen (State+User aus 1. Dok)",
+                   command=self.fill_state_user).grid(row=5, column=5, columnspan=2, sticky="w", **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -226,10 +236,15 @@ class ProbeApp:
                 res = fn()
                 state["done"] = True
                 self.root.after(0, lambda: self._ok(label, res, on_ok))
-            except Exception as e:  # surface every DATEV error in the log + status
+            except Exception as e:  # surface every DATEV error in the UI log + file + status
                 state["done"] = True
-                self._logf(f"!!! worker exception in {label!r}:\n{traceback.format_exc()}")
-                self.root.after(0, lambda: self._err(label, e))
+                tb = traceback.format_exc().rstrip()
+
+                def report(exc=e, tb=tb):
+                    self._err(label, exc)
+                    self._log_line(tb)   # full traceback in the UI too (and file)
+
+                self.root.after(0, report)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -360,22 +375,57 @@ class ProbeApp:
                 raise ValueError(f"{name} muss eine Zahl sein.")
             return int(v)
 
+        state = self.state_id.get().strip()
+        user = self.user_id.get().strip()
+        if not state or not user:
+            raise ValueError("State-ID und User-GUID sind Pflicht — „Vorlage holen“ klicken.")
+        now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         payload = {
             "class": {"id": _int(self.class_id, "Klasse-ID")},
             "correspondence_partner_guid": self.client_guid,
             "description": TEST_DESC,
             "domain": {"id": _int(self.domain_id, "Domain-ID")},
-            # type 1 = file; counter/parent_counter give it an explicit position in the
-            # structure tree (a document left without a valid structure is auto-deleted by
-            # DATEV within ~24 h, so we always supply one).
+            "state": {"id": state},      # mandatory (spec Required Elements)
+            "user": {"id": user},        # mandatory
+            # type 1 = file; counter/parent_counter position it in the tree; creation/
+            # modification dates are mandatory structure fields.
             "structure_items": [{"name": "datev-probe-test.pdf", "type": 1,
-                                 "counter": 1, "parent_counter": 0}],
+                                 "counter": 1, "parent_counter": 0,
+                                 "creation_date": now, "last_modification_date": now}],
         }
         if self.folder_id.get().strip():
             payload["folder"] = {"id": _int(self.folder_id, "Ordner-ID")}
         if self.register_id.get().strip():
             payload["register"] = {"id": _int(self.register_id, "Register-ID")}
         return payload
+
+    def fill_state_user(self):
+        """Copy a valid state.id + user.id from an existing document of this Mandant — both are
+        mandatory for create and must be ids that exist on this install."""
+        if not self._need_client():
+            return
+        flt = self.filter.get().strip()
+        if not flt and self.client_guid:
+            flt = f"correspondence_partner_guid eq '{self.client_guid}'"
+
+        def work():
+            docs = self.client.list_documents(flt or None, 1)
+            lst = docs if isinstance(docs, list) else (docs or {}).get("documents", [])
+            if not lst:
+                raise DatevError("Kein Dokument gefunden, um State/User zu übernehmen "
+                                 "(erst Mandant auflösen oder einen Filter setzen).")
+            return self.client.get_document(lst[0].get("id"))
+
+        def on_ok(full):
+            st = (full.get("state") or {}).get("id")
+            us = (full.get("user") or {}).get("id")
+            if st:
+                self.state_id.set(str(st))
+            if us:
+                self.user_id.set(str(us))
+            self._log_line(f"Vorlage übernommen: state.id={st}  ·  user.id={us}")
+
+        self._run("State/User-Vorlage holen", work, on_ok)
 
     def create_test_document(self):
         if not self._need_client():

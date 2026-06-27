@@ -1256,6 +1256,20 @@ class CoreApi:
             pass
         return baseline
 
+    @staticmethod
+    def _datev_resolve_guid(svc, client_guid, mandant_number):
+        """Resolve the target client GUID: an explicit ``client_guid`` wins, else resolve the
+        Mandant number via the service. Returns ``(guid_or_None, error_dict_or_None)`` — the
+        caller applies its own fallback (datev_export defaults to the connected source's Mandant)."""
+        if client_guid:
+            return client_guid, None
+        if mandant_number is not None:
+            try:
+                return svc.resolve_client(mandant_number).get("guid"), None
+            except Exception as e:
+                return None, {"ok": False, "error": str(e)}
+        return None, None
+
     def datev_file(self, session: str, client_guid: str = None, mandant_number=None,
                    description: str = None, domain_id: int = 1, folder_id=None,
                    register_id=None) -> dict:
@@ -1264,12 +1278,9 @@ class CoreApi:
         svc = self._datev_get_service()
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
-        guid = client_guid
-        if not guid and mandant_number is not None:
-            try:
-                guid = svc.resolve_client(mandant_number).get("guid")
-            except Exception as e:
-                return {"ok": False, "error": str(e)}
+        guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
+        if err:
+            return err
         if not guid:
             return {"ok": False, "error": "Kein Mandant angegeben."}
         data = self._datev_effective_bytes(session)
@@ -1283,6 +1294,16 @@ class CoreApi:
             self._datev_set_provenance(session, res["provenance"])
             with self._lock:
                 self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
+            # Persist the new DATEV link locally NOW. The provenance was applied silently (no
+            # dirty flag) and the document is no longer at a checkout path, so the link is NOT
+            # re-derivable — without this, closing the window would lose it and a re-file would
+            # create a duplicate DATEV document. Mirror datev_save_back's parallel local save.
+            local_path = self.document_path(session)
+            if local_path:
+                save_res = self.save(session, local_path)
+                res["local_saved"] = save_res.get("path") if save_res.get("ok") else None
+                if not save_res.get("ok"):
+                    res["local_error"] = save_res.get("error")
         return res
 
     def datev_export(self, session: str, node_ids=None, options=None, client_guid: str = None,
@@ -1293,12 +1314,9 @@ class CoreApi:
         svc = self._datev_get_service()
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
-        guid = client_guid
-        if not guid and mandant_number is not None:
-            try:
-                guid = svc.resolve_client(mandant_number).get("guid")
-            except Exception as e:
-                return {"ok": False, "error": str(e)}
+        guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
+        if err:
+            return err
         if not guid:
             # default to the connected source's Mandant ("same client")
             prov = self._datev_provenance(session) or {}

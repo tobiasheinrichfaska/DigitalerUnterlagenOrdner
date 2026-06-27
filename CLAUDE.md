@@ -409,8 +409,20 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   `test_datev_writeback.py`). Frontend: `webui/src/DatevBar.test.jsx`, `lib/datev.test.js`, the
   export-option cases in `ExportDialog.test.jsx`. Live end-to-end is the
   [`manual_tests/10_datev.md`](manual_tests/10_datev.md) checklist (needs a DATEVconnect box).
-- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **research tooling**, not
-  shipped in the BelegTool release.
+- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **maintained research
+  tooling**, not shipped in the BelegTool release. It is the live-DATEVconnect investigation
+  vehicle and is used for manual housekeeping (e.g. `delete_document` of test docs). It is the
+  **sole** caller of the `datev/client.py` read surface (`list_domains`/`list_documents`/
+  `get_document_raw`/`list_document_states`/`delete_document`), the `provenance.py` scorers
+  (`provenance_stats`/`match_entries`), and the file-config/urllib-transport path
+  (`config.load_config`/`resolve_auth_mode`, `transport.make_urllib_transport`). **These are NOT
+  dead code** — they are the probe's API; an audit that treats "probe = unshipped" will keep
+  flagging them. Keep them while the probe is maintained; only remove them if the probe is retired.
+- `DatevService.status()` returns `feature` + `keeps_revisions` (DokAb keeps no revision). The
+  in-app flow targets **DokAb only**, so the hard-coded "no revision — overwrite" warning in
+  `HostApi.save_to_datev`'s confirm dialog is always correct; `keeps_revisions` is a deliberate
+  backend status field (a future DMS/DokAbRev-aware conditional warning would consume it), not an
+  unused value to strip.
 
 ### Persistence / save policy (v3.6.0)
 The file stores **only `current_pdf_data` per node** — never a separate original.

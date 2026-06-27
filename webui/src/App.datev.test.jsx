@@ -131,6 +131,34 @@ describe('App — DATEV mode', () => {
     await screen.findByText(/In DATEV abgelegt/)
   })
 
+  it('a failed datev_file surfaces the error', async () => {
+    await renderApp({
+      open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
+      datev_file: () => ({ ok: false, error: 'Mandant 999 unbekannt' }),
+    })
+    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    expect(await screen.findByText(/Mandant 999 unbekannt/)).toBeInTheDocument()
+  })
+
+  it('datev_file OK but local save failed surfaces BOTH facts', async () => {
+    await renderApp({
+      open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
+      datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 },
+                           local_error: 'Speichern fehlgeschlagen' }),
+    })
+    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    expect(await screen.findByText(/abgelegt, aber lokal nicht gespeichert.*Speichern fehlgeschlagen/))
+      .toBeInTheDocument()
+  })
+
+  it('the checked-out-at-open hint renders from the open response', async () => {
+    await renderApp({
+      open: () => ({ ok: true, session: 's', tree: CONNECTED_TREE, can_undo: false, can_redo: false,
+                     datev: { connected: true, source_name: 'Rechnung.pdf', checked_out_at_open: true } }),
+    })
+    expect(await screen.findByText(/in DATEV ausgecheckt/)).toBeInTheDocument()
+  })
+
   it('export → DATEV files via datev_export and surfaces a partial-failure message', async () => {
     const calls = await renderApp({
       datev_export: () => ({ ok: false, parts: 2, filed_ok: 1,

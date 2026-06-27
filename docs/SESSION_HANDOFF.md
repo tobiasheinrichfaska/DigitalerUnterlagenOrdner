@@ -1,5 +1,12 @@
 # Session handoff — v3.10.0 (quick-wins shipped + in-app DATEV gate)
 
+> **STATUS: SHIPPED in v3.10.0.** This is the historical pre-build handoff — the in-app DATEV
+> integration described below was built, audited, and tested. It is kept for context, not as
+> outstanding work. The **authoritative** design is
+> [`datev-integration-design.md`](datev-integration-design.md); the shipped write-back guard
+> surface is `is_connected` / `valid_provenance` / `decide_save_back` (the earlier
+> `can_write_back` / `can_file_to_datev` predicates were folded away and no longer exist).
+
 **Repo:** `c:\skripte\public\DigitalerUnterlagenOrdner` · **Branch:** `feat/v3.10-quickwins`
 **Version:** bumped to **3.10.0** (was 3.9.5) · **Remote:**
 github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner

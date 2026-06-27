@@ -467,7 +467,10 @@ export default function App() {
       setDirty(false); setNotice(t('Nach DATEV zurückgeschrieben'))
       if (res.provenance) patchProvenance(res.provenance)
     } else if (res && res.verdict !== 'declined') {
+      // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
+      // OFFER the filesystem save fallback the design promises, so the edit isn't lost.
       setError(res.verdict ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
+      saveFile()
     }
   })
   const fileToDatev = () => {

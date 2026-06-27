@@ -6,12 +6,37 @@ See docs/datev-integration-design.md. DokAb keeps no revision, so the overwrite 
 this guard is what makes "update back to DATEV" safe on productive data.
 """
 
+import re
+
+_GUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
 def is_connected(provenance):
     """A working document is DATEV-connected iff it carries complete provenance
     (``doc_guid`` + ``file_id``). Established on open from a checkout path; **Save As clears the
     provenance** → not connected (and thus not write-back-able)."""
     return bool(provenance and provenance.get("doc_guid")
                 and provenance.get("file_id") is not None)
+
+
+def valid_provenance(provenance):
+    """Stronger than ``is_connected``: the provenance is **structurally trustworthy** for a
+    write-back. A ``.belegtool`` is untrusted input and can carry a crafted ``datev`` dict, so
+    before any server call require a real GUID ``doc_guid``, an integer ``file_id``, and (if
+    present) an integer ``structure_item_id``. A bool is rejected (``bool`` is an ``int``
+    subclass)."""
+    if not is_connected(provenance):
+        return False
+    if not _GUID_RE.match(str(provenance.get("doc_guid") or "")):
+        return False
+    fid = provenance.get("file_id")
+    if isinstance(fid, bool) or not isinstance(fid, int):
+        return False
+    sid = provenance.get("structure_item_id")
+    if sid is not None and (isinstance(sid, bool) or not isinstance(sid, int)):
+        return False
+    return True
 
 
 def can_write_back(provenance):

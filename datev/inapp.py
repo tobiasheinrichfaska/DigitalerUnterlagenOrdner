@@ -126,7 +126,11 @@ class DatevService:
             from .transport import make_curl_sso_transport
             from .client import DatevConnectClient
             from .types import DatevConfig
-            base = (settings or {}).get("dms_base_url") or dms_base_url({})
+            # Normalize the settings override through dms_base_url() too, so a host-only
+            # override (no /datev/api/dms/v2 path) gets the DMS path pinned — same as the
+            # file-based config path. No override ⇒ the loopback default.
+            override = (settings or {}).get("dms_base_url")
+            base = dms_base_url({"base_url": override}) if override else dms_base_url({})
             allow_self_signed = self_signed_allowed({}, base)
             cfg = DatevConfig(base_url=base, allow_self_signed=allow_self_signed)
             client = DatevConnectClient(cfg, make_curl_sso_transport(allow_self_signed))
@@ -223,9 +227,17 @@ class DatevService:
                     f.write(remote_bytes or b"")
             except OSError:
                 backup_path = None
-        new_file_id = self._client.upload_document_file(edited_bytes)
-        res = self._client.update_structure_item(doc_guid, sid, new_file_id,
-                                                  revision_comment=comment)
+        # The guard has passed; the upload + PUT are the only steps that actually overwrite.
+        # A mid-write network/HTTP/license error (or a non-int sid from a crafted provenance)
+        # must surface as a clean verdict, NOT an unhandled exception across the JS bridge —
+        # the local backup above is already written, so the user can still recover + save local.
+        try:
+            new_file_id = self._client.upload_document_file(edited_bytes)
+            res = self._client.update_structure_item(doc_guid, sid, new_file_id,
+                                                      revision_comment=comment)
+        except Exception as e:
+            return {"ok": False, "verdict": "error", "error": str(e),
+                    "backup_path": backup_path}
         new_prov = dict(provenance)
         new_prov["file_id"] = new_file_id  # structure_item_id stays stable
         return {"ok": True, "verdict": OK, "new_file_id": new_file_id,

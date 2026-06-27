@@ -123,6 +123,106 @@ def test_open_normal_mode_off_never_touches_datev(tmp_path):
     assert "datev" not in resp and resp["tree"]["datev"] is None
 
 
+# --- PDF-Tool bridge save (a directly-opened .pdf, no node binding) ---------
+def test_save_node_back_rejects_a_bridge_pdf_session(tmp_path):
+    # a directly-opened .pdf has NO pdftool binding → save_node_back refuses it. This is exactly
+    # the Critical bug the PDF-Tool tripped on; save_pdf_bytes is the bridge-session save.
+    import base64
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(_pdf(1))
+    core = CoreApi()
+    sid = core.open(path=str(pdf))["session"]
+    res = core.save_node_back(sid, base64.b64encode(_pdf(2)).decode())
+    assert not res["ok"] and "gebundenes" in res["error"]
+
+
+def test_save_pdf_bytes_updates_bridge_session_and_writes_pdf(tmp_path):
+    import base64
+    pdf = tmp_path / "beleg.pdf"
+    pdf.write_bytes(_pdf(1))
+    core = CoreApi()
+    sid = core.open(path=str(pdf))["session"]
+    edited = _pdf(3)                                   # stand-in for the edited bytes
+    res = core.save_pdf_bytes(sid, base64.b64encode(edited).decode())
+    assert res["ok"] and res["local_kind"] == "pdf" and res["local_saved"] == str(pdf)
+    # the session leaf now holds the edited bytes (what get_pdf_bytes serves / DATEV uploads)
+    assert base64.b64decode(core.get_pdf_bytes(sid)["data_b64"]) == edited
+    assert pdf.read_bytes() == edited                 # and the on-disk .pdf was overwritten
+
+
+def test_pdf_tool_edit_reaches_datev_writeback(tmp_path):
+    # the full PDF-Tool DATEV path: open a checkout .pdf (bridge), bake an edit via
+    # save_pdf_bytes, then write back — the bytes UPLOADED to DATEV must reflect the edit.
+    from datev.inapp import DatevService
+    import base64
+    import fitz
+    raw = _pdf(1)
+    fid = 1085411
+    checkout = tmp_path / GUID / f"{fid}.pdf"
+    checkout.parent.mkdir(parents=True)
+    checkout.write_bytes(raw)
+
+    class _Client:
+        def __init__(self):
+            self.uploaded = []
+
+        def get_document(self, g):
+            return {"change_date_time": "t0", "checked_out": False,
+                    "correspondence_partner_guid": "c"}
+
+        def get_document_file(self, f):
+            return raw
+
+        def list_structure_items(self, g):
+            return [{"id": 1085409, "document_file_id": fid}]
+
+        def upload_document_file(self, data):
+            self.uploaded.append(data)
+            return 9001
+
+        def update_structure_item(self, g, sid, f, revision_comment=None):
+            return {"http_status": 204}
+
+    core = CoreApi()
+    core._datev_mode = True
+    svc = DatevService(_Client())
+    core._datev_service = svc
+    sid = core.open(path=str(checkout))["session"]
+    core.save_pdf_bytes(sid, base64.b64encode(_pdf(4)).decode())   # edit: now 4 pages
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok", res
+    uploaded = svc._client.uploaded[0]
+    assert uploaded != raw                                          # the edit reached DATEV
+    assert fitz.open(stream=uploaded, filetype="pdf").page_count == 4
+
+
+def test_datev_file_to_pdf_path_overwrites_with_filed_bytes(tmp_path):
+    # filing a not-connected .pdf (PDF-Tool file-anew) writes the filed effective bytes back to
+    # the .pdf on disk (local_kind 'pdf'), keeping the file consistent.
+    pdf = tmp_path / "beleg.pdf"
+    pdf.write_bytes(_pdf(1))
+    svc = FakeService(prov=None)
+    core = _core_with_service(svc)
+    sid = core.open(path=str(pdf))["session"]
+    res = core.datev_file(sid, mandant_number=10001)
+    assert res["ok"] and res["local_kind"] == "pdf" and res["local_saved"] == str(pdf)
+    assert pdf.read_bytes().startswith(b"%PDF") and pdf.read_bytes() == svc.filed[0]["data"]
+
+
+def test_save_back_checkout_pdf_local_write_failure_reports_error(tmp_path, monkeypatch):
+    # DATEV ok but the on-disk checkout .pdf can't be written (read-only / removed) → ok stays,
+    # local_error names it, local_kind 'pdf'.
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "new_sha256": "h", "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "document_path", lambda s: str(tmp_path / "gone" / "x.pdf"))
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok"
+    assert res["local_kind"] == "pdf" and res["local_saved"] is None and res["local_error"]
+
+
 # --- save-back -------------------------------------------------------------
 def test_open_unedited_checkout_writeback_is_ok_not_false_conflict(tmp_path):
     # REGRESSION (round-4 audit, HIGH): the open-time content baseline must hash the RAW

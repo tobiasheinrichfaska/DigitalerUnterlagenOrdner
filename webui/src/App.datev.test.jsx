@@ -124,13 +124,15 @@ describe('App — DATEV mode', () => {
   it('a not-connected document files via datev_file with the prompted Mandant', async () => {
     const calls = await renderApp({
       open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
-      datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 } }),
+      datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 },
+                           local_saved: 'C:\\Kanzlei\\Beleg.belegtool', local_kind: 'belegtool' }),
     })
     fireEvent.click(screen.getByText('Nach DATEV ablegen'))
     await waitFor(() => expect(called(calls, 'datev_file').length).toBe(1))
     // datev_file(session, clientGuid=null, mandantNumber, …) → the prompted Mandant is arg[2]
     expect(called(calls, 'datev_file')[0].args[2]).toBe('10001')
-    await screen.findByText(/In DATEV abgelegt/)
+    // the success notice names the saved file so the .belegtool/.pdf format is explicit
+    await screen.findByText(/In DATEV abgelegt · Beleg\.belegtool/)
   })
 
   it('a failed datev_file surfaces the error', async () => {
@@ -172,5 +174,16 @@ describe('App — DATEV mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exportieren' }))           // confirm
     await waitFor(() => expect(called(calls, 'datev_export').length).toBe(1))
     expect(await screen.findByText(/Nur 1 von 2/)).toBeInTheDocument()
+  })
+
+  it('a successful export → DATEV reports the document count', async () => {
+    const calls = await renderApp({
+      datev_export: () => ({ ok: true, parts: 3, filed_ok: 3 }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }))
+    fireEvent.click(await screen.findByText(/Nach DATEV ablegen \(gleicher Mandant\)/))
+    fireEvent.click(screen.getByRole('button', { name: 'Exportieren' }))
+    await waitFor(() => expect(called(calls, 'datev_export').length).toBe(1))
+    expect(await screen.findByText(/In DATEV abgelegt \(3 Dokumente\)/)).toBeInTheDocument()
   })
 })

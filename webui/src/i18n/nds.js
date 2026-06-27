@@ -182,4 +182,11 @@ export const nds = {
   '{n} markiert': '{n} markeert',
   'nur auf einigen markiert': 'bloots bi welk',
   'Weitere Speicheroptionen': 'Mehr Spieker-Optschonen',
+  'In mehrere Dateien aufteilen': 'In mehr Dateien opdeeln',
+  'max. Seiten pro Datei': 'max. Sieden per Datei',
+  'Trennen bei:': 'Trennen bi:',
+  'oberste Ordner': 'böverste Ordner',
+  'jeder Ordnergrenze': 'elke Ordnergrenz',
+  'mitten im Dokument': 'midden in’t Dokument',
+  '{n} Dateien': '{n} Dateien',
 }

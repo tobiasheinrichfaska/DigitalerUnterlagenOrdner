@@ -183,4 +183,11 @@ export const yi = {
   '{n} markiert': '{n} מאַרקירט',
   'nur auf einigen markiert': 'נאָר אויף עטלעכע',
   'Weitere Speicheroptionen': 'מער היט-אָפּציעס',
+  'In mehrere Dateien aufteilen': 'צעטיילן אויף עטלעכע טעקעס',
+  'max. Seiten pro Datei': 'מאַקס. זײַטלעך פּער טעקע',
+  'Trennen bei:': 'ברעכן בײַ:',
+  'oberste Ordner': 'אייבערשטע פּאַפּקעס',
+  'jeder Ordnergrenze': 'יעדער פּאַפּקע-גרענעץ',
+  'mitten im Dokument': 'אין מיטן דאָקומענט',
+  '{n} Dateien': '{n} טעקעס',
 }

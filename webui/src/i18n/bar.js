@@ -182,4 +182,11 @@ export const bar = {
   '{n} markiert': '{n} markiert',
   'nur auf einigen markiert': 'nur bei a poar',
   'Weitere Speicheroptionen': 'Mehr Speicha-Mejlichkeitn',
+  'In mehrere Dateien aufteilen': 'In mehrere Dateien aufteiln',
+  'max. Seiten pro Datei': 'max. Seitn pro Datei',
+  'Trennen bei:': 'Trenna bei:',
+  'oberste Ordner': 'oberste Ordna',
+  'jeder Ordnergrenze': 'jeder Ordnergrenz',
+  'mitten im Dokument': 'mittn im Dokument',
+  '{n} Dateien': '{n} Dateien',
 }

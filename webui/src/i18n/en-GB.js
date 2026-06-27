@@ -12,4 +12,11 @@ export const enGB = {
   '{n} markiert': '{n} selected',
   'nur auf einigen markiert': 'on only some of the selection',
   'Weitere Speicheroptionen': 'More save options',
+  'In mehrere Dateien aufteilen': 'Split into multiple files',
+  'max. Seiten pro Datei': 'max. pages per file',
+  'Trennen bei:': 'Break at:',
+  'oberste Ordner': 'top-level folders',
+  'jeder Ordnergrenze': 'any folder boundary',
+  'mitten im Dokument': 'mid-document (by page count)',
+  '{n} Dateien': '{n} files',
 }

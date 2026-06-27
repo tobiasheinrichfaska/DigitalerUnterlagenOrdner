@@ -181,4 +181,11 @@ export const la = {
   '{n} markiert': '{n} notata',
   'nur auf einigen markiert': 'in nonnullis tantum',
   'Weitere Speicheroptionen': 'Plures optiones servandi',
+  'In mehrere Dateien aufteilen': 'In plures tabellas dividere',
+  'max. Seiten pro Datei': 'paginae max. per tabellam',
+  'Trennen bei:': 'Secare ad:',
+  'oberste Ordner': 'plicae summae',
+  'jeder Ordnergrenze': 'ad omnem plicae finem',
+  'mitten im Dokument': 'in medio documento',
+  '{n} Dateien': '{n} tabellae',
 }

@@ -24,9 +24,22 @@ Covers exporting to PDF and saving/reloading the `.belegtool` format, in the
   **clickable** and jump to the right page; the viewer's sidebar shows matching **bookmarks**;
   a tag index appears when enabled.
 - A green **"✓ PDF exportiert (N …)"** notice appears on success.
-- *Not obvious (known gap):* an export over **100 pages** stays a **single PDF** — the
-  auto-split-with-cross-references path exists in code but is **not yet wired into the UI**
-  (consistent with `CLAUDE.md` / `BETA_TESTING.md` §4).
+
+**Split into several files (#13):**
+5. Export again; in the dialog tick **„In mehrere Dateien aufteilen"**, set a small
+   **max. Seiten pro Datei** (e.g. 2), pick a **Trennen bei** level, and confirm.
+   - **oberste Ordner** — a top-level folder is kept whole even if it exceeds the limit.
+   - **jeder Ordnergrenze** — a large folder is split across files, but each document stays whole.
+   - **mitten im Dokument** — a single document may be split across files at the page count.
+
+**Expected (split):**
+- Several files are written next to the chosen name (e.g. `Export_Teil_1.pdf`, `…_Teil_2.pdf`);
+  the notice reads **„… — N Dateien"**.
+- Each part is a valid PDF with its **own TOC** that **cross-references** the other parts
+  (grey entries pointing at the other files).
+- *Not obvious:* with **mitten im Dokument**, a document split across two files shows its
+  **page range** in the name (e.g. `Rechnung (S. 1–2)` then `Rechnung (S. 3–4)`). Split mode
+  always renders a TOC and **ignores** the index / bookmarks / TOC-links checkboxes.
 
 ---
 

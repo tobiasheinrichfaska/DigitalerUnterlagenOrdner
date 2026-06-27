@@ -49,9 +49,11 @@ menu; the vocabulary comes from the core (`config().statuses`), labels via i18n.
 ## 5. Export
 Export the selection (resolved) to a single PDF with a printed TOC, clickable links and
 sidebar bookmarks. Acceptance: the PDF opens and the TOC links hit the right pages.
-**Known gap:** exports over 100 pages stay a single PDF — the auto-split-with-
-cross-references path (`toc_export.export_pdf_split_with_toc`) exists but is **not yet wired
-into the UI export** (consistent with CLAUDE.md / BETA_TESTING §4).
+**Configurable split (#13):** the dialog can split the export into several files above a page
+threshold, at a chosen break level — **top folders**, **any folder boundary**, or **mid-document**
+(a per-page cut that may split one document across files). Acceptance: above the threshold the
+export writes multiple part files, each a valid PDF with a per-file TOC + cross-references; the
+notice reports the file count. (Split mode uses its own TOC, not the index/bookmarks toggles.)
 
 ## 6. Persistence
 - **Speichern saves in place** once the document has a path (no dialog), clearing the dirty

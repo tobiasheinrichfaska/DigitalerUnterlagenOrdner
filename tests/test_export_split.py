@@ -90,6 +90,41 @@ def test_any_folder_single_part_when_under_threshold():
     assert len(groups) == 1 and _names(groups) == [['F']]
 
 
+# ------------------------------------------------------------- mid-document level
+def test_page_level_splits_a_leaf_across_parts():
+    big = _leaf('big', 4)
+    groups = _plan_groups([big], 3, 'page')                # 4 pages / 3 → 3 + 1
+    assert len(groups) == 2
+    assert count_node_pages(groups[0][0]) == 3
+    assert count_node_pages(groups[1][0]) == 1
+    # both parts reference the same source document (name carries the page range)
+    assert groups[0][0].name.startswith('big') and groups[1][0].name.startswith('big')
+
+
+def test_page_level_does_not_slice_a_leaf_that_fits():
+    a, b = _leaf('a', 2), _leaf('b', 2)
+    groups = _plan_groups([a, b], 2, 'page')
+    assert len(groups) == 2
+    assert groups[0][0] is a and groups[1][0] is b          # whole leaves, untouched
+
+
+def test_page_level_keeps_folder_structure():
+    f = _folder('F', [_leaf('l', 3)])
+    groups = _plan_groups([f], 2, 'page')                   # 3 pages / 2 → 2 parts
+    assert len(groups) == 2
+    for g in groups:
+        assert g[0].name == 'F' and g[0].is_folder and len(g[0].children) == 1
+
+
+def test_page_level_export_produces_the_right_number_of_parts(tmp_path):
+    from formats.toc_export import export_pdf_split_with_toc
+    paths = export_pdf_split_with_toc([_leaf('big', 5)], str(tmp_path / 'out.pdf'), 2, 'page')
+    assert len(paths) == 3                                  # 5 pages / 2 → 3 parts
+    for p in paths:
+        with pikepdf.open(p) as pdf:
+            assert len(pdf.pages) >= 1
+
+
 # --------------------------------------------------------------- multi-file export
 def test_export_split_writes_valid_part_files(tmp_path):
     from formats.toc_export import export_pdf_split_with_toc

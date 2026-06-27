@@ -182,4 +182,11 @@ export const mnn = {
   '{n} markiert': '{n} pika!',
   'nur auf einigen markiert': 'solo on poco',
   'Weitere Speicheroptionen': 'Más savaa-opciones',
+  'In mehrere Dateien aufteilen': 'Choppa in muchos files',
+  'max. Seiten pro Datei': 'max papar per file',
+  'Trennen bei:': 'Breaka at:',
+  'oberste Ordner': 'top boxes',
+  'jeder Ordnergrenze': 'any box-edge',
+  'mitten im Dokument': 'middle of papar',
+  '{n} Dateien': '{n} files',
 }

@@ -94,6 +94,21 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
 
+/* #2 icon-only toolbar buttons: square, compact, the label lives in the tooltip. */
+.tb-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 34px; padding: 0 8px;
+  font-size: 16px; line-height: 1;
+}
+.tb-btn .count-badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box;
+  font-size: 11px; font-weight: 600; line-height: 16px; text-align: center;
+  color: #fff; background: var(--accent, #2b6cb0); border-radius: 9px;
+}
+.tb-btn .dirty-dot { margin-left: 2px; color: var(--accent, #2b6cb0); font-size: 18px; }
+
 /* Save split-button (#3): main part + caret look like one button; the caret
    opens a small dropdown menu (Speichern unter…). */
 .save-split { position: relative; display: inline-flex; }

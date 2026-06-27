@@ -28,7 +28,9 @@ export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
 
   return (
     <span className="save-split" ref={wrapRef}>
-      <button className="save-main" onClick={onSave}>💾 {t('Speichern')}{dirty ? ' •' : ''}</button>
+      <button className="save-main tb-btn" onClick={onSave} title={t('Speichern')} aria-label={t('Speichern')}>
+        💾{dirty ? <span className="dirty-dot" aria-hidden="true">•</span> : ''}
+      </button>
       <button className="save-caret" aria-haspopup="menu" aria-expanded={open}
         title={t('Weitere Speicheroptionen')} aria-label={t('Weitere Speicheroptionen')}
         onClick={() => setOpen((o) => !o)}>▾</button>

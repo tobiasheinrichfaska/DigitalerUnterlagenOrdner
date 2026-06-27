@@ -109,6 +109,13 @@ class ProbeApp:
         self.created_lbl = tk.StringVar(value="Angelegt: —")
         ttk.Label(w, textvariable=self.created_lbl, font=("", 9, "bold")).grid(
             row=2, column=2, columnspan=4, sticky="w", **pad)
+        # Fetch a specific document back by id (pre-filled after a create) — Details + Struktur.
+        ttk.Label(w, text="Dokument-ID").grid(row=3, column=0, sticky="e")
+        self.fetch_id = tk.StringVar()
+        ttk.Entry(w, textvariable=self.fetch_id, width=40).grid(
+            row=3, column=1, columnspan=3, sticky="we", **pad)
+        ttk.Button(w, text="Abrufen (Details + Struktur)", command=self.fetch_by_id).grid(
+            row=3, column=4, columnspan=2, sticky="w", **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -292,7 +299,11 @@ class ProbeApp:
             "correspondence_partner_guid": self.client_guid,
             "description": TEST_DESC,
             "domain": {"id": _int(self.domain_id, "Domain-ID")},
-            "structure_items": [{"name": "datev-probe-test.pdf", "type": 1}],
+            # type 1 = file; counter/parent_counter give it an explicit position in the
+            # structure tree (a document left without a valid structure is auto-deleted by
+            # DATEV within ~24 h, so we always supply one).
+            "structure_items": [{"name": "datev-probe-test.pdf", "type": 1,
+                                 "counter": 1, "parent_counter": 0}],
         }
         if self.folder_id.get().strip():
             payload["folder"] = {"id": _int(self.folder_id, "Ordner-ID")}
@@ -333,11 +344,24 @@ class ProbeApp:
             self.created_doc_id = doc.get("id")
             cdt = doc.get("change_date_time") or doc.get("create_date_time") or "—"
             self.created_lbl.set(f"Angelegt: id={self.created_doc_id}  ·  change_date_time={cdt}")
-            if self.created_doc_id:  # read the structure back so we see what DokAb stored
+            if self.created_doc_id:  # pre-fill the fetch field + read the structure back
+                self.fetch_id.set(self.created_doc_id)
                 self._run(f"Struktur {self.created_doc_id}",
                           lambda: self.client.list_structure_items(self.created_doc_id))
 
         self._run("Test-Dokument anlegen", do_create, on_ok)
+
+    def fetch_by_id(self):
+        """GET a specific document (typed or just-created id) + its structure — proves whether
+        the create persisted and how DokAb stored it."""
+        if not self._need_client():
+            return
+        doc_id = self.fetch_id.get().strip()
+        if not doc_id:
+            messagebox.showinfo("DATEV-Probe", "Bitte eine Dokument-ID eingeben.")
+            return
+        self._run(f"Dokument {doc_id}", lambda: self.client.get_document(doc_id))
+        self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id))
 
 
 def main():

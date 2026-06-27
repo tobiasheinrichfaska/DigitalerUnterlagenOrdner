@@ -10,6 +10,7 @@ Every method returns a dict with ``ok: bool``; success carries ``session``,
 
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 import uuid
@@ -105,6 +106,14 @@ class CoreApi:
         # LOCKED in its organizer session while a pdf-tool session edits its bytes.
         self._node_locks = {}        # (owner_session, node_id) -> pdftool_session
         self._pdftool_bindings = {}  # pdftool_session -> (owner_session, node_id)
+        # DATEV mode (off by default → the heavy datev package is never imported on a
+        # normal launch). The live service is built lazily on first use; per-session
+        # write-back baselines (opened sha256 + change_date_time) live here at runtime.
+        from infra.settings import load_settings
+        self._datev_mode = bool(load_settings().get("datev_mode"))
+        self._datev_service = None    # lazy DatevService (built when DATEV mode is on)
+        self._datev_baseline = {}     # session -> {open_change_dt, was_checked_out_at_open, opened_sha256}
+        self._datev_lock = threading.Lock()  # guards the lazy service build
 
     # ----------------------------------------------------------------------
     # Render cache + windowed-prefetch coordination
@@ -355,6 +364,8 @@ class CoreApi:
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
+        if self._datev_mode and path:
+            resp = self._datev_capture_on_open(sid, path, resp)
         return resp
 
     def document_path(self, session: str):
@@ -1060,6 +1071,254 @@ class CoreApi:
                 self._node_locks.pop(binding, None)
             self._sessions.pop(pdftool_session, None)
         return {"ok": True}
+
+    # ----------------------------------------------------------------------
+    # DATEV mode (lazy; the datev package is imported only when mode is ON)
+    # docs/datev-integration-design.md
+    # ----------------------------------------------------------------------
+    def _datev_get_service(self):
+        """The live DatevService, built lazily on first use (mode must be ON). Returns
+        None if DATEV mode is off or the connection can't be established."""
+        if not self._datev_mode:
+            return None
+        if self._datev_service is None:
+            with self._datev_lock:
+                if self._datev_service is None:
+                    try:
+                        from datev.inapp import DatevService
+                        from infra.settings import load_settings
+                        self._datev_service = DatevService.connect(load_settings())
+                    except Exception:
+                        logger.warning("[datev] connect failed", exc_info=True)
+                        return None
+        return self._datev_service
+
+    def datev_status(self) -> dict:
+        """DATEV-mode + connection state for the UI. When mode is OFF this never imports
+        the datev package (cheap, safe to call on every launch)."""
+        if not self._datev_mode:
+            return {"ok": True, "datev_mode": False, "connected": False}
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": True, "datev_mode": True, "connected": False,
+                    "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        st = svc.status()
+        st["datev_mode"] = True
+        return st
+
+    def set_datev_mode(self, on: bool) -> dict:
+        """Persist the DATEV-mode flag (per-user settings.json) and (re)build/drop the
+        service. Returns the refreshed status."""
+        from infra.settings import update_settings
+        on = bool(on)
+        update_settings(datev_mode=on)
+        with self._datev_lock:
+            self._datev_mode = on
+            self._datev_service = None  # rebuild on next use (or drop when off)
+        return self.datev_status()
+
+    @staticmethod
+    def _datev_backup_dir():
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, APP_NAME, "datev_backups")
+
+    def _datev_effective_bytes(self, session):
+        """The working document's combined effective PDF bytes (what would be filed /
+        written back) — folders concatenate their children, a single leaf is itself."""
+        with self._lock:
+            s = self._sessions.get(session)
+            doc = s.document if s else None
+        if doc is None:
+            return None
+        from core.bridge import document_to_storage
+        return document_to_storage(doc).root.current_pdf_data
+
+    def _datev_provenance(self, session):
+        with self._lock:
+            s = self._sessions.get(session)
+            return (s.document.root.datev if s else None)
+
+    def _datev_set_provenance(self, session, provenance):
+        """Set/clear the root's provenance SILENTLY (origin metadata, not a user edit;
+        no undo/dirty), so a later save persists it."""
+        from core.commands import SetDatev
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is not None:
+                s.apply_silent(SetDatev(provenance))
+
+    def _datev_capture_on_open(self, session, path, resp):
+        """On open in DATEV mode: if ``path`` is a checkout path, capture provenance +
+        the open-time baseline, persist provenance on the root, and annotate ``resp`` with
+        ``datev`` (so the UI shows the badge + a 'checked out at open' notice)."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return resp
+        try:
+            opened = self._datev_effective_bytes(session)
+            prov, baseline = svc.capture_provenance(path, opened)
+        except Exception:
+            logger.warning("[datev] capture on open failed", exc_info=True)
+            return resp
+        if not prov:
+            return resp
+        self._datev_baseline[session] = baseline
+        self._datev_set_provenance(session, prov)
+        with self._lock:
+            resp = self._doc_response_locked(session)  # tree now carries root.datev
+        resp["datev"] = {"connected": True, "source_name": prov.get("source_name"),
+                         "checked_out_at_open": baseline.get("was_checked_out_at_open", False)}
+        return resp
+
+    def datev_save_back(self, session: str, confirmed: bool = True, comment: str = None) -> dict:
+        """Guarded write-back of the working document to its connected DATEV document.
+        Re-reads the server, runs the pure guard, and only on ``ok`` overwrites (after a
+        local backup). Any non-ok verdict is returned so the UI offers a filesystem save."""
+        if not self._datev_mode:
+            return {"ok": False, "error": "DATEV-Modus ist aus."}
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        prov = self._datev_provenance(session)
+        from datev.writeback import can_write_back
+        if not can_write_back(prov):
+            return {"ok": False, "error": "Dieses Dokument ist nicht mit DATEV verknüpft."}
+        baseline = self._datev_baseline.get(session)
+        if baseline is None:
+            # reopened .belegtool: provenance persisted but no live baseline — re-establish
+            # it from the server now (the opened bytes are the current effective bytes).
+            baseline = self._datev_reestablish_baseline(svc, session, prov)
+        edited = self._datev_effective_bytes(session)
+        if not edited:
+            return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
+        res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
+                            comment=comment or "BelegTool", backup_dir=self._datev_backup_dir())
+        if res.get("ok"):
+            new_prov = res.get("provenance") or prov
+            self._datev_set_provenance(session, new_prov)
+            self._datev_baseline[session] = {
+                "open_change_dt": res.get("new_change_dt"),
+                "was_checked_out_at_open": False,
+                "opened_sha256": hashlib.sha256(edited).hexdigest()}
+            with self._lock:
+                s = self._sessions.get(session)
+                if s is not None:
+                    s.mark_saved()
+        return res
+
+    def _datev_reestablish_baseline(self, svc, session, prov):
+        """Best-effort baseline for a reopened .belegtool (no live open-time baseline): the
+        content guard will compare server bytes to the current effective bytes, which only
+        matches when the file is byte-identical to the DATEV original — otherwise the guard
+        safely reports conflict_content and the UI falls back to a filesystem save."""
+        edited = self._datev_effective_bytes(session)
+        baseline = {"open_change_dt": None, "was_checked_out_at_open": False,
+                    "opened_sha256": hashlib.sha256(edited or b"").hexdigest()}
+        try:
+            _, fresh = svc.capture_provenance(
+                f"x/{prov.get('doc_guid')}/{prov.get('file_id')}", edited)
+            if fresh:
+                baseline["open_change_dt"] = fresh.get("open_change_dt")
+        except Exception:
+            pass
+        return baseline
+
+    def datev_can_file(self, session: str) -> dict:
+        """Whether the working doc can be FILED as a new DATEV document (not connected) and
+        the same-client hint (the connected source's Mandant, for export-to-DATEV)."""
+        prov = self._datev_provenance(session)
+        from datev.writeback import can_file_to_datev, is_connected
+        same_client = None
+        if is_connected(prov):
+            same_client = (prov or {}).get("correspondence_partner_guid")
+        return {"ok": True, "can_file": can_file_to_datev(prov), "connected": is_connected(prov),
+                "same_client_guid": same_client}
+
+    def datev_resolve_client(self, mandant_number) -> dict:
+        if not self._datev_mode:
+            return {"ok": False, "error": "DATEV-Modus ist aus."}
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        try:
+            return {"ok": True, **svc.resolve_client(mandant_number)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def datev_file(self, session: str, client_guid: str = None, mandant_number=None,
+                   description: str = None, domain_id: int = 1, folder_id=None,
+                   register_id=None) -> dict:
+        """File the working document as a NEW DATEV document (the create flow), then adopt
+        its provenance (→ connected). ``client_guid`` direct, or ``mandant_number`` resolved."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        guid = client_guid
+        if not guid and mandant_number is not None:
+            try:
+                guid = svc.resolve_client(mandant_number).get("guid")
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+        if not guid:
+            return {"ok": False, "error": "Kein Mandant angegeben."}
+        data = self._datev_effective_bytes(session)
+        if not data:
+            return {"ok": False, "error": "Keine Daten zum Ablegen."}
+        name = (self.document_name(session) or "Beleg").strip() or "Beleg"
+        res = svc.file_document(data, client_guid=guid, description=description or name,
+                                domain_id=domain_id, folder_id=folder_id,
+                                register_id=register_id, structure_name=f"{name}.pdf")
+        if res.get("ok") and res.get("provenance"):
+            self._datev_set_provenance(session, res["provenance"])
+            self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
+        return res
+
+    def datev_export(self, session: str, node_ids=None, options=None, client_guid: str = None,
+                     mandant_number=None, description: str = None, domain_id: int = 1,
+                     folder_id=None, register_id=None) -> dict:
+        """Export to PDF (single or **split**, honouring ``options``) and file EVERY produced
+        PDF as a new DATEV document under the same client. Returns ``{ok, filed, parts}``."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        guid = client_guid
+        if not guid and mandant_number is not None:
+            try:
+                guid = svc.resolve_client(mandant_number).get("guid")
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+        if not guid:
+            # default to the connected source's Mandant ("same client")
+            prov = self._datev_provenance(session) or {}
+            guid = prov.get("correspondence_partner_guid")
+        if not guid:
+            return {"ok": False, "error": "Kein Mandant angegeben."}
+        import tempfile
+        import shutil
+        base_name = (self.document_name(session) or "Export").strip() or "Export"
+        tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
+        try:
+            out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),
+                              node_ids, options)
+            if not out.get("ok"):
+                return out
+            paths = out.get("paths", [out.get("path")])
+            filed = []
+            for p in paths:
+                with open(p, "rb") as f:
+                    data = f.read()
+                label = os.path.splitext(os.path.basename(p))[0]
+                r = svc.file_document(data, client_guid=guid,
+                                      description=description or label,
+                                      domain_id=domain_id, folder_id=folder_id,
+                                      register_id=register_id, structure_name=f"{label}.pdf")
+                filed.append({"name": label, "ok": r.get("ok"),
+                              "doc_guid": (r.get("provenance") or {}).get("doc_guid"),
+                              "error": r.get("error")})
+            ok = all(f["ok"] for f in filed) and bool(filed)
+            return {"ok": ok, "filed": filed, "parts": len(filed)}
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:

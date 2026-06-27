@@ -60,7 +60,7 @@ describe('ExportDialog — confirm / cancel', () => {
     fireEvent.click(screen.getByText('Exportieren'))
     expect(onChoose).toHaveBeenCalledWith({
       toc: true, toc_links: true, index: true, index_links: true, bookmarks: true,
-      split_pages: null, split_level: 'top',
+      split_pages: null, split_level: 'top', to_datev: false,
     })
   })
 
@@ -96,5 +96,28 @@ describe('ExportDialog — confirm / cancel', () => {
     fireEvent.click(screen.getByText('Abbrechen'))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onCancel).toHaveBeenCalled()
+  })
+
+  describe('DATEV export option (#export-to-DATEV, same client)', () => {
+    it('is hidden unless datevAvailable', () => {
+      renderDialog({ datevAvailable: false })
+      expect(screen.queryByLabelText('Nach DATEV ablegen (gleicher Mandant)')).toBeNull()
+    })
+
+    it('defaults off → to_datev false on confirm', () => {
+      const { onChoose } = renderDialog({ datevAvailable: true })
+      expect(screen.getByLabelText('Nach DATEV ablegen (gleicher Mandant)')).not.toBeChecked()
+      fireEvent.click(screen.getByText('Exportieren'))
+      expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ to_datev: false }))
+    })
+
+    it('checking it sets to_datev true (and still carries split options)', () => {
+      const { onChoose } = renderDialog({ datevAvailable: true })
+      fireEvent.click(screen.getByLabelText('Nach DATEV ablegen (gleicher Mandant)'))
+      fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+      fireEvent.click(screen.getByText('Exportieren'))
+      expect(onChoose).toHaveBeenCalledWith(
+        expect.objectContaining({ to_datev: true, split_pages: 100 }))
+    })
   })
 })

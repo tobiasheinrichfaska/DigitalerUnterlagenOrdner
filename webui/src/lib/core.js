@@ -97,4 +97,17 @@ export const core = {
   openNodeInPdftool: (session, nodeId) => call('open_node_in_pdftool', session, nodeId),
   importDialog: (session, parentId = null) => call('import_dialog', session, parentId),
   importBytes: (session, name, data, parentId = null, index = null) => call('import_bytes', session, name, data, parentId, index),
+  // DATEV mode (lazy on the host; these are no-ops when DATEV mode is off)
+  datevStatus: () => call('datev_status'),
+  setDatevMode: (on) => call('set_datev_mode', on),
+  datevCanFile: (session) => call('datev_can_file', session),
+  datevResolveClient: (mandantNumber) => call('datev_resolve_client', mandantNumber),
+  saveToDatev: (session) => call('save_to_datev', session),
+  datevFile: (session, opts = {}) => call('datev_file', session, opts.clientGuid ?? null,
+    opts.mandantNumber ?? null, opts.description ?? null, opts.domainId ?? 1,
+    opts.folderId ?? null, opts.registerId ?? null),
+  datevExport: (session, nodeIds = null, options = null, opts = {}) =>
+    call('datev_export', session, nodeIds, options, opts.clientGuid ?? null,
+      opts.mandantNumber ?? null, opts.description ?? null, opts.domainId ?? 1,
+      opts.folderId ?? null, opts.registerId ?? null),
 }

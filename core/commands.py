@@ -113,6 +113,18 @@ class SetNoGain:
 
 
 @dataclass(frozen=True)
+class SetDatev:
+    """Set (or clear) the DATEV provenance on the document ROOT — DATEV mode only.
+    ``provenance`` is a dict ({doc_guid, file_id, structure_item_id, …}) or None to
+    disconnect (Save As breaks the link). Set in-process by CoreApi (open from a
+    checkout path / file-to-DATEV / Save As), never from the JS wire command set, so
+    it is excluded from ``_COMMAND_TYPES``. Applied SILENTLY (no undo/dirty) — it is
+    origin metadata, not a user edit — but it DOES change the document so a later save
+    persists it (round-trips in .belegtool via the root's ``datev`` field)."""
+    provenance: Optional[dict]
+
+
+@dataclass(frozen=True)
 class Delete:
     node_id: str
 
@@ -239,8 +251,8 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
-                TagMany, SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, SetNodeBytes,
-                Compress, Commit, Reset, Rotate, Split, SplitInto, Merge]
+                TagMany, SetNoGain, SetDatev, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes,
+                SetNodeBytes, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
@@ -461,6 +473,12 @@ def _set_no_gain(doc: Document, cmd: SetNoGain, engine=None) -> Document:
         if node is not None and not node.is_folder and not node.compression_no_gain:
             doc = doc.update_node(nid, compression_no_gain=True)
     return doc
+
+
+@_handler(SetDatev)
+def _set_datev(doc: Document, cmd: SetDatev, engine=None) -> Document:
+    """Set/clear the DATEV provenance on the ROOT node (idempotent)."""
+    return doc.update_node(doc.root.id, datev=cmd.provenance)
 
 
 @_handler(Delete)

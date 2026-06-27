@@ -33,6 +33,7 @@ def _node_from_pdfnode(pn) -> Node:
         collapsed=getattr(pn, "collapsed", False),
         compression_method=getattr(pn, "compression_method", None),
         tags=tuple(getattr(pn, "tags", ()) or ()),
+        datev=getattr(pn, "datev", None),
         children=tuple(_node_from_pdfnode(c) for c in pn.children),
         # raw per-node bytes (folders have none — never the aggregated property)
         original_data=getattr(pn, "_original_pdf_data", None),
@@ -65,6 +66,7 @@ def _pdfnode_from_node(node: Node):
     pn.collapsed = node.collapsed
     pn.compression_method = node.compression_method
     pn.tags = list(node.tags)
+    pn.datev = node.datev
     if not node.is_folder:
         # property setters store the bytes without triggering lazy compression
         pn.original_pdf_data = node.original_data

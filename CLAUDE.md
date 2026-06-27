@@ -566,9 +566,13 @@ as **v3.10.0**.
    machine** (no longer mocked-COM only). Storing golden *PDFs* in `tests/data/expected/` was
    dropped as redundant — the comparison is structural, and stored Office PDFs aren't
    deterministic.
-2. **Toolbar redesign — smaller icon buttons.** Shrink the toolbar to compact, recognisable
-   icons for Open / Import / Help / Save (+ Export, New window, Undo/Redo). Tooltips carry the
-   text labels; keep an `aria-label` per button.
+2. **Toolbar redesign — smaller icon buttons. — DONE (2026-06-27).** [`Toolbar.jsx`](webui/src/Toolbar.jsx)
+   is now icon-only: every button drops its visible label, the text moves into the `title`
+   tooltip, and each carries an `aria-label` so screen readers and role/name queries keep the
+   full name. Export shows the selection count as a `.count-badge`; the Save split-button's main
+   part is icon-only with a dirty dot. Compact square buttons via `.tb-btn` in `App.css`. Tests
+   that clicked toolbar buttons by visible text now query by role+name; `Toolbar.test.jsx` locks
+   every icon's accessible name.
 3. **„Speichern" as a split-button. — DONE (2026-06-26).** The toolbar's two Save buttons are now
    one split-button ([`SaveSplitButton.jsx`](webui/src/SaveSplitButton.jsx)): the main part saves in
    place (shows the dirty „•"), a caret opens a small dropdown with **„Speichern unter…"**.

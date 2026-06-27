@@ -109,5 +109,8 @@ The UI maps every non-`ok` verdict to a clear message + the filesystem-save fall
 - Productive client bytes stay local (memory/`.tmp/` backup); never sent externally; logs carry
   only `{doc_guid, file_id, size, sha256-prefix, change_date_time}`, never content.
 - Server also rejects the PUT if another user has it checked out — belt and suspenders.
-- **To validate before building:** confirm on the box that `change_date_time` advances after a
-  `PUT …/structure-items/{sid}` (then the cheap guard is trustworthy and the hash is the confirm).
+- **Validated on the box (2026-06-27):** `change_date_time` **advances on every**
+  `PUT …/structure-items/{sid}` (a swap moved it ~15 s), so the cheap metadata guard is
+  trustworthy and the full hash is the optional final confirm. Also confirmed: `structure_item.id`
+  is **stable** across exchanges (cache it at open) while `document_file_id` changes per version,
+  and the PUT returns `204`.

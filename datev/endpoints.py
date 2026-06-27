@@ -1,16 +1,22 @@
-"""Data-driven DATEVconnect DMS v2 endpoint catalog + URL builder. Round 1 = read only.
-(Round 2 will add the create/exchange POST+PUT endpoints; kept out until then so the
-read probe can't accidentally write.)"""
+"""Data-driven DATEVconnect DMS v2 endpoint catalog + URL builder.
+
+Read endpoints (round 1) and the **create-only** write endpoints (round 2a): upload a file
+and create a document. The exchange (PUT) + delete endpoints are still withheld until round
+2b, so the create-only probe cannot modify or remove an existing document."""
 from urllib.parse import quote, urlencode
 
 # name -> (HTTP method, path template with {placeholders})
 ENDPOINTS = {
+    # --- read (round 1) ---
     "info": ("GET", "/info"),
     "domains": ("GET", "/domains"),
     "documents": ("GET", "/documents"),
     "document": ("GET", "/documents/{id}"),
     "structure_items": ("GET", "/documents/{id}/structure-items"),
     "document_file": ("GET", "/document-files/{file_id}"),
+    # --- create only (round 2a) ---
+    "document_files_create": ("POST", "/document-files"),   # octet-stream body -> {id}
+    "documents_create": ("POST", "/documents"),             # DocumentCreate JSON -> Document
 }
 
 

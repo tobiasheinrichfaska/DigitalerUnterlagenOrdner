@@ -7,8 +7,15 @@ import json
 import pytest
 
 from datev.client import DatevConnectClient
-from datev.config import dms_base_url, is_loopback, resolve_auth_mode, self_signed_allowed
+from datev.config import (
+    dms_base_url,
+    is_loopback,
+    master_data_base_url,
+    resolve_auth_mode,
+    self_signed_allowed,
+)
 from datev.endpoints import build_url
+from datev.synthetic_pdf import make_test_pdf
 from datev.transport import build_curl_args
 from datev.types import (
     DatevAuthError,
@@ -105,6 +112,73 @@ def test_4xx_error_envelope_maps_description():
         cli.get_document("missing")
     assert "nicht gefunden" in str(ei.value)
     assert not isinstance(ei.value, DatevLicenseError)
+
+
+# --- write: create only (round 2a) -----------------------------------------
+def test_resolve_client_guid_finds_by_number():
+    # master-data returns an envelope {clients: [...]}; match on number → GUID.
+    body = {"clients": [{"id": "g-1", "number": 10000, "name": "Muster GmbH"},
+                        {"id": "g-2", "number": 10001, "name": "Beispiel AG"}]}
+    cli, fake = _client(lambda *a: _resp(obj=body))
+    res = cli.resolve_client_guid(10001)
+    assert res["guid"] == "g-2" and res["name"] == "Beispiel AG"
+    # the lookup goes to the master-data base, not the DMS base
+    assert fake.calls[0]["url"] == "https://localhost:58452/datev/api/master-data/v1/clients"
+
+
+def test_resolve_client_guid_not_found_raises():
+    cli, _ = _client(lambda *a: _resp(obj=[{"id": "g-1", "number": 10000}]))
+    with pytest.raises(DatevError):
+        cli.resolve_client_guid(99999)
+
+
+def test_upload_document_file_posts_octet_stream_and_returns_id():
+    seen = {}
+
+    def handler(method, url, headers, body):
+        seen.update(method=method, ctype=headers.get("Content-Type"), body=body)
+        return _resp(obj={"id": 1489})
+
+    cli, _ = _client(handler)
+    assert cli.upload_document_file(b"%PDF-1.4 x") == 1489
+    assert seen["method"] == "POST"
+    assert seen["ctype"] == "application/octet-stream"
+    assert seen["body"] == b"%PDF-1.4 x"          # raw bytes, binary-safe
+
+
+def test_create_document_posts_json_body_and_returns_doc():
+    seen = {}
+
+    def handler(method, url, headers, body):
+        seen.update(method=method, ctype=headers.get("Content-Type"), body=body)
+        return _resp(obj={"id": "doc-guid", "change_date_time": "2026-06-27T10:00:00"})
+
+    cli, _ = _client(handler)
+    payload = {"class": {"id": 1}, "correspondence_partner_guid": "g-2",
+               "structure_items": [{"name": "x.pdf", "type": 1, "document_file_id": 1489}]}
+    doc = cli.create_document(payload)
+    assert doc["id"] == "doc-guid"
+    assert seen["method"] == "POST" and seen["ctype"] == "application/json"
+    assert json.loads(seen["body"])["correspondence_partner_guid"] == "g-2"
+
+
+def test_create_document_license_error_maps():
+    env = {"error_description": "No License found for component K0001928 ... product 63218"}
+    cli, _ = _client(lambda *a: _resp(200, obj=env))
+    with pytest.raises(DatevLicenseError):
+        cli.create_document({"class": {"id": 1}})
+
+
+def test_synthetic_pdf_is_valid_single_page_with_marker():
+    b = make_test_pdf("ZZZ TEST bitte loeschen")
+    assert b.startswith(b"%PDF-") and b.rstrip().endswith(b"%%EOF")
+    assert b"ZZZ TEST bitte loeschen" in b      # the marker text is in the content stream
+
+
+def test_master_data_base_url_pins_path_from_dms_base():
+    assert master_data_base_url("https://DatevHeinrich:58452/datev/api/dms/v2") == \
+        "https://DatevHeinrich:58452/datev/api/master-data/v1"
+    assert master_data_base_url("") == "https://localhost:58452/datev/api/master-data/v1"
 
 
 # --- url builder -----------------------------------------------------------

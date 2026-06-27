@@ -175,6 +175,9 @@ class ProbeApp:
                    command=self.exchange_file).grid(row=6, column=0, columnspan=3, sticky="w", **pad)
         ttk.Button(w, text="Dokument löschen (DELETE)",
                    command=self.delete_doc).grid(row=6, column=3, columnspan=2, sticky="w", **pad)
+        ttk.Button(w, text="change_date_time-Test (Austausch)",
+                   command=self.test_change_datetime).grid(row=6, column=5, columnspan=3,
+                                                           sticky="w", **pad)
 
         # Provenance — index a Mandant and measure how uniquely size/title/name identify a doc
         pv = ttk.LabelFrame(self.root, text="Provenance (Herkunft eines Belegtool-Files in DATEV)")
@@ -672,6 +675,48 @@ class ProbeApp:
                       lambda: self.client.list_structure_items(doc_id), self._capture_structure)
 
         self._run("Datei austauschen", work, on_ok)
+
+    def test_change_datetime(self):
+        """Validate the cheap concurrency guard: read change_date_time, exchange the file, read
+        it again — does it advance? If yes, change_date_time is a trustworthy save-back guard."""
+        if not self._need_client():
+            return
+        doc_id = self.fetch_id.get().strip()
+        if not doc_id or not self._guard_doc_guid(doc_id):
+            return
+        if not self.structure_item_id:
+            messagebox.showinfo("DATEV-Probe",
+                                "Erst „Abrufen (Details + Struktur)“ — liefert die structure_item.id.")
+            return
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        if not messagebox.askyesno(
+                "change_date_time-Test — schreibt in DATEV",
+                f"Tauscht die Datei von {doc_id} aus und misst change_date_time davor/danach.\n"
+                f"DokAb: überschreibt ohne Revision. Fortfahren?"):
+            return
+
+        def work():
+            before = (self.client.get_document(doc_id) or {}).get("change_date_time")
+            self._post_log(f"change_date_time VOR:  {before}")
+            fid = self.client.upload_document_file(make_test_pdf(f"CDT-Test {stamp} – bitte löschen"))
+            self._post_log(f"neue document_file_id = {fid}")
+            self.client.update_structure_item(doc_id, self.structure_item_id, fid,
+                                              revision_comment=f"CDT-Test {stamp}")
+            after = (self.client.get_document(doc_id) or {}).get("change_date_time")
+            self._post_log(f"change_date_time NACH: {after}")
+            # ISO timestamps are zero-padded → lexical compare == chronological
+            advanced = bool(before) and bool(after) and str(after) > str(before)
+            return {"before": before, "after": after, "advanced": advanced}
+
+        def on_ok(res):
+            verdict = ("ADVANCED ✓ — change_date_time ist ein zuverlässiger Guard"
+                       if res["advanced"] else
+                       "UNVERÄNDERT ✗ — change_date_time NICHT als Guard verwenden")
+            self._log_line(f"change_date_time-Test: {verdict}")
+            self._run(f"Struktur {doc_id}",
+                      lambda: self.client.list_structure_items(doc_id), self._capture_structure)
+
+        self._run("change_date_time-Test", work, on_ok)
 
     def delete_doc(self):
         """Round 2b cleanup: DELETE the test document in the Dokument-ID field. Confirm-gated."""

@@ -38,6 +38,16 @@ facts decide the design and only the live box reveals them:
 | `datev_probe.py` | one-file exe entry point |
 | `tests/test_datev_client.py` | unit tests with a fake transport (no live DATEV): feature, reads, query/path building, Basic auth, error mapping |
 
+## Connection (mirrors OPOS)
+The connector matches OPOS's proven `src/io/datev_api.py`:
+- **Windows SSO** via `curl.exe --negotiate -u :` (current user, nothing stored), hardened the
+  same way: **`--http1.1`** (avoids `http_code 000` on the big documents list), bounded
+  `--connect-timeout`/`--max-time`, one `--retry`, `--compressed`, and **`CREATE_NO_WINDOW`** so the
+  windowed exe never flashes a console. Basic (UPN) stays available via stdlib `urllib`.
+- **`datev.config.json`** next to the exe ({`base_url`, `auth`, `user`, `password`, `verify_tls`})
+  prefills the GUI; self-signed TLS is trusted only for a loopback host unless `verify_tls` says
+  otherwise (same rule as OPOS). So an existing OPOS `datev.config.json` works here too.
+
 ## Build & run
 ```powershell
 scripts\build_datev_probe.ps1        # → dist\DATEV-Probe.exe  (stdlib-only; no deps install)

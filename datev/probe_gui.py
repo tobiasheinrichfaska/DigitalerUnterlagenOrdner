@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .client import DatevConnectClient
-from .config import load_config, resolve_auth_mode, self_signed_allowed
+from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
 from .transport import make_curl_sso_transport, make_urllib_transport
 from .types import DatevConfig, program_keeps_revisions
 
@@ -39,7 +39,8 @@ class ProbeApp:
         pad = dict(padx=6, pady=3)
         conn = ttk.LabelFrame(self.root, text="Verbindung")
         conn.pack(fill="x", **pad)
-        base_default = self.cfg.get("base_url") or DEFAULT_BASE
+        # Pin the DMS path even when the config's base_url points at the accounting API (OPOS reuse).
+        base_default = dms_base_url(self.cfg, DEFAULT_BASE)
         self.base = tk.StringVar(value=base_default)
         self.user = tk.StringVar(value=self.cfg.get("user") or "")
         self.pw = tk.StringVar(value=self.cfg.get("password") or "")

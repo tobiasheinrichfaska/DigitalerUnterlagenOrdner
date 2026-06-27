@@ -146,6 +146,13 @@ def test_upload_document_file_posts_octet_stream_and_returns_id():
     assert seen["body"] == b"%PDF-1.4 x"          # raw bytes, binary-safe
 
 
+def test_upload_document_file_coerces_string_id_to_int():
+    # DATEV returns the file id as a STRING; create wants an int → must coerce.
+    cli, _ = _client(lambda *a: _resp(obj={"id": "1085408"}))
+    fid = cli.upload_document_file(b"%PDF-1.4 x")
+    assert fid == 1085408 and isinstance(fid, int)
+
+
 def test_create_document_posts_json_body_and_returns_doc():
     seen = {}
 

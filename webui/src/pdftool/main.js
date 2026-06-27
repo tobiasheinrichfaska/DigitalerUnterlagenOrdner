@@ -8,7 +8,8 @@ import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { EventBus, PDFViewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
-import { chooseSource, base64ToUint8, uint8ToBase64 } from './source.js'
+import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { localBaseName } from '../lib/datev.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -35,9 +36,12 @@ eventBus.on('annotationlayerrendered', () => { window.__viewerFormLayerReady = t
 let bridge = null
 let boundSession = null
 let pdfDoc = null
+let sourceMode = null        // 'session' | 'bridge' | 'url' — DATEV UI only for a 'bridge' .pdf
+let datevConnected = false   // the open .pdf is a DATEV checkout (provenance from its path)
 
 const textBtn = document.getElementById('btn-text')
 const saveBtn = document.getElementById('btn-save')
+const datevBtn = document.getElementById('btn-datev')
 const statusEl = document.getElementById('pdf-status')
 const setStatus = (t) => { if (statusEl) statusEl.textContent = t }
 
@@ -64,6 +68,68 @@ async function saveBack() {
 }
 saveBtn?.addEventListener('click', saveBack)
 
+// --- DATEV (mode only; this surface opens a DATEV checkout .pdf) -------------
+// Bake the current edits into the node first (so the effective bytes DATEV receives reflect
+// them), then run the guarded write-back. save_to_datev shows a native confirm before the
+// (revision-less, permanent) overwrite. The result names the locally-saved file so the format
+// (a plain .pdf for a checkout) is explicit.
+async function datevWriteBack() {
+  if (!bridge || !boundSession || !pdfDoc) { setStatus('Kein gebundenes Dokument'); return }
+  setStatus('Speichern…')
+  try {
+    const bytes = await pdfDoc.saveDocument()
+    const saved = await bridge.save_node_back(boundSession, uint8ToBase64(bytes))
+    if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
+    const res = await bridge.save_to_datev(boundSession)
+    if (res && res.ok) {
+      const name = localBaseName(res.local_saved)
+      setStatus(`Nach DATEV zurückgeschrieben ✓${name ? ' · ' + name : ''}`
+        + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
+    } else if (res && res.verdict === 'declined') {
+      setStatus('Abgebrochen — nicht zurückgeschrieben')
+    } else {
+      setStatus(`DATEV: ${(res && (res.error || res.verdict)) || 'fehlgeschlagen'}`)
+    }
+  } catch (e) { setStatus(`Fehler: ${e}`) }
+}
+
+// Not-connected .pdf → file it as a NEW DATEV document under a prompted Mandant.
+async function datevFileNew() {
+  if (!bridge || !boundSession || !pdfDoc) { setStatus('Kein gebundenes Dokument'); return }
+  const num = window.prompt('Mandantennummer für die DATEV-Ablage')
+  if (!num || !num.trim()) return
+  setStatus('Ablegen…')
+  try {
+    const bytes = await pdfDoc.saveDocument()
+    await bridge.save_node_back(boundSession, uint8ToBase64(bytes))
+    const res = await bridge.datev_file(boundSession, null, num.trim())
+    if (res && res.ok) {
+      const name = localBaseName(res.local_saved)
+      setStatus(`In DATEV abgelegt ✓${name ? ' · ' + name : ''}`)
+    } else {
+      setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
+    }
+  } catch (e) { setStatus(`Fehler: ${e}`) }
+}
+
+// Reveal the DATEV button only for a .pdf opened in DATEV mode ('bridge' source); a write-back
+// for a connected checkout, else a file-anew. DATEV mode off (or a node binding) → no DATEV UI.
+async function setupDatevUi() {
+  if (!datevBtn || !bridge || sourceMode !== 'bridge') return
+  let datevMode = false
+  try { const st = await bridge.datev_status(); datevMode = !!(st && st.datev_mode) } catch { /* off */ }
+  const action = datevAction({ datevMode, connected: datevConnected })
+  if (!action) return
+  if (action === 'writeback') {
+    datevBtn.textContent = '🔗 Nach DATEV zurückschreiben'
+    datevBtn.onclick = datevWriteBack
+  } else {
+    datevBtn.textContent = '📤 Nach DATEV ablegen'
+    datevBtn.onclick = datevFileNew
+  }
+  datevBtn.hidden = false
+}
+
 // pywebview injects window.pywebview early and populates .api on 'pywebviewready'.
 // A plain browser (dev/e2e) has no window.pywebview → no bridge, no wait.
 async function getBridge() {
@@ -80,6 +146,7 @@ async function resolveDocumentArgs() {
   bridge = api
   const cfg = api ? await api.config() : null
   const src = chooseSource({ hasBridge: !!api, cfg, fileParam })
+  sourceMode = src.mode
   if (src.mode === 'session') {
     // node binding: the host already opened the bound session; just fetch its bytes
     boundSession = src.session
@@ -89,6 +156,8 @@ async function resolveDocumentArgs() {
     const opened = await api.open(null, src.path)
     if (opened?.ok) {
       boundSession = opened.session
+      // a DATEV checkout path captures provenance on open → the open response flags it
+      datevConnected = !!(opened.datev && opened.datev.connected)
       const res = await api.get_pdf_bytes(opened.session)
       if (res?.ok) return { data: base64ToUint8(res.data_b64) }
     }
@@ -106,6 +175,7 @@ resolveDocumentArgs()
     window.__viewerDocReady = true
     // Save only makes sense when bound to a node/file in the host (not the URL sample).
     if (saveBtn) saveBtn.disabled = !(bridge && boundSession)
+    setupDatevUi()  // reveal the DATEV action for a checkout .pdf opened in DATEV mode
   })
   .catch((err) => {
     window.__viewerError = String(err)

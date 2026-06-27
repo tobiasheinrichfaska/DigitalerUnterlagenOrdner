@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isDatevConnected, datevVerdictKey, DATEV_VERDICT_KEY } from './datev'
+import { isDatevConnected, datevVerdictKey, DATEV_VERDICT_KEY,
+  localBaseName, datevSavedNotice } from './datev'
 
 describe('isDatevConnected', () => {
   it('true only with both doc_guid and file_id', () => {
@@ -25,5 +26,30 @@ describe('datevVerdictKey', () => {
   it('falls back to a generic failure for unknown/undefined verdicts', () => {
     expect(datevVerdictKey('weird')).toBe('DATEV-Rückschreiben fehlgeschlagen.')
     expect(datevVerdictKey(undefined)).toBe('DATEV-Rückschreiben fehlgeschlagen.')
+  })
+})
+
+describe('localBaseName', () => {
+  it('takes the file name from a Windows or POSIX path', () => {
+    expect(localBaseName('C:\\Kanzlei\\Rechnung.belegtool')).toBe('Rechnung.belegtool')
+    expect(localBaseName('/tmp/abc/1085411.pdf')).toBe('1085411.pdf')
+  })
+  it('is empty for a missing path', () => {
+    expect(localBaseName(null)).toBe('')
+    expect(localBaseName(undefined)).toBe('')
+  })
+})
+
+describe('datevSavedNotice', () => {
+  it('appends the saved file name so the .belegtool/.pdf format is explicit', () => {
+    expect(datevSavedNotice('Nach DATEV zurückgeschrieben',
+      { local_saved: 'C:\\K\\Rechnung.belegtool' }))
+      .toBe('Nach DATEV zurückgeschrieben · Rechnung.belegtool')
+    expect(datevSavedNotice('Nach DATEV zurückgeschrieben', { local_saved: '/t/1085411.pdf' }))
+      .toBe('Nach DATEV zurückgeschrieben · 1085411.pdf')
+  })
+  it('is the bare message when nothing was saved locally', () => {
+    expect(datevSavedNotice('In DATEV abgelegt', { local_saved: null })).toBe('In DATEV abgelegt')
+    expect(datevSavedNotice('In DATEV abgelegt', {})).toBe('In DATEV abgelegt')
   })
 })

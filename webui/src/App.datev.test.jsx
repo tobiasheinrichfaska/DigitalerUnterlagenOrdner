@@ -66,12 +66,14 @@ describe('App — DATEV mode', () => {
     expect(called(calls, 'set_datev_mode')[0].args[0]).toBe(false)
   })
 
-  it('a successful write-back shows the notice and does NOT trigger a local save', async () => {
+  it('a successful write-back names the saved file (format explicit) and does NOT Save-As', async () => {
     const calls = await renderApp({
-      save_to_datev: () => ({ ok: true, verdict: 'ok', provenance: CONNECTED_TREE.datev }),
+      save_to_datev: () => ({ ok: true, verdict: 'ok', provenance: CONNECTED_TREE.datev,
+                              local_saved: 'C:\\Kanzlei\\Rechnung.belegtool', local_kind: 'belegtool' }),
     })
     fireEvent.click(screen.getByText('Nach DATEV zurückschreiben'))
-    await screen.findByText(/Nach DATEV zurückgeschrieben/)
+    // the notice shows the saved file name so the .belegtool/.pdf format is clear
+    await screen.findByText(/Nach DATEV zurückgeschrieben · Rechnung\.belegtool/)
     expect(called(calls, 'save_file').length).toBe(0)
   })
 

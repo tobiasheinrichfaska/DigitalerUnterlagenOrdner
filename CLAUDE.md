@@ -386,7 +386,25 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   is per-session runtime state in `CoreApi._datev_baseline`, **not** persisted.
 - **On open** (`CoreApi._datev_capture_on_open`) — a DATEV **checkout path**
   (`…\<doc-guid>\<file-id>`, via `parse_checkout_path`) captures provenance + baseline, shows a
-  „from DATEV" badge, and warns up front if the document was already checked out.
+  „from DATEV" badge, and warns up front if the document was already checked out. ⚠️ The content
+  baseline hashes the **RAW checkout file on disk** (== the server file), **not** the
+  re-serialised effective bytes — `_datev_effective_bytes` runs the doc through `PdfWriter`
+  (normalises xref/streams → never byte-identical to the raw file), so hashing *that* made every
+  first write-back of an unedited checkout falsely report `conflict_content` (fixed; regression
+  `test_open_unedited_checkout_writeback_is_ok_not_false_conflict`).
+- **Two surfaces (`unterscheide`):** a DATEV checkout is a **`.pdf`**, which the host routes to
+  the **PDF-Tool** surface ([`webui/src/pdftool/main.js`](webui/pdf-tool.html)); a linked
+  **`.belegtool`** opens in the **organizer**. **Both** run through `CoreApi.open`, so provenance
+  is captured either way, and **both** offer DATEV write-back: the organizer via `DatevBar`, the
+  PDF-Tool via a „🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen" toolbar button
+  (revealed by the pure `datevAction({datevMode, connected})` only for a `.pdf` in DATEV mode).
+  The PDF-Tool bakes its edits into the node (`save_node_back`) before the guarded write-back.
+- **Format-aware local save** (`_datev_local_persist`): the parallel local save writes the
+  bound path's **own format** — a `.belegtool` keeps the full structure + provenance (so the
+  link round-trips); a checkout **`.pdf`** is overwritten with the **clean effective PDF bytes**
+  (never inject the `.belegtool` structure into a DATEV checkout file). The result carries
+  `local_kind` ('belegtool' | 'pdf') and the UI shows the **saved file name** in the success
+  notice (`datevSavedNotice`) so the user can always tell which format landed on disk.
 - **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
   then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
   [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`

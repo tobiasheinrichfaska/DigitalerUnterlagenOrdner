@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chooseSource, base64ToUint8, uint8ToBase64 } from './source.js'
+import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
 
 describe('chooseSource', () => {
   it('uses the bridge when a .pdf is bound in the host', () => {
@@ -39,6 +39,19 @@ describe('chooseSource', () => {
       cfg: { startup_kind: 'node', startup_session: 'sess-123' },
       fileParam: null,
     })).toEqual({ mode: 'session', session: 'sess-123' })
+  })
+})
+
+describe('datevAction', () => {
+  it('offers write-back for a connected checkout in DATEV mode', () => {
+    expect(datevAction({ datevMode: true, connected: true })).toBe('writeback')
+  })
+  it('offers file-anew for a not-connected pdf in DATEV mode', () => {
+    expect(datevAction({ datevMode: true, connected: false })).toBe('file')
+  })
+  it('offers nothing when DATEV mode is off', () => {
+    expect(datevAction({ datevMode: false, connected: true })).toBeNull()
+    expect(datevAction({ datevMode: false, connected: false })).toBeNull()
   })
 })
 

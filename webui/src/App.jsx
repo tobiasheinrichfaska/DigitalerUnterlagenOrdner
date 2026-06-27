@@ -9,7 +9,7 @@ import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { DatevBar } from './DatevBar'
-import { isDatevConnected, datevVerdictKey } from './lib/datev'
+import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
 import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
@@ -471,10 +471,11 @@ export default function App() {
         // user can re-save the local copy to a writable location.
         setError(`${t('Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.')} ${res.local_error}`)
       } else {
-        // The host saved the local .belegtool in parallel (there is always a local path),
-        // so the local copy and DATEV stay in sync — no Save As prompt.
+        // The host saved the bound local file in parallel (no Save As prompt). Show the saved
+        // file name so the format is explicit — a .belegtool bundle (organizer) vs the plain
+        // .pdf of a DATEV checkout — so the user can always tell WHICH format landed on disk.
         setDirty(false)
-        setNotice(t('Nach DATEV zurückgeschrieben'))
+        setNotice(datevSavedNotice(t('Nach DATEV zurückgeschrieben'), res))
       }
     } else if (res && res.verdict !== 'declined') {
       // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
@@ -499,7 +500,7 @@ export default function App() {
           setError(`${t('In DATEV abgelegt, aber lokal nicht gespeichert.')} ${res.local_error}`)
         } else {
           setDirty(false)
-          setNotice(t('In DATEV abgelegt'))
+          setNotice(datevSavedNotice(t('In DATEV abgelegt'), res))
         }
       } else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
     })

@@ -161,11 +161,17 @@ def test_open_unedited_checkout_writeback_is_ok_not_false_conflict(tmp_path):
 
     core = CoreApi()
     core._datev_mode = True
-    core._datev_service = DatevService(_Client())
+    svc = DatevService(_Client())
+    core._datev_service = svc
     resp = core.open(path=str(checkout))
     assert resp.get("datev", {}).get("connected") is True       # captured as a checkout
     res = core.datev_save_back(resp["session"], confirmed=True)
     assert res["ok"] and res["verdict"] == "ok", res            # NOT conflict_content
+    # PDF-Tool path: the on-disk checkout .pdf is overwritten with the SAME clean effective
+    # bytes that went to DATEV (a plain PDF, not .belegtool format) so the file stays consistent.
+    assert res["local_kind"] == "pdf" and res["local_saved"] == str(checkout)
+    uploaded = svc._client.uploaded[0]
+    assert checkout.read_bytes() == uploaded and checkout.read_bytes().startswith(b"%PDF")
 
 
 def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):

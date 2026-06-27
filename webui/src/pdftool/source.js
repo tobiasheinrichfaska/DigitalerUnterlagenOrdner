@@ -17,6 +17,15 @@ export function chooseSource({ hasBridge, cfg, fileParam }) {
   return { mode: 'url', url: fileParam || '/spike-form.pdf' }
 }
 
+// Which DATEV action the PDF-Tool offers for the open document (DATEV mode only):
+//  - 'writeback' when the open .pdf is a DATEV checkout (connected) → guarded write-back;
+//  - 'file' when DATEV mode is on but the document is NOT connected → file it as a new doc;
+//  - null when DATEV mode is off (no DATEV UI at all).
+export function datevAction({ datevMode, connected }) {
+  if (!datevMode) return null
+  return connected ? 'writeback' : 'file'
+}
+
 // base64 → Uint8Array for PDF.js getDocument({ data }).
 export function base64ToUint8(b64) {
   const bin = atob(b64)

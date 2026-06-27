@@ -1186,6 +1186,32 @@ class CoreApi:
                          "checked_out_at_open": baseline.get("was_checked_out_at_open", False)}
         return resp
 
+    def _datev_local_persist(self, session, edited):
+        """Persist the working doc to its bound local path after a DATEV write/file, in sync.
+        A ``.belegtool`` path keeps the full structure + provenance (``save`` → mark_saved,
+        clears dirty); any OTHER path — a DATEV **checkout `.pdf`** opened in the PDF-Tool — is
+        overwritten with the clean effective PDF bytes, so the on-disk file stays consistent
+        with what DATEV received (never inject the ``.belegtool`` structure into a checkout
+        file). Returns ``{local_saved, local_error, local_kind}`` — ``local_kind`` ('belegtool'
+        | 'pdf') lets the UI state WHICH format was saved (the two surfaces save different
+        formats, so the user must be able to tell which one landed on disk)."""
+        local_path = self.document_path(session)
+        if not local_path:
+            logger.warning("[datev] no local path bound; local save skipped")
+            return {"local_saved": None, "local_error": "Kein lokaler Speicherort gebunden.",
+                    "local_kind": None}
+        if local_path.lower().endswith(".belegtool"):
+            save_res = self.save(session, local_path)
+            return {"local_saved": save_res.get("path") if save_res.get("ok") else None,
+                    "local_error": None if save_res.get("ok") else save_res.get("error"),
+                    "local_kind": "belegtool"}
+        try:
+            with open(local_path, "wb") as f:
+                f.write(edited or b"")
+            return {"local_saved": local_path, "local_error": None, "local_kind": "pdf"}
+        except OSError as e:
+            return {"local_saved": None, "local_error": str(e), "local_kind": "pdf"}
+
     def datev_save_back(self, session: str, confirmed: bool = True, comment: str = None) -> dict:
         """Guarded write-back of the working document to its connected DATEV document.
         Re-reads the server, runs the pure guard, and only on ``ok`` overwrites (after a
@@ -1229,23 +1255,15 @@ class CoreApi:
                     # prefer the server's stored-bytes hash (the service reads it back); fall
                     # back to the uploaded bytes only if the service didn't supply it.
                     "opened_sha256": res.get("new_sha256") or hashlib.sha256(edited).hexdigest()}
-            # Save the LOCAL destination alongside DATEV, in sync — there is ALWAYS a local
-            # path (the working document is a saved .belegtool), so persist it now (this also
-            # stores the updated provenance and clears dirty via mark_saved). NEVER prompt a
-            # Save As here. The defensive else only logs if a path is somehow unbound.
+            # Persist the LOCAL destination alongside DATEV, in sync (no Save As prompt): a
+            # .belegtool keeps its structure+provenance; a DATEV checkout .pdf is overwritten
+            # with the clean effective bytes (see _datev_local_persist). local_kind tells the UI
+            # which format landed so it can say so.
             # NOTE (accepted residual): the write-back snapshot (`edited`) was taken before the
             # network round-trip; this local save re-reads the *current* session document. The
             # modal busy-state disables edits during write-back, so the two can't diverge in the
             # single-window UI — see the residual note in CLAUDE.md.
-            local_path = self.document_path(session)
-            if local_path:
-                save_res = self.save(session, local_path)
-                res["local_saved"] = save_res.get("path") if save_res.get("ok") else None
-                if not save_res.get("ok"):
-                    res["local_error"] = save_res.get("error")
-            else:
-                logger.warning("[datev] write-back: no local path bound; local save skipped")
-                res["local_error"] = "Kein lokaler Speicherort gebunden."
+            res.update(self._datev_local_persist(session, edited))
         return res
 
     def _datev_reestablish_baseline(self, svc, session, prov):
@@ -1303,16 +1321,10 @@ class CoreApi:
             self._datev_set_provenance(session, res["provenance"])
             with self._lock:
                 self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
-            # Persist the new DATEV link locally NOW. The provenance was applied silently (no
-            # dirty flag) and the document is no longer at a checkout path, so the link is NOT
-            # re-derivable — without this, closing the window would lose it and a re-file would
-            # create a duplicate DATEV document. Mirror datev_save_back's parallel local save.
-            local_path = self.document_path(session)
-            if local_path:
-                save_res = self.save(session, local_path)
-                res["local_saved"] = save_res.get("path") if save_res.get("ok") else None
-                if not save_res.get("ok"):
-                    res["local_error"] = save_res.get("error")
+            # Persist the new DATEV link locally NOW (a .belegtool keeps the provenance so the
+            # link survives a window close; a .pdf is overwritten with the filed bytes). Mirror
+            # datev_save_back. local_kind tells the UI which format was saved.
+            res.update(self._datev_local_persist(session, data))
         return res
 
     def datev_export(self, session: str, node_ids=None, options=None, client_guid: str = None,

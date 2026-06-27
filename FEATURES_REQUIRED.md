@@ -77,6 +77,15 @@ package is never imported and none of this is reachable.
 - **Export → DATEV (same client)**: with a connected document, the export dialog offers „Nach
   DATEV ablegen (gleicher Mandant)"; `datev_export` files **every produced PDF** (single or each
   split part) as its own new document; a partial failure reports „Nur X von Y …".
+- **PDF opening (PDF-Tool surface)**: a DATEV checkout `.pdf` opens in the PDF-Tool, which must
+  also offer DATEV — **„🔗 Nach DATEV zurückschreiben"** for a connected checkout (bakes the edit
+  into the node, then the guarded write-back) and **„📤 Nach DATEV ablegen"** for a not-connected
+  PDF. The first write-back of an unedited checkout must **not** false-conflict (baseline hashes
+  the raw checkout file). DATEV mode off → no button.
+- **Format-clarity on local save**: the parallel local save writes the bound path's own format —
+  a `.belegtool` (organizer) keeps structure + provenance; a checkout `.pdf` (PDF-Tool) is
+  overwritten with clean effective PDF bytes — and the success notice **names the saved file** so
+  the user can tell which format landed (`local_kind`).
 - Acceptance: with mode **off**, a normal launch never touches DATEV and the badge/actions are
   absent. With mode **on** + a fake/real service, the verdicts above are honoured and a refused
   write-back never overwrites the server. (Live end-to-end = `manual_tests/10_datev.md`.)

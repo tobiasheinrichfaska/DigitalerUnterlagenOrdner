@@ -147,3 +147,29 @@ DATEV mode on.
 - No DATEV badge, no DATEV actions, no DATEV option in the export dialog.
 - Behaviour is identical to a build without the DATEV feature (the `datev` package is not even
   imported). Nothing about DATEV should appear anywhere.
+
+---
+
+## MT-DATEV-08: Write back a checkout opened in the PDF-Tool (PDF opening)
+
+**Preconditions:** DATEV mode **on**; a DATEVconnect box reachable. In DATEV, **check out** a
+test document (DATEV materialises `…\<doc-guid>\<file-id>.pdf`).
+
+**Steps:**
+1. Open the checked-out **`.pdf`** directly (double-click / file association / `BelegTool.exe <path>`).
+   It opens in the **PDF-Tool** surface (single-PDF editor), **not** the organizer.
+2. In the PDF-Tool toolbar, confirm a **„🔗 Nach DATEV zurückschreiben"** button is shown.
+3. Add a small note (✎ Text), then click **„🔗 Nach DATEV zurückschreiben"** and confirm **Ja**.
+
+**Expected:**
+- The write-back **succeeds** — status shows **„Nach DATEV zurückgeschrieben ✓ · <file>.pdf"**.
+  ⚠️ It must **not** report a conflict on the very first, otherwise-unedited write-back (the
+  content baseline hashes the raw checkout file, so an unchanged checkout is never a false
+  conflict).
+- The status line **names the saved file** so you can see it saved a **`.pdf`** (the on-disk
+  checkout file is overwritten with the edited PDF — still a valid PDF, no `.belegtool` structure).
+- In DATEV the document's file reflects the edit; a backup of the previous server bytes is in
+  `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\`.
+- A **not-connected** PDF (opened from a non-checkout path) instead shows **„📤 Nach DATEV
+  ablegen"**, which prompts a Mandant and files it as a new DATEV document.
+- With DATEV mode **off**, the PDF-Tool shows **no** DATEV button at all.

@@ -145,9 +145,30 @@ class DatevConnectClient:
         return file_id
 
     def create_document(self, payload):
-        """POST a DocumentCreate body -> the created Document (with its ``id`` GUID +
-        ``change_date_time``). ``payload`` is built by the GUI from the chosen client/folder."""
+        """POST a DocumentCreate body -> the created Document. The live box may answer 201 with
+        an empty body and the new id only in the ``Location`` header, so we fall back to that
+        (and always surface the HTTP status) instead of returning a confusing empty result."""
         body = json.dumps(payload).encode("utf-8")
         res = self._send("documents_create", accept="application/json",
                          body=body, content_type="application/json")
-        return self._as_json(res, "documents_create")
+        text = _text(res.body).strip()
+        parsed = None
+        if text:
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                raise DatevError(f"Ungültiges JSON von documents_create", res.status, text)
+            if isinstance(parsed, dict) and ("error_description" in parsed or "error" in parsed):
+                raise _error_from_body(text, res.status, "documents_create")
+        if isinstance(parsed, dict) and parsed.get("id"):
+            parsed.setdefault("http_status", res.status)
+            return parsed
+        # empty/idless body: recover the created id from Location (201 Created)
+        loc = res.headers.get("location")
+        result = {"http_status": res.status}
+        if loc:
+            result["location"] = loc
+            result["id"] = loc.rstrip("/").split("/")[-1]
+        elif parsed is not None:
+            result["body"] = parsed
+        return result

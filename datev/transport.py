@@ -39,26 +39,43 @@ def make_urllib_transport(allow_self_signed=False, timeout=30):
     return transport
 
 
-def build_curl_args(method, url, headers, allow_self_signed, out_path, has_body, curl="curl.exe"):
+def parse_header_dump(text):
+    """Last response block of a curl ``-D`` dump → a lowercased header dict (Negotiate makes
+    curl emit a 401 block then the final block; we want the final one's headers, e.g. Location)."""
+    blocks = [b for b in text.replace("\r\n", "\n").split("\n\n") if b.strip()]
+    out = {}
+    for line in (blocks[-1].splitlines() if blocks else []):
+        if ":" in line and not line.startswith("HTTP/"):
+            k, _, v = line.partition(":")
+            out[k.strip().lower()] = v.strip()
+    return out
+
+
+def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path=None,
+                    header_path=None, curl="curl.exe"):
     """Pure: the curl command line for one SSO request — mirrors OPOS's hardened ``curl_args``.
     ``--negotiate -u :`` authenticates as the current Windows user; ``--http1.1`` avoids the
     HTTP/2 framing errors that show up as ``http_code 000`` on large bodies (the big documents
     list); bounded timeouts + one retry let a transient drop self-heal; ``--compressed`` shrinks
     big JSON. Status → stdout (``-w``), body → ``out_path`` (``-o``, binary-safe so a fetched PDF
-    survives); a round-2 request body comes from stdin. We never forward an Authorization header
-    — SSO does the auth."""
+    survives). A request body is passed as a **file** (``--data-binary @<path>``), NOT stdin:
+    Negotiate sends an unauthenticated probe first and must **replay** the body on the
+    authenticated retry — a streamed stdin body can't be rewound, so a POST/PUT would stall.
+    We never forward an Authorization header — SSO does the auth."""
     args = [curl, "-sS", "--http1.1", "--negotiate", "-u", ":",
             "--connect-timeout", "15", "--max-time", "45",
             "--retry", "1", "--retry-connrefused", "--retry-delay", "2",
             "--compressed", "-X", method, "-w", "%{http_code}", "-o", out_path]
+    if header_path is not None:
+        args += ["-D", header_path]     # dump response headers (Location carries a created id)
     if allow_self_signed:
         args.append("-k")
     for key, value in (headers or {}).items():
         if key.lower() == "authorization":
             continue
         args += ["-H", f"{key}: {value}"]
-    if has_body:
-        args += ["--data-binary", "@-"]
+    if body_path is not None:
+        args += ["--data-binary", "@" + body_path]
     args.append(url)
     return args
 
@@ -69,23 +86,34 @@ def make_curl_sso_transport(allow_self_signed=False, timeout=300, curl="curl.exe
     def transport(method, url, headers, body=None):
         fd, out_path = tempfile.mkstemp(prefix="datevprobe_")
         os.close(fd)
+        hfd, header_path = tempfile.mkstemp(prefix="datevprobe_hdr_")
+        os.close(hfd)
+        body_path = None
+        if body is not None:                       # write the body to a re-readable file
+            bfd, body_path = tempfile.mkstemp(prefix="datevprobe_body_")
+            with os.fdopen(bfd, "wb") as bf:
+                bf.write(body)
         try:
             args = build_curl_args(method, url, headers, allow_self_signed, out_path,
-                                   body is not None, curl)
-            proc = subprocess.run(args, input=body, capture_output=True, timeout=timeout,
+                                   body_path, header_path, curl)
+            proc = subprocess.run(args, capture_output=True, timeout=timeout,
                                   creationflags=_NO_WINDOW)
             status_text = proc.stdout.decode("ascii", "ignore").strip()[-3:]
             status = int(status_text) if status_text.isdigit() else 0
             with open(out_path, "rb") as f:
                 data = f.read()
+            with open(header_path, "r", encoding="utf-8", errors="replace") as f:
+                resp_headers = parse_header_dump(f.read())
             if status == 0:  # curl itself failed (no HTTP exchange) — surface its stderr
                 err = proc.stderr.decode("utf-8", "replace").strip()
                 raise DatevError(f"SSO/curl fehlgeschlagen: {err or 'kein Statuscode (curl.exe vorhanden?)'}")
-            return HttpResponse(status, {}, data)
+            return HttpResponse(status, resp_headers, data)
         finally:
-            try:
-                os.remove(out_path)
-            except OSError:
-                pass
+            for p in (out_path, header_path, body_path):
+                if p:
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
 
     return transport

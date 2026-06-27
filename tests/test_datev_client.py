@@ -16,7 +16,7 @@ from datev.config import (
 )
 from datev.endpoints import build_url
 from datev.synthetic_pdf import make_test_pdf
-from datev.transport import build_curl_args
+from datev.transport import build_curl_args, parse_header_dump
 from datev.types import (
     DatevAuthError,
     DatevConfig,
@@ -169,6 +169,14 @@ def test_create_document_posts_json_body_and_returns_doc():
     assert json.loads(seen["body"])["correspondence_partner_guid"] == "g-2"
 
 
+def test_create_document_recovers_id_from_location_when_body_empty():
+    # the live box may answer 201 + empty body + Location header (no JSON id).
+    loc = "https://h/v2/documents/doc-guid-xyz"
+    cli, _ = _client(lambda *a: _resp(201, body=b"", headers={"location": loc}))
+    doc = cli.create_document({"class": {"id": 1}})
+    assert doc["id"] == "doc-guid-xyz" and doc["http_status"] == 201 and doc["location"] == loc
+
+
 def test_create_document_license_error_maps():
     env = {"error_description": "No License found for component K0001928 ... product 63218"}
     cli, _ = _client(lambda *a: _resp(200, obj=env))
@@ -207,7 +215,7 @@ def test_no_auth_header_without_credentials():
 def test_build_curl_args_uses_negotiate_and_drops_auth_header():
     args = build_curl_args("GET", "https://h/v2/info",
                            {"Accept": "application/json", "Authorization": "Basic x"},
-                           allow_self_signed=False, out_path="/tmp/o", has_body=False)
+                           allow_self_signed=False, out_path="/tmp/o", body_path=None)
     assert "--negotiate" in args and args[args.index("-u") + 1] == ":"  # current Windows user
     assert "--http1.1" in args                                         # OPOS hardening (avoids 000)
     assert args[args.index("-X") + 1] == "GET"
@@ -215,13 +223,24 @@ def test_build_curl_args_uses_negotiate_and_drops_auth_header():
     assert "Accept: application/json" in args                          # forwarded
     assert not any("Authorization" in a for a in args)                 # SSO does the auth
     assert "-k" not in args                                            # strict TLS by default
+    assert "--data-binary" not in args                                 # no body on a GET
 
 
-def test_build_curl_args_self_signed_and_body():
+def test_parse_header_dump_takes_final_block_location():
+    dump = ("HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Negotiate\r\n\r\n"
+            "HTTP/1.1 201 Created\r\nLocation: https://h/v2/documents/abc\r\n"
+            "Content-Length: 0\r\n\r\n")
+    h = parse_header_dump(dump)
+    assert h["location"] == "https://h/v2/documents/abc"
+    assert "www-authenticate" not in h          # the 401 block is ignored
+
+
+def test_build_curl_args_self_signed_and_file_body():
+    # body comes from a FILE (@path), not stdin (@-), so Negotiate can replay it on the retry.
     args = build_curl_args("POST", "https://h/v2/documents", {}, allow_self_signed=True,
-                           out_path="/tmp/o", has_body=True)
+                           out_path="/tmp/o", body_path="/tmp/body")
     assert "-k" in args                                                # tolerate self-signed
-    assert "--data-binary" in args and args[args.index("--data-binary") + 1] == "@-"
+    assert "--data-binary" in args and args[args.index("--data-binary") + 1] == "@/tmp/body"
 
 
 # --- connection config (mirrors OPOS datev_api) ----------------------------

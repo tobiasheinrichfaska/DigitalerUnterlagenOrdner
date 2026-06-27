@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import datetime
 
 from .provenance import parse_checkout_path
@@ -221,8 +222,14 @@ class DatevService:
         if backup_dir:
             try:
                 os.makedirs(backup_dir, exist_ok=True)
+                # Defense-in-depth: this is a reusable service — never let a doc_guid /
+                # file_id from a (possibly crafted) provenance inject path separators into
+                # the backup filename. Keep only hex/dash/digits; the result stays inside
+                # backup_dir regardless of caller (CoreApi also gates with valid_provenance).
+                safe_guid = re.sub(r"[^0-9A-Fa-f-]", "", str(doc_guid))[:36] or "doc"
+                safe_fid = re.sub(r"[^0-9]", "", str(file_id)) or "f"
                 backup_path = os.path.join(
-                    backup_dir, f"datev_backup_{doc_guid}_{file_id}.pdf")
+                    backup_dir, f"datev_backup_{safe_guid}_{safe_fid}.pdf")
                 with open(backup_path, "wb") as f:
                     f.write(remote_bytes or b"")
             except OSError:

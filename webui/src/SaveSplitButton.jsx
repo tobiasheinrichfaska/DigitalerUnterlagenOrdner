@@ -5,6 +5,7 @@
 // outside click, and focus moves to the menu item when it opens.
 import { useEffect, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
+import { useMenuDismiss, rovingFocusKeydown } from './hooks/useMenu'
 
 export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
   const { t } = useT()
@@ -12,14 +13,8 @@ export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
   const wrapRef = useRef(null)
   const itemRef = useRef(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onDocDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDocDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDocDown); document.removeEventListener('keydown', onKey) }
-  }, [open])
+  // Shared close-on-Escape / outside-click (#10).
+  useMenuDismiss(wrapRef, open, () => setOpen(false))
 
   // Move focus into the menu when it opens (so keyboard users land on the action).
   useEffect(() => { if (open) itemRef.current?.focus() }, [open])
@@ -35,7 +30,7 @@ export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
         title={t('Weitere Speicheroptionen')} aria-label={t('Weitere Speicheroptionen')}
         onClick={() => setOpen((o) => !o)}>▾</button>
       {open && (
-        <div className="save-menu" role="menu">
+        <div className="save-menu" role="menu" onKeyDown={(e) => rovingFocusKeydown(e.currentTarget, e)}>
           <button ref={itemRef} role="menuitem" className="save-menu-item" onClick={chooseSaveAs}>
             {t('Speichern unter…')}
           </button>

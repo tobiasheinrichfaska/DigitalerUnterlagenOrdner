@@ -579,8 +579,7 @@ as **v3.10.0**.
    Accessible: `aria-haspopup`/`aria-expanded`, `role="menu"`/`menuitem`, closes on Escape and
    outside-click, focus moves to the item on open. Covered by `SaveSplitButton.test.jsx` (8).
    New i18n key `Weitere Speicheroptionen` (en done; others via PENDING_TRANSLATIONS batch).
-   **Note:** this is a focused dropdown; generalizing it into the **shared reusable menu of #10**
-   (and migrating `ContextMenu.jsx` onto it) is still open.
+   **Note:** the dropdown now uses the **shared menu hook of #10** ([`hooks/useMenu.js`](webui/src/hooks/useMenu.js)).
 4. **Rotate controls — swap display order. — DONE (v3.10.0).** [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
    now renders the rotate buttons **left-then-right** (↺ before ↻); locked by `PreviewControls.test.jsx`.
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
@@ -650,11 +649,14 @@ as **v3.10.0**.
    pure [`lib/zoomAnchor.js`](webui/src/lib/zoomAnchor.js) (`pageFraction` / `scrollForAnchor`),
    unit-tested in `lib/zoomAnchor.test.js`; the visual behaviour is covered by `manual_tests`
    MT-10 (jsdom has no layout, so the integration is verified by hand).
-10. **Reusable accessible menu (keyboard nav).** *(Deferred audit item, folded here.)* Build one
-    accessible-menu pattern — `role="menu"`/`menuitem`, roving focus, ↑/↓ to move, Enter/Space to
-    activate, Esc to close, focus-first-on-open — and have **`ContextMenu.jsx` AND the planned #3
-    Save split-button dropdown share it**, rather than retrofitting today's ContextMenu and
-    rebuilding for the split-button. (Today: ContextMenu is mouse + Esc/backdrop only.)
+10. **Reusable accessible menu (keyboard nav). — DONE (2026-06-27).** The shared menu contract now
+    lives in [`hooks/useMenu.js`](webui/src/hooks/useMenu.js): `rovingFocusKeydown` (↑/↓ cycle,
+    Home/End jump), `tagMenuItems` (role="menuitem" tagging), and `useMenuDismiss` (Escape +
+    outside-mousedown close while open). Both **`ContextMenu.jsx`** (roving focus + tagging) and the
+    **`SaveSplitButton.jsx`** dropdown (dismiss + roving focus) use it — duplication removed.
+    ContextMenu keeps its context-specific backdrop, Escape-via-window listener and viewport
+    clamping. Covered by `hooks/useMenu.test.jsx` (7) plus the existing ContextMenu/SaveSplitButton
+    suites. Enter/Space activate the focused `<button>` natively.
 11. **Error-code contract (architectural, optional).** *(Deferred audit High — the pragmatic
     `lib/messages.js` reverse-template localizer already covers it functionally.)* Optionally
     replace backend German error strings with stable **`{ code, params }`** so the UI owns all

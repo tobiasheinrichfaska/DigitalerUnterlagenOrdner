@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
 
-export function ExportDialog({ hasTags, onChoose, onCancel }) {
+export function ExportDialog({ hasTags, datevAvailable = false, onChoose, onCancel }) {
   const { t } = useT()
   const [toc, setToc] = useState(true)
   const [tocLinks, setTocLinks] = useState(true)
@@ -16,6 +16,7 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
   const [split, setSplit] = useState(false)
   const [splitPages, setSplitPages] = useState(100)
   const [splitLevel, setSplitLevel] = useState('top')
+  const [toDatev, setToDatev] = useState(false)  // file the export into DATEV (same client)
 
   // Focus management: focus first element on open, trap Tab, close on Esc, restore focus on unmount.
   const dialogRef = useModal({ onClose: onCancel })
@@ -28,6 +29,7 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
     bookmarks: bookmarks && !split,
     split_pages: split ? Math.max(1, Number(splitPages) || 100) : null,
     split_level: splitLevel,
+    to_datev: datevAvailable && toDatev,  // → file the exported PDF(s) into DATEV instead of disk
   })
 
   return (
@@ -82,6 +84,13 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
             <option value="page">{t('mitten im Dokument')}</option>
           </select>
         </label>
+
+        {datevAvailable && (
+          <label className="exp-row datev-export-row">
+            <input type="checkbox" checked={toDatev} onChange={(e) => setToDatev(e.target.checked)} />
+            {t('Nach DATEV ablegen (gleicher Mandant)')}
+          </label>
+        )}
 
         <div className="modal-actions">
           <button className="primary" onClick={confirm}>{t('Exportieren')}</button>

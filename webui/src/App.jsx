@@ -8,6 +8,8 @@ import { ExportDialog } from './ExportDialog'
 import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
+import { DatevBar } from './DatevBar'
+import { isDatevConnected, datevVerdictKey } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
 import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
@@ -54,6 +56,8 @@ export default function App() {
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
+  const [datevMode, setDatevMode] = useState(false) // DATEV mode on (per-user host setting)
+  const [datevOpen, setDatevOpen] = useState(null) // {checked_out_at_open, source_name} from the open response
   const { width: treeWidth, startResize } = useResizablePane()
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
   // preventDefault the webview's page zoom). Bound via a *callback ref* so it attaches
@@ -177,6 +181,12 @@ export default function App() {
   // (A Python-side flag, not evaluate_js — the latter hangs during window close.)
   useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
+  // DATEV mode: read the per-user setting once on mount (cheap; when off the host
+  // never imports the datev package). The bar lets the user flip it.
+  useEffect(() => {
+    core.datevStatus().then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     // Fetch config first so we can honour a startup_path (a .belegtool handed
     // over by the legacy GUI's "open in new GUI"); otherwise open an empty doc.
@@ -185,6 +195,7 @@ export default function App() {
       .catch(() => null)
       .then((r) => run(core.open(null, r?.startup_path || null)).then((resp) => {
         apply(resp)
+        setDatevOpen(resp?.datev || null) // DATEV provenance/checked-out hint captured at open
         if (resp?.ok && allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
       }))
       .catch((e) => setError(String(e.message || e)))
@@ -438,8 +449,33 @@ export default function App() {
       apply(resp)
       if (resp?.ok) {
         setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
+        setDatevOpen(resp.datev || null) // refresh the DATEV badge/checked-out hint for the new file
         if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
       }
+    })
+  }
+
+  // --- DATEV mode (v3.10.0; ops delegate to the host, no-ops when mode is off) ---
+  const datevProvenance = state?.tree?.datev || null
+  const datevConnected = isDatevConnected(datevProvenance)
+  const patchProvenance = (prov) =>
+    setState((p) => (p?.tree ? { ...p, tree: { ...p.tree, datev: prov } } : p))
+  const toggleDatevMode = () =>
+    run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+  const saveToDatev = () => run(core.saveToDatev(session)).then((res) => {
+    if (res?.ok) {
+      setDirty(false); setNotice(t('Nach DATEV zurückgeschrieben'))
+      if (res.provenance) patchProvenance(res.provenance)
+    } else if (res && res.verdict !== 'declined') {
+      setError(res.verdict ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
+    }
+  })
+  const fileToDatev = () => {
+    const num = window.prompt(t('Mandantennummer für die DATEV-Ablage'))
+    if (num == null || !num.trim()) return
+    run(core.datevFile(session, { mandantNumber: num.trim() })).then((res) => {
+      if (res?.ok) { setNotice(t('In DATEV abgelegt')); if (res.provenance) patchProvenance(res.provenance) }
+      else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
     })
   }
 
@@ -468,6 +504,14 @@ export default function App() {
   const doExport = (options) => {
     const ids = exportAsk?.ids ?? null
     setExportAsk(null)
+    // #export-to-DATEV: file the exported PDF(s) as new DATEV document(s) under the same
+    // client instead of writing to disk (every split part becomes its own document).
+    if (options?.to_datev) {
+      return run(core.datevExport(session, ids, options)).then((res) => {
+        if (res?.ok) { setError(null); setNotice(t('In DATEV abgelegt ({n} Dokumente)', { n: res.parts })) }
+        else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
+      })
+    }
     return run(core.exportPdf(session, ids, options)).then((resp) => {
       if (resp?.ok) {
         setError(null)
@@ -535,6 +579,13 @@ export default function App() {
           canUndo={state?.can_undo} canRedo={state?.can_redo}
           tagsOn={tagsOn} busy={busy} editLocked={viewActive}
         />
+        <DatevBar
+          datevMode={datevMode} connected={datevConnected}
+          sourceName={datevProvenance?.source_name || datevOpen?.source_name}
+          checkedOutAtOpen={!!datevOpen?.checked_out_at_open}
+          onToggleMode={toggleDatevMode} onSaveBack={saveToDatev} onFile={fileToDatev}
+          busy={!!busy}
+        />
       </header>
 
 
@@ -599,6 +650,7 @@ export default function App() {
 
       {exportAsk && (
         <ExportDialog hasTags={allTags(state?.tree).length > 0}
+          datevAvailable={datevMode && datevConnected}
           onCancel={() => setExportAsk(null)} onChoose={doExport} />
       )}
 

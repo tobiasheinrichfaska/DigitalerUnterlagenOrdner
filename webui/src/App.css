@@ -83,6 +83,23 @@ header {
 header h1 { font-size: 19px; margin: 0; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; }
+
+/* DATEV-mode bar (v3.10.0) */
+.datev-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.datev-toggle {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; color: var(--muted, #667); cursor: pointer;
+}
+.datev-toggle.active { color: #fff; background: #2b8a3e; border-color: #2b8a3e; }
+.datev-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted, #556); }
+.datev-state.connected { color: #2b6cb0; }
+.datev-state .datev-warn { color: #b54708; font-style: italic; }
+.datev-action {
+  font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; cursor: pointer;
+}
+.datev-action:disabled { opacity: 0.5; cursor: progress; }
 button {
   font: inherit;
   padding: 5px 10px;

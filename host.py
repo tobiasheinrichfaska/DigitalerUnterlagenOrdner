@@ -197,7 +197,7 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.9.5"
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.10.0"
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
@@ -399,6 +399,49 @@ class HostApi:
         if isinstance(path, (tuple, list)):
             path = path[0]
         return self._core.save(session, path, store_alternatives)
+
+    # --- DATEV mode (lazy; ops delegate to CoreApi, dialogs run on this window) ---
+    def datev_status(self):
+        return self._core.datev_status()
+
+    def set_datev_mode(self, on):
+        return self._core.set_datev_mode(on)
+
+    def datev_can_file(self, session):
+        return self._core.datev_can_file(session)
+
+    def datev_resolve_client(self, mandant_number):
+        return self._core.datev_resolve_client(mandant_number)
+
+    def save_to_datev(self, session):
+        """Ask „nach DATEV zurückschreiben?" then perform the guarded write-back. Returns
+        the verdict so the React app can explain a non-ok result and offer a local save.
+        Cancelling the prompt is reported as ``declined`` (→ the UI does a normal save)."""
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        if not win.create_confirmation_dialog(
+                "Nach DATEV zurückschreiben?",
+                "Die Änderungen in das verknüpfte DATEV-Dokument zurückschreiben?\n"
+                "(DATEV Dokumentenablage behält keine Revision — der alte Stand wird "
+                "überschrieben; eine lokale Sicherung wird vorher angelegt.)"):
+            return {"ok": False, "verdict": "declined"}
+        return self._core.datev_save_back(session, confirmed=True)
+
+    def datev_file(self, session, client_guid=None, mandant_number=None, description=None,
+                   domain_id=1, folder_id=None, register_id=None):
+        return self._core.datev_file(session, client_guid=client_guid,
+                                     mandant_number=mandant_number, description=description,
+                                     domain_id=domain_id, folder_id=folder_id,
+                                     register_id=register_id)
+
+    def datev_export(self, session, node_ids=None, options=None, client_guid=None,
+                     mandant_number=None, description=None, domain_id=1, folder_id=None,
+                     register_id=None):
+        return self._core.datev_export(session, node_ids=node_ids, options=options,
+                                       client_guid=client_guid, mandant_number=mandant_number,
+                                       description=description, domain_id=domain_id,
+                                       folder_id=folder_id, register_id=register_id)
 
 
 def _safe_http_port():

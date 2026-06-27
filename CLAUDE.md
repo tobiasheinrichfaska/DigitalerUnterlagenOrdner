@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.9.5**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.10.0**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -55,7 +55,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.9.5) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.10.0) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -357,6 +357,58 @@ delete, allow read) — bit-for-bit Acrobat's; the OS frees it on process death 
 - **Deferred:** graphical on/off setting; Office-style autosave/recover of *unsaved* changes;
   read-only fallback when a file is in use.
 
+### In-app DATEV integration (v3.10.0, DATEV-mode only, lazy-loaded)
+
+Files / writes documents back into the local **DATEV Dokumentenablage** (DokAb) via
+DATEVconnect. **Off by default** behind a per-user setting; when off, the heavy `datev`
+package is **never imported** (normal launch stays lean). Authoritative design:
+[`docs/datev-integration-design.md`](docs/datev-integration-design.md); the live-verified
+mechanics: [`docs/datev-dokumentenablage-recipe.md`](docs/datev-dokumentenablage-recipe.md)
+and [`docs/datev-provenance.md`](docs/datev-provenance.md).
+
+- **Setting + toggle** ([`infra/settings.py`](infra/settings.py)) — `datev_mode` (+ optional
+  `dms_base_url`) persisted to `%APPDATA%\DigitalerUnterlagenOrdner\settings.json`, the sibling
+  of `window.json`. ⚠️ **Terminal-server safe: strictly per-user** (`%APPDATA%` Roaming is the
+  user's own profile, never machine-wide) — required because DATEV authenticates via **Windows
+  SSO as the logged-in user**. The header **„DATEV"** button ([`DatevBar.jsx`](webui/src/DatevBar.jsx))
+  flips it via `HostApi.set_datev_mode` → `CoreApi.set_datev_mode`.
+- **Lazy service** ([`datev/inapp.py`](datev/inapp.py) `DatevService`) — built on first use over
+  the reusable, injected-transport [`datev/client.py`](datev/client.py) (SSO curl). Imports the
+  `datev` package only when mode is on. `CoreApi._datev_get_service()` is the gate.
+- **Provenance** — the DATEV origin `{doc_guid, file_id, structure_item_id,
+  correspondence_partner_guid, source_name}` lives on the **root** `Node.datev` field and
+  **round-trips in `.belegtool`** (threaded through `model`/`pdf_node`/`bridge`/`pdf_storage`;
+  set/cleared by the in-process **`SetDatev`** command, applied silently — origin metadata, no
+  undo/dirty). The write-back **baseline** (opened sha256 + `change_date_time` + checked_out)
+  is per-session runtime state in `CoreApi._datev_baseline`, **not** persisted.
+- **On open** (`CoreApi._datev_capture_on_open`) — a DATEV **checkout path**
+  (`…\<doc-guid>\<file-id>`, via `parse_checkout_path`) captures provenance + baseline, shows a
+  „from DATEV" badge, and warns up front if the document was already checked out.
+- **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
+  then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
+  [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
+  unchanged vs baseline · server bytes == opened original). `ok` → backup the fetched server
+  bytes to `%APPDATA%\…\datev_backups\`, then `upload_document_file` → `update_structure_item`
+  (the **stable** structure-item id; DokAb overwrites, no revision). **Any non-ok verdict
+  (`declined`/`locked`/`conflict_changed`/`conflict_content`/`no_structure_item`) writes
+  NOTHING** and the UI falls back to a filesystem save.
+- **Save As clears provenance** (Save As breaks the DATEV link). A not-connected file offers
+  **„nach DATEV ablegen"** = the create flow (`CoreApi.datev_file` → upload + `create_document`,
+  Mandant via `resolve_client_guid`, user via SID match, no state for class 1), then adopts the
+  new provenance.
+- **Export → DATEV (same client)** — the export dialog gains „Nach DATEV ablegen (gleicher
+  Mandant)" when connected; `CoreApi.datev_export` exports (single **or split**, honouring the
+  options) and files **every produced PDF** as its own new DATEV document under the source's
+  Mandant.
+- **Tests:** the pure logic + orchestration are covered headless (`tests/test_settings.py`,
+  `test_datev_provenance_roundtrip.py`, `test_datev_inapp.py` with a fake client,
+  `test_datev_coreapi.py` with a fake service; the existing `test_datev_client.py` /
+  `test_datev_writeback.py`). Frontend: `webui/src/DatevBar.test.jsx`, `lib/datev.test.js`, the
+  export-option cases in `ExportDialog.test.jsx`. Live end-to-end is the
+  [`manual_tests/10_datev.md`](manual_tests/10_datev.md) checklist (needs a DATEVconnect box).
+- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **research tooling**, not
+  shipped in the BelegTool release.
+
 ### Persistence / save policy (v3.6.0)
 The file stores **only `current_pdf_data` per node** — never a separate original.
 So a **committed** node ("Lesbarkeit geprüft" = a `Compress` was applied) saves only
@@ -498,7 +550,9 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current tag: **v3.9.5** (beta)
+Current tag: **v3.10.0** (beta) — icon-only toolbar, Save split-button, multi-select tagging,
+„Neuer Ordner" at selection, zoom-keeps-position, nested archive/mail + subfolders, configurable
+export split, PDF-Tool text editor, and the **in-app DATEV integration** (DATEV-mode only).
 
 ---
 
@@ -542,6 +596,15 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Variants grow the file** — computed compression variants are embedded in the `.belegtool`
   (no sidecar). Split parts in **already-saved** files keep the old `no_compression` flag until
   re-split.
+- **DATEV mode (v3.10.0) — accepted bounds.** Off by default; **write-back only succeeds when the
+  document was opened from a DATEV checkout path and still byte-matches the server file** — a
+  reopened `.belegtool` (or any structural transform) safely reports `conflict_content` and
+  falls back to a local save (never a blind overwrite). DokAb keeps **no revision**, so the
+  write is a permanent overwrite (guarded; a local backup is written first). The **file-to-DATEV
+  placement** asks only for the Mandant number — domain/folder/register default (no graphical
+  folder picker yet). Live behaviour is verified only by the human `manual_tests/10_datev.md`
+  (no DATEVconnect in CI). The DATEVconnect OpenAPI specs in `import/` are **vendor IP —
+  gitignored, never committed**.
 
 > *Fixed 2026-06-18:* the keyboard-only context-menu bug (keyboard selection didn't arm the ▤ Menu /
 > Shift+F10 key) — the primary row now takes DOM focus on selection ([`Tree.jsx`](webui/src/Tree.jsx)),
@@ -601,8 +664,10 @@ as **v3.10.0**.
    so we avoid a cross-window drag entirely.
    All three candidate designs keep the drag **intra-window** (so the WebView2 cross-window limit
    never applies); shared/source contents come from the shared `CoreApi`.
-   **Decision (2026-06-09): build (A) now (v3.10.0); (B) and (C) are logged for later versions.**
-   - **(A) „Austausch-Pad" (interchange tray) — NOW.** A small shared tray in every window. Drag a
+   **Decision (2026-06-09): build (A) in v3.10.0; (B) and (C) are logged for later versions.**
+   **Revised (2026-06-27): (A) is CUT from v3.10.0 — not built; the in-app DATEV integration was
+   prioritised for v3.10.0 instead. (A)/(B)/(C) are all deferred to a later version.**
+   - **(A) „Austausch-Pad" (interchange tray) — deferred (was: NOW).** A small shared tray in every window. Drag a
      node *onto the pad* (same-window drag) → `CoreApi` stages the subtree; the pad shows in every
      window (shared `CoreApi`); drag the item *from the pad onto a tree* (same-window drag) → copy
      inserted (`materialize_subset` → insert). Simple; **copy-only**; doubles as a within-window
@@ -915,7 +980,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.9.5`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.10.0`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **One known gap that must NOT be reported as a bug** (the bug form's required
   checkbox enforces this): compression irreversible after save ("bereits komprimiert

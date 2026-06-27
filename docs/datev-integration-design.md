@@ -1,4 +1,11 @@
-# In-app DATEV integration — design (deferred; DATEV-mode only)
+# In-app DATEV integration — design (SHIPPED v3.10.0; DATEV-mode only)
+
+> **Status: built in v3.10.0.** This design is now implemented — settings gate
+> ([`infra/settings.py`](../infra/settings.py)), lazy service
+> ([`datev/inapp.py`](../datev/inapp.py)), provenance round-trip (`Node.datev` + `SetDatev`),
+> and the `CoreApi.datev_*` / `HostApi` ops wired to [`DatevBar.jsx`](../webui/src/DatevBar.jsx)
+> and the export dialog. See the **In-app DATEV integration** section of the project
+> [`CLAUDE.md`](../CLAUDE.md). The text below is the authoritative spec it was built to.
 
 Everything here happens **only when DATEV mode is activated** (a settings flag + a „DATEV"
 menu toggle; the DATEV code is lazy-loaded so a normal launch stays lean). In normal mode none

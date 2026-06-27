@@ -49,7 +49,7 @@ describe('translate (source-string keys)', () => {
     // 14 host-level error/warning strings (host.py + core/api.py + lib/messages.js). If a
     // string is added, bump this deliberately — and add it to every full-coverage
     // language file (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(163)
+    expect(Object.keys(en).length).toBe(179)
   })
 })
 
@@ -63,7 +63,19 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  const PENDING_TRANSLATIONS = new Set(['Im PDF-Tool öffnen'])
+  const PENDING_TRANSLATIONS = new Set([
+    'Im PDF-Tool öffnen',
+    // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
+    'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
+    'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',
+    'Nach DATEV zurückgeschrieben', 'In DATEV abgelegt', 'In DATEV abgelegt ({n} Dokumente)',
+    'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.',
+    'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.',
+    'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.',
+    'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.',
+    'DATEV-Rückschreiben fehlgeschlagen.', 'DATEV-Ablage fehlgeschlagen.',
+    'Nach DATEV ablegen (gleicher Mandant)',
+  ])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently
@@ -106,7 +118,7 @@ describe('translation coverage', () => {
   // entry for each — so a newly-added German string can't ship untranslated.
   const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
                  'Toolbar.jsx', 'SaveSplitButton.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx',
-                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'lib/status.js']
+                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'DatevBar.jsx', 'lib/status.js']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   // Resolve from THIS file's location (src/i18n/) → src/, not process.cwd(), so the

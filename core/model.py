@@ -53,6 +53,13 @@ class Node:
     compression_no_gain: bool = False
     collapsed: bool = False  # folder collapsed in the tree view (persisted)
     tags: Tuple[str, ...] = ()  # free-form labels for search / sort / group (persisted)
+    # DATEV provenance (DATEV mode only): which DATEV document this working file came
+    # from — {doc_guid, file_id, structure_item_id, source_name?}. Set on open from a
+    # checkout path, lives on the ROOT node, persisted so a reopened .belegtool still
+    # shows the "from DATEV" link; None ⇒ not DATEV-connected. The runtime write-back
+    # baseline (opened bytes' sha256, change_date_time, checked_out) is NOT persisted —
+    # it is re-established from the live server at save time (see CoreApi datev_* ops).
+    datev: Optional[Dict[str, Any]] = None
     children: Tuple["Node", ...] = ()
     original_data: Optional[bytes] = None
     current_data: Optional[bytes] = None
@@ -77,6 +84,7 @@ class Node:
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
             "tags": list(self.tags),
+            "datev": self.datev,  # DATEV provenance (root only; None elsewhere)
             # UI hint: a committed node reloaded from disk has no source bytes
             # (the original was dropped on save), so it can't be re-compressed/reset.
             "has_source": self.original_data is not None,
@@ -101,6 +109,7 @@ class Node:
             collapsed=d.get("collapsed", False),
             compression_method=d.get("compression_method"),
             tags=tuple(d.get("tags") or ()),
+            datev=d.get("datev"),
             children=tuple(Node.from_dict(c) for c in d.get("children", [])),
         )
 

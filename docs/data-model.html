@@ -69,6 +69,7 @@ transforms return new nodes with structural sharing.</p>
 <tr><td><code>collapsed</code></td><td>bool</td><td class="opt">opt</td><td>False</td><td>Folder is collapsed in the tree view. Persisted; set via <code>SetCollapsed</code>/<code>SetAllCollapsed</code>.</td></tr>
 <tr><td><code>compression_method</code></td><td>str | None</td><td class="opt">opt</td><td>None</td><td>Method that produced <code>current_data</code> (<code>jpg</code>/<code>png</code>/<code>pikepdf</code>); None if uncompressed.</td></tr>
 <tr><td><code>tags</code></td><td>tuple[str]</td><td class="opt">opt</td><td>()</td><td>Free-form labels (folders &amp; leaves); set via <code>SetTags</code>. Stored per-node; for search/group, <em>effective</em> tags = own ∪ ancestor-folder tags (computed in the view).</td></tr>
+<tr><td><code>datev</code></td><td>dict | None</td><td class="opt">opt</td><td>None</td><td><b>DATEV mode only (v3.10.0).</b> The DATEV-document origin of this working file — <code>{doc_guid, file_id, structure_item_id, correspondence_partner_guid, source_name}</code>. Lives on the <b>root</b> node only (None elsewhere); set/cleared via the silent <code>SetDatev</code> command and <b>persisted</b> in <code>/JSONStructure</code> (round-trips in <code>.belegtool</code>). It is an <em>external</em> reference (a DATEV document GUID), not an internal entity link. The runtime write-back baseline (opened sha256 + change_date_time + checked_out) is NOT stored here — it is per-session state in <code>CoreApi._datev_baseline</code>.</td></tr>
 <tr><td><code>children</code></td><td>tuple[Node, …]</td><td class="opt">opt</td><td>()</td><td>Ordered child nodes (order = position).</td></tr>
 <tr><td><code>original_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Canonical page bytes. <b>Not serialised</b> to JSON.</td></tr>
 <tr><td><code>current_data</code></td><td>bytes | None</td><td class="opt">opt</td><td>None</td><td>Compressed variant bytes, if any. <b>Not serialised</b>.</td></tr>
@@ -84,7 +85,7 @@ transforms return new nodes with structural sharing.</p>
 <h3>Persisted shape (the data contract)</h3>
 <p class="lead"><code>Document.to_dict()</code> serialises <b>structure only</b> (no bytes). Per node:
 <code>id, name, is_folder, status, position</code> (= sibling index), <code>vz_start, vz_end,
-pdf_length, is_compressed, dpi_original, dpi_current, no_compression, compression_no_gain, collapsed, compression_method, children[]</code>.
+pdf_length, is_compressed, dpi_original, dpi_current, no_compression, compression_no_gain, collapsed, compression_method, tags[], datev (root only), children[]</code>.
 On disk a <code>.belegtool</code> is a single PDF carrying the pages plus this JSON under the PDF
 metadata key <code>/JSONStructure</code> (see <span class="mono">docs/DATA_CONTRACT.md</span>;
 bridge in <span class="mono">core/bridge.py</span>).</p>
@@ -144,6 +145,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td>Document</td><td><code>root</code></td><td>Node</td><td>1 → 1</td><td>composition</td></tr>
 <tr><td>Node</td><td><code>children</code></td><td>Node</td><td>1 → 0..*</td><td>composition (self)</td></tr>
 <tr><td>Command</td><td><code>node_id / parent_id / new_parent_id / node_ids</code></td><td>Node</td><td>1 → 1..*</td><td>reference by id</td></tr>
+<tr><td>Node (root)</td><td><code>datev.doc_guid / file_id / structure_item_id</code></td><td><em>DATEV document</em> (external)</td><td>0..1 → 1</td><td>external reference (no internal arrow; DATEV mode only)</td></tr>
 <tr><td>DocumentSession</td><td><code>document</code></td><td>Document</td><td>1 → 1</td><td>holds current state</td></tr>
 <tr><td>DocumentSession</td><td><code>log</code></td><td>Command</td><td>1 → 0..*</td><td>reference (event log)</td></tr>
 </table>
@@ -162,6 +164,7 @@ bridge in <span class="mono">core/bridge.py</span>).</p>
 <tr><td><code>SetStatus</code></td><td>node_id, status</td><td>Set <code>status</code> (must be a valid status, incl. <code>""</code> = no status). On a <b>folder</b> it cascades to every descendant document.</td></tr>
 <tr><td><code>SetStatusMany</code></td><td>node_ids, status</td><td>Set <code>status</code> on several nodes as one undo step; a folder in the selection cascades to its documents. Ids de-duped, missing ids skipped.</td></tr>
 <tr><td><code>SetNoGain</code></td><td>node_ids</td><td>Flag each existing leaf <code>compression_no_gain=True</code> (folders/missing ids skipped; idempotent). A <b>derived</b> verdict, not a human edit: the API applies it <b>silently</b> (<code>DocumentSession.apply_silent</code> → no undo/redo, no dirty, not in the log) when a compression evaluation finds nothing smaller, so the red "undecided" dot stays resolved across moves and reopen.</td></tr>
+<tr><td><code>SetDatev</code></td><td>provenance</td><td><b>DATEV mode only (v3.10.0).</b> Set (or clear with <code>None</code>) the <code>datev</code> provenance on the <b>root</b> node. In-process only (carries no bytes but never part of the JS wire command set, like <code>SetNodeBytes</code>) and applied <b>silently</b> (<code>apply_silent</code> → no undo/dirty) — it is origin metadata, not a user edit — yet it changes the document so a later save persists it. Set on open from a checkout path / on file-to-DATEV; cleared by Save As (breaks the link).</td></tr>
 <tr><td><code>SetCollapsed</code></td><td>node_id, collapsed</td><td>Folder only → set <code>collapsed</code> (rejects leaves).</td></tr>
 <tr><td><code>SetAllCollapsed</code></td><td>collapsed</td><td>Set <code>collapsed</code> on every folder at once (one undo step).</td></tr>
 <tr><td><code>SetPeriod</code></td><td>node_id, vz_start, vz_end</td><td>Set the accounting period.</td></tr>

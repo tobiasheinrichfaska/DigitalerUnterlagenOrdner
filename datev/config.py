@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 CONFIG_NAME = "datev.config.json"
+DMS_PATH = "/datev/api/dms/v2"  # the Dokumentenablage API base path (spec: document management 2.3.1)
 
 
 def basis_dir():
@@ -42,6 +43,20 @@ def resolve_auth_mode(cfg):
     if a in ("sso", "basic"):
         return a
     return "basic" if (cfg or {}).get("user") else "sso"
+
+
+def dms_base_url(cfg, default="https://localhost:58452" + DMS_PATH):
+    """The Dokumentenablage base, taking host+port from the config but **pinning the DMS
+    path**. An OPOS ``datev.config.json`` points ``base_url`` at the *accounting* API
+    (``/datev/api/accounting/v1``); reusing it here would 404 on ``/info``. We keep its host
+    (``DatevHeinrich:58452``) and force ``/datev/api/dms/v2``. No usable host ⇒ ``default``."""
+    raw = (cfg or {}).get("base_url")
+    if not raw:
+        return default
+    p = urlparse(raw)
+    if not p.scheme or not p.netloc:
+        return default
+    return f"{p.scheme}://{p.netloc}{DMS_PATH}"
 
 
 def self_signed_allowed(cfg, base_url):

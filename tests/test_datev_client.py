@@ -7,7 +7,7 @@ import json
 import pytest
 
 from datev.client import DatevConnectClient
-from datev.config import is_loopback, resolve_auth_mode, self_signed_allowed
+from datev.config import dms_base_url, is_loopback, resolve_auth_mode, self_signed_allowed
 from datev.endpoints import build_url
 from datev.transport import build_curl_args
 from datev.types import (
@@ -154,6 +154,18 @@ def test_resolve_auth_mode_matches_opos():
     assert resolve_auth_mode({"auth": "sso"}) == "sso"
     assert resolve_auth_mode({"user": "u@d.local"}) == "basic"  # user present ⇒ Basic
     assert resolve_auth_mode({}) == "sso"                    # nothing ⇒ Windows SSO
+
+
+def test_dms_base_url_pins_path_from_opos_accounting_config():
+    # the live 404: OPOS config points at the accounting API; we keep the host, pin DMS.
+    acc = {"base_url": "https://DatevHeinrich:58452/datev/api/accounting/v1"}
+    assert dms_base_url(acc) == "https://DatevHeinrich:58452/datev/api/dms/v2"
+    # already-correct DMS url is idempotent
+    dms = {"base_url": "https://DatevHeinrich:58452/datev/api/dms/v2"}
+    assert dms_base_url(dms) == "https://DatevHeinrich:58452/datev/api/dms/v2"
+    # no/garbage base_url ⇒ default
+    assert dms_base_url({}) == "https://localhost:58452/datev/api/dms/v2"
+    assert dms_base_url({"base_url": "not-a-url"}) == "https://localhost:58452/datev/api/dms/v2"
 
 
 def test_self_signed_allowed_loopback_default_and_override():

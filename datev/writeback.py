@@ -39,11 +39,6 @@ def valid_provenance(provenance):
     return True
 
 
-def can_file_to_datev(provenance):
-    """Not-connected docs may be filed as a NEW DATEV document (the create flow)."""
-    return not is_connected(provenance)
-
-
 OK = "ok"
 DECLINED = "declined"                    # user chose not to write back
 LOCKED = "locked"                        # checked out at open or now → cannot write

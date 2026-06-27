@@ -85,6 +85,18 @@ describe('App — DATEV mode', () => {
       .toBeGreaterThan(0))
   })
 
+  it('an ERROR-verdict write-back shows the real cause (not the generic message) and offers local save', async () => {
+    // a mid-write network/HTTP failure returns {verdict:"error", error:"…"}; the UI must show
+    // the actual cause, not swallow it behind the generic "Write-back failed" key.
+    const calls = await renderApp({
+      save_to_datev: () => ({ ok: false, verdict: 'error', error: 'Netzwerk nicht erreichbar' }),
+    })
+    fireEvent.click(screen.getByText('Nach DATEV zurückschreiben'))
+    expect(await screen.findByText(/Netzwerk nicht erreichbar/)).toBeInTheDocument()
+    await waitFor(() => expect(called(calls, 'save_info').length + called(calls, 'save_file').length)
+      .toBeGreaterThan(0))   // the local-save fallback is still offered
+  })
+
   it('a declined write-back neither errors nor saves locally', async () => {
     const calls = await renderApp({
       save_to_datev: () => ({ ok: false, verdict: 'declined' }),

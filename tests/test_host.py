@@ -12,6 +12,55 @@ class _FakeWin:
         self.uid = uid
 
 
+class _ConfirmWin:
+    """A window whose native confirmation dialog returns a fixed answer (records the ask)."""
+    def __init__(self, uid, answer):
+        self.uid = uid
+        self.answer = answer
+        self.asked = 0
+
+    def create_confirmation_dialog(self, title, message):
+        self.asked += 1
+        return self.answer
+
+
+class _RecordingCore:
+    """Duck-typed CoreApi recording datev_save_back calls."""
+    def __init__(self):
+        self.calls = []
+
+    def datev_save_back(self, session, confirmed=True):
+        self.calls.append((session, confirmed))
+        return {"ok": True, "verdict": "ok"}
+
+
+def test_save_to_datev_user_declines_never_reaches_core(monkeypatch):
+    # the safety gate: clicking „Nein" in the confirm dialog must return declined and NEVER
+    # perform the (irreversible, revision-less) DATEV overwrite.
+    core = _RecordingCore()
+    api = host.HostApi(core, uid="w1")
+    win = _ConfirmWin("w1", answer=False)
+    monkeypatch.setattr(host.webview, "windows", [win])
+    res = api.save_to_datev("s")
+    assert res == {"ok": False, "verdict": "declined"}
+    assert win.asked == 1 and core.calls == []   # asked once, write-back never called
+
+
+def test_save_to_datev_user_confirms_calls_core_confirmed(monkeypatch):
+    core = _RecordingCore()
+    api = host.HostApi(core, uid="w1")
+    monkeypatch.setattr(host.webview, "windows", [_ConfirmWin("w1", answer=True)])
+    res = api.save_to_datev("s")
+    assert res["ok"] and core.calls == [("s", True)]
+
+
+def test_save_to_datev_errors_when_window_gone(monkeypatch):
+    api = host.HostApi(_RecordingCore(), uid="gone")
+    monkeypatch.setattr(host.webview, "windows", [])
+    res = api.save_to_datev("s")
+    assert res["ok"] is False and "Fenster" in res["error"]
+
+
 def test_win_resolves_this_window_by_uid(monkeypatch):
     api = host.HostApi(CoreApi(), uid="w1")
     monkeypatch.setattr(host.webview, "windows", [_FakeWin("w0"), _FakeWin("w1")])

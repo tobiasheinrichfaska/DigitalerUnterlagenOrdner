@@ -1196,8 +1196,11 @@ class CoreApi:
             baseline = self._datev_baseline.get(session)
         if baseline is None:
             # reopened .belegtool: provenance persisted but no live baseline — re-establish
-            # it from the server now (the opened bytes are the current effective bytes).
+            # it from the server now (the opened bytes are the current effective bytes) and
+            # cache it, so repeated write-back attempts on the same reopened file don't re-read.
             baseline = self._datev_reestablish_baseline(svc, session, prov)
+            with self._lock:
+                self._datev_baseline.setdefault(session, baseline)
         edited = self._datev_effective_bytes(session)
         if not edited:
             return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
@@ -1221,6 +1224,10 @@ class CoreApi:
             # path (the working document is a saved .belegtool), so persist it now (this also
             # stores the updated provenance and clears dirty via mark_saved). NEVER prompt a
             # Save As here. The defensive else only logs if a path is somehow unbound.
+            # NOTE (accepted residual): the write-back snapshot (`edited`) was taken before the
+            # network round-trip; this local save re-reads the *current* session document. The
+            # modal busy-state disables edits during write-back, so the two can't diverge in the
+            # single-window UI — see the residual note in CLAUDE.md.
             local_path = self.document_path(session)
             if local_path:
                 save_res = self.save(session, local_path)
@@ -1312,7 +1319,10 @@ class CoreApi:
                               node_ids, options)
             if not out.get("ok"):
                 return out
-            paths = out.get("paths", [out.get("path")])
+            # defensive: an ok export must yield at least one path; never open(None).
+            paths = [p for p in (out.get("paths") or [out.get("path")]) if p]
+            if not paths:
+                return {"ok": False, "error": "Export lieferte keine Datei."}
             filed = []
             for p in paths:
                 with open(p, "rb") as f:

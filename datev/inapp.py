@@ -268,14 +268,6 @@ class DatevService:
             return None
 
     # --- file a NEW document (create) --------------------------------------
-    def client_guid_for_document(self, doc_guid):
-        """The ``correspondence_partner_guid`` of an existing document — used to file an
-        export under the **same client** as the connected source document."""
-        try:
-            return (self._client.get_document(doc_guid) or {}).get("correspondence_partner_guid")
-        except Exception:
-            return None
-
     def resolve_client(self, mandant_number):
         """Mandant number → ``{guid, name, number}`` (raises via the client if not found)."""
         return self._client.resolve_client_guid(mandant_number)

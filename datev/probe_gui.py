@@ -8,11 +8,16 @@ Run standalone (or as the one-file exe built by scripts/build_datev_probe.ps1):
 import datetime
 import json
 import os
+import re
+import subprocess
 import sys
 import threading
 import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+_SCIM_EXT = "urn:ietf:params:scim:schemas:extension:datev:2.0:user"
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 from .client import DatevConnectClient
 from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
@@ -432,18 +437,42 @@ class ProbeApp:
 
         self._run("State/User-Vorlage holen", work, on_ok)
 
+    def _current_windows_sid(self):
+        """The SID of the Windows account this probe runs as (the SSO/connection identity),
+        via `whoami /user` — used to auto-pick the matching IAM user."""
+        try:
+            out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+                                 capture_output=True, text=True, timeout=10,
+                                 creationflags=_NO_WINDOW).stdout
+            m = re.search(r"S-1-[\d-]+", out)
+            return m.group(0) if m else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+
     def load_users(self):
-        """List IAM users so you can pick a live (is_deleted=false) user GUID — ideally the
-        clerk whose Windows login is used for the connection."""
+        """List IAM users (SCIM) and auto-fill User-GUID with the one whose Windows SID matches
+        this connection — that is the clerk the document gets attributed to."""
         if not self._need_client():
             return
+        my_sid = self._current_windows_sid()
 
-        def on_ok(users):
-            lst = users if isinstance(users, list) else (users or {}).get("users", [])
-            self._log_line(f"— {len(lst)} User —")
+        def on_ok(data):
+            lst = data.get("resources", []) if isinstance(data, dict) else (data or [])
+            self._log_line(f"— {len(lst)} User (eigene SID: {my_sid or '?'}) —")
+            match = None
             for u in lst:
-                flag = " [GELÖSCHT]" if u.get("is_deleted") else ""
-                self._log_line(f"   {u.get('id')}  ·  {u.get('name')}{flag}")
+                ext = u.get(_SCIM_EXT, {}) or {}
+                sid = (ext.get("linked_windows_identity") or {}).get("value", "")
+                mark = ""
+                if my_sid and sid == my_sid:
+                    match = u
+                    mark = "   ← VERBINDUNG"
+                act = "" if u.get("active", True) else " [inaktiv]"
+                self._log_line(f"   {u.get('id')}  ·  {u.get('display_name')}{act}  ·  {sid}{mark}")
+            if match:
+                self.user_id.set(match["id"])
+                self._log_line(f"→ User-GUID auf Verbindungs-User gesetzt: {match['id']} "
+                               f"({match.get('display_name')})")
 
         self._run("User laden (IAM)", self.client.list_users, on_ok)
 

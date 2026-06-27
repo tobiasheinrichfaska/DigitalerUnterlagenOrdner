@@ -9,7 +9,7 @@ import { rovingFocusKeydown, tagMenuItems } from './hooks/useMenu'
 const STATUS_DE = { '': 'Kein Status', erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)  // internal helper; not exported (keeps fast-refresh happy)
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, onOpenInPdfTool, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
@@ -116,6 +116,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           </>
         )}
         <button onClick={rename}>{t('Umbenennen')}</button>
+        {!editLocked && isLeaf && onOpenInPdfTool && (
+          <button onClick={() => { onOpenInPdfTool(node); onClose() }}>{t('Im PDF-Tool öffnen')}</button>
+        )}
         {!editLocked && isLeaf && node.pdf_length > 1 && (
           <div className="cm-haschild" onMouseEnter={() => setSplitOpen(true)} onMouseLeave={() => setSplitOpen(false)}>
             <button className="cm-trigger" onClick={() => setSplitOpen((v) => !v)}>

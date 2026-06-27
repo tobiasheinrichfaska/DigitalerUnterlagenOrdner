@@ -49,7 +49,7 @@ describe('translate (source-string keys)', () => {
     // 14 host-level error/warning strings (host.py + core/api.py + lib/messages.js). If a
     // string is added, bump this deliberately — and add it to every full-coverage
     // language file (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(162)
+    expect(Object.keys(en).length).toBe(163)
   })
 })
 
@@ -63,7 +63,7 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  const PENDING_TRANSLATIONS = new Set([])
+  const PENDING_TRANSLATIONS = new Set(['Im PDF-Tool öffnen'])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently

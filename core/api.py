@@ -1006,9 +1006,13 @@ class CoreApi:
             self._pdftool_bindings[pt] = (session, node_id)
             return {"ok": True, "session": pt}
 
-    def save_node_back(self, pdftool_session: str) -> dict:
+    def save_node_back(self, pdftool_session: str, data_b64: str = None) -> dict:
         """Write the PDF-Tool session's edited bytes back into the bound node (new source
-        → compression reset), marking the organizer session dirty. Undoable there."""
+        → compression reset), marking the organizer session dirty. Undoable there.
+        ``data_b64`` (PDF.js ``saveDocument()`` output: filled forms + added FreeText) is
+        the edited PDF — it also updates the tool session so a later reopen shows (and can
+        re-edit) the additions. Without it, the tool session's current bytes are used."""
+        import base64
         from core.commands import SetNodeBytes
         with self._lock:
             binding = self._pdftool_bindings.get(pdftool_session)
@@ -1021,6 +1025,17 @@ class CoreApi:
                 return {"ok": False, "error": "Sitzung nicht mehr vorhanden"}
             leaves = [n for n in t.document.root.iter() if not n.is_folder]
             data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+            if data_b64 is not None and leaves:
+                try:
+                    edited = base64.b64decode(data_b64)
+                except Exception:
+                    edited = None
+                if edited:
+                    # keep the tool session in sync (reopen shows + re-edits the additions)
+                    # AND write these edited bytes to the owner — the immutable document means
+                    # the post-dispatch leaf is a new object, so use `edited` directly here.
+                    t.dispatch(SetNodeBytes(leaves[0].id, edited))
+                    data = edited
             if not data:
                 return {"ok": False, "error": "keine Daten zum Speichern"}
             if owner.document.find(node_id) is None:

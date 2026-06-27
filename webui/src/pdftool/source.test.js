@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chooseSource, base64ToUint8 } from './source.js'
+import { chooseSource, base64ToUint8, uint8ToBase64 } from './source.js'
 
 describe('chooseSource', () => {
   it('uses the bridge when a .pdf is bound in the host', () => {
@@ -47,5 +47,17 @@ describe('base64ToUint8', () => {
     const b64 = btoa('PDFdata')
     expect(Array.from(base64ToUint8(b64)))
       .toEqual(Array.from(new TextEncoder().encode('PDFdata')))
+  })
+})
+
+describe('uint8ToBase64', () => {
+  it('round-trips with base64ToUint8', () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0, 255, 128, 1, 2, 3])  // %PDF + edges
+    expect(Array.from(base64ToUint8(uint8ToBase64(bytes)))).toEqual(Array.from(bytes))
+  })
+
+  it('handles a payload larger than the 0x8000 chunk size', () => {
+    const big = new Uint8Array(0x8000 * 2 + 17).map((_, i) => i % 256)
+    expect(Array.from(base64ToUint8(uint8ToBase64(big)))).toEqual(Array.from(big))
   })
 })

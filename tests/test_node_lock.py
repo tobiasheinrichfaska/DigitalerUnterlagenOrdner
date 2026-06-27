@@ -86,6 +86,42 @@ def test_save_node_back_writes_bytes_and_dirties_owner():
     assert api._sessions[sid].dirty                  # organizer marked unsaved
 
 
+def test_save_node_back_accepts_edited_bytes_from_pdfjs():
+    # PDF.js saveDocument() output arrives as base64 over the bridge; save_node_back
+    # writes exactly those bytes (no need to pre-dispatch into the tool session).
+    api, sid = _api_with_leaf()
+    pt = api.open_node_in_pdftool(sid, "L")["session"]
+    edited = _pdf("FREETEXT")
+    res = api.save_node_back(pt, base64.b64encode(edited).decode())
+    assert res["ok"]
+    assert api._sessions[sid].document.find("L").original_data == edited
+    assert api._sessions[sid].dirty
+
+
+def test_self_authored_text_survives_save_and_reopen():
+    # The cross-session promise: text the user adds in the PDF-Tool (a FreeText
+    # annotation, as PDF.js saveDocument() writes it) is still there — and still a
+    # FreeText object, i.e. re-editable — when the node is reopened in a later session.
+    api, sid = _api_with_leaf()
+    pt = api.open_node_in_pdftool(sid, "L")["session"]
+
+    served = base64.b64decode(api.get_pdf_bytes(pt)["data_b64"])
+    doc = fitz.open(stream=served, filetype="pdf")
+    doc[0].add_freetext_annot(fitz.Rect(20, 60, 180, 90), "Meine Notiz")
+    edited = doc.tobytes()
+    doc.close()
+
+    assert api.save_node_back(pt, base64.b64encode(edited).decode())["ok"]
+    api.close_pdftool(pt)
+
+    pt2 = api.open_node_in_pdftool(sid, "L")["session"]   # reopen the SAME node, fresh session
+    reopened = base64.b64decode(api.get_pdf_bytes(pt2)["data_b64"])
+    doc2 = fitz.open(stream=reopened, filetype="pdf")
+    kinds = [a.type[1] for a in doc2[0].annots()]
+    doc2.close()
+    assert "FreeText" in kinds   # the self-authored text persisted and is still an editable object
+
+
 def test_break_binding_unblocks_the_organizer_op():
     api, sid = _api_with_leaf()
     api.open_node_in_pdftool(sid, "L")

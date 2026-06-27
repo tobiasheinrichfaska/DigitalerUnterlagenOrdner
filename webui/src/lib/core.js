@@ -94,6 +94,7 @@ export const core = {
   renderCompressedWindow: (session, nodeId, dpi, method, first = 0, count = 10) =>
     call('render_compressed_window', session, nodeId, dpi, method, first, count),
   exportPdf: (session, nodeIds = null, options = null) => call('export_dialog', session, nodeIds, options),
+  openNodeInPdftool: (session, nodeId) => call('open_node_in_pdftool', session, nodeId),
   importDialog: (session, parentId = null) => call('import_dialog', session, parentId),
   importBytes: (session, name, data, parentId = null, index = null) => call('import_bytes', session, name, data, parentId, index),
 }

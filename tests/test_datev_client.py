@@ -212,6 +212,34 @@ def test_update_structure_item_puts_id_and_file():
     assert res["http_status"] == 200
 
 
+def test_parse_checkout_path_extracts_guid_and_file_id():
+    from datev.provenance import parse_checkout_path
+    p = r"C:\Users\x\AppData\Local\Temp\DATEV\fa89ad42-8cd4-4828-8234-143161d41985\1085411.pdf"
+    out = parse_checkout_path(p)
+    assert out == {"doc_guid": "fa89ad42-8cd4-4828-8234-143161d41985", "file_id": 1085411}
+    assert parse_checkout_path("nothing-here.pdf") == {}
+    assert parse_checkout_path(r"\\srv\fa89ad42-8cd4-4828-8234-143161d41985\1085411") \
+        ["doc_guid"] == "fa89ad42-8cd4-4828-8234-143161d41985"
+
+
+def test_provenance_stats_and_match():
+    from datev.provenance import match_entries, provenance_stats
+    entries = [
+        {"doc_id": "A", "desc": "Rechnung 1", "name": "r1.pdf", "size": 100, "file_id": 1},
+        {"doc_id": "B", "desc": "Rechnung 2", "name": "r2.pdf", "size": 100, "file_id": 2},  # size collision
+        {"doc_id": "C", "desc": "Bescheid", "name": "b.pdf", "size": 250, "file_id": 3},
+    ]
+    st = provenance_stats(entries)
+    assert st["files"] == 3
+    assert st["unique_size"] == 1            # only size 250 is unique
+    assert st["unique_title"] == 3           # all titles distinct
+    assert st["unique_size_title"] == 3      # size+title always distinct here
+    assert st["worst_size_collision"] == 2
+    assert len(match_entries(entries, size=100)) == 2                 # ambiguous
+    assert len(match_entries(entries, size=100, title="Rechnung 1")) == 1  # disambiguated
+    assert match_entries(entries, size=999) == []
+
+
 def test_delete_document_sends_delete():
     seen = {}
     cli, _ = _client(lambda m, u, h, b: seen.update(method=m, url=u) or _resp(204, body=b""))

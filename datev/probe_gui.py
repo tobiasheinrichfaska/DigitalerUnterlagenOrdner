@@ -116,6 +116,12 @@ class ProbeApp:
             row=3, column=1, columnspan=3, sticky="we", **pad)
         ttk.Button(w, text="Abrufen (Details + Struktur)", command=self.fetch_by_id).grid(
             row=3, column=4, columnspan=2, sticky="w", **pad)
+        # Confirm the uploaded FILE persists (file-id is an int, distinct from the document GUID).
+        ttk.Label(w, text="Datei-ID").grid(row=4, column=0, sticky="e")
+        self.file_id = tk.StringVar()
+        ttk.Entry(w, textvariable=self.file_id, width=14).grid(row=4, column=1, sticky="w", **pad)
+        ttk.Button(w, text="Datei prüfen (Bytes)", command=self.check_file_id).grid(
+            row=4, column=2, **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -184,7 +190,13 @@ class ProbeApp:
 
     def _err(self, label, exc):
         self.status.set(f"{label}: FEHLER")
-        self._log_line(f"✗ {type(exc).__name__}: {exc}")
+        status = getattr(exc, "status", None)
+        head = f"✗ {type(exc).__name__}" + (f" [HTTP {status}]" if status else "") + f": {exc}"
+        self._log_line(head)
+        body = getattr(exc, "body", None)  # the raw DATEV response — the real reason
+        if body:
+            snippet = body if len(body) <= 1000 else body[:999] + "…"
+            self._log_line(f"   Rohantwort: {snippet}")
 
     def _need_client(self):
         if self.client is None:
@@ -362,6 +374,17 @@ class ProbeApp:
             return
         self._run(f"Dokument {doc_id}", lambda: self.client.get_document(doc_id))
         self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id))
+
+    def check_file_id(self):
+        """GET /document-files/{id} — confirms the uploaded file still exists (an orphan upload
+        not bound into a surviving document is what DATEV purges)."""
+        if not self._need_client():
+            return
+        fid = self.file_id.get().strip()
+        if not fid:
+            messagebox.showinfo("DATEV-Probe", "Bitte eine Datei-ID (Zahl) eingeben.")
+            return
+        self._run(f"Datei {fid} prüfen", lambda: self.client.get_document_file(fid))
 
 
 def main():

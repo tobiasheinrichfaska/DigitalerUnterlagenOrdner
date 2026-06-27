@@ -23,8 +23,9 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
   const confirm = () => onChoose({
     toc,
     toc_links: toc && tocLinks,   // only meaningful when toc is on
-    index: hasTags && index, index_links: indexLinks,
-    bookmarks,
+    // split mode renders its own per-file TOC and ignores the index + bookmarks
+    index: hasTags && index && !split, index_links: indexLinks,
+    bookmarks: bookmarks && !split,
     split_pages: split ? Math.max(1, Number(splitPages) || 100) : null,
     split_level: splitLevel,
   })
@@ -44,19 +45,22 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
           {t('mit anklickbaren Links')}
         </label>
 
+        {/* Split mode renders its own per-file TOC and ignores the tag index +
+            bookmarks — disable them so the dialog reflects what will actually happen. */}
         <label className="exp-row" title={hasTags ? undefined : t('Keine Tags im Dokument')}>
-          <input type="checkbox" checked={index} disabled={!hasTags}
+          <input type="checkbox" checked={index && !split} disabled={!hasTags || split}
             onChange={(e) => setIndex(e.target.checked)} />
           {t('Stichwortverzeichnis (nach Tags)')}
         </label>
         <label className="exp-row exp-sub">
-          <input type="checkbox" checked={indexLinks} disabled={!hasTags || !index}
+          <input type="checkbox" checked={indexLinks} disabled={!hasTags || !index || split}
             onChange={(e) => setIndexLinks(e.target.checked)} />
           {t('mit anklickbaren Links')}
         </label>
 
         <label className="exp-row">
-          <input type="checkbox" checked={bookmarks} onChange={(e) => setBookmarks(e.target.checked)} />
+          <input type="checkbox" checked={bookmarks && !split} disabled={split}
+            onChange={(e) => setBookmarks(e.target.checked)} />
           {t('PDF-Lesezeichen (Seitenleiste)')}
         </label>
 

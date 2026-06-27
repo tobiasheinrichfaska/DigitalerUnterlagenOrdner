@@ -125,6 +125,19 @@ def test_page_level_export_produces_the_right_number_of_parts(tmp_path):
             assert len(pdf.pages) >= 1
 
 
+# ---------------------------------------------------- cross-reference page numbers
+def test_cross_reference_entries_carry_a_page_number(tmp_path):
+    from formats.toc_export import export_pdf_split_with_toc
+    paths = export_pdf_split_with_toc([_leaf('a', 2), _leaf('b', 2), _leaf('c', 2)],
+                                      str(tmp_path / 'out.pdf'), 2, 'top')
+    assert len(paths) == 3
+    d = fitz.open(paths[0])
+    text = "".join(p.get_text() for p in d)
+    d.close()
+    # part 1's TOC points at the other files AND shows a page within them ("S. N")
+    assert '→' in text and 'S.' in text
+
+
 # --------------------------------------------------------------- multi-file export
 def test_export_split_writes_valid_part_files(tmp_path):
     from formats.toc_export import export_pdf_split_with_toc

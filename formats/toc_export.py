@@ -193,7 +193,10 @@ def _render_toc_pdf(items: List[_TocItem],
             c.setFont("Helvetica-Oblique", 9)
             c.setFillColorRGB(0.55, 0.55, 0.55)
             c.drawString(x, y, name)
-            c.drawRightString(_A4_W - _MR, y, f"→ {item.other_file}")
+            # every part's TOC lists the SAME full item set, so all parts share one
+            # TOC page count → the entry's page in the other file is page_start+toc_offset.
+            ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + toc_offset}"
+            c.drawRightString(_A4_W - _MR, y, f"→ {ref}")
 
         elif item.is_folder:
             # ── Ordner-Überschrift ────────────────────────────────────────────
@@ -699,7 +702,7 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
                 for it in other_items:
                     full_items.append(_TocItem(
                         depth=it.depth, name=it.name,
-                        page_start=0, page_end=0,
+                        page_start=it.page_start, page_end=it.page_end,  # keep the page for the cross-ref
                         is_folder=it.is_folder, other_file=other_name,
                     ))
 

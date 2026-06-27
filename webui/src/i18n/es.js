@@ -180,4 +180,11 @@ export const es = {
   '{n} markiert': '{n} seleccionado(s)',
   'nur auf einigen markiert': 'solo en algunos',
   'Weitere Speicheroptionen': 'Más opciones de guardado',
+  'In mehrere Dateien aufteilen': 'Dividir en varios archivos',
+  'max. Seiten pro Datei': 'máx. páginas por archivo',
+  'Trennen bei:': 'Cortar en:',
+  'oberste Ordner': 'carpetas de nivel superior',
+  'jeder Ordnergrenze': 'cualquier límite de carpeta',
+  'mitten im Dokument': 'en medio del documento',
+  '{n} Dateien': '{n} archivos',
 }

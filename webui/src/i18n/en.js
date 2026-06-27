@@ -149,6 +149,7 @@ export const en = {
   'Trennen bei:': 'Break at:',
   'oberste Ordner': 'top-level folders',
   'jeder Ordnergrenze': 'any folder boundary',
+  'mitten im Dokument': 'mid-document (by page count)',
   '{n} Dateien': '{n} files',
   'Exportieren': 'Export',
   'Keine Tags im Dokument': 'No tags in the document',

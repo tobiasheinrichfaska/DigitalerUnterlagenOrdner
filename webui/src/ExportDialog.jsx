@@ -75,6 +75,7 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
             onChange={(e) => setSplitLevel(e.target.value)}>
             <option value="top">{t('oberste Ordner')}</option>
             <option value="folder">{t('jeder Ordnergrenze')}</option>
+            <option value="page">{t('mitten im Dokument')}</option>
           </select>
         </label>
 

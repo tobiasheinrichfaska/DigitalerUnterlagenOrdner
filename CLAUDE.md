@@ -509,9 +509,12 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Windows-only.** PyInstaller `win64`, Edge WebView2 GUI, hard `pywin32`/`pythonnet` deps,
   COM-based Office import. The PDF core is cross-platform but no port is maintained
   (community RFC: [`docs/cross-platform-port.md`](docs/cross-platform-port.md)).
-- **Export > 100 pages stays a single PDF.** The auto-split-with-cross-references path exists
-  (`toc_export.export_pdf_split_with_toc`) but is **not wired into the UI export**. **Promoted to a
-  configurable feature — see Open items #13** (page threshold + break level in the export dialog).
+- **Split export uses its own TOC, not the front-matter toggles.** Splitting into several files
+  (Open items #13, shipped) always renders a per-file TOC with cross-references to the other parts,
+  and **ignores the tag-index / PDF-bookmarks / TOC-links checkboxes** (those apply to single-file
+  export only). Unifying the split path with the full front-matter options is a follow-up. The
+  page-level („mitten im Dokument") cut copies pages via `PdfWriter`, so it inherits the same
+  text-PDF limitation as the normal export (named destinations / link annotations dropped).
 - **Compression is irreversible after save.** A committed node ("Lesbarkeit geprüft") drops its
   source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
 - **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
@@ -674,19 +677,22 @@ as **v3.10.0**.
     **basename-flatten** (which also dropped same-named files in different folders). Composes with
     the nesting above (a container at `sub/inner.zip` → `Ordner sub › Ordner inner.zip › …`). Tests:
     `tests/test_archive_subfolders.py` (6).
-13. **Configurable export split (promoted 2026-06-26).** Today export is always a single PDF; the
-    auto-split-with-cross-references path exists (`toc_export.export_pdf_split_with_toc`) but is
-    **not wired into the UI**. Promote it to a **user-configurable** option in the export dialog
-    ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)):
-    - **Threshold — pages per split** (e.g. „aufteilen ab N Seiten" / „max. N Seiten pro Datei"),
-      default the current 100; off = single PDF.
-    - **Break level / boundary** — *at what tree level the split is allowed to break*: split only at
-      top-level folders, at any folder boundary, or strictly by page count (mid-document). I.e. keep
-      a folder's documents together until the threshold forces a cut, vs. a hard page-count cut.
-    Flow mirrors the existing options: `ExportDialog → export_dialog → CoreApi.export(options) →
-    toc_export`. Wire `export_pdf_split_with_toc`, carry the page-numbering/cross-reference offsets
-    across parts, and name parts predictably (`<name> (1von3).pdf`). Update the beta-tester
-    „known gaps" checkbox + BETA_TESTING once shipped (it currently lists this as a non-bug gap).
+13. **Configurable export split. — DONE (2026-06-26).** The export dialog
+    ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)) gained **„In mehrere Dateien aufteilen"** with a
+    page **threshold** (`split_pages`, default 100; off = single PDF) and a **break level**
+    (`split_level`), asked at export time:
+    - **„oberste Ordner"** (`top`) — split only between top-level items; a top folder is never split.
+    - **„jeder Ordnergrenze"** (`folder`) — a large folder is split across parts at child boundaries;
+      a leaf is never split.
+    - **„mitten im Dokument"** (`page`) — a strict page-count cut that may split a single document
+      across files (the part name carries the original page range, e.g. `Rechnung (S. 1–3)`).
+    A shared grouping engine in [`toc_export.py`](formats/toc_export.py) — `_pack_units`,
+    `_leaves_with_path`, `_subtree_from_leaves`, `_subtree_from_pages`, `_slice_leaf`, `_plan_groups` —
+    packs atomic units (top-node / leaf / page) into ≤-threshold parts and rebuilds a pruned forest
+    per part; the existing cross-reference TOC assembly (`export_pdf_split_with_toc`) renders each.
+    `CoreApi.export` dispatches on `split_pages`/`split_level` and returns `paths` (the UI reports the
+    file count). Tests: `tests/test_export_split.py`, split cases in `tests/test_core_api.py`,
+    `ExportDialog.test.jsx`. i18n for all 7 new labels done across the full-coverage languages.
 
 ### Build hygiene — embed the version resource in BelegTool.exe (noted 2026-06-25)
 

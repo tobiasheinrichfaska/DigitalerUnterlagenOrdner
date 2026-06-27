@@ -180,4 +180,11 @@ export const fr = {
   '{n} markiert': '{n} sélectionné(s)',
   'nur auf einigen markiert': 'uniquement sur certains',
   'Weitere Speicheroptionen': 'Autres options d’enregistrement',
+  'In mehrere Dateien aufteilen': 'Diviser en plusieurs fichiers',
+  'max. Seiten pro Datei': 'max. pages par fichier',
+  'Trennen bei:': 'Couper à :',
+  'oberste Ordner': 'dossiers de premier niveau',
+  'jeder Ordnergrenze': 'toute limite de dossier',
+  'mitten im Dokument': 'au milieu du document',
+  '{n} Dateien': '{n} fichiers',
 }

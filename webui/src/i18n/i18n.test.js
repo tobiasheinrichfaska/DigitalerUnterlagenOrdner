@@ -45,11 +45,11 @@ describe('translate (source-string keys)', () => {
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
     // Canonical key count = 134 UI strings (incl. the 3 Tree.jsx drag-ghost keys, the
     // ContextMenu aria-label, the two #7 multi-select labels, the #3 Save split-button
-    // label, and the six #13 export-split labels) + 13 backend command-error messages +
+    // label, and the seven #13 export-split labels) + 13 backend command-error messages +
     // 14 host-level error/warning strings (host.py + core/api.py + lib/messages.js). If a
     // string is added, bump this deliberately — and add it to every full-coverage
     // language file (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(161)
+    expect(Object.keys(en).length).toBe(162)
   })
 })
 
@@ -63,12 +63,7 @@ describe('full-coverage languages', () => {
   // here MUST exist in en.js (still enforced below) but is exempt from the
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
-  // #13 export-split keys — batch-translated into the other languages once the
-  // feature (incl. the mid-document level) is final.
-  const PENDING_TRANSLATIONS = new Set([
-    'In mehrere Dateien aufteilen', 'max. Seiten pro Datei', 'Trennen bei:',
-    'oberste Ordner', 'jeder Ordnergrenze', '{n} Dateien',
-  ])
+  const PENDING_TRANSLATIONS = new Set([])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently

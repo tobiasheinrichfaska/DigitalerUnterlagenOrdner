@@ -180,4 +180,11 @@ export const hr = {
   '{n} markiert': 'Označeno: {n}',
   'nur auf einigen markiert': 'samo na nekima',
   'Weitere Speicheroptionen': 'Više opcija spremanja',
+  'In mehrere Dateien aufteilen': 'Podijeli na više datoteka',
+  'max. Seiten pro Datei': 'najv. stranica po datoteci',
+  'Trennen bei:': 'Prelomi na:',
+  'oberste Ordner': 'mape najviše razine',
+  'jeder Ordnergrenze': 'svakoj granici mape',
+  'mitten im Dokument': 'usred dokumenta (po stranicama)',
+  '{n} Dateien': '{n} datoteka',
 }

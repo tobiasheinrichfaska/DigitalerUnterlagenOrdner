@@ -182,4 +182,11 @@ export const vie = {
   '{n} markiert': '{n} markiert',
   'nur auf einigen markiert': 'nur bei a poar',
   'Weitere Speicheroptionen': 'Mehr Speicheroptionen',
+  'In mehrere Dateien aufteilen': 'In mehrere Dateien aufteiln',
+  'max. Seiten pro Datei': 'max. Seitn pro Datei',
+  'Trennen bei:': 'Trennan bei:',
+  'oberste Ordner': 'oberste Ordna',
+  'jeder Ordnergrenze': 'jeda Ordnergrenz',
+  'mitten im Dokument': 'mittn im Dokument',
+  '{n} Dateien': '{n} Dateien',
 }

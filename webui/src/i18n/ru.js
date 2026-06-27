@@ -180,4 +180,11 @@ export const ru = {
   '{n} markiert': 'Выбрано: {n}',
   'nur auf einigen markiert': 'только у некоторых',
   'Weitere Speicheroptionen': 'Другие параметры сохранения',
+  'In mehrere Dateien aufteilen': 'Разбить на несколько файлов',
+  'max. Seiten pro Datei': 'макс. страниц на файл',
+  'Trennen bei:': 'Разрывать по:',
+  'oberste Ordner': 'папкам верхнего уровня',
+  'jeder Ordnergrenze': 'любой границе папки',
+  'mitten im Dokument': 'внутри документа (по страницам)',
+  '{n} Dateien': '{n} файлов',
 }

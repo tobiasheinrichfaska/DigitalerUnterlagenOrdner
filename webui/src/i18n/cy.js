@@ -182,4 +182,11 @@ export const cy = {
   '{n} markiert': '{n} wedi’u dewis',
   'nur auf einigen markiert': 'ar rai yn unig',
   'Weitere Speicheroptionen': 'Rhagor o opsiynau cadw',
+  'In mehrere Dateien aufteilen': 'Rhannu’n sawl ffeil',
+  'max. Seiten pro Datei': 'uchafswm tudalennau fesul ffeil',
+  'Trennen bei:': 'Torri ar:',
+  'oberste Ordner': 'ffolderi lefel uchaf',
+  'jeder Ordnergrenze': 'unrhyw ffin ffolder',
+  'mitten im Dokument': 'canol y ddogfen',
+  '{n} Dateien': '{n} ffeil',
 }

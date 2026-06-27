@@ -603,6 +603,43 @@ def _subtree_from_leaves(items):
     return roots
 
 
+def _slice_leaf(leaf, indices):
+    """A new leaf holding only ``indices`` (0-based) of ``leaf``'s pages — for the
+    page-level split, where a document is cut across files. The name carries the
+    original page range so each part stays identifiable."""
+    writer = PdfWriter()
+    try:
+        reader = PdfReader(io.BytesIO(leaf.current_pdf_data or b""))
+        for i in indices:
+            writer.add_page(reader.pages[i])
+    except Exception as e:  # keep the export going; a broken slice becomes empty
+        logger.warning("Seiten-Split von '%s' fehlgeschlagen: %s", leaf.name, e)
+    buf = io.BytesIO()
+    writer.write(buf)
+    part = PDFNode(name=f"{leaf.name} (S. {indices[0] + 1}–{indices[-1] + 1})",
+                   pdf_data=buf.getvalue())
+    part.pdf_length = len(indices)
+    part.tags = list(getattr(leaf, "tags", []) or [])
+    return part
+
+
+def _subtree_from_pages(group):
+    """Rebuild a part's forest from page units, coalescing consecutive same-leaf
+    pages into one (possibly partial) leaf and keeping folder paths. A run that
+    covers all of a leaf's pages reuses the leaf untouched; a partial run is sliced."""
+    runs = []  # [leaf, path, [indices]]
+    for leaf, path, pi in group:
+        if runs and runs[-1][0] is leaf and runs[-1][2][-1] == pi - 1:
+            runs[-1][2].append(pi)
+        else:
+            runs.append([leaf, path, [pi]])
+    items = []
+    for leaf, path, indices in runs:
+        part = leaf if len(indices) == count_node_pages(leaf) else _slice_leaf(leaf, indices)
+        items.append((part, path))
+    return _subtree_from_leaves(items)
+
+
 def _plan_groups(nodes, max_pages, level):
     """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
 
@@ -610,16 +647,22 @@ def _plan_groups(nodes, max_pages, level):
       ``'top'``    — units are the top-level nodes; a top folder is never split.
       ``'folder'`` — units are leaves; a folder may be split across parts at child
                      boundaries, but a leaf is never split.
+      ``'page'``   — units are pages; a leaf may be split across parts (mid-document).
 
     Returns ``List[List[PDFNode]]`` — a pruned forest per part, ready for
-    ``_build_toc_items`` / ``_export_nodes_to_bytes``. (The ``'page'`` level, which
-    may split a leaf across parts, is handled separately.)"""
+    ``_build_toc_items`` / ``_export_nodes_to_bytes``."""
     if level == 'top':
         return _split_at_boundaries(nodes, max_pages)
     if level == 'folder':
         leaves = _leaves_with_path(nodes)
         units = [((leaf, path), count_node_pages(leaf)) for leaf, path in leaves]
         return [_subtree_from_leaves(grp) for grp in _pack_units(units, max_pages)]
+    if level == 'page':
+        units = []
+        for leaf, path in _leaves_with_path(nodes):
+            for pi in range(count_node_pages(leaf)):
+                units.append(((leaf, path, pi), 1))
+        return [_subtree_from_pages(grp) for grp in _pack_units(units, max_pages)]
     raise ValueError(f"unknown split level: {level!r}")
 
 

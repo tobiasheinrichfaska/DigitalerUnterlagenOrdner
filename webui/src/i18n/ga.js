@@ -182,4 +182,11 @@ export const ga = {
   '{n} markiert': '{n} roghnaithe',
   'nur auf einigen markiert': 'ar chuid acu amháin',
   'Weitere Speicheroptionen': 'Tuilleadh roghanna sábhála',
+  'In mehrere Dateien aufteilen': 'Roinn ina iliomad comhad',
+  'max. Seiten pro Datei': 'uas. leathanaigh in aghaidh an chomhaid',
+  'Trennen bei:': 'Bris ag:',
+  'oberste Ordner': 'fillteáin ardleibhéil',
+  'jeder Ordnergrenze': 'aon teorainn fhillteáin',
+  'mitten im Dokument': 'i lár na cáipéise',
+  '{n} Dateien': '{n} comhad',
 }

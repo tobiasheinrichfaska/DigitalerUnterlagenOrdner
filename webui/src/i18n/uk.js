@@ -180,4 +180,11 @@ export const uk = {
   '{n} markiert': 'Вибрано: {n}',
   'nur auf einigen markiert': 'лише в деяких',
   'Weitere Speicheroptionen': 'Інші параметри збереження',
+  'In mehrere Dateien aufteilen': 'Розділити на кілька файлів',
+  'max. Seiten pro Datei': 'макс. сторінок на файл',
+  'Trennen bei:': 'Розривати за:',
+  'oberste Ordner': 'папками верхнього рівня',
+  'jeder Ordnergrenze': 'будь-якою межею папки',
+  'mitten im Dokument': 'усередині документа (за сторінками)',
+  '{n} Dateien': '{n} файлів',
 }

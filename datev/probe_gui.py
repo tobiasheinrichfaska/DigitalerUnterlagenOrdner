@@ -21,6 +21,7 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 from .client import DatevConnectClient
 from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
+from .provenance import match_entries, provenance_stats
 from .synthetic_pdf import make_test_pdf
 from .transport import make_curl_sso_transport, make_urllib_transport
 from .types import DatevConfig, DatevError, program_keeps_revisions
@@ -58,6 +59,7 @@ class ProbeApp:
         self.client_guid = None     # resolved Mandant GUID (round 2)
         self.created_doc_id = None  # the doc this run created — the ONLY id round 2b may exchange
         self.structure_item_id = None  # structure_item.id of the fetched doc (for file exchange)
+        self.prov_entries = []      # indexed (doc/file) entries for provenance matching
         self.cfg = load_config()  # datev.config.json next to the exe (same as OPOS), if present
         self._logpath = os.path.join(_exe_dir(), "datev-probe.log")
         root.title(f"DATEV-Probe — DMS v2 — Build {_build_stamp()}")
@@ -173,6 +175,23 @@ class ProbeApp:
                    command=self.exchange_file).grid(row=6, column=0, columnspan=3, sticky="w", **pad)
         ttk.Button(w, text="Dokument löschen (DELETE)",
                    command=self.delete_doc).grid(row=6, column=3, columnspan=2, sticky="w", **pad)
+
+        # Provenance — index a Mandant and measure how uniquely size/title/name identify a doc
+        pv = ttk.LabelFrame(self.root, text="Provenance (Herkunft eines Belegtool-Files in DATEV)")
+        pv.pack(fill="x", **pad)
+        ttk.Label(pv, text="max. Dok.").grid(row=0, column=0, sticky="e")
+        self.prov_max = tk.IntVar(value=50)
+        ttk.Spinbox(pv, from_=1, to=2000, textvariable=self.prov_max, width=6).grid(row=0, column=1, **pad)
+        ttk.Button(pv, text="Mandant indexieren + auswerten",
+                   command=self.index_provenance).grid(row=0, column=2, **pad)
+        ttk.Label(pv, text="Treffer: Größe (B)").grid(row=0, column=3, sticky="e")
+        self.match_size = tk.StringVar()
+        ttk.Entry(pv, textvariable=self.match_size, width=10).grid(row=0, column=4, **pad)
+        ttk.Label(pv, text="Titel").grid(row=0, column=5, sticky="e")
+        self.match_title = tk.StringVar()
+        ttk.Entry(pv, textvariable=self.match_title, width=24).grid(row=0, column=6, sticky="we", **pad)
+        ttk.Button(pv, text="Match", command=self.match_provenance).grid(row=0, column=7, **pad)
+        pv.columnconfigure(6, weight=1)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -496,6 +515,73 @@ class ProbeApp:
                                f"classes={s.get('valid_document_classes')}")
 
         self._run("States laden", self.client.list_document_states, on_ok)
+
+    def index_provenance(self):
+        """Index this Mandant's documents (list + per-doc structure) and report how uniquely
+        size/title/name identify a single document — the fallback when no checkout path exists."""
+        if not self._need_client():
+            return
+        flt = self.filter.get().strip()
+        if not flt and self.client_guid:
+            flt = f"correspondence_partner_guid eq '{self.client_guid}'"
+        try:
+            top = int(self.prov_max.get())
+        except (tk.TclError, ValueError):
+            top = 50
+
+        def work():
+            docs = self.client.list_documents(flt or None, top)
+            lst = docs if isinstance(docs, list) else (docs or {}).get("documents", [])
+            entries = []
+            for i, d in enumerate(lst, 1):
+                did = d.get("id")
+                try:
+                    items = self.client.list_structure_items(did)
+                except DatevError as e:
+                    self._post_log(f"   (Struktur {did} übersprungen: {e})")
+                    continue
+                il = items if isinstance(items, list) else (items or {}).get("structure_items", [])
+                for it in il:
+                    if it.get("type") == 1:
+                        entries.append({"doc_id": did, "desc": d.get("description"),
+                                        "name": it.get("name"), "size": it.get("size"),
+                                        "file_id": it.get("document_file_id"),
+                                        "change_date_time": d.get("change_date_time")})
+                if i % 10 == 0:
+                    self._post_log(f"   … {i}/{len(lst)} Dokumente indexiert")
+            return entries
+
+        def on_ok(entries):
+            self.prov_entries = entries
+            st = provenance_stats(entries)
+            n = st["files"] or 1
+            self._log_line(
+                f"Provenance-Index: {st['files']} Dateien — eindeutig per "
+                f"Größe {st['unique_size']}/{n} ({100*st['unique_size']//n}%), "
+                f"Titel {st['unique_title']}/{n} ({100*st['unique_title']//n}%), "
+                f"Name {st['unique_name']}/{n} ({100*st['unique_name']//n}%), "
+                f"Größe+Titel {st['unique_size_title']}/{n} ({100*st['unique_size_title']//n}%); "
+                f"größte Größen-Kollision {st['worst_size_collision']}, "
+                f"Titel-Kollision {st['worst_title_collision']}.")
+
+        self._run("Provenance: Mandant indexieren", work, on_ok)
+
+    def match_provenance(self):
+        """Find the document(s) matching a given size and/or title in the last index."""
+        if not self.prov_entries:
+            messagebox.showinfo("DATEV-Probe", "Erst „Mandant indexieren“ ausführen.")
+            return
+        size = self.match_size.get().strip()
+        title = self.match_title.get().strip()
+        matches = match_entries(self.prov_entries,
+                                size=int(size) if size.isdigit() else None,
+                                title=title or None)
+        verdict = ("EINDEUTIG" if len(matches) == 1 else
+                   "KEIN Treffer" if not matches else f"{len(matches)} Kandidaten (mehrdeutig)")
+        self._log_line(f"— Match (Größe={size or '—'}, Titel={title or '—'}): {verdict} —")
+        for m in matches[:20]:
+            self._log_line(f"   doc {m['doc_id']} · {m.get('desc')} · {m.get('name')} · "
+                           f"{m.get('size')} B · file {m.get('file_id')}")
 
     def create_test_document(self):
         if not self._need_client():

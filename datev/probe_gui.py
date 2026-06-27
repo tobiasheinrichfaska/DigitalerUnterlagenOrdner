@@ -5,8 +5,12 @@ fetched automatically. Logic lives in the (tested) client; this is only the shel
 Run standalone (or as the one-file exe built by scripts/build_datev_probe.ps1):
     .build_venv/Scripts/python.exe datev_probe.py
 """
+import datetime
 import json
+import os
+import sys
 import threading
+import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -18,6 +22,21 @@ from .types import DatevConfig, program_keeps_revisions
 
 DEFAULT_BASE = "https://localhost:58452/datev/api/dms/v2"
 TEST_DESC = "ZZZ TEST – DATEV-Probe – bitte löschen"
+
+
+def _exe_dir():
+    return os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+        else os.path.dirname(os.path.abspath(__file__))
+
+
+def _build_stamp():
+    """The build/modification time of the running program — so the title proves which exe
+    is live (stale-copy is the classic 'my fix didn't take' cause)."""
+    try:
+        target = sys.executable if getattr(sys, "frozen", False) else __file__
+        return datetime.datetime.fromtimestamp(os.path.getmtime(target)).strftime("%Y-%m-%d %H:%M")
+    except OSError:
+        return "?"
 
 
 def _short(obj, n=160):
@@ -34,9 +53,11 @@ class ProbeApp:
         self.client_guid = None     # resolved Mandant GUID (round 2)
         self.created_doc_id = None  # the doc this run created — the ONLY id round 2b may exchange
         self.cfg = load_config()  # datev.config.json next to the exe (same as OPOS), if present
-        root.title("DATEV-Probe — DMS v2 (Lesen)")
+        self._logpath = os.path.join(_exe_dir(), "datev-probe.log")
+        root.title(f"DATEV-Probe — DMS v2 — Build {_build_stamp()}")
         root.geometry("960x720")
         self._build()
+        self._logf(f"=== Start {datetime.datetime.now():%Y-%m-%d %H:%M:%S} · Build {_build_stamp()} ===")
 
     # --- layout ------------------------------------------------------------
     def _build(self):
@@ -165,9 +186,19 @@ class ProbeApp:
                      else make_urllib_transport(cfg.allow_self_signed))
         return DatevConnectClient(cfg, transport)
 
+    def _logf(self, text):
+        """Append to datev-probe.log next to the exe — ground truth even if the GUI log
+        doesn't render a line (so a hung/odd call is still recorded)."""
+        try:
+            with open(self._logpath, "a", encoding="utf-8") as f:
+                f.write(text + "\n")
+        except OSError:
+            pass
+
     def _log_line(self, text):
         self.log.insert("end", text + "\n")
         self.log.see("end")
+        self._logf(text)
 
     def _post_log(self, text):
         """Thread-safe log: schedule the write on the Tk main thread (never touch widgets
@@ -195,6 +226,7 @@ class ProbeApp:
                 self.root.after(0, lambda: self._ok(label, res, on_ok))
             except Exception as e:  # surface every DATEV error in the log + status
                 state["done"] = True
+                self._logf(f"!!! worker exception in {label!r}:\n{traceback.format_exc()}")
                 self.root.after(0, lambda: self._err(label, e))
 
         threading.Thread(target=worker, daemon=True).start()

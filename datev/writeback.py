@@ -6,6 +6,24 @@ See docs/datev-integration-design.md. DokAb keeps no revision, so the overwrite 
 this guard is what makes "update back to DATEV" safe on productive data.
 """
 
+def is_connected(provenance):
+    """A working document is DATEV-connected iff it carries complete provenance
+    (``doc_guid`` + ``file_id``). Established on open from a checkout path; **Save As clears the
+    provenance** → not connected (and thus not write-back-able)."""
+    return bool(provenance and provenance.get("doc_guid")
+                and provenance.get("file_id") is not None)
+
+
+def can_write_back(provenance):
+    """Connected docs may be UPDATED in place (guarded by ``decide_save_back``)."""
+    return is_connected(provenance)
+
+
+def can_file_to_datev(provenance):
+    """Not-connected docs may be filed as a NEW DATEV document (the create flow)."""
+    return not is_connected(provenance)
+
+
 OK = "ok"
 DECLINED = "declined"                    # user chose not to write back
 LOCKED = "locked"                        # checked out at open or now → cannot write

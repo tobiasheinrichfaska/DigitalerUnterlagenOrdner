@@ -9,6 +9,45 @@ Mechanics it builds on: [`datev-dokumentenablage-recipe.md`](datev-dokumentenabl
 `…\<doc-guid>\<document-file-id>`). DokAb keeps **no revision** → a write is a permanent
 overwrite, so the save-back is guarded.
 
+## Document state: connected vs. not connected
+
+A working document is in exactly one of two states (DATEV mode):
+
+- **DATEV-connected** — carries provenance `{doc_guid, file_id, structure_item_id}` + the
+  open-time baseline. Established when a file is opened from a DATEV checkout path. Save offers
+  **"nach DATEV zurückschreiben"** (the guarded update below).
+- **Not connected** — a new/imported/locally-opened file, or one whose link was broken. Save goes
+  to the **filesystem**; additionally it offers **"nach DATEV ablegen"** (file as a *new* document).
+
+**Transitions:**
+
+| Action | Effect on the connection |
+|---|---|
+| Open from a DATEV checkout path | → **connected** (capture provenance + baseline) |
+| **Save As (to a filesystem path)** | **breaks the connection** → becomes **not connected** (the working doc is now that local file; the DATEV document is untouched and was *not* written). No write-back is possible afterwards until it is filed anew. |
+| Write-back succeeds | stays **connected** (refresh baseline: new `file_id`/`change_date_time`) |
+| **File a not-connected file to DATEV** (create) | → **connected** to the newly created document (optional; see below) |
+
+> **Save As must clear the DATEV binding.** Choosing a filesystem target is an explicit "this is
+> now a local copy" — keeping the binding would risk overwriting the DATEV document with a file the
+> user deliberately diverted. After Save As, only filesystem save / file-anew are offered.
+
+## Filing a not-connected file to DATEV (create)
+
+A document with **no** provenance can be filed into DATEV as a **new** document — the round-2a
+create flow (proven in the probe), in-app:
+
+1. Pick **Mandant** (→ `correspondence_partner_guid`), **domain/folder/register**, class.
+2. `POST /document-files` (the file bytes) → `document_file_id` (coerce to int).
+3. `POST /documents` with the mandatory set (`class · correspondence_partner_guid · description ·
+   domain · user · structure_items[counter,type,creation_date,last_modification_date]`; user =
+   the connection user; **no `state` for class 1**).
+4. On success, **optionally adopt the new `{doc_guid, file_id, structure_item.id}` as provenance**
+   so the node becomes **connected** and later edits write back to it.
+
+This is the counterpart to write-back: write-back **updates** an existing document, file-to-DATEV
+**creates** one. Both are DATEV-mode only and never run in normal mode.
+
 ## On open (DATEV mode)
 
 When a file is opened and its path is recognised as a DATEV checkout

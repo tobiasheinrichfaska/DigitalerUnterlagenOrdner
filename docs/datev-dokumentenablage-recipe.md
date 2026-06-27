@@ -88,10 +88,16 @@ To **change a file** of an existing document (the spec points here explicitly):
 { "id": 1085409, "document_file_id": 1085411, "revision_comment": "…" }
 ```
 1. Upload the new bytes (`POST /document-files`) → new `document_file_id`.
-2. PUT the structure item with the new file id.
+2. PUT the structure item with the new file id. **Returns `204 No Content` on success** (no body).
 - **On DokAb this OVERWRITES — no revision kept** (`DokAbRev`/`DMS` keep a revision via
   `revision_comment`). Verified: after PUT the item's `document_file_id` changes and the **old
   file id returns `not found`**.
+- **`structure_item.id` is STABLE across exchanges** (e.g. stays `1085411`); only
+  `document_file_id` changes per version (1085414 → 1085415 → …). So the structure-item id is the
+  durable PUT handle; the checkout path's file id is the *current* version pointer — map it to the
+  structure item via `GET …/structure-items` (find the item whose `document_file_id` matches).
+- **`change_date_time` advances on every PUT** (verified: a swap moved it ~15 s) → it is a
+  **trustworthy concurrency guard**; a full content hash is then only the optional final confirm.
 - The PUT is **rejected if the document is checked out by another user** (the conflict guard).
 - The "composition can only be manipulated in the offline product" note refers to **re-arranging
   the structure tree**, not swapping a file — file swap via this endpoint works.

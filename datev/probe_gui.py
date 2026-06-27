@@ -104,6 +104,9 @@ class ProbeApp:
                                           ("Register-ID", self.register_id), ("Klasse-ID", self.class_id)]):
             ttk.Label(w, text=lbl).grid(row=1, column=col * 2, sticky="e")
             ttk.Entry(w, textvariable=var, width=8).grid(row=1, column=col * 2 + 1, sticky="w", **pad)
+        ttk.Label(w, text="Vorh. Datei-ID").grid(row=2, column=6, sticky="e")
+        self.reuse_file_id = tk.StringVar()   # bind an existing orphan upload instead of a new one
+        ttk.Entry(w, textvariable=self.reuse_file_id, width=12).grid(row=2, column=7, sticky="w", **pad)
         ttk.Button(w, text="Test-Dokument anlegen", command=self.create_test_document).grid(
             row=2, column=0, columnspan=2, sticky="w", **pad)
         self.created_lbl = tk.StringVar(value="Angelegt: —")
@@ -349,9 +352,15 @@ class ProbeApp:
                 f"Es wird KEIN echtes Dokument verändert. Fortfahren?"):
             return
 
+        reuse = self.reuse_file_id.get().strip()
+
         def do_create():
-            file_id = self.client.upload_document_file(make_test_pdf(TEST_DESC))
-            self._post_log(f"document_file_id = {file_id}")   # thread-safe (was the wedge bug)
+            if reuse:   # rebind an existing orphan upload instead of creating a new file
+                file_id = int(reuse) if reuse.lstrip("-").isdigit() else reuse
+                self._post_log(f"vorhandene document_file_id = {file_id} (kein Upload)")
+            else:
+                file_id = self.client.upload_document_file(make_test_pdf(TEST_DESC))
+                self._post_log(f"document_file_id = {file_id}")   # thread-safe (was the wedge bug)
             payload["structure_items"][0]["document_file_id"] = file_id
             self._post_log("→ POST /documents " + json.dumps(payload, ensure_ascii=False))
             doc = self.client.create_document(payload)

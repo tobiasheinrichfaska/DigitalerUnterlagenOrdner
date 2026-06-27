@@ -138,6 +138,10 @@ class DatevConnectClient:
         if file_id is None:
             raise DatevError("Kein document_file_id in der Upload-Antwort.", res.status,
                              _text(res.body))
+        # DATEV returns the id as a STRING, but DocumentCreate.structure_items[].document_file_id
+        # is typed integer — sending the string leaves the file unbound (structure-less doc).
+        if isinstance(file_id, str) and file_id.strip().lstrip("-").isdigit():
+            file_id = int(file_id)
         return file_id
 
     def create_document(self, payload):

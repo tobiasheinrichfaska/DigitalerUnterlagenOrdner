@@ -46,9 +46,9 @@ write (trustworthy guard), `structure_item.id` stable across exchanges (cache it
   pipe-free `Popen` + kill, header/Location capture).
 - `datev/config.py` — `dms_base_url` / `master_data_base_url` / `iam_base_url` / auth.
 - `datev/provenance.py` — `parse_checkout_path` (exact), `provenance_stats`/`match_entries`.
-- `datev/writeback.py` — pure guard, 8 tests: `decide_save_back(...)` →
-  `ok|declined|locked|conflict_changed|conflict_content`; `is_connected`/`can_write_back`/
-  `can_file_to_datev`.
+- `datev/writeback.py` — pure guard: `decide_save_back(...)` →
+  `ok|declined|locked|conflict_changed|conflict_content` (+ `no_structure_item`/`error` from the
+  service); `is_connected` / `valid_provenance` (the connected/file-anew predicates).
 
 ### Authoritative design docs
 - `docs/datev-integration-design.md` — open/save/Save-As/file-anew flow + state model.
@@ -67,7 +67,7 @@ write (trustworthy guard), `structure_item.id` stable across exchanges (cache it
   provenance on the node (+ cache opened bytes' SHA-256, GET `change_date_time` + `checked_out`);
   if checked out, tell the user now. Show a "from DATEV" badge. Persist provenance on the node
   (round-trips in `.belegtool`).
-- **On save:** if `can_write_back` → ask „nach DATEV zurückschreiben? Ja/Nein" → on Ja, re-read
+- **On save:** if connected (`valid_provenance`) → ask „nach DATEV zurückschreiben? Ja/Nein" → on Ja, re-read
   server now and `decide_save_back` (not checked out, `change_date_time` unchanged vs baseline,
   server-bytes == opened-original); `ok` → back up fetched server bytes locally, then
   `upload_document_file` → `update_structure_item`; any non-ok → message + filesystem save.

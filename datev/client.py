@@ -197,7 +197,7 @@ class DatevConnectClient:
             try:
                 parsed = json.loads(text)
             except ValueError:
-                raise DatevError(f"Ungültiges JSON von documents_create", res.status, text)
+                raise DatevError("Ungültiges JSON von documents_create", res.status, text)
             if isinstance(parsed, dict) and ("error_description" in parsed or "error" in parsed):
                 raise _error_from_body(text, res.status, "documents_create")
         if isinstance(parsed, dict) and parsed.get("id"):

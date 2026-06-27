@@ -1161,7 +1161,16 @@ class CoreApi:
         if svc is None:
             return resp
         try:
-            opened = self._datev_effective_bytes(session)
+            # Hash the RAW checkout file on disk — for a DATEV checkout this IS the server file
+            # DATEV materialised. The content guard compares this open-time baseline against the
+            # RAW server bytes at write-back, so hashing the re-serialised *effective* bytes here
+            # (PdfWriter normalises xref/streams → never byte-identical to the raw file) would
+            # make EVERY first write-back of an unedited checkout falsely report conflict_content.
+            try:
+                with open(path, "rb") as f:
+                    opened = f.read()
+            except OSError:
+                opened = self._datev_effective_bytes(session)   # fallback (in-memory effective)
             prov, baseline = svc.capture_provenance(path, opened)
         except Exception:
             logger.warning("[datev] capture on open failed", exc_info=True)

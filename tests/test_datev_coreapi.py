@@ -124,6 +124,50 @@ def test_open_normal_mode_off_never_touches_datev(tmp_path):
 
 
 # --- save-back -------------------------------------------------------------
+def test_open_unedited_checkout_writeback_is_ok_not_false_conflict(tmp_path):
+    # REGRESSION (round-4 audit, HIGH): the open-time content baseline must hash the RAW
+    # checkout file (== the server file), NOT the re-serialised effective bytes. With the real
+    # DatevService over a fake client, opening an UNEDITED checkout .pdf and writing it straight
+    # back must return OK — never a false conflict_content (server bytes == the raw checkout).
+    from datev.inapp import DatevService
+    raw = _pdf(2)
+    fid = 1085411
+    checkout_dir = tmp_path / GUID
+    checkout_dir.mkdir(parents=True)
+    checkout = checkout_dir / f"{fid}.pdf"
+    checkout.write_bytes(raw)
+
+    class _Client:
+        def __init__(self):
+            self.uploaded, self.puts = [], []
+
+        def get_document(self, g):
+            return {"change_date_time": "t0", "checked_out": False,
+                    "correspondence_partner_guid": "client-x"}
+
+        def get_document_file(self, f):
+            return raw                              # the server still holds the raw checkout
+
+        def list_structure_items(self, g):
+            return [{"id": 1085409, "document_file_id": fid}]
+
+        def upload_document_file(self, data):
+            self.uploaded.append(data)
+            return 9001
+
+        def update_structure_item(self, g, sid, f, revision_comment=None):
+            self.puts.append((g, sid, f))
+            return {"http_status": 204}
+
+    core = CoreApi()
+    core._datev_mode = True
+    core._datev_service = DatevService(_Client())
+    resp = core.open(path=str(checkout))
+    assert resp.get("datev", {}).get("connected") is True       # captured as a checkout
+    res = core.datev_save_back(resp["session"], confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok", res            # NOT conflict_content
+
+
 def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):
     prov = {"doc_guid": GUID, "file_id": 1085411, "structure_item_id": 1085409}
     wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
@@ -338,6 +382,26 @@ def test_datev_file_no_mandant_errors(tmp_path):
     sid = core.open(path=_belegtool(tmp_path))["session"]
     res = core.datev_file(sid)                       # neither client_guid nor mandant_number
     assert not res["ok"] and "Mandant" in res["error"]
+
+
+def test_datev_file_explicit_client_guid_skips_resolve(tmp_path):
+    class NoResolve(FakeService):
+        def resolve_client(self, number):
+            raise AssertionError("resolve_client must not be called for an explicit guid")
+    core = _core_with_service(NoResolve(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_file(sid, client_guid="explicit-guid")
+    assert res["ok"]
+    assert core._datev_service.filed[0]["client_guid"] == "explicit-guid"
+
+
+def test_datev_file_ok_but_local_save_fails_reports_local_error(tmp_path, monkeypatch):
+    core = _core_with_service(FakeService(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "save", lambda *a, **k: {"ok": False, "error": "Datenträger voll"})
+    res = core.datev_file(sid, mandant_number=10001)
+    assert res["ok"]                                  # DATEV filing succeeded
+    assert res.get("local_saved") is None and res["local_error"] == "Datenträger voll"
 
 
 def test_datev_export_no_mandant_no_provenance_errors(tmp_path):

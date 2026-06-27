@@ -1,8 +1,9 @@
 """Data-driven DATEVconnect DMS v2 endpoint catalog + URL builder.
 
-Read endpoints (round 1) and the **create-only** write endpoints (round 2a): upload a file
-and create a document. The exchange (PUT) + delete endpoints are still withheld until round
-2b, so the create-only probe cannot modify or remove an existing document."""
+Full surface: read endpoints, the create endpoints (upload a file + create a document), and
+the exchange (PUT structure-item) + delete endpoints. The in-app write-back uses GET document /
+GET document-file / POST document-file / PUT structure-item; the create flow adds POST documents;
+the probe additionally uses the read/list + DELETE endpoints."""
 from urllib.parse import quote, urlencode
 
 # name -> (HTTP method, path template with {placeholders})

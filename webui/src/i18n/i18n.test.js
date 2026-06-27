@@ -43,11 +43,11 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 134 UI strings (incl. the 3 Tree.jsx drag-ghost keys, the
-    // ContextMenu aria-label, the two #7 multi-select labels, the #3 Save split-button
-    // label, and the seven #13 export-split labels) + 13 backend command-error messages +
-    // 14 host-level error/warning strings (host.py + core/api.py + lib/messages.js). If a
-    // string is added, bump this deliberately — and add it to every full-coverage
+    // Canonical key count = 163 (the v3.9 set: UI strings incl. the Tree drag-ghost keys,
+    // ContextMenu aria-label, #7 multi-select, #3 Save split-button, #13 export-split labels;
+    // + 13 backend command-error messages + 14 host-level error/warning strings) PLUS the 16
+    // v3.10.0 DATEV-mode strings (toggle/badge/actions/verdict messages + the export option) =
+    // 179. If a string is added, bump this deliberately — and add it to every full-coverage
     // language file (or PENDING_TRANSLATIONS).
     expect(Object.keys(en).length).toBe(179)
   })

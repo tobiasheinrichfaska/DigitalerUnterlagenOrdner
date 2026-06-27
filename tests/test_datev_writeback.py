@@ -9,7 +9,24 @@ from datev.writeback import (
     can_write_back,
     decide_save_back,
     is_connected,
+    valid_provenance,
 )
+
+GUID = "fa89ad42-8cd4-4828-8234-143161d41985"
+
+
+def test_valid_provenance_requires_guid_and_int_ids():
+    assert valid_provenance({"doc_guid": GUID, "file_id": 12, "structure_item_id": 9})
+    assert valid_provenance({"doc_guid": GUID, "file_id": 12})  # sid may be absent/None
+
+
+def test_valid_provenance_rejects_crafted_belegtool_provenance():
+    # an untrusted .belegtool could carry a hostile datev dict — reject before any server call
+    assert not valid_provenance({"doc_guid": "not-a-guid", "file_id": 12})
+    assert not valid_provenance({"doc_guid": GUID, "file_id": "12"})        # string id
+    assert not valid_provenance({"doc_guid": GUID, "file_id": True})        # bool is not an int id
+    assert not valid_provenance({"doc_guid": GUID, "file_id": 12, "structure_item_id": "x"})
+    assert not valid_provenance(None) and not valid_provenance({})
 
 # a baseline where everything agrees → write is allowed
 BASE = dict(user_confirmed=True, was_checked_out_at_open=False, checked_out_by_other_now=False,

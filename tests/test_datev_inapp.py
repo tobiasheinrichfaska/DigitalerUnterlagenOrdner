@@ -204,6 +204,23 @@ def test_writeback_without_structure_item_refuses():
     assert client.puts == []
 
 
+def test_writeback_upload_error_returns_error_verdict_not_exception(tmp_path):
+    # a mid-write network/HTTP error (after the guard passed) must come back as a clean
+    # {ok:false, verdict:"error"}, NOT propagate as an unhandled exception across the bridge.
+    client, prov, baseline = _connected()
+
+    def boom(_data):
+        raise RuntimeError("network down")
+
+    client.upload_document_file = boom
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", backup_dir=str(tmp_path))
+    assert not res["ok"] and res["verdict"] == "error"
+    assert "network down" in res["error"]
+    assert client.puts == []                       # nothing was PUT
+    # the server bytes were still backed up locally before the failed upload
+    assert res["backup_path"] and open(res["backup_path"], "rb").read()
+
+
 # --- file a NEW document (single + per split-part) -------------------------
 def test_file_document_uploads_then_creates_and_returns_provenance():
     client = FakeClient(new_file_id=5555, created_id="created-guid",

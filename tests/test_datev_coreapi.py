@@ -31,13 +31,14 @@ def _belegtool(tmp_path, name="doc"):
 
 class FakeService:
     def __init__(self, *, prov=None, baseline=None, writeback_result=None,
-                 file_result=None, client_guid="same-client"):
+                 file_result=None, client_guid="same-client", fail_file_calls=()):
         self.prov = prov
         self.baseline = baseline or {"open_change_dt": "t0", "was_checked_out_at_open": False,
                                      "opened_sha256": "h0"}
         self.writeback_result = writeback_result
         self.file_result = file_result
         self.client_guid = client_guid
+        self.fail_file_calls = set(fail_file_calls)  # 0-based file_document call indices that fail
         self.filed = []
 
     def status(self):
@@ -51,7 +52,10 @@ class FakeService:
 
     def file_document(self, data, *, client_guid, description, domain_id=1, folder_id=None,
                       register_id=None, structure_name="beleg.pdf"):
+        idx = len(self.filed)
         self.filed.append({"data": data, "client_guid": client_guid, "description": description})
+        if idx in self.fail_file_calls:
+            return {"ok": False, "error": "boom"}
         return self.file_result or {"ok": True,
                                     "provenance": {"doc_guid": "new-guid", "file_id": 1,
                                                    "structure_item_id": 2,
@@ -149,6 +153,26 @@ def test_save_back_not_connected_errors(tmp_path):
     assert not res["ok"] and "DATEV" in res["error"]
 
 
+def test_save_back_rejects_crafted_provenance_before_any_server_call(tmp_path):
+    # an untrusted .belegtool with a hostile datev dict (non-GUID / non-int) is refused
+    # up front — the fake service's writeback is never reached.
+    svc = FakeService(prov=None, writeback_result={"ok": True, "verdict": "ok"})
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    core._datev_set_provenance(sid, {"doc_guid": "not-a-guid", "file_id": "x"})
+    res = core.datev_save_back(sid, confirmed=True)
+    assert not res["ok"] and "gültig" in res["error"]
+
+
+def test_close_session_frees_datev_baseline(tmp_path):
+    prov = {"doc_guid": GUID, "file_id": 1085411, "structure_item_id": 1085409}
+    core = _core_with_service(FakeService(prov=prov))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    assert sid in core._datev_baseline           # captured on open
+    core.close_session(sid)
+    assert sid not in core._datev_baseline        # freed on close (no leak)
+
+
 # --- file + export ---------------------------------------------------------
 def test_datev_can_file_reports_same_client_when_connected(tmp_path):
     prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
@@ -186,3 +210,24 @@ def test_datev_export_files_each_split_part(tmp_path):
     assert res["ok"] and res["parts"] >= 2                     # split into >=2 parts
     assert len(svc.filed) == res["parts"]
     assert all(f["client_guid"] == "client-x" for f in svc.filed)  # same client, no Mandant given
+
+
+def test_datev_export_partial_failure_reports_how_many_landed(tmp_path):
+    # one split part fails to file → ok:false WITH detail (the OK parts already landed in
+    # DokAb, no rollback), not a silent generic failure.
+    big = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", is_folder=True, children=(Node(name="a", original_data=_pdf(60), pdf_length=60),)),
+        Node(name="B", is_folder=True, children=(Node(name="b", original_data=_pdf(60), pdf_length=60),)),
+    )))
+    path = str(tmp_path / "big.belegtool")
+    save_belegtool(big, path)
+    svc = FakeService(prov={"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+                            "correspondence_partner_guid": "client-x"},
+                      fail_file_calls={1})  # second part fails
+    core = _core_with_service(svc)
+    sid = core.open(path=path)["session"]
+    res = core.datev_export(sid, options={"split_pages": 100, "split_level": "top"})
+    assert not res["ok"]
+    assert res["filed_ok"] == res["parts"] - 1                 # all but one landed
+    assert "von" in res["error"]                               # "Nur X von Y …"
+    assert any(f["ok"] for f in res["filed"]) and any(not f["ok"] for f in res["filed"])

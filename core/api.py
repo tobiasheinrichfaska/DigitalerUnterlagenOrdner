@@ -761,6 +761,7 @@ class CoreApi:
             s = self._sessions.pop(session, None)
             self._paths.pop(session, None)
             lock = self._locks.pop(session, None)
+            self._datev_baseline.pop(session, None)  # free the DATEV write-back baseline
             view_dir = self._view_dirs.pop(session, None)
             if view_dir is not None:
                 self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
@@ -1162,7 +1163,8 @@ class CoreApi:
             return resp
         if not prov:
             return resp
-        self._datev_baseline[session] = baseline
+        with self._lock:
+            self._datev_baseline[session] = baseline
         self._datev_set_provenance(session, prov)
         with self._lock:
             resp = self._doc_response_locked(session)  # tree now carries root.datev
@@ -1180,10 +1182,13 @@ class CoreApi:
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
         prov = self._datev_provenance(session)
-        from datev.writeback import can_write_back
-        if not can_write_back(prov):
-            return {"ok": False, "error": "Dieses Dokument ist nicht mit DATEV verknüpft."}
-        baseline = self._datev_baseline.get(session)
+        from datev.writeback import valid_provenance
+        if not valid_provenance(prov):
+            # not connected, OR a crafted/garbled provenance from an untrusted .belegtool
+            # (non-GUID doc_guid / non-int ids) — refuse before any server call.
+            return {"ok": False, "error": "Dieses Dokument ist nicht (gültig) mit DATEV verknüpft."}
+        with self._lock:
+            baseline = self._datev_baseline.get(session)
         if baseline is None:
             # reopened .belegtool: provenance persisted but no live baseline — re-establish
             # it from the server now (the opened bytes are the current effective bytes).
@@ -1191,16 +1196,20 @@ class CoreApi:
         edited = self._datev_effective_bytes(session)
         if not edited:
             return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
-        res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
-                            comment=comment or "BelegTool", backup_dir=self._datev_backup_dir())
+        try:
+            res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
+                                comment=comment or "BelegTool", backup_dir=self._datev_backup_dir())
+        except Exception as e:  # never let a write-back error cross the bridge as a raw rejection
+            logger.exception("[datev] write-back failed")
+            return {"ok": False, "verdict": "error", "error": str(e)}
         if res.get("ok"):
             new_prov = res.get("provenance") or prov
             self._datev_set_provenance(session, new_prov)
-            self._datev_baseline[session] = {
-                "open_change_dt": res.get("new_change_dt"),
-                "was_checked_out_at_open": False,
-                "opened_sha256": hashlib.sha256(edited).hexdigest()}
             with self._lock:
+                self._datev_baseline[session] = {
+                    "open_change_dt": res.get("new_change_dt"),
+                    "was_checked_out_at_open": False,
+                    "opened_sha256": hashlib.sha256(edited).hexdigest()}
                 s = self._sessions.get(session)
                 if s is not None:
                     s.mark_saved()
@@ -1270,7 +1279,8 @@ class CoreApi:
                                 register_id=register_id, structure_name=f"{name}.pdf")
         if res.get("ok") and res.get("provenance"):
             self._datev_set_provenance(session, res["provenance"])
-            self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
+            with self._lock:
+                self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
         return res
 
     def datev_export(self, session: str, node_ids=None, options=None, client_guid: str = None,
@@ -1308,15 +1318,25 @@ class CoreApi:
                 with open(p, "rb") as f:
                     data = f.read()
                 label = os.path.splitext(os.path.basename(p))[0]
-                r = svc.file_document(data, client_guid=guid,
-                                      description=description or label,
-                                      domain_id=domain_id, folder_id=folder_id,
-                                      register_id=register_id, structure_name=f"{label}.pdf")
+                try:
+                    r = svc.file_document(data, client_guid=guid,
+                                          description=description or label,
+                                          domain_id=domain_id, folder_id=folder_id,
+                                          register_id=register_id, structure_name=f"{label}.pdf")
+                except Exception as e:  # one part's failure must not abort the rest / crash
+                    r = {"ok": False, "error": str(e)}
                 filed.append({"name": label, "ok": r.get("ok"),
                               "doc_guid": (r.get("provenance") or {}).get("doc_guid"),
                               "error": r.get("error")})
-            ok = all(f["ok"] for f in filed) and bool(filed)
-            return {"ok": ok, "filed": filed, "parts": len(filed)}
+            done = sum(1 for f in filed if f["ok"])
+            ok = done == len(filed) and bool(filed)
+            result = {"ok": ok, "filed": filed, "parts": len(filed), "filed_ok": done}
+            if not ok:
+                # DokAb has no rollback — a half-filed split leaves the OK parts in DATEV.
+                # Tell the user exactly how many landed (and where) so duplicates can be cleaned.
+                result["error"] = (f"Nur {done} von {len(filed)} Teil(en) nach DATEV abgelegt — "
+                                   "die bereits abgelegten bleiben in DATEV.")
+            return result
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

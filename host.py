@@ -279,8 +279,8 @@ class HostApi:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    def save_node_back(self, pdftool_session):
-        return self._core.save_node_back(pdftool_session)
+    def save_node_back(self, pdftool_session, data_b64=None):
+        return self._core.save_node_back(pdftool_session, data_b64)
 
     def break_node_binding(self, session, node_id):
         return self._core.break_node_binding(session, node_id)

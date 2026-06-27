@@ -411,6 +411,16 @@ export default function App() {
     dispatch({ type: 'GroupIntoFolder', node_ids: ids, parent_id: parentId, name, new_id: null, index: null })
   }
 
+  // Open a leaf in the PDF-Tool (binds + locks the node, opens a bound window where the
+  // user can add text / fill forms and save back). Folders have no PDF → core refuses
+  // them; the context-menu entry is leaf-only, and we mirror that guard here.
+  const openInPdfTool = (node) => {
+    if (!session || !node || node.is_folder) return
+    run(core.openNodeInPdftool(session, node.id)).then((resp) => {
+      if (resp && resp.ok === false) setError(resp.error || 'PDF-Tool konnte nicht geöffnet werden.')
+    })
+  }
+
   // New folder at the selection (planned #8): inside a selected folder, as a sibling
   // after a selected leaf, else at the root — with a naming dialog (default pre-filled).
   const addFolderAtSelection = () => {
@@ -578,7 +588,7 @@ export default function App() {
         />
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} selectedIds={selectedIds}
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} onOpenInPdfTool={openInPdfTool} selectedIds={selectedIds}
         onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} editLocked={viewActive} />
 
       {saveAsk && (

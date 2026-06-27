@@ -26,6 +26,7 @@ export const en = {
   'Speichern': 'Save',
   'Speichern unter…': 'Save as…',
   'Weitere Speicheroptionen': 'More save options',
+  'Im PDF-Tool öffnen': 'Open in PDF tool',
   'Export PDF': 'Export PDF',
   // save dialog (compression alternatives)
   'Komprimierungs-Alternativen speichern?': 'Save compression alternatives?',

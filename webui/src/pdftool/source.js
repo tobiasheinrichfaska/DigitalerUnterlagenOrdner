@@ -24,3 +24,14 @@ export function base64ToUint8(b64) {
   for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i)
   return arr
 }
+
+// Uint8Array → base64 for the save-back bridge call (PDF.js saveDocument() output).
+// Chunked so a multi-MB PDF doesn't blow String.fromCharCode's argument limit.
+export function uint8ToBase64(bytes) {
+  const CHUNK = 0x8000
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(bin)
+}

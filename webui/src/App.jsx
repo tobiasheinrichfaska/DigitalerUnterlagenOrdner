@@ -462,7 +462,8 @@ export default function App() {
       if (resp?.ok) {
         setError(null)
         const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
-        const base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
+        let base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
+        if (resp.paths && resp.paths.length > 1) base += ` — ${t('{n} Dateien', { n: resp.paths.length })}`
         // resp.warning is a German backend message ("Ohne Seiten übersprungen: …")
         // with dynamic names — localize it before composing the (translated) notice.
         setNotice(resp.warning ? `${base} — ${localizeMessage(t, resp.warning)}` : base)

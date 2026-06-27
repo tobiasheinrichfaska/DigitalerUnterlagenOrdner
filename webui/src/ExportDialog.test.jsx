@@ -60,7 +60,26 @@ describe('ExportDialog — confirm / cancel', () => {
     fireEvent.click(screen.getByText('Exportieren'))
     expect(onChoose).toHaveBeenCalledWith({
       toc: true, toc_links: true, index: true, index_links: true, bookmarks: true,
+      split_pages: null, split_level: 'top',
     })
+  })
+
+  it('returns the split threshold + level when splitting is enabled (#13)', () => {
+    const { onChoose } = renderDialog()
+    fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+    const num = document.querySelector('.exp-num')
+    fireEvent.change(num, { target: { value: '50' } })
+    fireEvent.change(document.querySelector('.exp-level'), { target: { value: 'folder' } })
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(
+      expect.objectContaining({ split_pages: 50, split_level: 'folder' }),
+    )
+  })
+
+  it('keeps split_pages null while splitting is off', () => {
+    const { onChoose } = renderDialog()
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ split_pages: null }))
   })
 
   it('cancels via the button, the backdrop, and Esc', () => {

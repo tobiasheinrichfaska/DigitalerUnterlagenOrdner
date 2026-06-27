@@ -545,14 +545,93 @@ def _split_at_boundaries(nodes: List[PDFNode], max_pages: int) -> List[List[PDFN
     return groups
 
 
+def _pack_units(units, max_pages):
+    """Greedy: pack ``(ref, pages)`` units into ordered groups whose page sums stay
+    ``<= max_pages``; a single oversized unit gets its own group. Returns the refs
+    grouped: ``List[List[ref]]``. Shared by every break level (#13)."""
+    groups, cur, cur_n = [], [], 0
+    for ref, n in units:
+        if cur and cur_n + n > max_pages:
+            groups.append(cur)
+            cur, cur_n = [], 0
+        cur.append(ref)
+        cur_n += n
+    if cur:
+        groups.append(cur)
+    return groups
+
+
+def _leaves_with_path(nodes, _path=()):
+    """All non-empty leaves in document order, each paired with its folder-name path
+    (so a split part can be rebuilt with the document's folder structure)."""
+    out = []
+    for node in nodes:
+        if node.is_folder:
+            out.extend(_leaves_with_path(node.children, _path + (node.name,)))
+        elif count_node_pages(node) > 0:
+            out.append((node, _path))
+    return out
+
+
+def _subtree_from_leaves(items):
+    """Rebuild a pruned forest of folders holding the given ``(leaf, folder_path)``
+    items — preserving order and merging shared folders — so a split part keeps the
+    document's structure. Folder nodes are fresh; leaf nodes are reused as-is."""
+    roots = []
+    index = {}  # path tuple -> folder PDFNode
+
+    def ensure(path):
+        if not path:
+            return None
+        if path in index:
+            return index[path]
+        parent = ensure(path[:-1])
+        folder = PDFNode(name=path[-1], is_folder=True)
+        index[path] = folder
+        if parent is None:
+            roots.append(folder)
+        else:
+            parent.add_child(folder)
+        return folder
+
+    for leaf, path in items:
+        parent = ensure(path)
+        if parent is None:
+            roots.append(leaf)
+        else:
+            parent.add_child(leaf)
+    return roots
+
+
+def _plan_groups(nodes, max_pages, level):
+    """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
+
+    ``level``:
+      ``'top'``    — units are the top-level nodes; a top folder is never split.
+      ``'folder'`` — units are leaves; a folder may be split across parts at child
+                     boundaries, but a leaf is never split.
+
+    Returns ``List[List[PDFNode]]`` — a pruned forest per part, ready for
+    ``_build_toc_items`` / ``_export_nodes_to_bytes``. (The ``'page'`` level, which
+    may split a leaf across parts, is handled separately.)"""
+    if level == 'top':
+        return _split_at_boundaries(nodes, max_pages)
+    if level == 'folder':
+        leaves = _leaves_with_path(nodes)
+        units = [((leaf, path), count_node_pages(leaf)) for leaf, path in leaves]
+        return [_subtree_from_leaves(grp) for grp in _pack_units(units, max_pages)]
+    raise ValueError(f"unknown split level: {level!r}")
+
+
 def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
-                               max_pages: int) -> List[str]:
+                               max_pages: int, level: str = 'top') -> List[str]:
     """
     Aufteilen in mehrere Dateien. Jede Datei hat einen TOC mit Querverweisen
     auf die anderen Dateien. Gibt Liste der erstellten Pfade zurück.
+    ``level`` ('top'/'folder'/'page') wählt die Bruchgrenze — siehe ``_plan_groups``.
     """
     top = PDFStorage.filter_keep_ancestors(nodes)
-    groups = _split_at_boundaries(top, max_pages)
+    groups = _plan_groups(top, max_pages, level)
 
     if len(groups) == 1:
         export_pdf_with_toc(top, base_path)

@@ -799,17 +799,27 @@ class CoreApi:
             nodes = list(storage.root.children)
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
-        from formats.toc_export import export_pdf, empty_leaf_names
+        from formats.toc_export import (
+            export_pdf, export_pdf_split_with_toc, count_total_pages, empty_leaf_names)
 
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
         skipped = empty_leaf_names(nodes)
+        # #13: split into several files when a page threshold is set and exceeded.
+        opts = options or {}
+        split_pages = opts.get("split_pages")
+        split_level = opts.get("split_level", "top")
         try:
-            export_pdf(nodes, path, options)
+            if split_pages and count_total_pages(nodes) > int(split_pages):
+                paths = export_pdf_split_with_toc(nodes, path, int(split_pages), split_level)
+            else:
+                export_pdf(nodes, path, options)
+                paths = [path]
         except Exception as e:
             logger.exception("export failed")
             return {"ok": False, "error": str(e)}
-        result = {"ok": True, "session": session, "path": path, "count": len(nodes)}
+        result = {"ok": True, "session": session, "path": paths[0],
+                  "paths": paths, "count": len(nodes)}
         if skipped:
             result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
         return result

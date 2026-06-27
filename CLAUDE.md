@@ -816,6 +816,13 @@ embedded version). Low effort; do it on the next build bump.
 
 - **Accepted audit-info residuals (2026-06-12, deliberately not fixed):**
   `save()` reads `_locks`/`_paths` outside the lock (unreachable via the modal UI);
+  the **DATEV write-back parallel local save** (`datev_save_back`) snapshots `edited` before the
+  network round-trip but the in-sync local `.belegtool` save re-reads the *current* session
+  document afterwards — a concurrent same-session edit between the two would diverge DATEV (old
+  bytes) from the local file (new bytes); unreachable because the write-back runs under the
+  modal busy-state that disables edits (single-window UI), annotated at the call site;
+  `_safe_change_dt`/reopened-baseline use an extra `get_document` round-trip whose failure is
+  fail-safe (the next write-back re-establishes the baseline from the server);
   `SetPeriod` does no value validation; `office_via_com`'s
   CoInitialize/CoUninitialize balance on js threads is best-effort;
   `_friendly_import_error`'s raw-text fallback tail stays untranslated (known);

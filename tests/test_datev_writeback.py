@@ -5,7 +5,6 @@ from datev.writeback import (
     DECLINED,
     LOCKED,
     OK,
-    can_file_to_datev,
     decide_save_back,
     is_connected,
     valid_provenance,
@@ -65,11 +64,10 @@ def test_decline_takes_precedence_over_everything():
 
 def test_connection_state_and_save_as_breaks_it():
     prov = {"doc_guid": "fa89ad42-…", "file_id": 1085411, "structure_item_id": 1085409}
-    assert is_connected(prov) and not can_file_to_datev(prov)
-    # Save As clears the provenance → not connected → file-anew, no write-back
+    assert is_connected(prov)
+    # Save As clears the provenance → not connected → file-anew (UI gates on !connected)
     for broken in (None, {}, {"doc_guid": "x"}, {"file_id": 1}):
         assert not is_connected(broken)
-        assert can_file_to_datev(broken)
 
 
 def test_lock_takes_precedence_over_change_and_content():

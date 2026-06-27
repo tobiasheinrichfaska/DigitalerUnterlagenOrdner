@@ -228,6 +228,29 @@ def test_writeback_new_sha256_is_server_stored_bytes_not_uploaded(tmp_path):
     assert res["new_sha256"] != sha256(b"%PDF edited")           # NOT the uploaded bytes
 
 
+def test_writeback_new_sha256_falls_back_when_server_readback_fails(tmp_path):
+    # if reading the stored bytes back fails after a successful write, the baseline hash
+    # falls back to the uploaded bytes (better a baseline than none) — write still ok.
+    client, prov, baseline = _connected()
+    orig = client.get_document_file
+
+    def gdf(file_id):
+        if file_id == client.new_file_id:   # the POST-write read-back (not the guard read)
+            raise RuntimeError("read-back failed")
+        return orig(file_id)
+
+    client.get_document_file = gdf
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", backup_dir=str(tmp_path))
+    assert res["ok"]
+    assert res["new_sha256"] == sha256(b"%PDF edited")     # fell back to the uploaded bytes
+
+
+def test_pick_connection_user_skips_deleted():
+    users = [{"id": "u1", "display_name": "A", "active": True, "is_deleted": True},
+             {"id": "u2", "display_name": "B", "active": True}]
+    assert pick_connection_user(users, my_sid="no-match")["id"] == "u2"
+
+
 def test_writeback_put_error_after_upload_returns_error_verdict(tmp_path):
     # the PUT (update_structure_item) failing AFTER a successful upload must also come back
     # as a clean error verdict (not an exception), with the upload recorded + a backup written.
@@ -297,11 +320,6 @@ def test_file_document_no_user_errors():
     svc = DatevService(FakeClient(users=[]))
     res = svc.file_document(b"x", client_guid="c", description="d")
     assert not res["ok"] and "Benutzer" in res["error"]
-
-
-def test_client_guid_for_document_reads_correspondence_partner():
-    client = FakeClient(document={"correspondence_partner_guid": "same-client"})
-    assert DatevService(client).client_guid_for_document(GUID) == "same-client"
 
 
 def test_status_reports_feature_and_revision_policy():

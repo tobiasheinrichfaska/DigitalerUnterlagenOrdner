@@ -212,6 +212,55 @@ def test_open_mode_off_never_calls_datev_service(tmp_path, monkeypatch):
     assert resp["ok"] and "datev" not in resp
 
 
+def test_open_mode_off_does_not_import_datev_package(tmp_path):
+    # STRUCTURAL lazy-gate proof: a mode-off launch must not leave the datev package in
+    # sys.modules — a regressed top-level `import datev` would fail THIS even if behaviour looks
+    # fine. Drop any datev.* imported by sibling test modules first so we measure the gate.
+    import sys
+    for m in [k for k in list(sys.modules) if k == "datev" or k.startswith("datev.")]:
+        del sys.modules[m]
+    core = CoreApi()  # mode off
+    core.open(path=_belegtool(tmp_path))
+    assert "datev" not in sys.modules and "datev.inapp" not in sys.modules
+
+
+def test_save_back_reestablished_baseline_ok_path_caches_baseline(tmp_path):
+    # the OK-after-reopen branch: a reopened .belegtool (no live baseline) whose re-established
+    # baseline matches → write-back succeeds and a baseline is cached for the session.
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "new_sha256": "h", "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    core._datev_baseline.pop(sid, None)        # reopened-file state (no live baseline)
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok"
+    assert sid in core._datev_baseline         # re-established + cached
+
+
+def test_set_datev_mode_true_drops_old_service_and_rebuilds(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from datev import inapp
+    fresh = FakeService(prov=None)
+    monkeypatch.setattr(inapp.DatevService, "connect", classmethod(lambda cls, *a, **k: fresh))
+    core = CoreApi()
+    core._datev_service = object()             # a stale "already built" instance
+    core.set_datev_mode(True)
+    assert core._datev_service is fresh         # old dropped, rebuilt on next use
+
+
+def test_datev_export_errors_when_export_yields_no_path(tmp_path, monkeypatch):
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+            "correspondence_partner_guid": "client-x"}
+    svc = FakeService(prov=prov)
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "export", lambda *a, **k: {"ok": True})  # ok but no paths/path
+    res = core.datev_export(sid)
+    assert not res["ok"] and "Datei" in res["error"]
+    assert svc.filed == []                     # nothing opened/filed (no open(None))
+
+
 def test_save_back_conflict_returns_verdict_without_writing(tmp_path):
     prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
     core = _core_with_service(FakeService(

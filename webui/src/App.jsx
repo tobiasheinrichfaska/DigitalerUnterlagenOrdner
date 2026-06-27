@@ -479,7 +479,11 @@ export default function App() {
     } else if (res && res.verdict !== 'declined') {
       // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
       // OFFER the filesystem save fallback the design promises, so the edit isn't lost.
-      setError(res.verdict ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
+      // A guard verdict (locked/conflict_*/no_structure_item) has a localized message; the
+      // 'error' verdict (mid-write network/HTTP failure) carries the real cause in res.error
+      // — show THAT, not the generic fallback (which would hide why it failed).
+      const guard = res.verdict && res.verdict !== 'error'
+      setError(guard ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
       saveFile()
     }
   })

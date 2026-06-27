@@ -57,6 +57,7 @@ class ProbeApp:
         self.structure_items = []
         self.client_guid = None     # resolved Mandant GUID (round 2)
         self.created_doc_id = None  # the doc this run created — the ONLY id round 2b may exchange
+        self.structure_item_id = None  # structure_item.id of the fetched doc (for file exchange)
         self.cfg = load_config()  # datev.config.json next to the exe (same as OPOS), if present
         self._logpath = os.path.join(_exe_dir(), "datev-probe.log")
         root.title(f"DATEV-Probe — DMS v2 — Build {_build_stamp()}")
@@ -167,6 +168,11 @@ class ProbeApp:
             row=5, column=6, sticky="w", **pad)
         ttk.Button(w, text="States laden", command=self.load_states).grid(
             row=5, column=7, sticky="w", **pad)
+        # Round 2b — exchange the file of (and delete) the document in the Dokument-ID field.
+        ttk.Button(w, text="Datei austauschen (PUT structure-item)",
+                   command=self.exchange_file).grid(row=6, column=0, columnspan=3, sticky="w", **pad)
+        ttk.Button(w, text="Dokument löschen (DELETE)",
+                   command=self.delete_doc).grid(row=6, column=3, columnspan=2, sticky="w", **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -535,9 +541,63 @@ class ProbeApp:
             if self.created_doc_id:  # pre-fill the fetch field + read the structure back
                 self.fetch_id.set(self.created_doc_id)
                 self._run(f"Struktur {self.created_doc_id}",
-                          lambda: self.client.list_structure_items(self.created_doc_id))
+                          lambda: self.client.list_structure_items(self.created_doc_id),
+                          self._capture_structure)
 
         self._run("Test-Dokument anlegen", do_create, on_ok)
+
+    def _capture_structure(self, items):
+        """Remember the first structure_item.id so the file can be exchanged later."""
+        lst = items if isinstance(items, list) else (items or {}).get("structure_items", [])
+        if lst and lst[0].get("id") is not None:
+            self.structure_item_id = str(lst[0]["id"])
+            self._log_line(f"structure_item.id = {self.structure_item_id}")
+
+    def exchange_file(self):
+        """Round 2b: replace the file of the document in the Dokument-ID field with a NEW
+        synthetic PDF (PUT /documents/{id}/structure-items/{sid}). Confirm-gated."""
+        if not self._need_client():
+            return
+        doc_id = self.fetch_id.get().strip()
+        if not doc_id or not self._guard_doc_guid(doc_id):
+            return
+        if not self.structure_item_id:
+            messagebox.showinfo("DATEV-Probe",
+                                "Erst „Abrufen (Details + Struktur)“ — liefert die structure_item.id.")
+            return
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        if not messagebox.askyesno(
+                "Datei austauschen — schreibt in DATEV",
+                f"Die Datei von Dokument\n{doc_id}\n(structure_item {self.structure_item_id}) wird "
+                f"durch ein NEUES synthetisches PDF ersetzt.\n\nDokAb: ohne Revision (überschreibt). "
+                f"Fortfahren?"):
+            return
+
+        def work():
+            fid = self.client.upload_document_file(
+                make_test_pdf(f"DATEV-Probe AUSTAUSCH {stamp} – bitte löschen"))
+            self._post_log(f"neue document_file_id = {fid}")
+            return self.client.update_structure_item(
+                doc_id, self.structure_item_id, fid, revision_comment=f"Probe-Austausch {stamp}")
+
+        def on_ok(res):
+            self._log_line(f"Austausch-Ergebnis: {json.dumps(res, ensure_ascii=False)}")
+            self._run(f"Struktur {doc_id}",
+                      lambda: self.client.list_structure_items(doc_id), self._capture_structure)
+
+        self._run("Datei austauschen", work, on_ok)
+
+    def delete_doc(self):
+        """Round 2b cleanup: DELETE the test document in the Dokument-ID field. Confirm-gated."""
+        if not self._need_client():
+            return
+        doc_id = self.fetch_id.get().strip()
+        if not doc_id or not self._guard_doc_guid(doc_id):
+            return
+        if not messagebox.askyesno("Dokument löschen",
+                                   f"Dokument {doc_id} wird GELÖSCHT. Fortfahren?"):
+            return
+        self._run(f"Dokument {doc_id} löschen", lambda: self.client.delete_document(doc_id))
 
     def fetch_by_id(self):
         """GET a specific document (typed or just-created id) + its structure — proves whether
@@ -551,7 +611,8 @@ class ProbeApp:
         if not self._guard_doc_guid(doc_id):
             return
         self._run(f"Dokument {doc_id}", lambda: self.client.get_document(doc_id))
-        self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id))
+        self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id),
+                  self._capture_structure)
 
     def _guard_doc_guid(self, doc_id):
         """A document id is a GUID; an all-numeric value is a document_file_id (wrong

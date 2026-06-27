@@ -190,6 +190,36 @@ def test_synthetic_pdf_is_valid_single_page_with_marker():
     assert b"ZZZ TEST bitte loeschen" in b      # the marker text is in the content stream
 
 
+def test_synthetic_pdf_renders_umlauts_winansi():
+    b = make_test_pdf("löschen –")
+    assert b"/WinAnsiEncoding" in b              # font set so umlauts/en-dash render
+    assert "löschen".encode("cp1252") in b       # ö encoded as WinAnsi 0xF6, not '?'
+
+
+def test_update_structure_item_puts_id_and_file():
+    seen = {}
+
+    def handler(method, url, headers, body):
+        seen.update(method=method, url=url, body=body)
+        return _resp(200, body=b"")
+
+    cli, _ = _client(handler)
+    res = cli.update_structure_item("doc-guid", 1085409, 1085411, revision_comment="x")
+    assert seen["method"] == "PUT"
+    assert "/documents/doc-guid/structure-items/1085409" in seen["url"]
+    sent = json.loads(seen["body"])
+    assert sent["id"] == 1085409 and sent["document_file_id"] == 1085411
+    assert res["http_status"] == 200
+
+
+def test_delete_document_sends_delete():
+    seen = {}
+    cli, _ = _client(lambda m, u, h, b: seen.update(method=m, url=u) or _resp(204, body=b""))
+    res = cli.delete_document("doc-guid")
+    assert seen["method"] == "DELETE" and seen["url"].endswith("/documents/doc-guid")
+    assert res["http_status"] == 204
+
+
 def test_master_data_base_url_pins_path_from_dms_base():
     assert master_data_base_url("https://DatevHeinrich:58452/datev/api/dms/v2") == \
         "https://DatevHeinrich:58452/datev/api/master-data/v1"

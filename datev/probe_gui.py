@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .client import DatevConnectClient
-from .transport import make_urllib_transport
+from .transport import make_curl_sso_transport, make_urllib_transport
 from .types import DatevConfig, program_keeps_revisions
 
 DEFAULT_BASE = "https://localhost:58452/datev/api/dms/v2"
@@ -41,16 +41,25 @@ class ProbeApp:
         self.user = tk.StringVar()
         self.pw = tk.StringVar()
         self.self_signed = tk.BooleanVar(value=True)
+        self.auth_mode = tk.StringVar(value="sso")  # like the other DATEV programs: SSO default
         ttk.Label(conn, text="Base-URL").grid(row=0, column=0, sticky="w")
         ttk.Entry(conn, textvariable=self.base, width=60).grid(row=0, column=1, columnspan=3, sticky="we", **pad)
-        ttk.Label(conn, text="Benutzer (UPN)").grid(row=1, column=0, sticky="w")
-        ttk.Entry(conn, textvariable=self.user, width=28).grid(row=1, column=1, sticky="we", **pad)
-        ttk.Label(conn, text="Passwort").grid(row=1, column=2, sticky="w")
-        ttk.Entry(conn, textvariable=self.pw, show="•", width=20).grid(row=1, column=3, sticky="we", **pad)
+        # Auth: Windows SSO (current user, no password — matches DATEV's own programs) or Basic.
+        ttk.Radiobutton(conn, text="Windows-Anmeldung (SSO)", value="sso", variable=self.auth_mode,
+                        command=self._sync_auth).grid(row=1, column=0, columnspan=2, sticky="w", **pad)
+        ttk.Radiobutton(conn, text="Basic (Benutzer/Passwort)", value="basic", variable=self.auth_mode,
+                        command=self._sync_auth).grid(row=1, column=2, columnspan=2, sticky="w", **pad)
+        ttk.Label(conn, text="Benutzer (UPN)").grid(row=2, column=0, sticky="w")
+        self.user_entry = ttk.Entry(conn, textvariable=self.user, width=28)
+        self.user_entry.grid(row=2, column=1, sticky="we", **pad)
+        ttk.Label(conn, text="Passwort").grid(row=2, column=2, sticky="w")
+        self.pw_entry = ttk.Entry(conn, textvariable=self.pw, show="•", width=20)
+        self.pw_entry.grid(row=2, column=3, sticky="we", **pad)
         ttk.Checkbutton(conn, text="Self-signed TLS zulassen (localhost)",
-                        variable=self.self_signed).grid(row=2, column=1, columnspan=2, sticky="w", **pad)
-        ttk.Button(conn, text="Verbinden / Info abrufen", command=self.connect).grid(row=2, column=3, sticky="e", **pad)
+                        variable=self.self_signed).grid(row=3, column=1, columnspan=2, sticky="w", **pad)
+        ttk.Button(conn, text="Verbinden / Info abrufen", command=self.connect).grid(row=3, column=3, sticky="e", **pad)
         conn.columnconfigure(1, weight=1)
+        self._sync_auth()  # disable user/pw under SSO
 
         self.feature = tk.StringVar(value="Programmtyp: —")
         ttk.Label(self.root, textvariable=self.feature, font=("", 10, "bold")).pack(anchor="w", padx=8)
@@ -92,12 +101,20 @@ class ProbeApp:
         ttk.Label(self.root, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", side="bottom")
 
     # --- helpers -----------------------------------------------------------
+    def _sync_auth(self):
+        state = "disabled" if self.auth_mode.get() == "sso" else "normal"
+        self.user_entry.configure(state=state)
+        self.pw_entry.configure(state=state)
+
     def _make_client(self):
+        sso = self.auth_mode.get() == "sso"
         cfg = DatevConfig(base_url=self.base.get().strip(),
-                          username=self.user.get().strip() or None,
-                          password=self.pw.get() or None,
+                          username=None if sso else (self.user.get().strip() or None),
+                          password=None if sso else (self.pw.get() or None),
                           allow_self_signed=self.self_signed.get())
-        return DatevConnectClient(cfg, make_urllib_transport(cfg.allow_self_signed))
+        transport = (make_curl_sso_transport(cfg.allow_self_signed) if sso
+                     else make_urllib_transport(cfg.allow_self_signed))
+        return DatevConnectClient(cfg, transport)
 
     def _log_line(self, text):
         self.log.insert("end", text + "\n")

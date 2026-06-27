@@ -44,11 +44,23 @@ scripts\build_datev_probe.ps1        # → dist\DATEV-Probe.exe  (stdlib-only; n
 ```
 Or from source: `.build_venv\Scripts\python.exe datev_probe.py`
 
-In the GUI: enter the Base-URL (default `https://localhost:58452/datev/api/dms/v2`), the UPN
-user + password (Basic; UPN form `user@domain.local`), keep *self-signed TLS* on for
-localhost → **Verbinden / Info abrufen**. The program type (DokAB/DokAbRev/DMS) and whether
-exchanges keep revisions are shown. Then load domains / documents and inspect one document's
-file. Everything pulled is printed in the log.
+In the GUI: enter the Base-URL (default `https://localhost:58452/datev/api/dms/v2`), keep
+**Windows-Anmeldung (SSO)** selected (the default — authenticates as the current Windows user
+via `curl.exe --negotiate`, exactly like DATEV's own programs; **no username/password needed**),
+keep *self-signed TLS* on for localhost → **Verbinden / Info abrufen**. The program type
+(DokAB/DokAbRev/DMS) and whether exchanges keep revisions are shown. Then load domains /
+documents and inspect one document's file. Everything pulled is printed in the log.
 
-> Runs on (or with line-of-sight to) the DATEV workstation, where DATEVconnect listens on
-> `localhost:58452`. SSO is not yet implemented — use Basic (UPN) for now.
+> Runs on the DATEV workstation, where DATEVconnect listens on `localhost:58452`. SSO uses the
+> bundled `curl.exe` (Windows 10+); switch to **Basic (Benutzer/Passwort)** (UPN form
+> `user@domain.local`) only if SSO is unavailable.
+
+## App integration (deferred — DATEV mode only): how a document finds itself
+When BelegTool later gains the DATEV mode (a settings flag + a DATEV menu toggle; lazy-loaded so
+a normal launch stays lean), the **provenance** for "update itself back to DATEV" does **not** need
+a separate DATEV import API: when a document is opened from DATEV, **DATEV prefixes the temp file
+name with the document id** (first characters). BelegTool captures that id when the file is handed
+over → stores it on the node → on save it knows exactly which DATEV document to replace. This whole
+path exists **only when DATEV mode is enabled**. (Conflict-safety on write still applies: DokAB has
+no revisions, so an exchange overwrites — re-read `change_date_time` before writing; see the
+concurrency notes.)

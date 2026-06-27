@@ -131,10 +131,15 @@ def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):
     core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
     resp = core.open(path=_belegtool(tmp_path))
     sid = resp["session"]
+    path = core.document_path(sid)
     res = core.datev_save_back(sid, confirmed=True)
     assert res["ok"] and res["verdict"] == "ok"
     assert core._datev_provenance(sid)["file_id"] == 9001       # advanced; sid stable
     assert core._datev_baseline[sid]["open_change_dt"] == "t1"
+    # parallel local save: the bound .belegtool is written in sync (no Save As prompt)
+    assert res["local_saved"] == path
+    import os
+    assert os.path.exists(path)
 
 
 def test_save_back_conflict_returns_verdict_without_writing(tmp_path):

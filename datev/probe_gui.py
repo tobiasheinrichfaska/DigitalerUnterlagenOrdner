@@ -434,8 +434,22 @@ class ProbeApp:
         if not doc_id:
             messagebox.showinfo("DATEV-Probe", "Bitte eine Dokument-ID eingeben.")
             return
+        if not self._guard_doc_guid(doc_id):
+            return
         self._run(f"Dokument {doc_id}", lambda: self.client.get_document(doc_id))
         self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id))
+
+    def _guard_doc_guid(self, doc_id):
+        """A document id is a GUID; an all-numeric value is a document_file_id (wrong
+        namespace). Catch the common mix-up before a pointless GET /documents/<number>."""
+        if doc_id.isdigit():
+            messagebox.showwarning(
+                "DATEV-Probe",
+                f"„{doc_id}“ ist eine Datei-ID (Zahl), kein Dokument-GUID.\n\n"
+                "GET /documents/{id} braucht den Dokument-GUID (z. B. 5677c4b7-…).\n"
+                "Für eine Datei-Nummer „Datei prüfen (Bytes)“ nutzen (= /document-files/{id}).")
+            return False
+        return True
 
     def get_doc_raw(self):
         """Single raw GET /documents/{id} — shows HTTP status + full body so existence is
@@ -445,6 +459,8 @@ class ProbeApp:
         doc_id = self.fetch_id.get().strip()
         if not doc_id:
             messagebox.showinfo("DATEV-Probe", "Bitte eine Dokument-ID eingeben.")
+            return
+        if not self._guard_doc_guid(doc_id):
             return
         self._run(f"GET /documents/{doc_id} (roh)",
                   lambda: self.client.get_document_raw(doc_id))

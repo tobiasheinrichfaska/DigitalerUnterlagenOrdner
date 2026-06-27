@@ -215,13 +215,18 @@ def test_open_mode_off_never_calls_datev_service(tmp_path, monkeypatch):
 def test_open_mode_off_does_not_import_datev_package(tmp_path):
     # STRUCTURAL lazy-gate proof: a mode-off launch must not leave the datev package in
     # sys.modules — a regressed top-level `import datev` would fail THIS even if behaviour looks
-    # fine. Drop any datev.* imported by sibling test modules first so we measure the gate.
+    # fine. Drop any datev.* imported by sibling test modules first so we measure the gate, then
+    # RESTORE them in finally so this test can't pollute the (randomly-ordered) suite.
     import sys
-    for m in [k for k in list(sys.modules) if k == "datev" or k.startswith("datev.")]:
+    saved = {k: v for k, v in sys.modules.items() if k == "datev" or k.startswith("datev.")}
+    for m in saved:
         del sys.modules[m]
-    core = CoreApi()  # mode off
-    core.open(path=_belegtool(tmp_path))
-    assert "datev" not in sys.modules and "datev.inapp" not in sys.modules
+    try:
+        core = CoreApi()  # mode off
+        core.open(path=_belegtool(tmp_path))
+        assert "datev" not in sys.modules and "datev.inapp" not in sys.modules
+    finally:
+        sys.modules.update(saved)
 
 
 def test_save_back_reestablished_baseline_ok_path_caches_baseline(tmp_path):
@@ -298,6 +303,60 @@ def test_close_session_frees_datev_baseline(tmp_path):
 
 
 # --- file + export ---------------------------------------------------------
+def test_datev_status_connected_merges_mode(tmp_path):
+    core = _core_with_service(FakeService(prov=None))
+    st = core.datev_status()
+    assert st["datev_mode"] is True and st["connected"] is True
+    assert st["feature"] == "DokAb" and st["keeps_revisions"] is False   # from svc.status()
+
+
+def test_datev_file_persists_link_locally(tmp_path):
+    # filing a not-connected doc must save the new DATEV link into the bound .belegtool, so
+    # closing the window can't lose it (the doc is no longer at a re-derivable checkout path).
+    svc = FakeService(prov=None)
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    path = core.document_path(sid)
+    res = core.datev_file(sid, mandant_number=10001, description="Beleg")
+    assert res["ok"] and res["local_saved"] == path
+    reopened = CoreApi().open(path=path)            # the adopted link survived to disk
+    assert reopened["tree"]["datev"]["doc_guid"] == "new-guid"
+
+
+def test_datev_file_resolve_failure_returns_error(tmp_path):
+    class Boom(FakeService):
+        def resolve_client(self, number):
+            raise RuntimeError("Mandant 999 unbekannt")
+    core = _core_with_service(Boom(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_file(sid, mandant_number=999)
+    assert not res["ok"] and "unbekannt" in res["error"]
+
+
+def test_datev_file_no_mandant_errors(tmp_path):
+    core = _core_with_service(FakeService(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_file(sid)                       # neither client_guid nor mandant_number
+    assert not res["ok"] and "Mandant" in res["error"]
+
+
+def test_datev_export_no_mandant_no_provenance_errors(tmp_path):
+    core = _core_with_service(FakeService(prov=None))   # not connected → no same-client guid
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_export(sid)                     # no mandant, nothing connected
+    assert not res["ok"] and "Mandant" in res["error"]
+
+
+def test_datev_export_resolve_failure_returns_error(tmp_path):
+    class Boom(FakeService):
+        def resolve_client(self, number):
+            raise RuntimeError("resolve down")
+    core = _core_with_service(Boom(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_export(sid, mandant_number=999)
+    assert not res["ok"] and "resolve down" in res["error"]
+
+
 def test_datev_file_creates_and_adopts_provenance(tmp_path):
     svc = FakeService(prov=None)
     core = _core_with_service(svc)

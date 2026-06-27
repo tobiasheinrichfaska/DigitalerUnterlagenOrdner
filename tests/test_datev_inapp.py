@@ -133,6 +133,19 @@ def test_capture_provenance_non_checkout_path_returns_none():
     assert prov is None and baseline is None
 
 
+def test_capture_provenance_survives_server_read_failure():
+    # the checkout path gives doc_guid/file_id even if the server reads fail — provenance is
+    # still returned (degraded), never an exception.
+    class Boom(FakeClient):
+        def get_document(self, doc_id):
+            raise RuntimeError("server down")
+
+    prov, baseline = DatevService(Boom()).capture_provenance(
+        rf"C:\Temp\{GUID}\1085411.pdf", b"x")
+    assert prov["doc_guid"] == GUID and prov["file_id"] == 1085411
+    assert baseline["open_change_dt"] is None       # read failed → stays None, no crash
+
+
 def test_capture_provenance_reports_checked_out_at_open():
     client = FakeClient(document={"change_date_time": "t", "checked_out": True},
                         structure_items=[{"id": 1, "document_file_id": 1085411}])
@@ -314,6 +327,32 @@ def test_file_document_each_split_part_is_its_own_document():
     assert client.uploaded == parts            # every part uploaded
     assert len(client.creates) == 3            # one create per part
     assert all(c["correspondence_partner_guid"] == "c" for c in client.creates)
+
+
+def test_file_document_explicit_user_guid_skips_scim_lookup():
+    client = FakeClient(new_file_id=5555, created_id="cg",
+                        structure_items=[{"id": 7, "document_file_id": 5555}])
+    seen = {"users": 0}
+    orig = client.list_users
+
+    def lu():
+        seen["users"] += 1
+        return orig()
+
+    client.list_users = lu
+    res = DatevService(client).file_document(b"x", client_guid="c", description="d",
+                                             user_guid="u-explicit")
+    assert res["ok"] and client.creates[0]["user"] == {"id": "u-explicit"}
+    assert seen["users"] == 0                        # explicit user → no SCIM list query
+
+
+def test_connect_with_injected_client_get_info_failure_sets_feature_none():
+    class Boom(FakeClient):
+        def get_info(self):
+            raise RuntimeError("no /info")
+
+    svc = DatevService.connect(client=Boom(), my_sid="x")
+    assert svc.feature is None and svc.status()["connected"] is False
 
 
 def test_file_document_no_user_errors():

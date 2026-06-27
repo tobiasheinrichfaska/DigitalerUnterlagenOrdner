@@ -491,8 +491,17 @@ export default function App() {
     const num = window.prompt(t('Mandantennummer für die DATEV-Ablage'))
     if (num == null || !num.trim()) return
     run(core.datevFile(session, { mandantNumber: num.trim() })).then((res) => {
-      if (res?.ok) { setNotice(t('In DATEV abgelegt')); if (res.provenance) patchProvenance(res.provenance) }
-      else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
+      if (res?.ok) {
+        if (res.provenance) patchProvenance(res.provenance)
+        if (res.local_error) {
+          // Filed to DATEV, but the bound .belegtool couldn't be saved with the new link.
+          // Say both facts and keep the document dirty so the link can be re-saved locally.
+          setError(`${t('In DATEV abgelegt, aber lokal nicht gespeichert.')} ${res.local_error}`)
+        } else {
+          setDirty(false)
+          setNotice(t('In DATEV abgelegt'))
+        }
+      } else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
     })
   }
 

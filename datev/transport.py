@@ -86,8 +86,8 @@ def make_curl_sso_transport(allow_self_signed=False, timeout=40, curl="curl.exe"
     # Every curl stream goes to a FILE (status via -w, body via -o, headers via -D, stderr too),
     # so we never read through OS pipes. That matters on timeout: subprocess.run(capture_output)
     # re-drains its pipes after killing curl and can block forever if a handle survives; with
-    # files there is nothing to drain, so a hung call is killed and surfaced cleanly. timeout >
-    # curl's --max-time (45) so curl normally self-reports first; this is the hard backstop.
+    # files there is nothing to drain, so a hung call is killed and surfaced cleanly. timeout (40)
+    # > curl's --max-time (30) so curl normally self-reports first; this is the hard backstop.
     def transport(method, url, headers, body=None):
         paths = {k: tempfile.mkstemp(prefix=f"datevprobe_{k}_")[1] for k in
                  ("out", "hdr", "status", "err")}

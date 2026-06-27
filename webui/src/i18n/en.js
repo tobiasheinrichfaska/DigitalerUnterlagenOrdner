@@ -226,6 +226,8 @@ export const en = {
   'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.':
     'Written back to DATEV, but not saved locally.',
   'In DATEV abgelegt': 'Filed to DATEV',
+  'In DATEV abgelegt, aber lokal nicht gespeichert.':
+    'Filed to DATEV, but not saved locally.',
   'In DATEV abgelegt ({n} Dokumente)': 'Filed to DATEV ({n} documents)',
   'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.':
     'DATEV: the document is checked out — only a local save is possible.',

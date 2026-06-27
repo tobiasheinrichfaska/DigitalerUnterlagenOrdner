@@ -1210,9 +1210,19 @@ class CoreApi:
                     "open_change_dt": res.get("new_change_dt"),
                     "was_checked_out_at_open": False,
                     "opened_sha256": hashlib.sha256(edited).hexdigest()}
-                s = self._sessions.get(session)
-                if s is not None:
-                    s.mark_saved()
+            # Save the LOCAL destination alongside DATEV, in sync — there is ALWAYS a local
+            # path (the working document is a saved .belegtool), so persist it now (this also
+            # stores the updated provenance and clears dirty via mark_saved). NEVER prompt a
+            # Save As here. The defensive else only logs if a path is somehow unbound.
+            local_path = self.document_path(session)
+            if local_path:
+                save_res = self.save(session, local_path)
+                res["local_saved"] = save_res.get("path") if save_res.get("ok") else None
+                if not save_res.get("ok"):
+                    res["local_error"] = save_res.get("error")
+            else:
+                logger.warning("[datev] write-back: no local path bound; local save skipped")
+                res["local_error"] = "Kein lokaler Speicherort gebunden."
         return res
 
     def _datev_reestablish_baseline(self, svc, session, prov):

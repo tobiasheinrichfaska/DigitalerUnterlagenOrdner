@@ -464,8 +464,12 @@ export default function App() {
     run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
   const saveToDatev = () => run(core.saveToDatev(session)).then((res) => {
     if (res?.ok) {
-      setDirty(false); setNotice(t('Nach DATEV zurückgeschrieben'))
+      setNotice(t('Nach DATEV zurückgeschrieben'))
       if (res.provenance) patchProvenance(res.provenance)
+      // The host saved the local .belegtool in parallel (there is always a local path),
+      // so the local copy and DATEV stay in sync — no Save As prompt.
+      setDirty(false)
+      if (res.local_error) setError(res.local_error)
     } else if (res && res.verdict !== 'declined') {
       // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
       // OFFER the filesystem save fallback the design promises, so the edit isn't lost.

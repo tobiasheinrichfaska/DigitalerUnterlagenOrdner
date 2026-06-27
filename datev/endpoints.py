@@ -15,9 +15,12 @@ ENDPOINTS = {
     "structure_items": ("GET", "/documents/{id}/structure-items"),
     "document_file": ("GET", "/document-files/{file_id}"),
     "documentstates": ("GET", "/documentstates"),
-    # --- create only (round 2a) ---
+    # --- create (round 2a) ---
     "document_files_create": ("POST", "/document-files"),   # octet-stream body -> {id}
     "documents_create": ("POST", "/documents"),             # DocumentCreate JSON -> Document
+    # --- exchange / delete (round 2b) ---
+    "structure_item_update": ("PUT", "/documents/{id}/structure-items/{sid}"),  # swap the file
+    "documents_delete": ("DELETE", "/documents/{id}"),       # remove our test document
 }
 
 

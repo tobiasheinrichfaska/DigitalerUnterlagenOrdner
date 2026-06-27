@@ -3,14 +3,12 @@ PDF library. Round 2 uploads THIS (never a real document) as the throwaway test 
 create/exchange against the live box can never touch real client content."""
 
 
-def make_test_pdf(text="DATEV-Probe Testdokument — bitte loeschen"):
-    """A minimal valid single-page PDF showing ``text`` (ASCII; Helvetica). Returned as bytes,
-    ready to POST to ``/document-files``."""
-    # Keep the content ASCII — a hand-built PDF has no font embedding, and WinAnsi/Helvetica
-    # covers Latin-1; we sanitize to stay safe.
-    safe = "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in text)
-    safe = safe.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
-    stream = f"BT /F1 14 Tf 72 720 Td ({safe}) Tj ET".encode("latin-1")
+def make_test_pdf(text="DATEV-Probe Testdokument – bitte löschen"):
+    """A minimal valid single-page PDF showing ``text`` (Helvetica, WinAnsi so German umlauts
+    and the en-dash render). Returned as bytes, ready to POST to ``/document-files``."""
+    safe = text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+    # cp1252 == WinAnsiEncoding; covers ä/ö/ü/ß and – (anything outside it → '?').
+    stream = ("BT /F1 14 Tf 72 720 Td (" + safe + ") Tj ET").encode("cp1252", "replace")
 
     objs = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -18,7 +16,7 @@ def make_test_pdf(text="DATEV-Probe Testdokument — bitte loeschen"):
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
         b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
         b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream),
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     ]
 
     out = bytearray(b"%PDF-1.4\n")

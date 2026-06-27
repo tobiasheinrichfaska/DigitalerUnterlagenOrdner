@@ -164,6 +164,26 @@ class DatevConnectClient:
             file_id = int(file_id)
         return file_id
 
+    # --- exchange / delete (round 2b) ---------------------------------------------------
+    def update_structure_item(self, doc_id, structure_item_id, document_file_id,
+                              revision_comment=None):
+        """PUT /documents/{id}/structure-items/{sid} — swap the file of a structure item to a
+        newly uploaded ``document_file_id`` (in-place file replacement). DokAb overwrites;
+        DMS keeps a revision. Returns the HTTP status + raw body."""
+        payload = {"id": int(structure_item_id), "document_file_id": int(document_file_id)}
+        if revision_comment:
+            payload["revision_comment"] = revision_comment
+        body = json.dumps(payload).encode("utf-8")
+        res = self._send("structure_item_update",
+                         params={"id": doc_id, "sid": structure_item_id},
+                         body=body, content_type="application/json")
+        return {"http_status": res.status, "raw_body": _text(res.body)}
+
+    def delete_document(self, doc_id):
+        """DELETE /documents/{id} — remove our test document (cleanup)."""
+        res = self._send("documents_delete", params={"id": doc_id})
+        return {"http_status": res.status, "raw_body": _text(res.body)}
+
     def create_document(self, payload):
         """POST a DocumentCreate body -> the created Document. The live box may answer 201 with
         an empty body and the new id only in the ``Location`` header, so we fall back to that

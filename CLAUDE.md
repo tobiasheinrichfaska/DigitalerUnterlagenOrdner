@@ -111,6 +111,7 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js` incl. `mergeableIds`, `treeNav.js`, `status.js`, `messages.js`). |
 | `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
 | `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal (separate from the main UI language switcher): 🇩🇪/🇬🇧 flags toggle the two authoritative versions; help text authored best-effort for all UI languages, unknown → EN fallback; GitHub/mailto correction links. |
+| `webui/pdf-tool.html`, `webui/src/pdftool/` (`main.js`, `source.js`) | **PDF-Tool surface** (2nd Vite entry, PDF.js): the host routes a `.pdf`/node binding here (`host._entry_for_kind` / `startup_kind`), it fetches the bound bytes over the bridge (`CoreApi.get_pdf_bytes` / `open_pdftool` / `close_pdftool`) and renders a **selectable text layer + interactive AcroForm**. `source.js` (`chooseSource`/`base64ToUint8`) is the pure, unit-tested source-selection logic. Save-back plumbing exists (`SetNodeBytes` command + node binding lock) but editing actions aren't surfaced yet. Design + roadmap: [`docs/pdf-tool.md`](docs/pdf-tool.md). |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
@@ -519,6 +520,11 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
 - **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
   off by default; no autosave/recover of unsaved changes, no read-only fallback when in use.
+- **PDF-Tool surface is an early viewer, not yet an editor.** The second surface (a `.pdf` or a node
+  binding opens it) renders a selectable text layer and fillable AcroForm widgets, and the save-back
+  command (`SetNodeBytes`) + node binding lock exist in the core — but the **editing actions are not
+  wired into the surface yet**: filled-form/OCR/page-rearrange/compression changes are not persisted
+  back from this UI, and signing is deferred. See [`docs/pdf-tool.md`](docs/pdf-tool.md) for the roadmap.
 - **Nested containers are recursed, but bounded** *(since 2026-06-26, Open items #12)* — a
   `.zip`/`.tar`/`.tgz`/`.eml`/`.msg` inside another container is extracted into a sub-folder.
   Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 3`** (a deeper container shows

@@ -101,6 +101,10 @@ class CoreApi:
         self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
         self._view_touched = {}  # view_dir -> last os.utime, to rate-limit the keep-alive touch
         self._renderer_lock = threading.Lock()  # guards the lazy RenderService build
+        # PDF-Tool node binding (docs/pdf-tool.md): a node opened in the PDF-Tool is
+        # LOCKED in its organizer session while a pdf-tool session edits its bytes.
+        self._node_locks = {}        # (owner_session, node_id) -> pdftool_session
+        self._pdftool_bindings = {}  # pdftool_session -> (owner_session, node_id)
 
     # ----------------------------------------------------------------------
     # Render cache + windowed-prefetch coordination
@@ -410,6 +414,11 @@ class CoreApi:
     # ----------------------------------------------------------------------
     def dispatch(self, session: str, command: dict) -> dict:
         cmd = command_from_dict(command)
+        locked = self._locked_conflict(session, cmd)
+        if locked is not None:
+            return {"ok": False, "code": "node_locked", "node_id": locked,
+                    "error": "Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann "
+                             "nicht gleichzeitig geändert werden."}
         removed = self._removed_node_ids(session, cmd)
         if removed:
             with self._lock:
@@ -929,6 +938,113 @@ class CoreApi:
                     and not node.is_compressed and not node.no_compression
                     and not node.compression_no_gain):
                 s.apply_silent(SetNoGain((node_id,)))
+
+    def get_pdf_bytes(self, session: str) -> dict:
+        """Effective PDF bytes of a PDF-bound session (a single-leaf document, as
+        produced by opening a plain .pdf) as base64 — handed to PDF.js in the
+        PDF-Tool surface. Returns the first leaf's current (else original) bytes."""
+        import base64
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            leaves = [n for n in s.document.root.iter() if not n.is_folder]
+            data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+        if not data:
+            return {"ok": False, "error": "no pdf bytes in session"}
+        return {"ok": True, "data_b64": base64.b64encode(data).decode("ascii")}
+
+    # --- PDF-Tool node binding (lock + save-back) --------------------------
+    @staticmethod
+    def _content_mutated_ids(cmd) -> list:
+        """Node ids whose CONTENT/existence a command changes (not mere reposition /
+        metadata). These conflict with a PDF-Tool lock; Move/Rename/SetStatus/SetTags/
+        collapse do not."""
+        name = type(cmd).__name__
+        if name in ("Compress", "Rotate", "Split", "SplitInto", "Commit", "Reset", "Delete"):
+            return [cmd.node_id]
+        if name in ("Merge", "DeleteMany"):
+            return list(cmd.node_ids)
+        return []
+
+    def _locked_conflict(self, session, cmd):
+        """The locked node id a command would content-mutate, or None."""
+        with self._lock:
+            for nid in self._content_mutated_ids(cmd):
+                if (session, nid) in self._node_locks:
+                    return nid
+        return None
+
+    def node_locked(self, session: str, node_id: str) -> bool:
+        with self._lock:
+            return (session, node_id) in self._node_locks
+
+    def open_node_in_pdftool(self, session: str, node_id: str) -> dict:
+        """Bind a leaf to a new PDF-Tool session and LOCK it in its organizer session.
+        Returns the new session id (its single-leaf doc carries the node's effective
+        bytes; ``get_pdf_bytes`` serves them to PDF.js)."""
+        from core.model import Document, Node
+        with self._lock:
+            owner = self._sessions.get(session)
+            if owner is None:
+                return {"ok": False, "error": "unknown session"}
+            node = owner.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            if node.is_folder:
+                return {"ok": False, "error": "Ordner können nicht im PDF-Tool geöffnet werden."}
+            if (session, node_id) in self._node_locks:
+                return {"ok": False, "code": "node_locked",
+                        "error": "Dieser Knoten ist bereits im PDF-Tool geöffnet."}
+            data = node.current_data or node.original_data
+            if not data:
+                return {"ok": False, "error": "Knoten hat keine PDF-Daten."}
+            leaf = Node(name=node.name, original_data=data, pdf_length=node.pdf_length)
+            doc = Document(Node(name=node.name, is_folder=True, children=(leaf,)))
+            pt = self._new_locked(doc)
+            self._node_locks[(session, node_id)] = pt
+            self._pdftool_bindings[pt] = (session, node_id)
+            return {"ok": True, "session": pt}
+
+    def save_node_back(self, pdftool_session: str) -> dict:
+        """Write the PDF-Tool session's edited bytes back into the bound node (new source
+        → compression reset), marking the organizer session dirty. Undoable there."""
+        from core.commands import SetNodeBytes
+        with self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
+            if binding is None:
+                return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
+            owner_session, node_id = binding
+            t = self._sessions.get(pdftool_session)
+            owner = self._sessions.get(owner_session)
+            if t is None or owner is None:
+                return {"ok": False, "error": "Sitzung nicht mehr vorhanden"}
+            leaves = [n for n in t.document.root.iter() if not n.is_folder]
+            data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+            if not data:
+                return {"ok": False, "error": "keine Daten zum Speichern"}
+            if owner.document.find(node_id) is None:
+                return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
+            owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
+        return {"ok": True, "owner": owner_session, "node": node_id}
+
+    def break_node_binding(self, session: str, node_id: str) -> dict:
+        """Release a node's PDF-Tool lock so the organizer op can proceed; the bound
+        pdf-tool session is detached (its later save-back will report no binding)."""
+        with self._lock:
+            pt = self._node_locks.pop((session, node_id), None)
+            if pt is not None:
+                self._pdftool_bindings.pop(pt, None)
+        return {"ok": True}
+
+    def close_pdftool(self, pdftool_session: str) -> dict:
+        """Close a PDF-Tool session: release its node lock and free the session."""
+        with self._lock:
+            binding = self._pdftool_bindings.pop(pdftool_session, None)
+            if binding is not None:
+                self._node_locks.pop(binding, None)
+            self._sessions.pop(pdftool_session, None)
+        return {"ok": True}
 
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:

@@ -162,6 +162,16 @@ class InsertNodes:
 
 
 @dataclass(frozen=True)
+class SetNodeBytes:
+    """Replace a leaf's content with new PDF bytes — the PDF-Tool save-back (form-fill /
+    OCR / page edit done on the bound bytes). Carries bytes, so (like InsertNodes) it is
+    created in-process and never part of the wire/JSON command set. The new bytes become
+    the node's *source* and the compression state is reset (mirrors Rotate)."""
+    node_id: str
+    data: bytes
+
+
+@dataclass(frozen=True)
 class GroupIntoFolder:
     """Create a new folder under ``parent_id`` and move every selected node into
     it (preserving order). The other half of "merge": keeps the nodes as separate
@@ -229,8 +239,8 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
-                TagMany, SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
-                Commit, Reset, Rotate, Split, SplitInto, Merge]
+                TagMany, SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, SetNodeBytes,
+                Compress, Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
@@ -427,6 +437,18 @@ def _tag_many(doc: Document, cmd: TagMany, engine=None) -> Document:
         elif tag in cur:
             doc = doc.update_node(nid, tags=tuple(t for t in cur if t != tag))
     return doc
+
+
+@_handler(SetNodeBytes)
+def _set_node_bytes(doc: Document, cmd: SetNodeBytes, engine=None) -> Document:
+    """PDF-Tool save-back: the edited bytes become the leaf's new source; compression
+    state is reset (the bytes changed, so any variant/no-gain verdict is stale)."""
+    _require_leaf(doc, cmd.node_id)
+    if not cmd.data:
+        raise CommandError("Keine Daten zum Speichern.")
+    return doc.update_node(cmd.node_id, original_data=cmd.data, current_data=None,
+                           is_compressed=False, dpi_current=None,
+                           compression_method=None, compression_no_gain=False)
 
 
 @_handler(SetNoGain)

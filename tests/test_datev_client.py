@@ -8,6 +8,7 @@ import pytest
 
 from datev.client import DatevConnectClient
 from datev.endpoints import build_url
+from datev.transport import build_curl_args
 from datev.types import (
     DatevAuthError,
     DatevConfig,
@@ -118,3 +119,23 @@ def test_no_auth_header_without_credentials():
     fake = _Fake(lambda *a: _resp(obj={"feature": "DokAB"}))
     DatevConnectClient(cfg, fake).get_info()
     assert "Authorization" not in fake.calls[0]["headers"]
+
+
+# --- SSO curl arg builder (the other DATEV programs self-authenticate) -----
+def test_build_curl_args_uses_negotiate_and_drops_auth_header():
+    args = build_curl_args("GET", "https://h/v2/info",
+                           {"Accept": "application/json", "Authorization": "Basic x"},
+                           allow_self_signed=False, out_path="/tmp/o", has_body=False)
+    assert "--negotiate" in args and args[args.index("-u") + 1] == ":"  # current Windows user
+    assert args[args.index("-X") + 1] == "GET"
+    assert args[-1] == "https://h/v2/info"                              # url last
+    assert "Accept: application/json" in args                          # forwarded
+    assert not any("Authorization" in a for a in args)                 # SSO does the auth
+    assert "-k" not in args                                            # strict TLS by default
+
+
+def test_build_curl_args_self_signed_and_body():
+    args = build_curl_args("POST", "https://h/v2/documents", {}, allow_self_signed=True,
+                           out_path="/tmp/o", has_body=True)
+    assert "-k" in args                                                # tolerate self-signed
+    assert "--data-binary" in args and args[args.index("--data-binary") + 1] == "@-"

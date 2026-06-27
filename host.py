@@ -11,6 +11,7 @@ Run:
 """
 
 import io
+import json
 import os
 import sys
 
@@ -19,6 +20,7 @@ import webview
 from core.api import CoreApi
 from infra.log_config import logger
 from version_info import APP_NAME, get_full_title
+from infra.window_geometry import geometry_visible
 
 
 def _prewarm():
@@ -120,17 +122,64 @@ def _bind_close(win, api):
     win.events.closing += _on_closing
 
 
-def _open_window(core, startup_path=None):
+def _geom_file():
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.path.join(base, APP_NAME, "window.json")
+
+
+def _virtual_screen():
+    """Windows virtual-desktop bounds (x, y, w, h) spanning all monitors; None elsewhere."""
+    try:
+        import ctypes
+        gsm = ctypes.windll.user32.GetSystemMetrics
+        return (gsm(76), gsm(77), gsm(78), gsm(79))  # SM_*VIRTUALSCREEN
+    except Exception:
+        return None
+
+
+def _load_geometry():
+    """The last saved geometry if it is still on-screen, else None (→ default)."""
+    try:
+        with open(_geom_file(), encoding="utf-8") as f:
+            g = json.load(f)
+        if geometry_visible(g, _virtual_screen()):
+            return g
+    except Exception:
+        pass
+    return None
+
+
+def _save_geometry(win):
+    """Persist the window's size + position so the next launch restores it (incl. monitor)."""
+    try:
+        g = {"x": int(win.x), "y": int(win.y),
+             "width": int(win.width), "height": int(win.height)}
+        path = _geom_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(g, f)
+    except Exception:
+        logger.debug("window geometry save skipped", exc_info=True)
+
+
+def _open_window(core, startup_path=None, restore=False):
     """Open a document window with its own HostApi (sharing one CoreApi — sessions
     are independent per window). Used for the first window and every 'new window'.
     ``startup_path`` (only the first window) is a .belegtool the React app opens on
-    load — used when the legacy GUI hands a document over via 'open in new GUI'."""
+    load. ``restore`` (first window only) re-applies the last saved geometry and saves
+    it again on close, so the app remembers its size / position / monitor across launches."""
     api = HostApi(core)
     api._startup_path = startup_path
+    kwargs = dict(width=1280, height=820, min_size=(900, 600))
+    geom = _load_geometry() if restore else None
+    if geom:
+        kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
+                      x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry(), js_api=api,   # title bar shows "… 3.9.5"
-        width=1280, height=820, min_size=(900, 600))
+        get_full_title(), _entry(), js_api=api, **kwargs)   # title bar shows "… 3.9.5"
     api._uid = win.uid  # bind after creation (storing the window object recurses)
+    if restore:
+        win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
     _bind_close(win, api)
     return {"ok": True}
 
@@ -398,7 +447,7 @@ def main(startup_path=None):
         _warn_missing_webview2()
         return
     core = CoreApi()  # shared across all windows; sessions are per window
-    _open_window(core, startup_path)
+    _open_window(core, startup_path, restore=True)  # first window remembers its geometry
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     # Pin a safe http port so the file server never lands on a Chromium-blocked one.

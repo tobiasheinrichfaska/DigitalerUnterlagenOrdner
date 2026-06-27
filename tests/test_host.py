@@ -224,7 +224,7 @@ def test_main_logs_and_explains_clr_load_failure(monkeypatch):
             calls["logged"] = True
 
     monkeypatch.setattr(host, "_webview2_installed", lambda: True)
-    monkeypatch.setattr(host, "_open_window", lambda core, startup_path=None: {"ok": True})
+    monkeypatch.setattr(host, "_open_window", lambda core, startup_path=None, restore=False: {"ok": True})
     monkeypatch.setattr(host.webview, "start",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Failed to initialize Python.Runtime")))
     monkeypatch.setattr(host, "_warn_clr_load_failed", lambda e: calls.__setitem__("warned", e))

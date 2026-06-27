@@ -15,17 +15,30 @@ facts decide the design and only the live box reveals them:
 - The exact runtime behaviour of create + exchange.
 
 ## Rounds
-1. **Read (this build).** Govern each retrieval from the GUI: connect → `info` (feature) →
-   `domains` → `documents` (filter + max) → one document's structure-items → its file.
-   Read-only; safe.
-2. **Write (next).** *Create* a NEW throwaway test document (single file) and **save its id**;
-   then *exchange* that file — **only on the self-created id**, behind an explicit confirm —
-   to observe overwrite-vs-revision on this install. Never touches a real client document.
+1. **Read (done, live-verified).** Govern each retrieval from the GUI: connect → `info`
+   (feature) → `domains` → `documents` (filter + max) → one document's structure-items → its
+   file. Read-only; safe. **Confirmed on the live box: `feature = "DokAb"`** (no revisions →
+   exchange overwrites), `environment = "Kanzlei"`, rich domain/folder/register taxonomy, and
+   the `Mandanten` domain links to `master-data/v1/clients` for the client GUID.
+2a. **Create only (this build).** Resolve a **Mandant number → GUID** via
+   `master-data/v1/clients` (the create's required `correspondence_partner_guid`), upload a
+   **synthetic** one-page PDF (`POST /document-files` → `document_file_id`), then `POST
+   /documents` with the chosen domain/folder/register and **save the returned document id +
+   `change_date_time`**. Reads the structure back so we see what DokAb stored. Confirm-gated.
+2b. **Exchange + delete (next).** Upload new bytes, `PUT /documents/{savedId}` with the
+   structure item pointing at the new file id — **only on the id created in 2a** — to observe
+   overwrite-vs-revision; then `DELETE /documents/{savedId}` to clean up. Re-GET and compare
+   `change_date_time` first (the conflict token; DokAb has no ETag).
 
 ## Safety
 - Round 1 is read-only.
-- Round 2 will only ever create and then modify a document **it created in the same run** (the
-  saved id); a real client document is never written. The exchange step is confirm-gated.
+- Round 2a **creates** one document from **synthetic PDF bytes** (`datev/synthetic_pdf.py` —
+  never a real document), under a **client and folder/register you choose in the GUI**,
+  auto-labelled `ZZZ TEST – DATEV-Probe – bitte löschen`, behind an explicit confirm dialog.
+  No existing document is read, modified, or deleted. The Mandant number is entered at runtime
+  (never hard-coded — this is a public repo).
+- Round 2b will only ever modify/delete the document **created in the same run** (the saved
+  id); every write stays confirm-gated.
 
 ## Architecture (BelegTool, Python)
 | File | Role |
@@ -33,8 +46,9 @@ facts decide the design and only the live box reveals them:
 | `datev/types.py` | `DatevConfig`, injected `Transport`, errors, `program_keeps_revisions` (DokAB ⇒ overwrite) |
 | `datev/endpoints.py` | data-driven DMS v2 endpoint catalog (read) + `build_url` |
 | `datev/transport.py` | stdlib `urllib` transport (Basic auth header from the client; self-signed-TLS tolerant). SSO/Negotiate later. |
-| `datev/client.py` | `DatevConnectClient` — `get_info` / `list_domains` / `list_documents` / `get_document` / `list_structure_items` / `get_document_file`; maps 401 → `DatevAuthError`, license envelope → `DatevLicenseError` |
-| `datev/probe_gui.py` | Tkinter governing GUI — every retrieval is an explicit, logged button |
+| `datev/client.py` | `DatevConnectClient` — read: `get_info` / `list_domains` / `list_documents` / `get_document` / `list_structure_items` / `get_document_file`; create (2a): `resolve_client_guid` / `list_clients` / `upload_document_file` / `create_document`; maps 401 → `DatevAuthError`, license envelope → `DatevLicenseError` |
+| `datev/synthetic_pdf.py` | `make_test_pdf` — a tiny hand-built one-page PDF (stdlib only), the throwaway bytes for 2a |
+| `datev/probe_gui.py` | Tkinter governing GUI — every retrieval/write is an explicit, logged button; 2a create is confirm-gated |
 | `datev_probe.py` | one-file exe entry point |
 | `tests/test_datev_client.py` | unit tests with a fake transport (no live DATEV): feature, reads, query/path building, Basic auth, error mapping |
 

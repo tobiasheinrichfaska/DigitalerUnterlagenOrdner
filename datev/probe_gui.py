@@ -12,10 +12,12 @@ from tkinter import filedialog, messagebox, ttk
 
 from .client import DatevConnectClient
 from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
+from .synthetic_pdf import make_test_pdf
 from .transport import make_curl_sso_transport, make_urllib_transport
 from .types import DatevConfig, program_keeps_revisions
 
 DEFAULT_BASE = "https://localhost:58452/datev/api/dms/v2"
+TEST_DESC = "ZZZ TEST – DATEV-Probe – bitte löschen"
 
 
 def _short(obj, n=160):
@@ -29,6 +31,8 @@ class ProbeApp:
         self.client = None
         self.docs = []          # last documents list
         self.structure_items = []
+        self.client_guid = None     # resolved Mandant GUID (round 2)
+        self.created_doc_id = None  # the doc this run created — the ONLY id round 2b may exchange
         self.cfg = load_config()  # datev.config.json next to the exe (same as OPOS), if present
         root.title("DATEV-Probe — DMS v2 (Lesen)")
         root.geometry("960x720")
@@ -81,6 +85,30 @@ class ProbeApp:
         ttk.Spinbox(act, from_=1, to=1000, textvariable=self.top, width=6).grid(row=0, column=4, **pad)
         ttk.Button(act, text="Dokumente laden", command=self.load_documents).grid(row=0, column=5, **pad)
         act.columnconfigure(2, weight=1)
+
+        # Write actions — Round 2a: CREATE ONLY (synthetic PDF, you pick the Mandant; no exchange/delete)
+        w = ttk.LabelFrame(self.root, text="Schreiben — Runde 2a: NUR Anlegen (Test-Dokument, synthetisch)")
+        w.pack(fill="x", **pad)
+        ttk.Label(w, text="Mandant-Nr.").grid(row=0, column=0, sticky="e")
+        self.mandant = tk.StringVar()
+        ttk.Entry(w, textvariable=self.mandant, width=10).grid(row=0, column=1, sticky="w", **pad)
+        ttk.Button(w, text="→ GUID auflösen", command=self.resolve_client).grid(row=0, column=2, **pad)
+        self.guid_lbl = tk.StringVar(value="GUID: —")
+        ttk.Label(w, textvariable=self.guid_lbl).grid(row=0, column=3, columnspan=3, sticky="w", **pad)
+        # placement ids (the user reads these from the Domains dump)
+        self.domain_id = tk.StringVar(value="1")    # Mandanten
+        self.folder_id = tk.StringVar()
+        self.register_id = tk.StringVar()
+        self.class_id = tk.StringVar(value="1")     # "Dokument"
+        for col, (lbl, var) in enumerate([("Domain-ID", self.domain_id), ("Ordner-ID", self.folder_id),
+                                          ("Register-ID", self.register_id), ("Klasse-ID", self.class_id)]):
+            ttk.Label(w, text=lbl).grid(row=1, column=col * 2, sticky="e")
+            ttk.Entry(w, textvariable=var, width=8).grid(row=1, column=col * 2 + 1, sticky="w", **pad)
+        ttk.Button(w, text="Test-Dokument anlegen", command=self.create_test_document).grid(
+            row=2, column=0, columnspan=2, sticky="w", **pad)
+        self.created_lbl = tk.StringVar(value="Angelegt: —")
+        ttk.Label(w, textvariable=self.created_lbl, font=("", 9, "bold")).grid(
+            row=2, column=2, columnspan=4, sticky="w", **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -235,6 +263,81 @@ class ProbeApp:
             self._log_line(f"gespeichert: {path} ({len(data)} Bytes)")
 
         self._run(f"Datei {file_id}", lambda: self.client.get_document_file(file_id), on_ok)
+
+    # --- write (round 2a: create only) -------------------------------------
+    def resolve_client(self):
+        if not self._need_client():
+            return
+        num = self.mandant.get().strip()
+        if not num:
+            messagebox.showinfo("DATEV-Probe", "Bitte eine Mandant-Nr. eingeben.")
+            return
+
+        def on_ok(res):
+            self.client_guid = res.get("guid")
+            self.guid_lbl.set(f"GUID: {self.client_guid}  ({res.get('name') or ''})")
+
+        self._run(f"Mandant {num} auflösen", lambda: self.client.resolve_client_guid(num), on_ok)
+
+    def _build_create_payload(self):
+        """A DocumentCreate body for ONE synthetic test file under the chosen client/placement."""
+        def _int(var, name):
+            v = var.get().strip()
+            if not v.isdigit():
+                raise ValueError(f"{name} muss eine Zahl sein.")
+            return int(v)
+
+        payload = {
+            "class": {"id": _int(self.class_id, "Klasse-ID")},
+            "correspondence_partner_guid": self.client_guid,
+            "description": TEST_DESC,
+            "domain": {"id": _int(self.domain_id, "Domain-ID")},
+            "structure_items": [{"name": "datev-probe-test.pdf", "type": 1}],
+        }
+        if self.folder_id.get().strip():
+            payload["folder"] = {"id": _int(self.folder_id, "Ordner-ID")}
+        if self.register_id.get().strip():
+            payload["register"] = {"id": _int(self.register_id, "Register-ID")}
+        return payload
+
+    def create_test_document(self):
+        if not self._need_client():
+            return
+        if not self.client_guid:
+            messagebox.showinfo("DATEV-Probe", "Erst „→ GUID auflösen“ (Mandant-Nr.).")
+            return
+        try:
+            payload = self._build_create_payload()
+        except ValueError as e:
+            messagebox.showwarning("DATEV-Probe", str(e))
+            return
+        if not messagebox.askyesno(
+                "Test-Dokument anlegen — schreibt in DATEV",
+                f"Es wird EIN synthetisches Test-PDF in der LIVE-Dokumentenablage angelegt:\n\n"
+                f"  Mandant-GUID: {self.client_guid}\n"
+                f"  Domain {self.domain_id.get()} · Ordner {self.folder_id.get() or '—'} · "
+                f"Register {self.register_id.get() or '—'}\n"
+                f"  Beschreibung: {TEST_DESC}\n\n"
+                f"Es wird KEIN echtes Dokument verändert. Fortfahren?"):
+            return
+
+        def do_create():
+            file_id = self.client.upload_document_file(make_test_pdf(TEST_DESC))
+            self._log_line(f"document_file_id = {file_id}")
+            payload["structure_items"][0]["document_file_id"] = file_id
+            doc = self.client.create_document(payload)
+            return {"file_id": file_id, "document": doc}
+
+        def on_ok(res):
+            doc = res.get("document") or {}
+            self.created_doc_id = doc.get("id")
+            cdt = doc.get("change_date_time") or doc.get("create_date_time") or "—"
+            self.created_lbl.set(f"Angelegt: id={self.created_doc_id}  ·  change_date_time={cdt}")
+            if self.created_doc_id:  # read the structure back so we see what DokAb stored
+                self._run(f"Struktur {self.created_doc_id}",
+                          lambda: self.client.list_structure_items(self.created_doc_id))
+
+        self._run("Test-Dokument anlegen", do_create, on_ok)
 
 
 def main():

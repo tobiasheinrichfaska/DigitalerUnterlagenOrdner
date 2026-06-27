@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 CONFIG_NAME = "datev.config.json"
 DMS_PATH = "/datev/api/dms/v2"  # the Dokumentenablage API base path (spec: document management 2.3.1)
+MASTER_DATA_PATH = "/datev/api/master-data/v1"  # client master data (spec: Client Master Data 1.7.1)
 
 
 def basis_dir():
@@ -57,6 +58,17 @@ def dms_base_url(cfg, default="https://localhost:58452" + DMS_PATH):
     if not p.scheme or not p.netloc:
         return default
     return f"{p.scheme}://{p.netloc}{DMS_PATH}"
+
+
+def master_data_base_url(dms_base, default="https://localhost:58452" + MASTER_DATA_PATH):
+    """The Client-Master-Data base, taking host+port from the DMS base but pinning the
+    master-data path. Round 2 needs ``…/master-data/v1/clients`` to turn a Mandant number
+    into the ``correspondence_partner_guid`` a document create requires; the live box serves
+    it on the same host:port as DMS (see the domain ``correspondence_partner.link``)."""
+    p = urlparse(dms_base or "")
+    if not p.scheme or not p.netloc:
+        return default
+    return f"{p.scheme}://{p.netloc}{MASTER_DATA_PATH}"
 
 
 def self_signed_allowed(cfg, base_url):

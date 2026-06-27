@@ -166,6 +166,11 @@ class ProbeApp:
         self.log.insert("end", text + "\n")
         self.log.see("end")
 
+    def _post_log(self, text):
+        """Thread-safe log: schedule the write on the Tk main thread (never touch widgets
+        from a worker thread — that can wedge the event loop so results never render)."""
+        self.root.after(0, lambda: self._log_line(text))
+
     def _run(self, label, fn, on_ok=None):
         self.status.set(f"{label} …")
         self._log_line(f"→ {label}")
@@ -346,9 +351,11 @@ class ProbeApp:
 
         def do_create():
             file_id = self.client.upload_document_file(make_test_pdf(TEST_DESC))
-            self._log_line(f"document_file_id = {file_id}")
+            self._post_log(f"document_file_id = {file_id}")   # thread-safe (was the wedge bug)
             payload["structure_items"][0]["document_file_id"] = file_id
+            self._post_log("→ POST /documents " + json.dumps(payload, ensure_ascii=False))
             doc = self.client.create_document(payload)
+            self._post_log("← " + json.dumps(doc, ensure_ascii=False))
             return {"file_id": file_id, "document": doc}
 
         def on_ok(res):

@@ -1116,6 +1116,11 @@ class CoreApi:
         with self._datev_lock:
             self._datev_mode = on
             self._datev_service = None  # rebuild on next use (or drop when off)
+        if not on:
+            # mode-off fully resets DATEV runtime state — no stale per-session baselines
+            # linger until each window's close_session.
+            with self._lock:
+                self._datev_baseline.clear()
         return self.datev_status()
 
     @staticmethod
@@ -1198,7 +1203,7 @@ class CoreApi:
             return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
         try:
             res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
-                                comment=comment or "BelegTool", backup_dir=self._datev_backup_dir())
+                                comment=comment or APP_NAME, backup_dir=self._datev_backup_dir())
         except Exception as e:  # never let a write-back error cross the bridge as a raw rejection
             logger.exception("[datev] write-back failed")
             return {"ok": False, "verdict": "error", "error": str(e)}
@@ -1209,7 +1214,9 @@ class CoreApi:
                 self._datev_baseline[session] = {
                     "open_change_dt": res.get("new_change_dt"),
                     "was_checked_out_at_open": False,
-                    "opened_sha256": hashlib.sha256(edited).hexdigest()}
+                    # prefer the server's stored-bytes hash (the service reads it back); fall
+                    # back to the uploaded bytes only if the service didn't supply it.
+                    "opened_sha256": res.get("new_sha256") or hashlib.sha256(edited).hexdigest()}
             # Save the LOCAL destination alongside DATEV, in sync — there is ALWAYS a local
             # path (the working document is a saved .belegtool), so persist it now (this also
             # stores the updated provenance and clears dirty via mark_saved). NEVER prompt a
@@ -1241,28 +1248,6 @@ class CoreApi:
         except Exception:
             pass
         return baseline
-
-    def datev_can_file(self, session: str) -> dict:
-        """Whether the working doc can be FILED as a new DATEV document (not connected) and
-        the same-client hint (the connected source's Mandant, for export-to-DATEV)."""
-        prov = self._datev_provenance(session)
-        from datev.writeback import can_file_to_datev, is_connected
-        same_client = None
-        if is_connected(prov):
-            same_client = (prov or {}).get("correspondence_partner_guid")
-        return {"ok": True, "can_file": can_file_to_datev(prov), "connected": is_connected(prov),
-                "same_client_guid": same_client}
-
-    def datev_resolve_client(self, mandant_number) -> dict:
-        if not self._datev_mode:
-            return {"ok": False, "error": "DATEV-Modus ist aus."}
-        svc = self._datev_get_service()
-        if svc is None:
-            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
-        try:
-            return {"ok": True, **svc.resolve_client(mandant_number)}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
 
     def datev_file(self, session: str, client_guid: str = None, mandant_number=None,
                    description: str = None, domain_id: int = 1, folder_id=None,

@@ -247,10 +247,19 @@ class DatevService:
                     "backup_path": backup_path}
         new_prov = dict(provenance)
         new_prov["file_id"] = new_file_id  # structure_item_id stays stable
+        # Re-hash the bytes DokAb actually STORED (it may re-process on store), so the next
+        # write-back's content guard compares the real server state — hashing our uploaded
+        # bytes here would spuriously trip conflict_content if the server normalised them.
+        # Fall back to the uploaded bytes if the read-back fails (better than no baseline).
+        try:
+            new_sha256 = sha256(self._client.get_document_file(new_file_id))
+        except Exception:
+            new_sha256 = sha256(edited_bytes)
         return {"ok": True, "verdict": OK, "new_file_id": new_file_id,
                 "structure_item_id": sid, "http_status": res.get("http_status"),
                 "backup_path": backup_path, "provenance": new_prov,
-                "new_change_dt": self._safe_change_dt(doc_guid)}
+                "new_change_dt": self._safe_change_dt(doc_guid),
+                "new_sha256": new_sha256}
 
     def _safe_change_dt(self, doc_guid):
         try:

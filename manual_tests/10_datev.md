@@ -67,10 +67,19 @@ else). Make a small edit (e.g. add a FreeText note via the PDF-Tool, or any chan
 **Expected:**
 - A success notice **„Nach DATEV zurückgeschrieben"** appears.
 - In DATEV, the document's file now reflects your edit; its **change date advances**.
+- **The bound `.belegtool` is also saved on disk in the same step** — there is always a local
+  path, so write-back and the local copy stay in sync **without any „Speichern unter…" prompt**.
+  The unsaved-changes **„•"** clears (the title no longer shows pending changes).
 - A backup of the **previous** server file was written to
   `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` **before** the overwrite.
 - Choosing **Nein** (cancel the dialog) writes **nothing** to DATEV — you can then use the
   normal **💾 Speichern** for a local file instead.
+
+**Edge — DATEV succeeds but the local save fails** (e.g. the `.belegtool` sits on a removed
+USB / read-only network share): provoke it by making the local file unwritable, then write back.
+*Expected:* the **„Nach DATEV zurückgeschrieben"** notice still appears (DATEV **did** get the
+edit), **and** a separate error names the failed local save — your edit is not silently lost,
+and you can re-save locally to a writable location.
 
 ---
 

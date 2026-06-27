@@ -223,6 +223,8 @@ export const en = {
   'Nach DATEV ablegen': 'File to DATEV',
   'Mandantennummer für die DATEV-Ablage': 'Client number for filing to DATEV',
   'Nach DATEV zurückgeschrieben': 'Written back to DATEV',
+  'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.':
+    'Written back to DATEV, but not saved locally.',
   'In DATEV abgelegt': 'Filed to DATEV',
   'In DATEV abgelegt ({n} Dokumente)': 'Filed to DATEV ({n} documents)',
   'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.':

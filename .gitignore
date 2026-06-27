@@ -19,6 +19,10 @@ Installer_*/
 # Scratch / temp (project-bound; disposable — workspace convention)
 .tmp/
 
+# Delivery inbox — may hold vendor specs (DATEV OpenAPI = vendor IP) or sensitive data.
+# Never commit to this PUBLIC repo. Keep locally as the source of truth.
+import/
+
 # Playwright artifacts if it is ever run from the repo root (normally lives in webui/)
 test-results/
 

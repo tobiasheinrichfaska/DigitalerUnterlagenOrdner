@@ -378,6 +378,26 @@ def test_export_no_split_when_under_threshold(tmp_path):
     assert out.exists()
 
 
+def test_export_split_refuses_overwrite_without_confirm(tmp_path):
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="B", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="C", pdf_length=2, original_data=create_valid_pdf(2)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    out = tmp_path / "Export.pdf"
+    opts = {"split_pages": 3, "split_level": "top"}
+    r1 = api.export(sid, str(out), options=opts)            # first run writes the parts
+    assert r1["ok"] and len(r1["paths"]) >= 2
+    r2 = api.export(sid, str(out), options=opts)            # parts exist → refused, nothing written
+    assert r2["ok"] is False and r2["code"] == "exists" and r2["existing"]
+    r3 = api.export(sid, str(out), options={**opts, "overwrite": True})  # confirmed → overwrites
+    assert r3["ok"] and len(r3["paths"]) >= 2
+
+
 def test_dirty_tracking_cleared_on_save(tmp_path):
     # per-session dirty flag (the host's close guard uses its own per-window flag)
     api = CoreApi()

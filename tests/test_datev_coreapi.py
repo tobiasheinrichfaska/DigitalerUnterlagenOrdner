@@ -212,6 +212,21 @@ def test_datev_export_files_each_split_part(tmp_path):
     assert all(f["client_guid"] == "client-x" for f in svc.filed)  # same client, no Mandant given
 
 
+def test_datev_export_sanitizes_hostile_document_name(tmp_path):
+    # a document name with path separators / traversal must not write outside the temp dir
+    # (datev_export builds a real temp path from the name — no native dialog to vet it).
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+            "correspondence_partner_guid": "client-x"}
+    svc = FakeService(prov=prov)
+    core = _core_with_service(svc)
+    resp = core.open(path=_belegtool(tmp_path))
+    sid = resp["session"]
+    root_id = resp["tree"]["id"]
+    core.dispatch(sid, {"type": "Rename", "node_id": root_id, "name": "../../evil/name"})
+    res = core.datev_export(sid)  # single PDF (no split) — must not raise or escape
+    assert res["ok"] and len(svc.filed) == 1
+
+
 def test_datev_export_partial_failure_reports_how_many_landed(tmp_path):
     # one split part fails to file → ok:false WITH detail (the OK parts already landed in
     # DokAb, no rollback), not a silent generic failure.

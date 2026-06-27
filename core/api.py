@@ -1305,7 +1305,12 @@ class CoreApi:
             return {"ok": False, "error": "Kein Mandant angegeben."}
         import tempfile
         import shutil
-        base_name = (self.document_name(session) or "Export").strip() or "Export"
+        import re
+        # The document name becomes a real temp path here (no native dialog to vet it),
+        # so strip path separators / illegal chars — a name with "/" or ".." must not
+        # write outside the temp dir. (Mirrors materialize_subset's name sanitisation.)
+        raw_name = (self.document_name(session) or "Export").strip()
+        base_name = re.sub(r'[<>:"/\\|?*]', "_", raw_name).strip().rstrip(". ") or "Export"
         tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
         try:
             out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),

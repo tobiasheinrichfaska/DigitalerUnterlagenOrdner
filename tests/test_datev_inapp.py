@@ -204,6 +204,19 @@ def test_writeback_without_structure_item_refuses():
     assert client.puts == []
 
 
+def test_writeback_backup_filename_is_path_safe(tmp_path):
+    # defense-in-depth: a crafted provenance must never let the backup escape backup_dir
+    # via path separators in doc_guid (CoreApi also gates with valid_provenance upstream).
+    import os
+    client, prov, baseline = _connected()
+    prov = dict(prov, doc_guid="../../../etc/evil")
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", backup_dir=str(tmp_path))
+    assert res["ok"] and res["backup_path"]
+    # the backup landed INSIDE backup_dir — no traversal
+    assert os.path.dirname(os.path.abspath(res["backup_path"])) == os.path.abspath(str(tmp_path))
+    assert ".." not in os.path.basename(res["backup_path"])
+
+
 def test_writeback_upload_error_returns_error_verdict_not_exception(tmp_path):
     # a mid-write network/HTTP error (after the guard passed) must come back as a clean
     # {ok:false, verdict:"error"}, NOT propagate as an unhandled exception across the bridge.

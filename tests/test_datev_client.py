@@ -7,6 +7,7 @@ import json
 import pytest
 
 from datev.client import DatevConnectClient
+from datev.config import is_loopback, resolve_auth_mode, self_signed_allowed
 from datev.endpoints import build_url
 from datev.transport import build_curl_args
 from datev.types import (
@@ -127,6 +128,7 @@ def test_build_curl_args_uses_negotiate_and_drops_auth_header():
                            {"Accept": "application/json", "Authorization": "Basic x"},
                            allow_self_signed=False, out_path="/tmp/o", has_body=False)
     assert "--negotiate" in args and args[args.index("-u") + 1] == ":"  # current Windows user
+    assert "--http1.1" in args                                         # OPOS hardening (avoids 000)
     assert args[args.index("-X") + 1] == "GET"
     assert args[-1] == "https://h/v2/info"                              # url last
     assert "Accept: application/json" in args                          # forwarded
@@ -139,3 +141,23 @@ def test_build_curl_args_self_signed_and_body():
                            out_path="/tmp/o", has_body=True)
     assert "-k" in args                                                # tolerate self-signed
     assert "--data-binary" in args and args[args.index("--data-binary") + 1] == "@-"
+
+
+# --- connection config (mirrors OPOS datev_api) ----------------------------
+def test_is_loopback():
+    assert is_loopback("https://localhost:58452/x") and is_loopback("https://127.0.0.1/x")
+    assert not is_loopback("https://server.firma.local/x")
+
+
+def test_resolve_auth_mode_matches_opos():
+    assert resolve_auth_mode({"auth": "basic"}) == "basic"   # explicit wins
+    assert resolve_auth_mode({"auth": "sso"}) == "sso"
+    assert resolve_auth_mode({"user": "u@d.local"}) == "basic"  # user present ⇒ Basic
+    assert resolve_auth_mode({}) == "sso"                    # nothing ⇒ Windows SSO
+
+
+def test_self_signed_allowed_loopback_default_and_override():
+    assert self_signed_allowed({}, "https://localhost/x")            # loopback ⇒ trust
+    assert not self_signed_allowed({}, "https://lan-host/x")         # LAN ⇒ strict
+    assert self_signed_allowed({"verify_tls": False}, "https://lan-host/x")    # explicit wins
+    assert not self_signed_allowed({"verify_tls": True}, "https://localhost/x")

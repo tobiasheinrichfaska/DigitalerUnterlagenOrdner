@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .client import DatevConnectClient
+from .config import load_config, resolve_auth_mode, self_signed_allowed
 from .transport import make_curl_sso_transport, make_urllib_transport
 from .types import DatevConfig, program_keeps_revisions
 
@@ -28,6 +29,7 @@ class ProbeApp:
         self.client = None
         self.docs = []          # last documents list
         self.structure_items = []
+        self.cfg = load_config()  # datev.config.json next to the exe (same as OPOS), if present
         root.title("DATEV-Probe — DMS v2 (Lesen)")
         root.geometry("960x720")
         self._build()
@@ -37,11 +39,13 @@ class ProbeApp:
         pad = dict(padx=6, pady=3)
         conn = ttk.LabelFrame(self.root, text="Verbindung")
         conn.pack(fill="x", **pad)
-        self.base = tk.StringVar(value=DEFAULT_BASE)
-        self.user = tk.StringVar()
-        self.pw = tk.StringVar()
-        self.self_signed = tk.BooleanVar(value=True)
-        self.auth_mode = tk.StringVar(value="sso")  # like the other DATEV programs: SSO default
+        base_default = self.cfg.get("base_url") or DEFAULT_BASE
+        self.base = tk.StringVar(value=base_default)
+        self.user = tk.StringVar(value=self.cfg.get("user") or "")
+        self.pw = tk.StringVar(value=self.cfg.get("password") or "")
+        self.self_signed = tk.BooleanVar(value=self_signed_allowed(self.cfg, base_default))
+        # SSO default like the other DATEV programs; honours an explicit "auth" in the config.
+        self.auth_mode = tk.StringVar(value=resolve_auth_mode(self.cfg))
         ttk.Label(conn, text="Base-URL").grid(row=0, column=0, sticky="w")
         ttk.Entry(conn, textvariable=self.base, width=60).grid(row=0, column=1, columnspan=3, sticky="we", **pad)
         # Auth: Windows SSO (current user, no password — matches DATEV's own programs) or Basic.

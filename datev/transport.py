@@ -13,6 +13,10 @@ import urllib.request
 
 from .types import DatevError, HttpResponse
 
+# Hide the curl.exe console window on Windows — otherwise each SSO call flashes a window
+# in the windowed exe (mirrors OPOS datev_api._NO_WINDOW).
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def make_urllib_transport(allow_self_signed=False, timeout=30):
     ctx = ssl.create_default_context()
@@ -36,12 +40,17 @@ def make_urllib_transport(allow_self_signed=False, timeout=30):
 
 
 def build_curl_args(method, url, headers, allow_self_signed, out_path, has_body, curl="curl.exe"):
-    """Pure: the curl command line for one SSO request. ``--negotiate -u :`` authenticates
-    as the current Windows user; the status goes to stdout (``-w``), the body to ``out_path``
-    (``-o``, binary-safe), the request body (round 2) comes from stdin. We never forward an
-    Authorization header — SSO does the auth."""
-    args = [curl, "-s", "-S", "--negotiate", "-u", ":", "-X", method,
-            "-w", "%{http_code}", "-o", out_path]
+    """Pure: the curl command line for one SSO request — mirrors OPOS's hardened ``curl_args``.
+    ``--negotiate -u :`` authenticates as the current Windows user; ``--http1.1`` avoids the
+    HTTP/2 framing errors that show up as ``http_code 000`` on large bodies (the big documents
+    list); bounded timeouts + one retry let a transient drop self-heal; ``--compressed`` shrinks
+    big JSON. Status → stdout (``-w``), body → ``out_path`` (``-o``, binary-safe so a fetched PDF
+    survives); a round-2 request body comes from stdin. We never forward an Authorization header
+    — SSO does the auth."""
+    args = [curl, "-sS", "--http1.1", "--negotiate", "-u", ":",
+            "--connect-timeout", "15", "--max-time", "120",
+            "--retry", "1", "--retry-connrefused", "--retry-delay", "2",
+            "--compressed", "-X", method, "-w", "%{http_code}", "-o", out_path]
     if allow_self_signed:
         args.append("-k")
     for key, value in (headers or {}).items():
@@ -54,14 +63,17 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, has_body,
     return args
 
 
-def make_curl_sso_transport(allow_self_signed=False, timeout=30, curl="curl.exe"):
+def make_curl_sso_transport(allow_self_signed=False, timeout=300, curl="curl.exe"):
+    # timeout > curl's own --max-time so curl reports the real reason rather than the
+    # subprocess timeout masking it (as in OPOS).
     def transport(method, url, headers, body=None):
         fd, out_path = tempfile.mkstemp(prefix="datevprobe_")
         os.close(fd)
         try:
             args = build_curl_args(method, url, headers, allow_self_signed, out_path,
                                    body is not None, curl)
-            proc = subprocess.run(args, input=body, capture_output=True, timeout=timeout)
+            proc = subprocess.run(args, input=body, capture_output=True, timeout=timeout,
+                                  creationflags=_NO_WINDOW)
             status_text = proc.stdout.decode("ascii", "ignore").strip()[-3:]
             status = int(status_text) if status_text.isdigit() else 0
             with open(out_path, "rb") as f:

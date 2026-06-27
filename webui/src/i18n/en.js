@@ -144,6 +144,12 @@ export const en = {
   'mit anklickbaren Links': 'with clickable links',
   'Stichwortverzeichnis (nach Tags)': 'Tag index',
   'PDF-Lesezeichen (Seitenleiste)': 'PDF bookmarks (sidebar)',
+  'In mehrere Dateien aufteilen': 'Split into multiple files',
+  'max. Seiten pro Datei': 'max. pages per file',
+  'Trennen bei:': 'Break at:',
+  'oberste Ordner': 'top-level folders',
+  'jeder Ordnergrenze': 'any folder boundary',
+  '{n} Dateien': '{n} files',
   'Exportieren': 'Export',
   'Keine Tags im Dokument': 'No tags in the document',
 

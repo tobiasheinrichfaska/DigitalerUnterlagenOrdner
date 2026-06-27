@@ -1,6 +1,7 @@
 // Export options, asked before the native save dialog: printed table of contents
 // (+clickable links), tag index (+links — only offered when the document has tags),
-// and PDF sidebar bookmarks. Returns the chosen options to the caller.
+// PDF sidebar bookmarks, and (#13) optional splitting into several files at a page
+// threshold + a chosen break level. Returns the chosen options to the caller.
 import { useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
@@ -12,6 +13,9 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
   const [index, setIndex] = useState(hasTags)
   const [indexLinks, setIndexLinks] = useState(true)
   const [bookmarks, setBookmarks] = useState(true)
+  const [split, setSplit] = useState(false)
+  const [splitPages, setSplitPages] = useState(100)
+  const [splitLevel, setSplitLevel] = useState('top')
 
   // Focus management: focus first element on open, trap Tab, close on Esc, restore focus on unmount.
   const dialogRef = useModal({ onClose: onCancel })
@@ -21,6 +25,8 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
     toc_links: toc && tocLinks,   // only meaningful when toc is on
     index: hasTags && index, index_links: indexLinks,
     bookmarks,
+    split_pages: split ? Math.max(1, Number(splitPages) || 100) : null,
+    split_level: splitLevel,
   })
 
   return (
@@ -52,6 +58,24 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
         <label className="exp-row">
           <input type="checkbox" checked={bookmarks} onChange={(e) => setBookmarks(e.target.checked)} />
           {t('PDF-Lesezeichen (Seitenleiste)')}
+        </label>
+
+        <label className="exp-row">
+          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} />
+          {t('In mehrere Dateien aufteilen')}
+        </label>
+        <label className="exp-row exp-sub">
+          {t('max. Seiten pro Datei')}
+          <input type="number" min="1" className="exp-num" value={splitPages} disabled={!split}
+            onChange={(e) => setSplitPages(e.target.value)} />
+        </label>
+        <label className="exp-row exp-sub">
+          {t('Trennen bei:')}
+          <select className="exp-level" value={splitLevel} disabled={!split}
+            onChange={(e) => setSplitLevel(e.target.value)}>
+            <option value="top">{t('oberste Ordner')}</option>
+            <option value="folder">{t('jeder Ordnergrenze')}</option>
+          </select>
         </label>
 
         <div className="modal-actions">

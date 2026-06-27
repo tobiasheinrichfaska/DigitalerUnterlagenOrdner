@@ -14,6 +14,7 @@ ENDPOINTS = {
     "document": ("GET", "/documents/{id}"),
     "structure_items": ("GET", "/documents/{id}/structure-items"),
     "document_file": ("GET", "/document-files/{file_id}"),
+    "documentstates": ("GET", "/documentstates"),
     # --- create only (round 2a) ---
     "document_files_create": ("POST", "/document-files"),   # octet-stream body -> {id}
     "documents_create": ("POST", "/documents"),             # DocumentCreate JSON -> Document

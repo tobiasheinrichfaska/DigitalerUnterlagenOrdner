@@ -103,6 +103,24 @@ a Word/Excel/`.md` file.
 
 ---
 
+## MT-34b: Window remembers its size / position / monitor
+
+**Steps:**
+1. Launch the app. **Resize** the window and **drag it** to a clear spot — if you have
+   more than one monitor, move it to the **second** monitor.
+2. **Close** the window (the app exits).
+3. **Launch** the app again.
+
+**Expected:**
+- The window reopens at the **same size and position** as you left it — including on the
+  **same monitor** (multi-monitor).
+- *Not obvious:* only the **first/main** window restores; extra **Neues Fenster** windows
+  open at the default size. If the monitor you last used is **disconnected**, the app falls
+  back to the **default centred** 1280×820 instead of opening off-screen. (Geometry is
+  stored in `%APPDATA%\DigitalerUnterlagenOrdner\window.json`.)
+
+---
+
 ## MT-35: Unsaved-changes guards
 
 **Steps:**

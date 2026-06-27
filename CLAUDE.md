@@ -33,7 +33,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
 | File | Role |
 |---|---|
-| `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. |
+| `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. The **first** window **persists its geometry** (size/position/monitor) to `%APPDATA%\…\window.json` on close and restores it on next launch; a saved geometry whose monitor is gone falls back to the default (validated by the pure [`infra/window_geometry.py`](infra/window_geometry.py), tested). |
 
 ### Data model
 

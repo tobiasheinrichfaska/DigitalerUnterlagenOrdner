@@ -147,3 +147,10 @@ def test_export_split_writes_valid_part_files(tmp_path):
     for p in paths:
         with pikepdf.open(p) as pdf:
             assert len(pdf.pages) >= 1                             # each part is a valid PDF
+
+
+def test_export_split_on_empty_forest_writes_nothing(tmp_path):
+    from formats.toc_export import export_pdf_split_with_toc
+    out = tmp_path / 'out.pdf'
+    assert export_pdf_split_with_toc([], str(out), 3) == []        # no groups → no paths
+    assert not out.exists()                                        # and no file written

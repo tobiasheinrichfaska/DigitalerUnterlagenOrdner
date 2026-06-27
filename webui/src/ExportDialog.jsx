@@ -24,7 +24,7 @@ export function ExportDialog({ hasTags, onChoose, onCancel }) {
     toc,
     toc_links: toc && tocLinks,   // only meaningful when toc is on
     // split mode renders its own per-file TOC and ignores the index + bookmarks
-    index: hasTags && index && !split, index_links: indexLinks,
+    index: hasTags && index && !split, index_links: hasTags && index && !split && indexLinks,
     bookmarks: bookmarks && !split,
     split_pages: split ? Math.max(1, Number(splitPages) || 100) : null,
     split_level: splitLevel,

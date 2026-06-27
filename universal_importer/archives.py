@@ -12,6 +12,7 @@ into rather than degraded to "nicht importierbar" (#12). Recursion is
 
 import io
 import os
+import re
 import zipfile
 from email import policy
 from email.parser import BytesParser
@@ -144,15 +145,25 @@ def _member_result(content: bytes, name: str, depth: int, budget: "_Budget") -> 
 # the cap the overflow collapses back into the leaf name (no data lost, depth bounded).
 _MAX_PATH_DEPTH = 24
 
+# A bare drive-letter path segment ("C:", "d:") — dropped when building folder nodes.
+_DRIVE_SEG = re.compile(r"^[A-Za-z]:$")
+
 
 def _split_member_path(name: str):
     """Split an archive member path into (folder_parts, basename). Honors both
     POSIX and Windows separators. ``"rechnungen/2024/beleg.pdf"`` →
     ``(["rechnungen", "2024"], "beleg.pdf")``; a bare name → ``([], name)``.
-    Folder depth is capped at ``_MAX_PATH_DEPTH`` (overflow folded into the name)."""
-    parts = [p for p in (name or "").replace("\\", "/").split("/") if p]
+    Folder depth is capped at ``_MAX_PATH_DEPTH`` (overflow folded into the name).
+    Traversal-style segments from a hostile member name (``.``, ``..``, a bare drive
+    letter like ``C:``) are dropped so they can't become folder nodes named ``..``;
+    the tree is in-memory only, so this is cosmetic hardening, not a path-write fix."""
+    parts = [p for p in (name or "").replace("\\", "/").split("/")
+             if p and p not in (".", "..") and not _DRIVE_SEG.match(p)]
     if not parts:
-        return [], (name or "")
+        # Nothing usable survived sanitizing → fall back to the raw basename so the
+        # member still imports under some name instead of vanishing.
+        raw = (name or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+        return [], (raw or (name or ""))
     if len(parts) > _MAX_PATH_DEPTH:
         return parts[:_MAX_PATH_DEPTH - 1], "/".join(parts[_MAX_PATH_DEPTH - 1:])
     return parts[:-1], parts[-1]

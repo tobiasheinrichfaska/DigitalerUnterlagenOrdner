@@ -123,12 +123,10 @@ body:
     id: not-a-known-gap
     attributes:
       label: Confirm this is not a known limitation
-      description: "These two are documented, accepted behaviour — not bugs."
+      description: "This is documented, accepted behaviour — not a bug."
       options:
         - label: >
-            I confirm this is NOT one of the two known limitations:
-            (1) exporting more than 100 pages produces a single PDF — auto-split is
-            not wired into the UI; or
-            (2) compression is irreversible after a node is saved — the source is
-            dropped and the option shows "bereits komprimiert (keine Quelle)".
+            I confirm this is NOT the known limitation: compression is irreversible
+            after a node is saved — the source is dropped and the option shows
+            "bereits komprimiert (keine Quelle)".
           required: true

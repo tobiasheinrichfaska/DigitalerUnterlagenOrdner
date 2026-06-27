@@ -106,13 +106,15 @@ contents and bookmarks), and **save & reload** a `.belegtool` file.
 
 ---
 
-## 4. Two known gaps — please DON'T report these as bugs
+## 4. One known gap — please DON'T report this as a bug
 
-1. **Large export = one PDF.** Exporting more than 100 pages produces a *single*
-   PDF; the auto-split-into-multiple-files feature is not wired into the UI yet.
-2. **Compression is irreversible after saving.** Once you apply compression to a
+1. **Compression is irreversible after saving.** Once you apply compression to a
    node and save, the original source is dropped — you can't undo it later, and
    the option shows *"bereits komprimiert (keine Quelle)"*. This is by design.
+
+> Large exports now offer a split: the export dialog lets you split into multiple
+> PDFs by page count and break level (top node / any folder / mid-document), so a
+> big tree no longer has to be one giant file.
 
 ---
 

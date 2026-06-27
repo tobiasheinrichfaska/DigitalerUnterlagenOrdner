@@ -907,11 +907,12 @@ report known gaps, give the wrong version, etc.).
 **Facts baked into these files — keep them in sync with the source of truth:**
 - **Version `3.9.5`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
-- **Two known gaps that must NOT be reported as bugs** (the bug form's required
-  checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired
-  into the UI; (2) compression irreversible after save ("bereits komprimiert (keine
-  Quelle)"). **If either gap is fixed, remove it from the checkbox, BETA_TESTING.md
-  §4, and CONTRIBUTING.md** — otherwise testers are told a working feature is broken.
+- **One known gap that must NOT be reported as a bug** (the bug form's required
+  checkbox enforces this): compression irreversible after save ("bereits komprimiert
+  (keine Quelle)"). The former auto-split gap was removed when #13 (configurable
+  export split) shipped on the v3.10 branch. **If this gap is fixed, remove it from
+  the checkbox, BETA_TESTING.md §4, and CONTRIBUTING.md** — otherwise testers are
+  told a working feature is broken.
 - **Manual tests `01`–`08` are all current against the React UI** (01–04 rewritten
   2026-06-15; the removed Tk GUI is no longer referenced anywhere).
 - **Two run paths** (prebuilt onedir folder; from source: Python 3.12+ + Node, `pip

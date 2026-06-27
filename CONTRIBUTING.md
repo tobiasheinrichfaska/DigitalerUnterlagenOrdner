@@ -21,10 +21,8 @@ its own issue form (**New issue** → pick a template):
 | 🧪 Beta feedback | Issue → *Beta feedback* | First impressions / UX / "would you use it?" |
 | 💬 Question | [Discussions](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/discussions) | Not sure if it's a bug, or general chat |
 
-**Two things that are NOT bugs** (please don't report them):
-1. Exporting more than 100 pages produces a **single** PDF — auto-split is not
-   wired into the UI yet.
-2. Compression is **irreversible after saving** — the source is dropped and the
+**One thing that is NOT a bug** (please don't report it):
+1. Compression is **irreversible after saving** — the source is dropped and the
    option shows *"bereits komprimiert (keine Quelle)"*.
 
 ---

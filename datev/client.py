@@ -6,7 +6,7 @@ DatevAuthError (401) / DatevLicenseError (missing component license) / DatevErro
 import base64
 import json
 
-from .config import master_data_base_url
+from .config import iam_base_url, master_data_base_url
 from .endpoints import ENDPOINTS, build_url
 from .types import DatevAuthError, DatevError, DatevLicenseError
 
@@ -38,6 +38,7 @@ class DatevConnectClient:
         self._transport = transport
         # master-data lives at a different path on the same host (round 2); derive if not given.
         self._md_base = master_data_base or master_data_base_url(config.base_url)
+        self._iam_base = iam_base_url(config.base_url)
         self._auth = None
         if config.username and config.password:
             raw = f"{config.username}:{config.password}".encode("utf-8")
@@ -135,6 +136,17 @@ class DatevConnectClient:
                 if guid:
                     return {"guid": guid, "name": c.get("name"), "number": c.get("number")}
         raise DatevError(f"Mandant {want} nicht gefunden (Client-Stammdaten).")
+
+    def list_document_states(self):
+        """GET /documentstates — the predefined states (id is server-assigned), so create
+        must use one of these ids."""
+        return self._json("documentstates")
+
+    def list_users(self):
+        """IAM users (id GUID, name, is_deleted) — to fill the document's mandatory ``user``
+        with a live, non-deleted GUID (ideally the connecting clerk)."""
+        url = self._iam_base.rstrip("/") + "/users"
+        return self._as_json(self._send_url("GET", url, "users"), "users")
 
     # --- create only (round 2a) ---------------------------------------------------------
     def upload_document_file(self, pdf_bytes):

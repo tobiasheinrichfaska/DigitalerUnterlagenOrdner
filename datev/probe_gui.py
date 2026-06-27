@@ -157,7 +157,11 @@ class ProbeApp:
         self.user_id = tk.StringVar()
         ttk.Entry(w, textvariable=self.user_id, width=40).grid(row=5, column=3, columnspan=2, sticky="we", **pad)
         ttk.Button(w, text="Vorlage holen (State+User aus 1. Dok)",
-                   command=self.fill_state_user).grid(row=5, column=5, columnspan=2, sticky="w", **pad)
+                   command=self.fill_state_user).grid(row=5, column=5, sticky="w", **pad)
+        ttk.Button(w, text="User laden (IAM)", command=self.load_users).grid(
+            row=5, column=6, sticky="w", **pad)
+        ttk.Button(w, text="States laden", command=self.load_states).grid(
+            row=5, column=7, sticky="w", **pad)
 
         # Documents list + detail buttons
         mid = ttk.Frame(self.root)
@@ -377,15 +381,14 @@ class ProbeApp:
 
         state = self.state_id.get().strip()
         user = self.user_id.get().strip()
-        if not state or not user:
-            raise ValueError("State-ID und User-GUID sind Pflicht — „Vorlage holen“ klicken.")
+        if not user:
+            raise ValueError("User-GUID ist Pflicht — „User laden (IAM)“ und einen aktiven wählen.")
         now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         payload = {
             "class": {"id": _int(self.class_id, "Klasse-ID")},
             "correspondence_partner_guid": self.client_guid,
             "description": TEST_DESC,
             "domain": {"id": _int(self.domain_id, "Domain-ID")},
-            "state": {"id": state},      # mandatory (spec Required Elements)
             "user": {"id": user},        # mandatory
             # type 1 = file; counter/parent_counter position it in the tree; creation/
             # modification dates are mandatory structure fields.
@@ -393,6 +396,8 @@ class ProbeApp:
                                  "counter": 1, "parent_counter": 0,
                                  "creation_date": now, "last_modification_date": now}],
         }
+        if state:   # DokAb documents carry no state; include only if explicitly set
+            payload["state"] = {"id": state}
         if self.folder_id.get().strip():
             payload["folder"] = {"id": _int(self.folder_id, "Ordner-ID")}
         if self.register_id.get().strip():
@@ -426,6 +431,36 @@ class ProbeApp:
             self._log_line(f"Vorlage übernommen: state.id={st}  ·  user.id={us}")
 
         self._run("State/User-Vorlage holen", work, on_ok)
+
+    def load_users(self):
+        """List IAM users so you can pick a live (is_deleted=false) user GUID — ideally the
+        clerk whose Windows login is used for the connection."""
+        if not self._need_client():
+            return
+
+        def on_ok(users):
+            lst = users if isinstance(users, list) else (users or {}).get("users", [])
+            self._log_line(f"— {len(lst)} User —")
+            for u in lst:
+                flag = " [GELÖSCHT]" if u.get("is_deleted") else ""
+                self._log_line(f"   {u.get('id')}  ·  {u.get('name')}{flag}")
+
+        self._run("User laden (IAM)", self.client.list_users, on_ok)
+
+    def load_states(self):
+        """List the predefined document states (id + name + valid classes) so a valid
+        state.id can be chosen for the create."""
+        if not self._need_client():
+            return
+
+        def on_ok(states):
+            lst = states if isinstance(states, list) else (states or {}).get("states", [])
+            self._log_line(f"— {len(lst)} States —")
+            for s in lst:
+                self._log_line(f"   id={s.get('id')}  ·  {s.get('name')}  ·  "
+                               f"classes={s.get('valid_document_classes')}")
+
+        self._run("States laden", self.client.list_document_states, on_ok)
 
     def create_test_document(self):
         if not self._need_client():

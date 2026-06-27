@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 CONFIG_NAME = "datev.config.json"
 DMS_PATH = "/datev/api/dms/v2"  # the Dokumentenablage API base path (spec: document management 2.3.1)
 MASTER_DATA_PATH = "/datev/api/master-data/v1"  # client master data (spec: Client Master Data 1.7.1)
+IAM_PATH = "/datev/api/iam/v1"  # identity/users (per the Mitarbeiter domain link)
 
 
 def basis_dir():
@@ -69,6 +70,15 @@ def master_data_base_url(dms_base, default="https://localhost:58452" + MASTER_DA
     if not p.scheme or not p.netloc:
         return default
     return f"{p.scheme}://{p.netloc}{MASTER_DATA_PATH}"
+
+
+def iam_base_url(dms_base, default="https://localhost:58452" + IAM_PATH):
+    """The IAM base (host+port from the DMS base, IAM path pinned) — for listing users to
+    fill the document's mandatory ``user`` with a live, non-deleted GUID."""
+    p = urlparse(dms_base or "")
+    if not p.scheme or not p.netloc:
+        return default
+    return f"{p.scheme}://{p.netloc}{IAM_PATH}"
 
 
 def self_signed_allowed(cfg, base_url):

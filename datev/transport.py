@@ -75,14 +75,17 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path
             continue
         args += ["-H", f"{key}: {value}"]
     if body_path is not None:
-        args += ["--data-binary", "@" + body_path]
+        # Disable Expect:100-continue — DATEVconnect may not answer it, which stalls the POST
+        # until curl's internal 1s fallback (and on some stacks longer); send the body straight.
+        args += ["-H", "Expect:", "--data-binary", "@" + body_path]
     args.append(url)
     return args
 
 
-def make_curl_sso_transport(allow_self_signed=False, timeout=300, curl="curl.exe"):
-    # timeout > curl's own --max-time so curl reports the real reason rather than the
-    # subprocess timeout masking it (as in OPOS).
+def make_curl_sso_transport(allow_self_signed=False, timeout=60, curl="curl.exe"):
+    # timeout > curl's own --max-time (45) so curl normally reports the real reason; this is
+    # only the backstop if curl wedges and ignores --max-time (then Python kills it at 60s,
+    # not 5 min, so a hang always surfaces fast).
     def transport(method, url, headers, body=None):
         fd, out_path = tempfile.mkstemp(prefix="datevprobe_")
         os.close(fd)
@@ -96,8 +99,11 @@ def make_curl_sso_transport(allow_self_signed=False, timeout=300, curl="curl.exe
         try:
             args = build_curl_args(method, url, headers, allow_self_signed, out_path,
                                    body_path, header_path, curl)
-            proc = subprocess.run(args, capture_output=True, timeout=timeout,
-                                  creationflags=_NO_WINDOW)
+            try:
+                proc = subprocess.run(args, capture_output=True, timeout=timeout,
+                                      creationflags=_NO_WINDOW)
+            except subprocess.TimeoutExpired:
+                raise DatevError(f"Zeitüberschreitung nach {timeout}s — {method} {url} ohne Antwort.")
             status_text = proc.stdout.decode("ascii", "ignore").strip()[-3:]
             status = int(status_text) if status_text.isdigit() else 0
             with open(out_path, "rb") as f:

@@ -48,7 +48,7 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, has_body,
     survives); a round-2 request body comes from stdin. We never forward an Authorization header
     — SSO does the auth."""
     args = [curl, "-sS", "--http1.1", "--negotiate", "-u", ":",
-            "--connect-timeout", "15", "--max-time", "120",
+            "--connect-timeout", "15", "--max-time", "45",
             "--retry", "1", "--retry-connrefused", "--retry-delay", "2",
             "--compressed", "-X", method, "-w", "%{http_code}", "-o", out_path]
     if allow_self_signed:

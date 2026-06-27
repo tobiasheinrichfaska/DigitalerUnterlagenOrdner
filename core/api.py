@@ -854,6 +854,22 @@ class CoreApi:
             result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
         return result
 
+    _RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
+                       *(f"COM{i}" for i in range(1, 10)),
+                       *(f"LPT{i}" for i in range(1, 10))}
+
+    @classmethod
+    def _safe_filename(cls, name, default):
+        """A filesystem-safe base name (no extension) from an arbitrary user/tag/document
+        string: strip illegal chars, trailing dots/spaces, and Windows-reserved device names.
+        Used wherever such a name becomes a real temp/disk path with no native dialog to vet it
+        (materialize_subset's view title, datev_export's part files)."""
+        import re as _re
+        safe = _re.sub(r'[<>:"/\\|?*]', "_", (name or default)).strip().rstrip(". ")
+        if not safe or safe.upper() in cls._RESERVED_NAMES:
+            return default
+        return safe
+
     def materialize_subset(self, session: str, node_ids, name=None) -> dict:
         """Write a NEW .belegtool containing only ``node_ids`` — the nodes a tag view
         is currently displaying — kept in the document's **normal order and structure**
@@ -880,20 +896,12 @@ class CoreApi:
         new_root = prune(document.root)
         if not new_root.children:
             return {"ok": False, "error": "nichts angezeigt"}
-        import re
         import tempfile
         from core.bridge import save_belegtool
         # open() titles a document from its FILE NAME (stem), so encode the wanted name
         # there — in its own temp dir to avoid mkstemp's random suffix in the title.
-        # The name flows from a tag string → window title: strip illegal chars,
-        # Windows-reserved basenames, and trailing dots/spaces before it becomes a path.
-        safe = re.sub(r'[<>:"/\\|?*]', "_", (name or "Ansicht"))
-        safe = safe.strip().rstrip(". ")
-        _RESERVED = {"CON", "PRN", "AUX", "NUL",
-                     *(f"COM{i}" for i in range(1, 10)),
-                     *(f"LPT{i}" for i in range(1, 10))}
-        if not safe or safe.upper() in _RESERVED:
-            safe = "Ansicht"
+        # The name flows from a tag string → window title: make it a safe base name.
+        safe = self._safe_filename(name, "Ansicht")
         path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)
@@ -1377,12 +1385,10 @@ class CoreApi:
             return {"ok": False, "error": "Kein Mandant angegeben."}
         import tempfile
         import shutil
-        import re
-        # The document name becomes a real temp path here (no native dialog to vet it),
-        # so strip path separators / illegal chars — a name with "/" or ".." must not
-        # write outside the temp dir. (Mirrors materialize_subset's name sanitisation.)
-        raw_name = (self.document_name(session) or "Export").strip()
-        base_name = re.sub(r'[<>:"/\\|?*]', "_", raw_name).strip().rstrip(". ") or "Export"
+        # The document name becomes a real temp path here (no native dialog to vet it), so make
+        # it a safe base name (path separators / illegal chars / reserved device names stripped)
+        # — shared with materialize_subset via _safe_filename.
+        base_name = self._safe_filename(self.document_name(session), "Export")
         tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
         try:
             out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),

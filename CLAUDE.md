@@ -399,7 +399,11 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   is captured either way, and **both** offer DATEV write-back: the organizer via `DatevBar`, the
   PDF-Tool via a „🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen" toolbar button
   (revealed by the pure `datevAction({datevMode, connected})` only for a `.pdf` in DATEV mode).
-  The PDF-Tool bakes its edits into the node (`save_node_back`) before the guarded write-back.
+  The PDF-Tool bakes its edits before the guarded write-back via the method that matches how it
+  was opened (`bakeEdits`): a node binding uses `save_node_back`, a **directly-opened checkout
+  `.pdf`** (bridge session, no node binding) uses **`CoreApi.save_pdf_bytes`** (writes the first
+  leaf + the on-disk `.pdf` via `_datev_local_persist`) — `save_node_back` would reject a bridge
+  session, which is why the dedicated path exists.
 - **Format-aware local save** (`_datev_local_persist`): the parallel local save writes the
   bound path's **own format** — a `.belegtool` keeps the full structure + provenance (so the
   link round-trips); a checkout **`.pdf`** is overwritten with the **clean effective PDF bytes**

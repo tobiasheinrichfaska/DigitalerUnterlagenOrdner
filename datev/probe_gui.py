@@ -177,12 +177,24 @@ class ProbeApp:
     def _run(self, label, fn, on_ok=None):
         self.status.set(f"{label} …")
         self._log_line(f"→ {label}")
+        state = {"done": False, "secs": 0}
+
+        def heartbeat():   # visible proof the call is still running (so slow ≠ stuck)
+            if state["done"]:
+                return
+            state["secs"] += 1
+            self.status.set(f"{label} … läuft ({state['secs']}s)")
+            self.root.after(1000, heartbeat)
+
+        self.root.after(1000, heartbeat)
 
         def worker():
             try:
                 res = fn()
+                state["done"] = True
                 self.root.after(0, lambda: self._ok(label, res, on_ok))
             except Exception as e:  # surface every DATEV error in the log + status
+                state["done"] = True
                 self.root.after(0, lambda: self._err(label, e))
 
         threading.Thread(target=worker, daemon=True).start()

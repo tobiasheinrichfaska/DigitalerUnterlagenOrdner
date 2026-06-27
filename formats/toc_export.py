@@ -669,6 +669,24 @@ def _plan_groups(nodes, max_pages, level):
     raise ValueError(f"unknown split level: {level!r}")
 
 
+def _part_paths(base_path, n):
+    """Output paths for an ``n``-part split — the base for a single part, else
+    ``<base>_Teil_<i>.<ext>``. Single source of truth for the part naming."""
+    if n <= 1:
+        return [base_path]
+    base_name = os.path.splitext(base_path)[0]
+    ext = os.path.splitext(base_path)[1] or ".pdf"
+    return [f"{base_name}_Teil_{i + 1}{ext}" for i in range(n)]
+
+
+def plan_split_paths(nodes: List[PDFNode], base_path: str, max_pages: int,
+                     level: str = 'top') -> List[str]:
+    """The file paths an export split WOULD write — without writing anything. Lets the
+    caller check for overwrites and confirm before clobbering existing files (#13)."""
+    top = PDFStorage.filter_keep_ancestors(nodes)
+    return _part_paths(base_path, len(_plan_groups(top, max_pages, level)))
+
+
 def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
                                max_pages: int, level: str = 'top') -> List[str]:
     """
@@ -683,9 +701,7 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
         export_pdf_with_toc(top, base_path)
         return [base_path]
 
-    base_name = os.path.splitext(base_path)[0]
-    ext = os.path.splitext(base_path)[1] or ".pdf"
-    paths = [f"{base_name}_Teil_{i + 1}{ext}" for i in range(len(groups))]
+    paths = _part_paths(base_path, len(groups))
     file_names = [os.path.basename(p) for p in paths]
 
     group_items = [_build_toc_items(g) for g in groups]

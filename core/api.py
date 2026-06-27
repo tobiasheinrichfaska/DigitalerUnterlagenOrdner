@@ -800,7 +800,8 @@ class CoreApi:
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
         from formats.toc_export import (
-            export_pdf, export_pdf_split_with_toc, count_total_pages, empty_leaf_names)
+            export_pdf, export_pdf_split_with_toc, plan_split_paths,
+            count_total_pages, empty_leaf_names)
 
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
@@ -809,8 +810,16 @@ class CoreApi:
         opts = options or {}
         split_pages = opts.get("split_pages")
         split_level = opts.get("split_level", "top")
+        will_split = bool(split_pages) and count_total_pages(nodes) > int(split_pages)
+        # Guard the ACTUAL part files (not just the base name) against overwriting —
+        # the host confirms before we clobber them, then re-calls with overwrite=True.
+        if will_split and not opts.get("overwrite"):
+            planned = plan_split_paths(nodes, path, int(split_pages), split_level)
+            existing = [p for p in planned if os.path.exists(p)]
+            if existing:
+                return {"ok": False, "code": "exists", "existing": existing, "paths": planned}
         try:
-            if split_pages and count_total_pages(nodes) > int(split_pages):
+            if will_split:
                 paths = export_pdf_split_with_toc(nodes, path, int(split_pages), split_level)
             else:
                 export_pdf(nodes, path, options)

@@ -243,7 +243,19 @@ class HostApi:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
-        return self._core.export(session, path, node_ids, options)
+        result = self._core.export(session, path, node_ids, options)
+        # #13: a split would overwrite existing "_Teil_N" files (the native Save dialog
+        # only confirmed the base name) — confirm the ACTUAL part files before clobbering.
+        if not result.get("ok") and result.get("code") == "exists":
+            names = "\n".join(os.path.basename(p) for p in result.get("existing", []))
+            if not win.create_confirmation_dialog(
+                    "Dateien überschreiben?",
+                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names):
+                return {"ok": False, "error": "cancelled"}
+            opts = dict(options or {})
+            opts["overwrite"] = True
+            result = self._core.export(session, path, node_ids, opts)
+        return result
 
     def import_dialog(self, session, parent_id=None):
         win = self._win()

@@ -19,6 +19,9 @@ Installer_*/
 # Scratch / temp (project-bound; disposable — workspace convention)
 .tmp/
 
+# Playwright artifacts if it is ever run from the repo root (normally lives in webui/)
+test-results/
+
 # Audit reports (local artifacts; keep them off the public repo)
 reports/
 

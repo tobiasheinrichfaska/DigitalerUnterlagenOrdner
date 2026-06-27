@@ -53,7 +53,8 @@ class FakeService:
     def file_document(self, data, *, client_guid, description, domain_id=1, folder_id=None,
                       register_id=None, structure_name="beleg.pdf"):
         idx = len(self.filed)
-        self.filed.append({"data": data, "client_guid": client_guid, "description": description})
+        self.filed.append({"data": data, "client_guid": client_guid, "description": description,
+                           "structure_name": structure_name})
         if idx in self.fail_file_calls:
             return {"ok": False, "error": "boom"}
         return self.file_result or {"ok": True,
@@ -287,7 +288,7 @@ def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):
     assert core._datev_provenance(sid)["file_id"] == 9001       # advanced; sid stable
     assert core._datev_baseline[sid]["open_change_dt"] == "t1"
     # parallel local save: the bound .belegtool is written in sync (no Save As prompt)
-    assert res["local_saved"] == path
+    assert res["local_saved"] == path and res["local_kind"] == "belegtool"
     import os
     assert os.path.exists(path)
 
@@ -553,6 +554,40 @@ def test_datev_export_files_each_split_part(tmp_path):
     assert res["ok"] and res["parts"] >= 2                     # split into >=2 parts
     assert len(svc.filed) == res["parts"]
     assert all(f["client_guid"] == "client-x" for f in svc.filed)  # same client, no Mandant given
+    # each split part is its own document with a DISTINCT structure name + description
+    assert len({f["structure_name"] for f in svc.filed}) == res["parts"]
+    assert len({f["description"] for f in svc.filed}) == res["parts"]
+
+
+def test_datev_export_split_descriptions_suffix_the_given_one(tmp_path):
+    # with an explicit description each split part gets "<desc> — <label>" (distinct + traceable).
+    big = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", is_folder=True, children=(Node(name="a", original_data=_pdf(60), pdf_length=60),)),
+        Node(name="B", is_folder=True, children=(Node(name="b", original_data=_pdf(60), pdf_length=60),)),
+    )))
+    path = str(tmp_path / "big.belegtool")
+    save_belegtool(big, path)
+    svc = FakeService(prov={"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+                            "correspondence_partner_guid": "client-x"})
+    core = _core_with_service(svc)
+    sid = core.open(path=path)["session"]
+    res = core.datev_export(sid, options={"split_pages": 100, "split_level": "top"},
+                            description="Gesamt")
+    assert res["ok"] and res["parts"] >= 2
+    descs = [f["description"] for f in svc.filed]
+    assert all(d.startswith("Gesamt — ") for d in descs)       # suffixed with the part label
+    assert len(set(descs)) == len(descs)                       # distinct
+
+
+def test_datev_export_single_keeps_plain_description(tmp_path):
+    # a single (non-split) export keeps the given description verbatim — no part suffix.
+    svc = FakeService(prov={"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+                            "correspondence_partner_guid": "client-x"})
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_export(sid, description="Rechnung 2024")
+    assert res["ok"] and res["parts"] == 1
+    assert svc.filed[0]["description"] == "Rechnung 2024"
 
 
 def test_datev_export_short_circuits_when_pdf_export_fails(tmp_path, monkeypatch):

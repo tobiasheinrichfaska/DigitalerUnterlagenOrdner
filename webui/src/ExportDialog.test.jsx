@@ -76,6 +76,15 @@ describe('ExportDialog — confirm / cancel', () => {
     )
   })
 
+  it('disables and clears the index + bookmarks while splitting (split renders its own TOC)', () => {
+    const { onChoose } = renderDialog({ hasTags: true })  // index + bookmarks on by default
+    fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+    expect(screen.getByLabelText('Stichwortverzeichnis (nach Tags)')).toBeDisabled()
+    expect(screen.getByLabelText('PDF-Lesezeichen (Seitenleiste)')).toBeDisabled()
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ index: false, bookmarks: false }))
+  })
+
   it('keeps split_pages null while splitting is off', () => {
     const { onChoose } = renderDialog()
     fireEvent.click(screen.getByText('Exportieren'))

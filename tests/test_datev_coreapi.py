@@ -142,6 +142,76 @@ def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):
     assert os.path.exists(path)
 
 
+def test_save_back_ok_but_local_save_fails_reports_local_error(tmp_path, monkeypatch):
+    # DATEV write-back succeeds but the parallel local .belegtool save fails: ok stays True
+    # (DATEV DID land), but local_error must surface so the divergence isn't silent, and the
+    # baseline must adopt the SERVER-stored hash supplied by the service (new_sha256).
+    prov = {"doc_guid": GUID, "file_id": 1085411, "structure_item_id": 1085409}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "new_sha256": "server-hash", "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "save", lambda *a, **k: {"ok": False, "error": "Datenträger voll"})
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok"
+    assert res["local_saved"] is None
+    assert res["local_error"] == "Datenträger voll"
+    assert core._datev_baseline[sid]["opened_sha256"] == "server-hash"   # server bytes, not uploaded
+
+
+def test_save_back_ok_no_local_path_reports_unbound(tmp_path, monkeypatch):
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "document_path", lambda s: None)
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"]
+    assert res["local_error"] == "Kein lokaler Speicherort gebunden."
+
+
+def test_save_back_reestablishes_baseline_for_reopened_file(tmp_path):
+    # a reopened .belegtool has persisted provenance but NO live baseline → datev_save_back
+    # must re-establish it from the server (and here safely report conflict_content), not crash.
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    svc = FakeService(prov=prov, writeback_result={"ok": False, "verdict": "conflict_content"})
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    core._datev_baseline.pop(sid, None)        # simulate the reopened-file state
+    res = core.datev_save_back(sid, confirmed=True)
+    assert not res["ok"] and res["verdict"] == "conflict_content"
+
+
+def test_set_datev_mode_off_clears_baselines(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    core = _core_with_service(FakeService(prov=prov))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    assert sid in core._datev_baseline
+    core.set_datev_mode(False)
+    assert core._datev_baseline == {}          # mode-off frees stale per-session baselines
+
+
+def test_datev_status_connect_failed_reports_error(monkeypatch):
+    core = CoreApi()
+    core._datev_mode = True
+    monkeypatch.setattr(core, "_datev_get_service", lambda: None)
+    st = core.datev_status()
+    assert st["datev_mode"] is True and st["connected"] is False
+    assert "Verbindung" in st["error"]
+
+
+def test_open_mode_off_never_calls_datev_service(tmp_path, monkeypatch):
+    # the lazy gate: with DATEV mode off, open() must NEVER reach the service (which would
+    # import the datev package). Stub it to raise — a clean open proves the gate holds.
+    core = CoreApi()  # datev_mode default False
+    monkeypatch.setattr(core, "_datev_get_service",
+                        lambda: (_ for _ in ()).throw(AssertionError("must not connect")))
+    resp = core.open(path=_belegtool(tmp_path))
+    assert resp["ok"] and "datev" not in resp
+
+
 def test_save_back_conflict_returns_verdict_without_writing(tmp_path):
     prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
     core = _core_with_service(FakeService(
@@ -179,16 +249,6 @@ def test_close_session_frees_datev_baseline(tmp_path):
 
 
 # --- file + export ---------------------------------------------------------
-def test_datev_can_file_reports_same_client_when_connected(tmp_path):
-    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
-            "correspondence_partner_guid": "client-x"}
-    core = _core_with_service(FakeService(prov=prov))
-    sid = core.open(path=_belegtool(tmp_path))["session"]
-    info = core.datev_can_file(sid)
-    assert info["connected"] is True and info["can_file"] is False
-    assert info["same_client_guid"] == "client-x"
-
-
 def test_datev_file_creates_and_adopts_provenance(tmp_path):
     svc = FakeService(prov=None)
     core = _core_with_service(svc)
@@ -215,6 +275,20 @@ def test_datev_export_files_each_split_part(tmp_path):
     assert res["ok"] and res["parts"] >= 2                     # split into >=2 parts
     assert len(svc.filed) == res["parts"]
     assert all(f["client_guid"] == "client-x" for f in svc.filed)  # same client, no Mandant given
+
+
+def test_datev_export_short_circuits_when_pdf_export_fails(tmp_path, monkeypatch):
+    # if the underlying PDF export fails, datev_export returns that error and files NOTHING.
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+            "correspondence_partner_guid": "client-x"}
+    svc = FakeService(prov=prov)
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    monkeypatch.setattr(core, "export",
+                        lambda *a, **k: {"ok": False, "error": "nichts zu exportieren"})
+    res = core.datev_export(sid)
+    assert not res["ok"] and res["error"] == "nichts zu exportieren"
+    assert svc.filed == []
 
 
 def test_datev_export_sanitizes_hostile_document_name(tmp_path):

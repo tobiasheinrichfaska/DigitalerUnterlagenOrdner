@@ -407,12 +407,6 @@ class HostApi:
     def set_datev_mode(self, on):
         return self._core.set_datev_mode(on)
 
-    def datev_can_file(self, session):
-        return self._core.datev_can_file(session)
-
-    def datev_resolve_client(self, mandant_number):
-        return self._core.datev_resolve_client(mandant_number)
-
     def save_to_datev(self, session):
         """Ask „nach DATEV zurückschreiben?" then perform the guarded write-back. Returns
         the verdict so the React app can explain a non-ok result and offer a local save.

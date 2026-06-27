@@ -61,7 +61,27 @@ notice reports the file count. (Split mode uses its own TOC, not the index/bookm
 - Re-opening a `.belegtool` restores the schema losslessly; a committed node returns
   coherently (`current_data` set, `original_data` None) and drop-source-on-save is unchanged.
 
-## 7. Language, status bar & windows
+## 7. DATEV mode (v3.10.0 — off by default, opt-in per user)
+Only when the per-user **DATEV mode** is on (header „DATEV" toggle); when off, the `datev`
+package is never imported and none of this is reachable.
+- **Status + toggle**: the bar reflects `datev_status` (mode on/off, connected/not); toggling
+  persists per-user (`%APPDATA%`, terminal-server safe) via `set_datev_mode`.
+- **Connected document** (opened from a DATEV checkout path): shows the „Mit DATEV verknüpft"
+  badge; **„Nach DATEV zurückschreiben"** runs the guarded write-back (`save_to_datev` →
+  `datev_save_back`). On `ok` the linked DATEV document is overwritten (a backup is written
+  first) **and the bound `.belegtool` is saved locally in parallel** (no Save-As prompt); a
+  non-ok verdict (`declined`/`locked`/`conflict_changed`/`conflict_content`/`no_structure_item`)
+  writes **nothing** to DATEV and offers a local save instead.
+- **Not-connected document**: **„Nach DATEV ablegen"** files it as a NEW DATEV document under a
+  prompted Mandant (`datev_file`), then shows „verknüpft".
+- **Export → DATEV (same client)**: with a connected document, the export dialog offers „Nach
+  DATEV ablegen (gleicher Mandant)"; `datev_export` files **every produced PDF** (single or each
+  split part) as its own new document; a partial failure reports „Nur X von Y …".
+- Acceptance: with mode **off**, a normal launch never touches DATEV and the badge/actions are
+  absent. With mode **on** + a fake/real service, the verdicts above are honoured and a refused
+  write-back never overwrites the server. (Live end-to-end = `manual_tests/10_datev.md`.)
+
+## 8. Language, status bar & windows
 - **Language switcher** (22 entries incl. Deutsch and English (US)/(UK); the others fall
   back to German for any untranslated string) translates all UI text live and persists the
   choice; document content/names are not translated.

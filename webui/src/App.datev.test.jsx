@@ -12,6 +12,8 @@ const CONNECTED_TREE = {
   datev: { doc_guid: 'fa89ad42-8cd4-4828-8234-143161d41985', file_id: 1085411, source_name: 'Rechnung.pdf' },
   children: [leaf('A', 'seite1')],
 }
+// a NOT-connected document (no provenance on the root) → offers „Nach DATEV ablegen"
+const UNLINKED_TREE = { id: 'root', name: 'Beleg', is_folder: true, datev: null, children: [leaf('A', 'seite1')] }
 
 function installApi(overrides = {}) {
   const calls = []
@@ -90,5 +92,43 @@ describe('App — DATEV mode', () => {
     fireEvent.click(screen.getByText('Nach DATEV zurückschreiben'))
     await waitFor(() => expect(called(calls, 'save_to_datev').length).toBe(1))
     expect(called(calls, 'save_info').length + called(calls, 'save_file').length).toBe(0)
+  })
+
+  it('write-back OK but local save failed surfaces BOTH facts (DATEV landed + local failed)', async () => {
+    // the v3.10.0 parallel-save mode: DATEV landed, but the bound .belegtool couldn't be written.
+    // The single visible message must say the write-back succeeded AND that the local save did
+    // not — an error alone would read as if the whole write-back failed.
+    await renderApp({
+      save_to_datev: () => ({ ok: true, verdict: 'ok', provenance: CONNECTED_TREE.datev,
+                              local_error: 'Lokales Speichern fehlgeschlagen' }),
+    })
+    fireEvent.click(screen.getByText('Nach DATEV zurückschreiben'))
+    expect(await screen.findByText(/zurückgeschrieben, aber lokal nicht gespeichert.*Lokales Speichern fehlgeschlagen/))
+      .toBeInTheDocument()
+  })
+
+  it('a not-connected document files via datev_file with the prompted Mandant', async () => {
+    const calls = await renderApp({
+      open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
+      datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 } }),
+    })
+    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    await waitFor(() => expect(called(calls, 'datev_file').length).toBe(1))
+    // datev_file(session, clientGuid=null, mandantNumber, …) → the prompted Mandant is arg[2]
+    expect(called(calls, 'datev_file')[0].args[2]).toBe('10001')
+    await screen.findByText(/In DATEV abgelegt/)
+  })
+
+  it('export → DATEV files via datev_export and surfaces a partial-failure message', async () => {
+    const calls = await renderApp({
+      datev_export: () => ({ ok: false, parts: 2, filed_ok: 1,
+                             error: 'Nur 1 von 2 Teil(en) nach DATEV abgelegt' }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }))            // toolbar export
+    // the export-options dialog opens with the DATEV option (connected + mode on)
+    fireEvent.click(await screen.findByText(/Nach DATEV ablegen \(gleicher Mandant\)/))
+    fireEvent.click(screen.getByRole('button', { name: 'Exportieren' }))           // confirm
+    await waitFor(() => expect(called(calls, 'datev_export').length).toBe(1))
+    expect(await screen.findByText(/Nur 1 von 2/)).toBeInTheDocument()
   })
 })

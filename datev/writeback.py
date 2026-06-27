@@ -39,11 +39,6 @@ def valid_provenance(provenance):
     return True
 
 
-def can_write_back(provenance):
-    """Connected docs may be UPDATED in place (guarded by ``decide_save_back``)."""
-    return is_connected(provenance)
-
-
 def can_file_to_datev(provenance):
     """Not-connected docs may be filed as a NEW DATEV document (the create flow)."""
     return not is_connected(provenance)

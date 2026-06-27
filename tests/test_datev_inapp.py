@@ -217,6 +217,33 @@ def test_writeback_backup_filename_is_path_safe(tmp_path):
     assert ".." not in os.path.basename(res["backup_path"])
 
 
+def test_writeback_new_sha256_is_server_stored_bytes_not_uploaded(tmp_path):
+    # the post-write baseline hash must come from the bytes DokAb STORED (read back),
+    # not the bytes we uploaded — else a server-side re-process would spuriously trip
+    # conflict_content on the next write-back.
+    client, prov, baseline = _connected()
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", backup_dir=str(tmp_path))
+    assert res["ok"]
+    assert res["new_sha256"] == sha256(client.file_bytes)        # server read-back
+    assert res["new_sha256"] != sha256(b"%PDF edited")           # NOT the uploaded bytes
+
+
+def test_writeback_put_error_after_upload_returns_error_verdict(tmp_path):
+    # the PUT (update_structure_item) failing AFTER a successful upload must also come back
+    # as a clean error verdict (not an exception), with the upload recorded + a backup written.
+    client, prov, baseline = _connected()
+
+    def boom(*a, **k):
+        raise RuntimeError("PUT 409")
+
+    client.update_structure_item = boom
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", backup_dir=str(tmp_path))
+    assert not res["ok"] and res["verdict"] == "error"
+    assert "PUT 409" in res["error"]
+    assert client.uploaded == [b"%PDF edited"]      # upload happened before the PUT failed
+    assert res["backup_path"] and open(res["backup_path"], "rb").read()
+
+
 def test_writeback_upload_error_returns_error_verdict_not_exception(tmp_path):
     # a mid-write network/HTTP error (after the guard passed) must come back as a clean
     # {ok:false, verdict:"error"}, NOT propagate as an unhandled exception across the bridge.

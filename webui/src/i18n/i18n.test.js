@@ -46,10 +46,10 @@ describe('translate (source-string keys)', () => {
     // Canonical key count = 163 (the v3.9 set: UI strings incl. the Tree drag-ghost keys,
     // ContextMenu aria-label, #7 multi-select, #3 Save split-button, #13 export-split labels;
     // + 13 backend command-error messages + 14 host-level error/warning strings) PLUS the 16
-    // v3.10.0 DATEV-mode strings (toggle/badge/actions/verdict messages + the export option) =
-    // 179. If a string is added, bump this deliberately — and add it to every full-coverage
-    // language file (or PENDING_TRANSLATIONS).
-    expect(Object.keys(en).length).toBe(179)
+    // v3.10.0 DATEV-mode strings (toggle/badge/actions/verdict messages + the export option +
+    // the write-back-ok-but-local-save-failed notice) = 180. If a string is added, bump this
+    // deliberately — and add it to every full-coverage language file (or PENDING_TRANSLATIONS).
+    expect(Object.keys(en).length).toBe(180)
   })
 })
 
@@ -68,7 +68,8 @@ describe('full-coverage languages', () => {
     // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
     'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
     'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',
-    'Nach DATEV zurückgeschrieben', 'In DATEV abgelegt', 'In DATEV abgelegt ({n} Dokumente)',
+    'Nach DATEV zurückgeschrieben', 'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.',
+    'In DATEV abgelegt', 'In DATEV abgelegt ({n} Dokumente)',
     'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.',
     'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.',
     'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.',

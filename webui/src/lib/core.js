@@ -100,8 +100,6 @@ export const core = {
   // DATEV mode (lazy on the host; these are no-ops when DATEV mode is off)
   datevStatus: () => call('datev_status'),
   setDatevMode: (on) => call('set_datev_mode', on),
-  datevCanFile: (session) => call('datev_can_file', session),
-  datevResolveClient: (mandantNumber) => call('datev_resolve_client', mandantNumber),
   saveToDatev: (session) => call('save_to_datev', session),
   datevFile: (session, opts = {}) => call('datev_file', session, opts.clientGuid ?? null,
     opts.mandantNumber ?? null, opts.description ?? null, opts.domainId ?? 1,

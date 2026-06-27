@@ -26,7 +26,10 @@ engine, bridge, session, api, render_policy) with `core/ipc/` for the named-pipe
 transport; `services/` = stateful infra (render cache, CPU fairness, variants);
 `formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
 compress_pdf_bytes); `universal_importer/` = multi-format import package;
-`infra/` = ports (tasks, log_config, tools); `host.py`/`version_info.py` =
+`datev/` = the lazy DATEVconnect integration (DATEV-mode only; never imported when
+off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`);
+`infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
+`file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
 ### Entry point & host

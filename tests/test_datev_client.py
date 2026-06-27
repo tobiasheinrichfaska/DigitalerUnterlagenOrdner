@@ -220,6 +220,10 @@ def test_parse_checkout_path_extracts_guid_and_file_id():
     assert parse_checkout_path("nothing-here.pdf") == {}
     assert parse_checkout_path(r"\\srv\0a0a0a01-0000-4000-8000-000000000001\9085411") \
         ["doc_guid"] == "0a0a0a01-0000-4000-8000-000000000001"
+    # anchored: a GUID folder that is NOT the file's parent must NOT be captured (no false
+    # "from DATEV" for an ordinary file that merely lives under a GUID-named directory).
+    assert parse_checkout_path(
+        r"C:\0a0a0a01-0000-4000-8000-000000000001\sub\rechnung.pdf") == {}
 
 
 def test_provenance_stats_and_match():

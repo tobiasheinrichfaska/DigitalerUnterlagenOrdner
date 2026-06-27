@@ -9,7 +9,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { EventBus, PDFViewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
-import { localBaseName } from '../lib/datev.js'
+import { datevSavedNotice } from '../lib/datev.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -55,13 +55,28 @@ textBtn?.addEventListener('click', () => {
   }
 })
 
+function hasBinding() {
+  return !!(bridge && boundSession && pdfDoc)
+}
+
+// Persist the current PDF.js edits (form values + added FreeText) into the bound session via
+// the method that matches HOW the surface was opened: a node binding (save_node_back, needs a
+// pdftool binding) vs a directly-opened .pdf 'bridge' session (save_pdf_bytes — the bridge open
+// creates NO node binding, so save_node_back would reject it). Returns the bridge result.
+async function bakeEdits() {
+  const b64 = uint8ToBase64(await pdfDoc.saveDocument())
+  return sourceMode === 'session'
+    ? bridge.save_node_back(boundSession, b64)
+    : bridge.save_pdf_bytes(boundSession, b64)
+}
+
 async function saveBack() {
-  if (!bridge || !boundSession || !pdfDoc) { setStatus('Kein gebundenes Dokument'); return }
+  if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   setStatus('Speichern…')
   try {
-    const bytes = await pdfDoc.saveDocument()  // form values + added FreeText baked in
-    const res = await bridge.save_node_back(boundSession, uint8ToBase64(bytes))
-    setStatus(res && res.ok ? 'Gespeichert ✓' : `Fehler: ${(res && res.error) || 'unbekannt'}`)
+    const res = await bakeEdits()
+    setStatus(res && res.ok ? datevSavedNotice('Gespeichert ✓', res)
+      : `Fehler: ${(res && res.error) || 'unbekannt'}`)
   } catch (e) {
     setStatus(`Fehler: ${e}`)
   }
@@ -74,16 +89,14 @@ saveBtn?.addEventListener('click', saveBack)
 // (revision-less, permanent) overwrite. The result names the locally-saved file so the format
 // (a plain .pdf for a checkout) is explicit.
 async function datevWriteBack() {
-  if (!bridge || !boundSession || !pdfDoc) { setStatus('Kein gebundenes Dokument'); return }
+  if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   setStatus('Speichern…')
   try {
-    const bytes = await pdfDoc.saveDocument()
-    const saved = await bridge.save_node_back(boundSession, uint8ToBase64(bytes))
+    const saved = await bakeEdits()
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.save_to_datev(boundSession)
     if (res && res.ok) {
-      const name = localBaseName(res.local_saved)
-      setStatus(`Nach DATEV zurückgeschrieben ✓${name ? ' · ' + name : ''}`
+      setStatus(datevSavedNotice('Nach DATEV zurückgeschrieben ✓', res)
         + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
     } else if (res && res.verdict === 'declined') {
       setStatus('Abgebrochen — nicht zurückgeschrieben')
@@ -95,20 +108,16 @@ async function datevWriteBack() {
 
 // Not-connected .pdf → file it as a NEW DATEV document under a prompted Mandant.
 async function datevFileNew() {
-  if (!bridge || !boundSession || !pdfDoc) { setStatus('Kein gebundenes Dokument'); return }
+  if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   const num = window.prompt('Mandantennummer für die DATEV-Ablage')
   if (!num || !num.trim()) return
   setStatus('Ablegen…')
   try {
-    const bytes = await pdfDoc.saveDocument()
-    await bridge.save_node_back(boundSession, uint8ToBase64(bytes))
+    const saved = await bakeEdits()  // bake first; abort if it fails so we never file unedited bytes
+    if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.datev_file(boundSession, null, num.trim())
-    if (res && res.ok) {
-      const name = localBaseName(res.local_saved)
-      setStatus(`In DATEV abgelegt ✓${name ? ' · ' + name : ''}`)
-    } else {
-      setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
-    }
+    if (res && res.ok) setStatus(datevSavedNotice('In DATEV abgelegt ✓', res))
+    else setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }
 

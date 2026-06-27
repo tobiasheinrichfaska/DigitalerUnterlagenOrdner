@@ -27,7 +27,8 @@ transport; `services/` = stateful infra (render cache, CPU fairness, variants);
 `formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
 compress_pdf_bytes); `universal_importer/` = multi-format import package;
 `datev/` = the lazy DATEVconnect integration (DATEV-mode only; never imported when
-off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`);
+off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`,
+`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF), `probe_gui` (research tool));
 `infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
 `file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).

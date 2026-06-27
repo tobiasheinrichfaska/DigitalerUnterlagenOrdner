@@ -1055,6 +1055,33 @@ class CoreApi:
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
         return {"ok": True, "owner": owner_session, "node": node_id}
 
+    def save_pdf_bytes(self, session: str, data_b64: str) -> dict:
+        """Persist PDF.js-edited bytes for a PDF-Tool **bridge** session — a plain single-leaf
+        document opened directly from a ``.pdf`` (NOT a node binding; that path uses
+        ``save_node_back``, which needs a binding the bridge open never creates). Writes the
+        edited bytes into the session's first leaf so a following DATEV write-back/file uploads
+        the edits, and (via ``_datev_local_persist``) saves them to the bound file on disk.
+        Returns ``{ok, local_saved, local_kind}``."""
+        import base64
+        from core.commands import SetNodeBytes
+        if not data_b64:
+            return {"ok": False, "error": "keine Daten zum Speichern"}
+        try:
+            data = base64.b64decode(data_b64)
+        except Exception:
+            return {"ok": False, "error": "ungültige Daten"}
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unbekannte Sitzung"}
+            leaves = [n for n in s.document.root.iter() if not n.is_folder]
+            if not leaves:
+                return {"ok": False, "error": "kein PDF im Dokument"}
+            s.dispatch(SetNodeBytes(leaves[0].id, data))
+        res = {"ok": True}
+        res.update(self._datev_local_persist(session, data))   # write the .pdf on disk too
+        return res
+
     def break_node_binding(self, session: str, node_id: str) -> dict:
         """Release a node's PDF-Tool lock so the organizer op can proceed; the bound
         pdf-tool session is detached (its later save-back will report no binding)."""
@@ -1208,6 +1235,10 @@ class CoreApi:
         try:
             with open(local_path, "wb") as f:
                 f.write(edited or b"")
+            with self._lock:  # the on-disk file now matches the session — keep dirty coherent
+                s = self._sessions.get(session)
+                if s is not None:
+                    s.mark_saved()
             return {"local_saved": local_path, "local_error": None, "local_kind": "pdf"}
         except OSError as e:
             return {"local_saved": None, "local_error": str(e), "local_kind": "pdf"}
@@ -1363,13 +1394,19 @@ class CoreApi:
             if not paths:
                 return {"ok": False, "error": "Export lieferte keine Datei."}
             filed = []
+            multi = len(paths) > 1
             for p in paths:
                 with open(p, "rb") as f:
                     data = f.read()
                 label = os.path.splitext(os.path.basename(p))[0]
+                # On a split each part is its own DATEV document — give each a DISTINCT
+                # description (suffix the per-part label) so the N (revision-less, no-rollback)
+                # documents are identifiable; a single export keeps the plain description.
+                part_desc = (f"{description} — {label}" if description and multi
+                             else (description or label))
                 try:
                     r = svc.file_document(data, client_guid=guid,
-                                          description=description or label,
+                                          description=part_desc,
                                           domain_id=domain_id, folder_id=folder_id,
                                           register_id=register_id, structure_name=f"{label}.pdf")
                 except Exception as e:  # one part's failure must not abort the rest / crash

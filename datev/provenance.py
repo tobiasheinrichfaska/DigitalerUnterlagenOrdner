@@ -24,11 +24,17 @@ def parse_checkout_path(path):
     if not path:
         return {}
     parts = [p for p in re.split(r"[\\/]", str(path)) if p]
-    guid = next((_GUID_RE.search(p).group(0) for p in parts if _GUID_RE.search(p)), None)
-    if not guid:
+    if len(parts) < 2:
         return {}
-    out = {"doc_guid": guid}
-    stem = os.path.splitext(parts[-1])[0] if parts else ""
+    # Anchored to the documented shape: the GUID must be the file's PARENT directory
+    # (second-to-last segment, named EXACTLY the GUID) and the file name's stem the numeric
+    # document-file id. A loose "GUID anywhere in the path" match would falsely flag any file
+    # that merely lives somewhere under a GUID-named folder as a DATEV checkout.
+    m = _GUID_RE.fullmatch(parts[-2])
+    if not m:
+        return {}
+    out = {"doc_guid": m.group(0)}
+    stem = os.path.splitext(parts[-1])[0]
     if stem.isdigit():
         out["file_id"] = int(stem)
     return out

@@ -16,6 +16,20 @@ Mechanics it builds on: [`datev-dokumentenablage-recipe.md`](datev-dokumentenabl
 `…\<doc-guid>\<document-file-id>`). DokAb keeps **no revision** → a write is a permanent
 overwrite, so the save-back is guarded.
 
+**Two surfaces (added v3.10.0).** A DATEV checkout is a **`.pdf`**, which the host routes to the
+**PDF-Tool** surface ([`webui/src/pdftool/main.js`](../webui/pdf-tool.html)); a linked
+**`.belegtool`** opens in the **organizer**. **Both** run through `CoreApi.open` (so provenance
+is captured either way), and **both** offer DATEV write-back — the organizer via
+[`DatevBar.jsx`](../webui/src/DatevBar.jsx), the PDF-Tool via a toolbar button
+(„🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen", revealed by the pure `datevAction`).
+The PDF-Tool bakes its edits into the session (`save_pdf_bytes`, NOT `save_node_back` — a bridge
+`.pdf` open has no node binding) before the guarded write-back. The **content baseline hashes
+the RAW checkout file** (== the server file), not the re-serialised effective bytes, so an
+unedited checkout's first write-back is never a false `conflict_content`. The parallel local
+save is **format-aware** (`_datev_local_persist`): a `.belegtool` keeps its structure +
+provenance; a checkout `.pdf` is overwritten with the clean effective PDF bytes; the result's
+`local_kind` lets the UI name the saved format.
+
 ## Document state: connected vs. not connected
 
 A working document is in exactly one of two states (DATEV mode):

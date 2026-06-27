@@ -139,7 +139,9 @@ class ProbeApp:
         ttk.Entry(w, textvariable=self.fetch_id, width=40).grid(
             row=3, column=1, columnspan=3, sticky="we", **pad)
         ttk.Button(w, text="Abrufen (Details + Struktur)", command=self.fetch_by_id).grid(
-            row=3, column=4, columnspan=2, sticky="w", **pad)
+            row=3, column=4, sticky="w", **pad)
+        ttk.Button(w, text="GET /documents/{id} (roh)", command=self.get_doc_raw).grid(
+            row=3, column=5, sticky="w", **pad)
         # Confirm the uploaded FILE persists (file-id is an int, distinct from the document GUID).
         ttk.Label(w, text="Datei-ID").grid(row=4, column=0, sticky="e")
         self.file_id = tk.StringVar()
@@ -434,6 +436,18 @@ class ProbeApp:
             return
         self._run(f"Dokument {doc_id}", lambda: self.client.get_document(doc_id))
         self._run(f"Struktur {doc_id}", lambda: self.client.list_structure_items(doc_id))
+
+    def get_doc_raw(self):
+        """Single raw GET /documents/{id} — shows HTTP status + full body so existence is
+        unambiguous (200 real / 200 default-values / 404 not found)."""
+        if not self._need_client():
+            return
+        doc_id = self.fetch_id.get().strip()
+        if not doc_id:
+            messagebox.showinfo("DATEV-Probe", "Bitte eine Dokument-ID eingeben.")
+            return
+        self._run(f"GET /documents/{doc_id} (roh)",
+                  lambda: self.client.get_document_raw(doc_id))
 
     def check_file_id(self):
         """GET /document-files/{id} — confirms the uploaded file still exists (an orphan upload

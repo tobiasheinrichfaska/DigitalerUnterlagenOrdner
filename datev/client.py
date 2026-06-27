@@ -99,6 +99,14 @@ class DatevConnectClient:
     def get_document(self, doc_id):
         return self._json("document", params={"id": doc_id})
 
+    def get_document_raw(self, doc_id):
+        """GET /documents/{id} returning the HTTP status + raw body verbatim (no parsing/
+        filtering) — the decisive existence check: 200 with real data = exists, 404 = never
+        persisted. A >=400 raises (so the status/body still surface via the error path)."""
+        res = self._send("document", params={"id": doc_id}, accept="application/json")
+        return {"http_status": res.status, "raw_body": _text(res.body),
+                "location": res.headers.get("location")}
+
     def list_structure_items(self, doc_id):
         return self._json("structure_items", params={"id": doc_id})
 

@@ -697,6 +697,9 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
     top = PDFStorage.filter_keep_ancestors(nodes)
     groups = _plan_groups(top, max_pages, level)
 
+    if not groups:
+        return []  # nothing to export (empty forest) — write no file, report no paths
+
     if len(groups) == 1:
         export_pdf_with_toc(top, base_path)
         return [base_path]

@@ -107,6 +107,25 @@ def test_pathological_deep_path_is_depth_capped():
     assert "content" in leaf and leaf["content"].getvalue().startswith(b"%PDF")  # pdf survives
 
 
+def test_split_member_path_drops_traversal_and_drive_segments():
+    # A hostile member name must not spawn folder nodes named "." / ".." / "C:".
+    assert archives._split_member_path("../../etc/x.pdf") == (["etc"], "x.pdf")
+    assert archives._split_member_path("./a/./b/x.pdf") == (["a", "b"], "x.pdf")
+    assert archives._split_member_path("C:/Users/x.pdf") == (["Users"], "x.pdf")
+    assert archives._split_member_path("d:\\share\\y.pdf") == (["share"], "y.pdf")
+    # Only traversal segments → fall back to the bare basename, member still imports.
+    assert archives._split_member_path("../../x.pdf") == ([], "x.pdf")
+    assert archives._split_member_path("..") == ([], "..")  # nothing usable → raw name
+
+
+def test_zip_traversal_member_imports_without_dotdot_folders():
+    pdf = create_valid_pdf(pages=1)
+    struct = archives.extract_zip_to_structure(_zip_bytes({"../../secret/x.pdf": pdf}))
+    assert ".." not in _names(struct)               # no traversal folder node at the root
+    folder = _byname(struct, "secret")
+    assert folder is not None and _byname(folder["children"], "x.pdf") is not None
+
+
 # ------------------------------------------------------------------- tar
 def test_tar_subfolders_nest_and_keep_distinct_basenames():
     pdf = create_valid_pdf(pages=1)

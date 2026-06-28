@@ -1382,9 +1382,13 @@ class CoreApi:
         if not data:
             return {"ok": False, "error": "Keine Daten zum Ablegen."}
         name = (self.document_name(session) or "Beleg").strip() or "Beleg"
-        res = svc.file_document(data, client_guid=guid, description=description or name,
-                                domain_id=domain_id, folder_id=folder_id,
-                                register_id=register_id, structure_name=f"{name}.pdf")
+        try:
+            res = svc.file_document(data, client_guid=guid, description=description or name,
+                                    domain_id=domain_id, folder_id=folder_id,
+                                    register_id=register_id, structure_name=f"{name}.pdf")
+        except Exception as e:  # never let a create error cross the bridge as a raw rejection
+            logger.exception("[datev] file_document failed")
+            return {"ok": False, "verdict": "error", "error": str(e)}
         if res.get("ok") and res.get("provenance"):
             self._datev_set_provenance(session, res["provenance"])
             with self._lock:

@@ -399,17 +399,21 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   is captured either way, and **both** offer DATEV write-back: the organizer via `DatevBar`, the
   PDF-Tool via a „🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen" toolbar button
   (revealed by the pure `datevAction({datevMode, connected})` only for a `.pdf` in DATEV mode).
-  The PDF-Tool bakes its edits before the guarded write-back via the method that matches how it
-  was opened (`bakeEdits`): a node binding uses `save_node_back`, a **directly-opened checkout
-  `.pdf`** (bridge session, no node binding) uses **`CoreApi.save_pdf_bytes`** (writes the first
-  leaf + the on-disk `.pdf` via `_datev_local_persist`) — `save_node_back` would reject a bridge
-  session, which is why the dedicated path exists.
+  The PDF-Tool bakes its edits before a DATEV op via **`CoreApi.update_pdf_bytes`** — a
+  **session-only** write of the first leaf (NO disk write), so a refused/declined write-back
+  **never clobbers the on-disk checkout `.pdf`**; the file is written only AFTER a successful
+  verdict by `_datev_local_persist`. The plain „💾 Speichern" instead uses `save_pdf_bytes`
+  (session + disk) for a bridge `.pdf`, or `save_node_back` for a node binding (`save_node_back`
+  rejects a bridge session — no binding — which is why the dedicated bridge path exists).
 - **Format-aware local save** (`_datev_local_persist`): the parallel local save writes the
   bound path's **own format** — a `.belegtool` keeps the full structure + provenance (so the
   link round-trips); a checkout **`.pdf`** is overwritten with the **clean effective PDF bytes**
   (never inject the `.belegtool` structure into a DATEV checkout file). The result carries
   `local_kind` ('belegtool' | 'pdf') and the UI shows the **saved file name** in the success
-  notice (`datevSavedNotice`) so the user can always tell which format landed on disk.
+  notice (`datevSavedNotice`) so the user can always tell which format landed on disk. Document
+  names that become a real temp/disk path (the `datev_export` part files, the `materialize_subset`
+  view title) are run through the shared **`CoreApi._safe_filename`** (strips path separators,
+  illegal chars, trailing dots/spaces, and Windows reserved device names like `NUL`/`COM1`).
 - **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
   then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
   [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`

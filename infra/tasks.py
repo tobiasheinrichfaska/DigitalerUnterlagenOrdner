@@ -4,7 +4,7 @@ The core schedules background work (preview / compression) through this module
 instead of creating threads directly, so the execution strategy is swappable
 without touching the model:
 
-- **default**: one daemon thread per task — the current Tkinter-app behaviour;
+- **default**: one daemon thread per task — the default headless behaviour;
 - a managed thread/process pool later in the core service / backend;
 - a synchronous runner in tests for determinism.
 
@@ -46,7 +46,8 @@ def submit(fn: Callable[[], None]) -> None:
 # --- UI-thread dispatch ----------------------------------------------------
 # Some callbacks (e.g. an import-finished handler) must run on the GUI's main
 # thread. A headless backend has no such thread, so the default runs ``fn``
-# inline. The Tk app registers a dispatcher that marshals onto the Tk loop.
+# inline. A UI host can register a dispatcher that marshals onto its main loop
+# (the pywebview host does this; inline when headless).
 
 _ui_dispatcher: Optional[Callable[[Callable[[], None]], None]] = None
 

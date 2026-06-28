@@ -138,6 +138,7 @@ def test_save_node_back_rejects_a_bridge_pdf_session(tmp_path):
 
 
 def test_save_pdf_bytes_updates_bridge_session_and_writes_pdf(tmp_path):
+    # the plain 💾 Speichern: bakes the edit into the session AND writes the .pdf on disk.
     import base64
     pdf = tmp_path / "beleg.pdf"
     pdf.write_bytes(_pdf(1))
@@ -151,9 +152,62 @@ def test_save_pdf_bytes_updates_bridge_session_and_writes_pdf(tmp_path):
     assert pdf.read_bytes() == edited                 # and the on-disk .pdf was overwritten
 
 
+def test_update_pdf_bytes_bakes_session_only_no_disk_write(tmp_path):
+    # the DATEV bake: updates the session leaf but does NOT touch the on-disk .pdf (the disk
+    # write is deferred to the guarded DATEV op, so a refused write-back can't clobber the file).
+    import base64
+    pdf = tmp_path / "beleg.pdf"
+    pdf.write_bytes(_pdf(1))
+    original = pdf.read_bytes()
+    core = CoreApi()
+    sid = core.open(path=str(pdf))["session"]
+    edited = _pdf(3)
+    res = core.update_pdf_bytes(sid, base64.b64encode(edited).decode())
+    assert res["ok"] and "local_saved" not in res     # session-only: no local persist
+    assert base64.b64decode(core.get_pdf_bytes(sid)["data_b64"]) == edited  # session updated
+    assert pdf.read_bytes() == original               # ON-DISK .pdf untouched
+
+
+def test_update_pdf_bytes_guards(tmp_path):
+    import base64
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(_pdf(1))
+    core = CoreApi()
+    sid = core.open(path=str(pdf))["session"]
+    assert core.update_pdf_bytes(sid, "")["error"] == "keine Daten zum Speichern"
+    assert core.update_pdf_bytes(sid, "@@not-base64@@")["error"] == "ungültige Daten"
+    assert core.update_pdf_bytes("nope", base64.b64encode(_pdf(1)).decode())["error"] \
+        == "unbekannte Sitzung"
+
+
+def test_safe_filename_neutralizes_reserved_and_separators():
+    f = CoreApi._safe_filename
+    assert f("Rechnung 2024", "Export") == "Rechnung 2024"
+    for reserved in ("NUL", "nul", "CON", "PRN", "COM1", "LPT9", "NUL.pdf", "COM1.foo"):
+        assert f(reserved, "Export") == "Export"             # reserved (even with an extension)
+    for hostile in ("../../evil", "a/b\\c", 'x:y*z?"<>'):
+        assert not any(ch in f(hostile, "Export") for ch in '<>:"/\\|?*')  # no illegal char survives
+    assert f("", "X") == "X" and f(None, "X") == "X"
+
+
+def test_datev_local_persist_dispatches_on_extension(tmp_path):
+    core = CoreApi()
+    bt = core.open(path=_belegtool(tmp_path))["session"]     # .belegtool path → save() format
+    r1 = core._datev_local_persist(bt, b"%PDF ignored on the belegtool branch")
+    assert r1["local_kind"] == "belegtool" and r1["local_saved"].endswith(".belegtool")
+    pdf = tmp_path / "x.pdf"                                  # .pdf path → raw bytes written
+    pdf.write_bytes(_pdf(1))
+    pd = core.open(path=str(pdf))["session"]
+    r2 = core._datev_local_persist(pd, b"%PDF-1.4 edited")
+    assert r2["local_kind"] == "pdf" and pdf.read_bytes() == b"%PDF-1.4 edited"
+    new = core.open()["session"]                             # untitled, no bound path
+    r3 = core._datev_local_persist(new, b"x")
+    assert r3["local_saved"] is None and "Speicherort" in r3["local_error"]
+
+
 def test_pdf_tool_edit_reaches_datev_writeback(tmp_path):
-    # the full PDF-Tool DATEV path: open a checkout .pdf (bridge), bake an edit via
-    # save_pdf_bytes, then write back — the bytes UPLOADED to DATEV must reflect the edit.
+    # the full PDF-Tool DATEV path: open a checkout .pdf (bridge), bake an edit via the
+    # session-only update_pdf_bytes, then write back — the UPLOADED bytes must reflect the edit.
     from datev.inapp import DatevService
     import base64
     import fitz
@@ -189,12 +243,52 @@ def test_pdf_tool_edit_reaches_datev_writeback(tmp_path):
     svc = DatevService(_Client())
     core._datev_service = svc
     sid = core.open(path=str(checkout))["session"]
-    core.save_pdf_bytes(sid, base64.b64encode(_pdf(4)).decode())   # edit: now 4 pages
+    core.update_pdf_bytes(sid, base64.b64encode(_pdf(4)).decode())   # edit: now 4 pages (session)
     res = core.datev_save_back(sid, confirmed=True)
     assert res["ok"] and res["verdict"] == "ok", res
     uploaded = svc._client.uploaded[0]
     assert uploaded != raw                                          # the edit reached DATEV
     assert fitz.open(stream=uploaded, filetype="pdf").page_count == 4
+
+
+def test_datev_writeback_refused_does_not_clobber_local_checkout(tmp_path):
+    # REGRESSION (round-7 audit, Medium): the PDF-Tool DATEV bake is SESSION-ONLY, so a refused
+    # write-back (here conflict_content: the server changed since open) must leave the on-disk
+    # checkout .pdf UNTOUCHED — never silently overwrite it while telling the user "save locally".
+    from datev.inapp import DatevService
+    import base64
+    raw = _pdf(1)
+    fid = 1085411
+    checkout = tmp_path / GUID / f"{fid}.pdf"
+    checkout.parent.mkdir(parents=True)
+    checkout.write_bytes(raw)
+
+    class _Client:
+        def get_document(self, g):
+            return {"change_date_time": "t0", "checked_out": False,
+                    "correspondence_partner_guid": "c"}
+
+        def get_document_file(self, f):
+            return b"%PDF-1.4 DIFFERENT server bytes"     # server changed → conflict_content
+
+        def list_structure_items(self, g):
+            return [{"id": 1085409, "document_file_id": fid}]
+
+        def upload_document_file(self, data):
+            raise AssertionError("must not upload on a refused write-back")
+
+        def update_structure_item(self, *a, **k):
+            raise AssertionError("must not PUT on a refused write-back")
+
+    core = CoreApi()
+    core._datev_mode = True
+    core._datev_service = DatevService(_Client())
+    sid = core.open(path=str(checkout))["session"]
+    core.update_pdf_bytes(sid, base64.b64encode(_pdf(4)).decode())   # bake edit (session only)
+    assert checkout.read_bytes() == raw                             # bake did NOT touch disk
+    res = core.datev_save_back(sid, confirmed=True)
+    assert not res["ok"] and res["verdict"] == "conflict_content"
+    assert checkout.read_bytes() == raw                             # refused → file left untouched
 
 
 def test_datev_file_to_pdf_path_overwrites_with_filed_bytes(tmp_path):
@@ -617,6 +711,21 @@ def test_datev_export_sanitizes_hostile_document_name(tmp_path):
     core.dispatch(sid, {"type": "Rename", "node_id": root_id, "name": "../../evil/name"})
     res = core.datev_export(sid)  # single PDF (no split) — must not raise or escape
     assert res["ok"] and len(svc.filed) == 1
+
+
+def test_datev_export_sanitizes_reserved_device_name(tmp_path):
+    # a Windows reserved device name ("NUL") as the document name must not become the temp file
+    # base — _safe_filename falls back to the default (datev_export is a distinct caller of it).
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+            "correspondence_partner_guid": "client-x"}
+    svc = FakeService(prov=prov)
+    core = _core_with_service(svc)
+    resp = core.open(path=_belegtool(tmp_path))
+    sid = resp["session"]
+    core.dispatch(sid, {"type": "Rename", "node_id": resp["tree"]["id"], "name": "NUL"})
+    res = core.datev_export(sid)
+    assert res["ok"] and len(svc.filed) == 1
+    assert svc.filed[0]["structure_name"].split(".")[0].upper() != "NUL"   # not a device name
 
 
 def test_datev_export_partial_failure_reports_how_many_landed(tmp_path):

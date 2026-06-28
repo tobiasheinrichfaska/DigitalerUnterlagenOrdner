@@ -180,6 +180,22 @@ def test_update_pdf_bytes_guards(tmp_path):
         == "unbekannte Sitzung"
 
 
+def test_dispatch_pdf_bytes_rejects_a_folder_only_document():
+    # a session whose document has no leaf (folders only) has no PDF to write into:
+    # _dispatch_pdf_bytes must refuse rather than IndexError on leaves[0].
+    import base64
+    from core.session import DocumentSession
+    core = CoreApi()
+    doc = Document(Node(name="root", is_folder=True,
+                        children=(Node(name="sub", is_folder=True, children=()),)))
+    core._sessions["folderonly"] = DocumentSession(doc, engine=core._engine)
+    res = core.update_pdf_bytes("folderonly", base64.b64encode(_pdf(1)).decode())
+    assert res == {"ok": False, "error": "kein PDF im Dokument"}
+    # save_pdf_bytes shares the guard → same refusal, and nothing is persisted
+    assert core.save_pdf_bytes("folderonly", base64.b64encode(_pdf(1)).decode()) \
+        == {"ok": False, "error": "kein PDF im Dokument"}
+
+
 def test_safe_filename_neutralizes_reserved_and_separators():
     f = CoreApi._safe_filename
     assert f("Rechnung 2024", "Export") == "Rechnung 2024"

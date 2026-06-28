@@ -102,7 +102,8 @@ async function datevWriteBack() {
   if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   setStatus('Speichern…')
   try {
-    const saved = await bakeForDatev()   // session only; disk write happens after the guard
+    const b64 = uint8ToBase64(await pdfDoc.saveDocument())
+    const saved = await bridge.update_pdf_bytes(boundSession, b64)  // session only; disk write after the guard
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.save_to_datev(boundSession)
     if (res && res.ok) {
@@ -111,7 +112,14 @@ async function datevWriteBack() {
     } else if (res && res.verdict === 'declined') {
       setStatus('Abgebrochen — nicht zurückgeschrieben')
     } else {
-      setStatus(`DATEV: ${(res && (res.error || res.verdict)) || 'fehlgeschlagen'}`)
+      // conflict/locked/error → DATEV refused, but the edit is real work and must not be lost.
+      // The bake above was session-only (never touched disk), so persist it to the on-disk .pdf
+      // now — mirrors the organizer's saveFile() fallback. The DATEV server copy stays untouched.
+      const verdict = (res && (res.error || res.verdict)) || 'fehlgeschlagen'
+      const local = await bridge.save_pdf_bytes(boundSession, b64)
+      setStatus(local && local.ok
+        ? datevSavedNotice(`DATEV: ${verdict} — lokal gesichert`, local)
+        : `DATEV: ${verdict}`)
     }
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }

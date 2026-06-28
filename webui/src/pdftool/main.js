@@ -9,7 +9,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { EventBus, PDFViewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
-import { datevSavedNotice } from '../lib/datev.js'
+import { datevSavedNotice, datevVerdictKey } from '../lib/datev.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -115,15 +115,19 @@ async function datevWriteBack() {
       // conflict/locked/error → DATEV refused, but the edit is real work and must not be lost.
       // The bake above was session-only (never touched disk), so persist it to the on-disk .pdf
       // now — mirrors the organizer's saveFile() fallback. The DATEV server copy stays untouched.
-      const verdict = (res && (res.error || res.verdict)) || 'fehlgeschlagen'
+      // A guard verdict (locked/conflict_*/no_structure_item) has a localized German message
+      // (already prefixed "DATEV: "); the 'error' verdict carries the real cause in res.error —
+      // show THAT, not the raw code (mirrors App.jsx). datevVerdictKey already prefixes "DATEV: ".
+      const guard = res && res.verdict && res.verdict !== 'error'
+      const head = guard ? datevVerdictKey(res.verdict) : `DATEV: ${(res && res.error) || 'fehlgeschlagen'}`
       const local = await bridge.save_pdf_bytes(boundSession, b64)
       // save_pdf_bytes returns ok:true once the session bake succeeds, even if the on-disk
       // write inside _datev_local_persist failed (local_error set). Only claim "lokal gesichert"
       // when the disk write actually landed — otherwise surface the local error so the user
-      // never closes the window believing a lost edit is safe. Mirrors the ok-path at line 111.
+      // never closes the window believing a lost edit is safe.
       setStatus(local && local.ok && !local.local_error
-        ? datevSavedNotice(`DATEV: ${verdict} — lokal gesichert`, local)
-        : `DATEV: ${verdict}${local && local.local_error ? ` — lokal: ${local.local_error}` : ''}`)
+        ? datevSavedNotice(`${head} — lokal gesichert`, local)
+        : `${head}${local && local.local_error ? ` — lokal: ${local.local_error}` : ''}`)
     }
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }
@@ -138,8 +142,13 @@ async function datevFileNew() {
     const saved = await bakeForDatev()  // session only; abort if it fails so we never file unedited bytes
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.datev_file(boundSession, null, num.trim())
-    if (res && res.ok) setStatus(datevSavedNotice('In DATEV abgelegt ✓', res))
-    else setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
+    // On success the parallel local save may still have failed (filed in DATEV but the on-disk
+    // .pdf wasn't updated → now stale). Surface res.local_error too, never a bare "✓" — mirrors
+    // App.jsx fileToDatev and datevWriteBack's ok-path so the user knows to re-save locally.
+    if (res && res.ok) {
+      setStatus(datevSavedNotice('In DATEV abgelegt ✓', res)
+        + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
+    } else setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }
 

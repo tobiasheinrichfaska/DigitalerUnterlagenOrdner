@@ -116,8 +116,9 @@ async function datevWriteBack() {
       // The bake above was session-only (never touched disk), so persist it to the on-disk .pdf
       // now — mirrors the organizer's saveFile() fallback. The DATEV server copy stays untouched.
       // A guard verdict (locked/conflict_*/no_structure_item) has a localized German message
-      // (already prefixed "DATEV: "); the 'error' verdict carries the real cause in res.error —
-      // show THAT, not the raw code (mirrors App.jsx). datevVerdictKey already prefixes "DATEV: ".
+      // (the four known ones are already prefixed "DATEV: "; an unknown verdict falls back to
+      // "DATEV-Rückschreiben fehlgeschlagen."); the 'error' verdict carries the real cause in
+      // res.error — show THAT with a "DATEV: " prefix, not the raw code. Mirrors App.jsx.
       const guard = res && res.verdict && res.verdict !== 'error'
       const head = guard ? datevVerdictKey(res.verdict) : `DATEV: ${(res && res.error) || 'fehlgeschlagen'}`
       const local = await bridge.save_pdf_bytes(boundSession, b64)

@@ -45,7 +45,7 @@ test.describe('PDF-Tool DATEV', () => {
     expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev'])
   })
 
-  test('a refused write-back shows the conflict message, not a success', async ({ page }) => {
+  test('a refused write-back shows the conflict AND falls back to a local save', async ({ page }) => {
     await installBridge(page, { connected: true, datevMode: true })
     await page.addInitScript(() => { window.__sbResult = { ok: false, verdict: 'conflict_changed' } })
     await page.goto('/pdf-tool.html')
@@ -54,7 +54,11 @@ test.describe('PDF-Tool DATEV', () => {
     await btn.click()
     const status = page.locator('#pdf-status')
     await expect(status).toHaveText(/DATEV: conflict_changed/, { timeout: 20000 })
+    await expect(status).toHaveText(/lokal gesichert/)        // the edit was NOT lost
     await expect(status).not.toHaveText(/zurückgeschrieben ✓/)
+    // session bake → guarded write-back refused → local save_pdf_bytes fallback persists the edit
+    const calls = await page.evaluate(() => window.__calls.map((c) => c[0]))
+    expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev', 'save_pdf_bytes'])
   })
 
   test('a not-connected pdf shows file-anew; click files via datev_file with the Mandant', async ({ page }) => {

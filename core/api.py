@@ -1079,7 +1079,7 @@ class CoreApi:
     def _dispatch_pdf_bytes(self, session, data):
         """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
         (``SetNodeBytes``). No disk write. Returns ``{ok}`` or an error dict."""
-        from core.commands import SetNodeBytes, CommandError
+        from core.commands import SetNodeBytes  # CommandError is module-level (line 25)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:

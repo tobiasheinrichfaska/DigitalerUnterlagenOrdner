@@ -21,7 +21,7 @@ function installBridge(page, { connected, datevMode }) {
       },
       datev_status: () => ({ ok: true, datev_mode: datevMode, connected }),
       update_pdf_bytes: (s) => { calls.push(['update_pdf_bytes', s]); return { ok: true } },  // session-only bake
-      save_pdf_bytes: (s) => { calls.push(['save_pdf_bytes', s]); return { ok: true, local_saved: 'C:/x/1085411.pdf', local_kind: 'pdf' } },
+      save_pdf_bytes: (s) => { calls.push(['save_pdf_bytes', s]); return window.__localResult || { ok: true, local_saved: 'C:/x/1085411.pdf', local_kind: 'pdf' } },
       save_to_datev: (s) => { calls.push(['save_to_datev', s]); return window.__sbResult || { ok: true, verdict: 'ok', local_saved: 'C:/x/1085411.pdf' } },
       datev_file: (s, c, num) => { calls.push(['datev_file', s, num]); return { ok: true, provenance: { doc_guid: 'g', file_id: 1 }, local_saved: 'C:/x/1085411.pdf' } },
     }
@@ -57,6 +57,28 @@ test.describe('PDF-Tool DATEV', () => {
     await expect(status).toHaveText(/lokal gesichert/)        // the edit was NOT lost
     await expect(status).not.toHaveText(/zurückgeschrieben ✓/)
     // session bake → guarded write-back refused → local save_pdf_bytes fallback persists the edit
+    const calls = await page.evaluate(() => window.__calls.map((c) => c[0]))
+    expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev', 'save_pdf_bytes'])
+  })
+
+  test('a refused write-back whose local fallback ALSO fails surfaces the local error, not false success', async ({ page }) => {
+    // Regression (round 9): save_pdf_bytes returns ok:true once the session bake succeeds even if
+    // the on-disk write inside _datev_local_persist failed (local_error set, local_saved null).
+    // The fallback must NOT claim "lokal gesichert" then — it must surface the disk error so the
+    // user never closes the window believing a lost edit is safe.
+    await installBridge(page, { connected: true, datevMode: true })
+    await page.addInitScript(() => {
+      window.__sbResult = { ok: false, verdict: 'conflict_changed' }
+      window.__localResult = { ok: true, local_saved: null, local_error: 'Datenträger voll', local_kind: 'pdf' }
+    })
+    await page.goto('/pdf-tool.html')
+    const btn = page.locator('#btn-datev')
+    await expect(btn).toBeVisible({ timeout: 20000 })
+    await btn.click()
+    const status = page.locator('#pdf-status')
+    await expect(status).toHaveText(/DATEV: conflict_changed/, { timeout: 20000 })
+    await expect(status).toHaveText(/lokal: Datenträger voll/)   // the disk failure is surfaced
+    await expect(status).not.toHaveText(/lokal gesichert/)       // NOT a false success
     const calls = await page.evaluate(() => window.__calls.map((c) => c[0]))
     expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev', 'save_pdf_bytes'])
   })

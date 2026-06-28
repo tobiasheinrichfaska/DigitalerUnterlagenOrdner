@@ -117,9 +117,13 @@ async function datevWriteBack() {
       // now — mirrors the organizer's saveFile() fallback. The DATEV server copy stays untouched.
       const verdict = (res && (res.error || res.verdict)) || 'fehlgeschlagen'
       const local = await bridge.save_pdf_bytes(boundSession, b64)
-      setStatus(local && local.ok
+      // save_pdf_bytes returns ok:true once the session bake succeeds, even if the on-disk
+      // write inside _datev_local_persist failed (local_error set). Only claim "lokal gesichert"
+      // when the disk write actually landed — otherwise surface the local error so the user
+      // never closes the window believing a lost edit is safe. Mirrors the ok-path at line 111.
+      setStatus(local && local.ok && !local.local_error
         ? datevSavedNotice(`DATEV: ${verdict} — lokal gesichert`, local)
-        : `DATEV: ${verdict}`)
+        : `DATEV: ${verdict}${local && local.local_error ? ` — lokal: ${local.local_error}` : ''}`)
     }
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }

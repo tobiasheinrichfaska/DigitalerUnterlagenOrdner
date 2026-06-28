@@ -594,6 +594,19 @@ def test_datev_file_resolve_failure_returns_error(tmp_path):
     assert not res["ok"] and "unbekannt" in res["error"]
 
 
+def test_datev_file_service_raise_returns_error_not_propagated(tmp_path):
+    # Regression (round 9): svc.file_document() raising (DatevAuthError / network down / license)
+    # must be caught and returned as {ok: False, verdict: 'error', ...} — NOT propagate uncaught
+    # across the pywebview bridge as a raw rejection. Mirrors datev_save_back / datev_export guards.
+    class Boom(FakeService):
+        def file_document(self, *a, **k):
+            raise RuntimeError("network down")
+    core = _core_with_service(Boom(prov=None))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_file(sid, mandant_number=10001)
+    assert not res["ok"] and res["verdict"] == "error" and "network down" in res["error"]
+
+
 def test_datev_file_no_mandant_errors(tmp_path):
     core = _core_with_service(FakeService(prov=None))
     sid = core.open(path=_belegtool(tmp_path))["session"]

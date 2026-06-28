@@ -15,10 +15,16 @@ covers the basics.
 1. Look at the preview panel on the right; scroll through the pages.
 2. Zoom with **Strg + Mausrad** (Ctrl + wheel) over the preview, and use the zoom bar
    **− / ＋ / 100 %** at the bottom of the preview.
+3. Scroll **down** to (say) page 5, note a line of text at the very top of the viewport,
+   then zoom **in** and **out** a couple of steps.
 
 **Expected:**
 - Pages render in the preview (windowed — only visible pages render, placeholders fill
   in as you scroll; see MT-39). Ctrl+wheel and the zoom bar change the page size.
+- *Not obvious (v3.10.0):* zooming while scrolled down **keeps the document position** —
+  the line that was at the top of the viewport stays at the top after the zoom (the page
+  you were reading does not drift up or down). Before this fix the pixel scroll stayed
+  fixed, so the content slid away when you zoomed deep in a long document.
 - The zoom bar also shows the viewport position as **"Seite n / m"**.
 - *Not obvious:* there is **no separate "Original anzeigen" toggle** — the preview shows
   the node's effective bytes; the compression **working-preview** (MT-11) is where you

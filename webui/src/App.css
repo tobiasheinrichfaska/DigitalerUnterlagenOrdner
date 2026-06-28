@@ -83,6 +83,23 @@ header {
 header h1 { font-size: 19px; margin: 0; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; }
+
+/* DATEV-mode bar (v3.10.0) */
+.datev-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.datev-toggle {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; color: var(--muted, #667); cursor: pointer;
+}
+.datev-toggle.active { color: #fff; background: #2b8a3e; border-color: #2b8a3e; }
+.datev-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted, #556); }
+.datev-state.connected { color: #2b6cb0; }
+.datev-state .datev-warn { color: #b54708; font-style: italic; }
+.datev-action {
+  font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; cursor: pointer;
+}
+.datev-action:disabled { opacity: 0.5; cursor: progress; }
 button {
   font: inherit;
   padding: 5px 10px;
@@ -93,6 +110,40 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
+
+/* #2 icon-only toolbar buttons: square, compact, the label lives in the tooltip. */
+.tb-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; height: 34px; padding: 0 8px;
+  font-size: 16px; line-height: 1;
+}
+.tb-btn .count-badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box;
+  font-size: 11px; font-weight: 600; line-height: 16px; text-align: center;
+  color: #fff; background: var(--accent, #2b6cb0); border-radius: 9px;
+}
+.tb-btn .dirty-dot { margin-left: 2px; color: var(--accent, #2b6cb0); font-size: 18px; }
+
+/* Save split-button (#3): main part + caret look like one button; the caret
+   opens a small dropdown menu (Speichern unter…). */
+.save-split { position: relative; display: inline-flex; }
+.save-split .save-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.save-split .save-caret {
+  border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none;
+  padding-left: 7px; padding-right: 7px;
+}
+.save-menu {
+  position: absolute; top: 100%; left: 0; margin-top: 3px; z-index: 50;
+  background: #fff; border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); padding: 4px; min-width: max-content;
+}
+.save-menu-item {
+  display: block; width: 100%; text-align: left; white-space: nowrap;
+  background: none; border: none; border-radius: 4px; padding: 6px 12px;
+}
+.save-menu-item:hover, .save-menu-item:focus { background: #eef4fb; border-color: transparent; outline: none; }
 
 ul.tree { user-select: none; } /* so Shift-click range-select doesn't highlight text */
 /* No list indentation: rows span the full width (so dragging left to pop out a
@@ -270,6 +321,9 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 .exp-row { display: flex; align-items: center; gap: 8px; margin: 7px 0; cursor: pointer; }
 .exp-row.exp-sub { margin-left: 24px; color: var(--muted); font-size: 0.92em; }
 .exp-row input[disabled] { cursor: not-allowed; }
+.exp-num { width: 64px; padding: 2px 6px; }
+.exp-level { padding: 2px 6px; }
+.exp-num:disabled, .exp-level:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* help modal */
 .help-modal {
@@ -344,6 +398,14 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
   padding: 0 3px; font-size: 0.95em; line-height: 1;
 }
 .te-chip .te-x { font-size: 1.1em; }
+/* multi-select tagging (#7): a count badge + a "partial" chip (tag on only SOME
+   of the selected nodes) rendered hollow so it reads differently from a full tag. */
+.te-multi { opacity: 0.7; font-size: 0.8em; font-style: italic; margin-right: 2px; }
+.te-chip.te-chip-partial {
+  background: transparent; color: var(--accent, #2b6cb0);
+  border: 1px dashed var(--accent, #2b6cb0);
+}
+.te-chip.te-chip-partial .te-star, .te-chip.te-chip-partial .te-x { color: var(--accent, #2b6cb0); }
 .te-input { min-width: 90px; flex: 0 1 140px; padding: 2px 6px; }
 .te-favs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .te-fav {

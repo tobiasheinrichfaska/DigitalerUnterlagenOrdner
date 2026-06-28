@@ -8,8 +8,10 @@ import { ExportDialog } from './ExportDialog'
 import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
+import { DatevBar } from './DatevBar'
+import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
-import { findNode, findParent, isAncestorOf, afterLevels } from './lib/tree'
+import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
@@ -54,6 +56,8 @@ export default function App() {
   const [dirty, setDirty] = useState(false) // unsaved changes since last open/save
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
+  const [datevMode, setDatevMode] = useState(false) // DATEV mode on (per-user host setting)
+  const [datevOpen, setDatevOpen] = useState(null) // {checked_out_at_open, source_name} from the open response
   const { width: treeWidth, startResize } = useResizablePane()
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
   // preventDefault the webview's page zoom). Bound via a *callback ref* so it attaches
@@ -177,6 +181,12 @@ export default function App() {
   // (A Python-side flag, not evaluate_js — the latter hangs during window close.)
   useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
+  // DATEV mode: read the per-user setting once on mount (cheap; when off the host
+  // never imports the datev package). The bar lets the user flip it.
+  useEffect(() => {
+    core.datevStatus().then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     // Fetch config first so we can honour a startup_path (a .belegtool handed
     // over by the legacy GUI's "open in new GUI"); otherwise open an empty doc.
@@ -185,6 +195,7 @@ export default function App() {
       .catch(() => null)
       .then((r) => run(core.open(null, r?.startup_path || null)).then((resp) => {
         apply(resp)
+        setDatevOpen(resp?.datev || null) // DATEV provenance/checked-out hint captured at open
         if (resp?.ok && allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
       }))
       .catch((e) => setError(String(e.message || e)))
@@ -388,6 +399,9 @@ export default function App() {
   // DOCUMENT order (else null) — pure logic in lib/selection.js (unit-tested there)
   const mergeable = mergeableIds(state?.tree, selectedIds)
 
+  // the selected node objects (for the multi-select tag editor, #7)
+  const selectedNodes = state?.tree ? selectedIds.map((id) => findNode(state.tree, id)).filter(Boolean) : []
+
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
   // their common parent if they share one, else at the root (always safe).
   const groupable = (() => {
@@ -408,14 +422,87 @@ export default function App() {
     dispatch({ type: 'GroupIntoFolder', node_ids: ids, parent_id: parentId, name, new_id: null, index: null })
   }
 
+  // Open a leaf in the PDF-Tool (binds + locks the node, opens a bound window where the
+  // user can add text / fill forms and save back). Folders have no PDF → core refuses
+  // them; the context-menu entry is leaf-only, and we mirror that guard here.
+  const openInPdfTool = (node) => {
+    if (!session || !node || node.is_folder) return
+    run(core.openNodeInPdftool(session, node.id)).then((resp) => {
+      if (resp && resp.ok === false) setError(resp.error || 'PDF-Tool konnte nicht geöffnet werden.')
+    })
+  }
+
+  // New folder at the selection (planned #8): inside a selected folder, as a sibling
+  // after a selected leaf, else at the root — with a naming dialog (default pre-filled).
+  const addFolderAtSelection = () => {
+    if (viewActive || !state?.tree) return
+    const target = newFolderTarget(state.tree, selected?.id)
+    const raw = window.prompt(t('Name des neuen Ordners'), t('Neuer Ordner'))
+    const name = raw != null ? raw.trim() : null
+    if (!name) return
+    dispatch({ type: 'AddFolder', parent_id: target.parentId, name, index: target.index, new_id: null })
+  }
+
   const openFile = () => {
     if (dirty && !window.confirm(t('Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?'))) return
     run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) {
         setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
+        setDatevOpen(resp.datev || null) // refresh the DATEV badge/checked-out hint for the new file
         if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
       }
+    })
+  }
+
+  // --- DATEV mode (v3.10.0; ops delegate to the host, no-ops when mode is off) ---
+  const datevProvenance = state?.tree?.datev || null
+  const datevConnected = isDatevConnected(datevProvenance)
+  const patchProvenance = (prov) =>
+    setState((p) => (p?.tree ? { ...p, tree: { ...p.tree, datev: prov } } : p))
+  const toggleDatevMode = () =>
+    run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+  const saveToDatev = () => run(core.saveToDatev(session)).then((res) => {
+    if (res?.ok) {
+      if (res.provenance) patchProvenance(res.provenance)
+      if (res.local_error) {
+        // DATEV got the edit, but the parallel local save failed. Say BOTH facts (an error
+        // alone would read as "the write-back failed") and KEEP the document dirty so the
+        // user can re-save the local copy to a writable location.
+        setError(`${t('Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.')} ${res.local_error}`)
+      } else {
+        // The host saved the bound local file in parallel (no Save As prompt). Show the saved
+        // file name so the format is explicit — a .belegtool bundle (organizer) vs the plain
+        // .pdf of a DATEV checkout — so the user can always tell WHICH format landed on disk.
+        setDirty(false)
+        setNotice(datevSavedNotice(t('Nach DATEV zurückgeschrieben'), res))
+      }
+    } else if (res && res.verdict !== 'declined') {
+      // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
+      // OFFER the filesystem save fallback the design promises, so the edit isn't lost.
+      // A guard verdict (locked/conflict_*/no_structure_item) has a localized message; the
+      // 'error' verdict (mid-write network/HTTP failure) carries the real cause in res.error
+      // — show THAT, not the generic fallback (which would hide why it failed).
+      const guard = res.verdict && res.verdict !== 'error'
+      setError(guard ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
+      saveFile()
+    }
+  })
+  const fileToDatev = () => {
+    const num = window.prompt(t('Mandantennummer für die DATEV-Ablage'))
+    if (num == null || !num.trim()) return
+    run(core.datevFile(session, { mandantNumber: num.trim() })).then((res) => {
+      if (res?.ok) {
+        if (res.provenance) patchProvenance(res.provenance)
+        if (res.local_error) {
+          // Filed to DATEV, but the bound .belegtool couldn't be saved with the new link.
+          // Say both facts and keep the document dirty so the link can be re-saved locally.
+          setError(`${t('In DATEV abgelegt, aber lokal nicht gespeichert.')} ${res.local_error}`)
+        } else {
+          setDirty(false)
+          setNotice(datevSavedNotice(t('In DATEV abgelegt'), res))
+        }
+      } else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
     })
   }
 
@@ -444,11 +531,20 @@ export default function App() {
   const doExport = (options) => {
     const ids = exportAsk?.ids ?? null
     setExportAsk(null)
+    // #export-to-DATEV: file the exported PDF(s) as new DATEV document(s) under the same
+    // client instead of writing to disk (every split part becomes its own document).
+    if (options?.to_datev) {
+      return run(core.datevExport(session, ids, options)).then((res) => {
+        if (res?.ok) { setError(null); setNotice(t('In DATEV abgelegt ({n} Dokumente)', { n: res.parts })) }
+        else if (res) setError(res.error || t('DATEV-Ablage fehlgeschlagen.'))
+      })
+    }
     return run(core.exportPdf(session, ids, options)).then((resp) => {
       if (resp?.ok) {
         setError(null)
         const entries = t(resp.count === 1 ? 'Eintrag' : 'Einträge')
-        const base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
+        let base = t('PDF exportiert ({count} {entries})', { count: resp.count, entries })
+        if (resp.paths && resp.paths.length > 1) base += ` — ${t('{n} Dateien', { n: resp.paths.length })}`
         // resp.warning is a German backend message ("Ohne Seiten übersprungen: …")
         // with dynamic names — localize it before composing the (translated) notice.
         setNotice(resp.warning ? `${base} — ${localizeMessage(t, resp.warning)}` : base)
@@ -502,13 +598,20 @@ export default function App() {
           onSave={saveFile}
           onSaveAs={saveFileAs}
           onExport={() => exportPdf(selectedIds.length ? selectedIds : null)}
-          onAddFolder={() => dispatch({ type: 'AddFolder', parent_id: state.tree.id, name: t('Neuer Ordner'), index: null, new_id: null })}
+          onAddFolder={addFolderAtSelection}
           onUndo={undo} onRedo={redo} onToggleTags={toggleTags}
           onHelp={() => setHelpOpen(true)}
           lang={lang} setLang={setLang}
           dirty={dirty} selectedCount={selectedIds.length}
           canUndo={state?.can_undo} canRedo={state?.can_redo}
           tagsOn={tagsOn} busy={busy} editLocked={viewActive}
+        />
+        <DatevBar
+          datevMode={datevMode} connected={datevConnected}
+          sourceName={datevProvenance?.source_name || datevOpen?.source_name}
+          checkedOutAtOpen={!!datevOpen?.checked_out_at_open}
+          onToggleMode={toggleDatevMode} onSaveBack={saveToDatev} onFile={fileToDatev}
+          busy={!!busy}
         />
       </header>
 
@@ -553,7 +656,7 @@ export default function App() {
         </div>
         <div className="splitter" onMouseDown={startResize} title={t('Breite der Baumansicht ziehen')} />
         <PreviewPane
-          previewRef={previewRef} tagsOn={tagsOn} selected={selected}
+          previewRef={previewRef} tagsOn={tagsOn} selected={selected} selectedNodes={selectedNodes}
           docTags={allTags(state?.tree)} dispatch={dispatch} session={session}
           onPreview={onPreview} defaultDpi={config?.default_dpi ?? 150}
           onCompressionResolved={setUndecided}
@@ -563,7 +666,7 @@ export default function App() {
         />
       </div>
 
-      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} selectedIds={selectedIds}
+      <ContextMenu menu={menu} dispatch={dispatch} onClose={() => setMenu(null)} mergeIds={mergeable} group={groupable} onExport={exportPdf} onDelete={deleteSelection} onGroup={groupSelection} onOpenInPdfTool={openInPdfTool} selectedIds={selectedIds}
         onSetCollapsed={setCollapsedFor} onExpandAll={expandAll} onCollapseAll={collapseAll} statuses={config?.statuses ?? []} editLocked={viewActive} />
 
       {saveAsk && (
@@ -574,6 +677,7 @@ export default function App() {
 
       {exportAsk && (
         <ExportDialog hasTags={allTags(state?.tree).length > 0}
+          datevAvailable={datevMode && datevConnected}
           onCancel={() => setExportAsk(null)} onChoose={doExport} />
       )}
 

@@ -11,7 +11,7 @@ const STATUS_KEYS = ['erfasst', 'zu erfassen', 'vorjahreswert']
 
 function setup(node, extra = {}) {
   const spies = {
-    dispatch: vi.fn(), onClose: vi.fn(), onExport: vi.fn(),
+    dispatch: vi.fn(), onClose: vi.fn(), onExport: vi.fn(), onOpenInPdfTool: vi.fn(),
     onSetCollapsed: vi.fn(), onExpandAll: vi.fn(), onCollapseAll: vi.fn(),
   }
   const result = render(
@@ -42,6 +42,18 @@ describe('ContextMenu', () => {
   it('single-page leaf hides Split', () => {
     setup({ ...leaf, pdf_length: 1 })
     expect(screen.queryByText(/Splitten/)).toBeNull()
+  })
+
+  it('leaf: "Im PDF-Tool öffnen" opens the bound editor; folder never offers it', () => {
+    const { onOpenInPdfTool, onClose } = setup(leaf)
+    fireEvent.click(screen.getByText('Im PDF-Tool öffnen'))
+    expect(onOpenInPdfTool).toHaveBeenCalledWith(leaf)  // a leaf can be opened in the PDF-Tool
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('folder hides "Im PDF-Tool öffnen" (a folder has no PDF)', () => {
+    setup(folder)
+    expect(screen.queryByText('Im PDF-Tool öffnen')).toBeNull()
   })
 
   it('folder: Ordner anlegen + Zuklappen + Alle entries; no Split', () => {

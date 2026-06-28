@@ -103,6 +103,24 @@ a Word/Excel/`.md` file.
 
 ---
 
+## MT-34b: Window remembers its size / position / monitor
+
+**Steps:**
+1. Launch the app. **Resize** the window and **drag it** to a clear spot — if you have
+   more than one monitor, move it to the **second** monitor.
+2. **Close** the window (the app exits).
+3. **Launch** the app again.
+
+**Expected:**
+- The window reopens at the **same size and position** as you left it — including on the
+  **same monitor** (multi-monitor).
+- *Not obvious:* only the **first/main** window restores; extra **Neues Fenster** windows
+  open at the default size. If the monitor you last used is **disconnected**, the app falls
+  back to the **default centred** 1280×820 instead of opening off-screen. (Geometry is
+  stored in `%APPDATA%\DigitalerUnterlagenOrdner\window.json`.)
+
+---
+
 ## MT-35: Unsaved-changes guards
 
 **Steps:**
@@ -299,3 +317,20 @@ folders.
   moving it would silently affect rows you can't see — so structure is locked until you
   **Ansicht zurücksetzen** (clear the search). **Content edits stay available**: rename,
   status, and compression still work on the rows you can see.
+
+**D — Multi-select tagging (#7):**
+10. With tagging **on**, give two leaves a shared tag (e.g. `Steuer` on both) and one of
+    them a second tag (e.g. `2024` on leaf A only).
+11. **Ctrl+click** (or Shift-range) to select **both** leaves at once.
+12. In the tag editor above the preview, **add** a tag (e.g. `Wichtig`), then **remove**
+    the shared `Steuer` chip.
+
+**Expected (D):**
+- The editor shows a small **„2 markiert"** badge and the **union** of the two leaves'
+  tags. *Not obvious:* a tag on **only one** of them (`2024`) is drawn as a **hollow /
+  dashed** „partial" chip, while a tag on **both** (`Steuer`) is a solid chip.
+- Adding `Wichtig` puts it on **both** leaves; removing `Steuer` takes it off **both** —
+  each is **one undo step** (a single ↶ reverts the whole bulk change).
+- *Not obvious:* re-adding the partial `2024` from the input **completes** it onto the
+  other leaf too. A node that already has the tag is left unchanged (no duplicates), and
+  **Backspace** does **not** bulk-remove in multi-select (only single-select).

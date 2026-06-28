@@ -76,6 +76,11 @@ positioning is exercised in detail in `05_react_ui.md` MT-31.)
 **Expected:**
 - The archive's **folder structure is preserved** as nested folder nodes; files
   inside become nodes with previews.
+- *Not obvious:* a subfolder becomes a real **folder node** — a member
+  `rechnungen/2024/beleg.pdf` shows as **Ordner `rechnungen` › Ordner `2024` ›
+  `beleg.pdf`**, NOT a single document literally named `rechnungen/2024/beleg.pdf`.
+  Two files with the same name in different subfolders stay distinct (one isn't
+  dropped). Members sharing a folder are merged under one folder node.
 - *Not obvious:* a hostile archive is bounded — too many members or a combined
   unpacked size over the limit is refused (zip-bomb guard) rather than exhausting memory.
 
@@ -102,3 +107,30 @@ with the bytes `MZ`) and rename it to `rechnung.pdf`. Have it ready as a loose f
   real signature, so an EXE/script renamed to `.pdf` is rejected with a visible
   reason rather than silently degrading. The same gate refuses OOXML Office files
   that point at an external template/source (security refusal).
+
+---
+
+## MT-06: Import a *nested* container (archive/e-mail inside another)
+
+Verifies #12 — a container **inside** a container is opened, not flattened to
+„nicht importierbar".
+
+**Preconditions:** Build a nested sample, e.g. a `.zip` that contains another `.zip`
+(which holds a PDF), and an `.eml` that has a `.zip` **attachment** (which holds a PDF).
+A `.msg` inside a `.zip` works too.
+
+**Steps:**
+1. **📥 Importieren** → choose the outer `.zip`.
+2. **📥 Importieren** → choose the `.eml` with the `.zip` attachment.
+
+**Steps — Expected:**
+- The inner `.zip`/`.eml`/`.msg` appears as its **own folder node**; expanding it
+  reveals the extracted members (the PDF inside) — the tree mirrors
+  *archive → (inner archive / mail) → attachment*.
+- *Not obvious:* recursion is **bounded to 3 levels deep**. A container nested deeper
+  than that shows as `… – nicht importierbar (zu tief verschachtelt)` instead of being
+  opened — this is the anti-„zip-quine" guard, not a bug.
+- *Not obvious:* the zip-bomb budget (size + member count) is **shared across all
+  levels**, so a deeply nested set can't multiply past the limit. If the budget runs
+  out partway, the next inner container reads `… – nicht importierbar` and the rest of
+  the import is unaffected.

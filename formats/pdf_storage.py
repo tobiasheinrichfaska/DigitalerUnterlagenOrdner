@@ -185,6 +185,8 @@ class PDFStorage:
             self.root.uid = structure["uid"]  # restore the root's id too (not just children)
         if structure.get("collapsed"):
             self.root.collapsed = bool(structure["collapsed"])
+        if structure.get("datev"):
+            self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
         current_start = [0]  # mutable Seitenzähler
 
         try:

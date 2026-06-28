@@ -11,6 +11,7 @@ Run:
 """
 
 import io
+import json
 import os
 import sys
 
@@ -19,6 +20,7 @@ import webview
 from core.api import CoreApi
 from infra.log_config import logger
 from version_info import APP_NAME, get_full_title
+from infra.window_geometry import geometry_visible
 
 
 def _prewarm():
@@ -73,6 +75,7 @@ HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file_
 # If webui's dev script ever pins a port, update this in the same change.
 DEV_URL = "http://localhost:5173"
 PROD_INDEX = os.path.join(HERE, "webui", "dist", "index.html")
+PROD_PDFTOOL = os.path.join(HERE, "webui", "dist", "pdf-tool.html")  # the PDF-Tool surface
 FILE_TYPES = ("BelegTool (*.belegtool)", "PDF (*.pdf)", "Alle Dateien (*.*)")
 
 
@@ -94,6 +97,15 @@ def _entry():
     return DEV_URL if os.environ.get("BELEG_DEV") else PROD_INDEX
 
 
+def _entry_for_kind(kind):
+    """Front-end surface for a launch target: 'pdf' (file) or 'node' → the PDF-Tool
+    surface, anything else → the organizer. Dev serves both HTML entries off one Vite
+    server; prod loads the built files (see docs/pdf-tool.md)."""
+    if kind not in ("pdf", "node"):
+        return _entry()
+    return f"{DEV_URL}/pdf-tool.html" if os.environ.get("BELEG_DEV") else PROD_PDFTOOL
+
+
 def _bind_close(win, api):
     """Per-window close guard: confirm before discarding unsaved changes. Uses the
     Python-side dirty flag the React app pushes via set_dirty — NOT evaluate_js,
@@ -108,6 +120,11 @@ def _bind_close(win, api):
         except Exception:
             pass
         try:
+            if api._pdftool_session:
+                # node-bound PDF-Tool window: release the node lock + free the bound
+                # session. (Save-back-on-close prompt is a deferred GUI item — see
+                # docs/pdf-tool.md; closing currently discards unsaved pdf-tool edits.)
+                api._core.close_pdftool(api._pdftool_session)
             if api._session:
                 api._core.release(api._session)  # free the file lock for this window
                 # free the session itself (document bytes, undo log, caches, temp view)
@@ -120,17 +137,70 @@ def _bind_close(win, api):
     win.events.closing += _on_closing
 
 
-def _open_window(core, startup_path=None):
+def _geom_file():
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.path.join(base, APP_NAME, "window.json")
+
+
+def _virtual_screen():
+    """Windows virtual-desktop bounds (x, y, w, h) spanning all monitors; None elsewhere."""
+    try:
+        import ctypes
+        gsm = ctypes.windll.user32.GetSystemMetrics
+        return (gsm(76), gsm(77), gsm(78), gsm(79))  # SM_*VIRTUALSCREEN
+    except Exception:
+        return None
+
+
+def _load_geometry():
+    """The last saved geometry if it is still on-screen, else None (→ default)."""
+    try:
+        with open(_geom_file(), encoding="utf-8") as f:
+            g = json.load(f)
+        if geometry_visible(g, _virtual_screen()):
+            return g
+    except Exception:
+        pass
+    return None
+
+
+def _save_geometry(win):
+    """Persist the window's size + position so the next launch restores it (incl. monitor)."""
+    try:
+        g = {"x": int(win.x), "y": int(win.y),
+             "width": int(win.width), "height": int(win.height)}
+        path = _geom_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(g, f)
+    except Exception:
+        logger.debug("window geometry save skipped", exc_info=True)
+
+
+def _open_window(core, startup_path=None, restore=False,
+                 startup_kind="belegtool", startup_session=None):
     """Open a document window with its own HostApi (sharing one CoreApi — sessions
     are independent per window). Used for the first window and every 'new window'.
-    ``startup_path`` (only the first window) is a .belegtool the React app opens on
-    load — used when the legacy GUI hands a document over via 'open in new GUI'."""
+    ``startup_path`` (or ``startup_session`` for a node binding) is opened by the
+    surface on load. ``startup_kind`` selects the surface: 'pdf'/'node' → the PDF-Tool,
+    else the organizer. ``restore`` (first window only) re-applies the last saved
+    geometry and saves it again on close, so the app remembers its size / position /
+    monitor across launches."""
     api = HostApi(core)
     api._startup_path = startup_path
+    api._startup_kind = startup_kind
+    api._startup_session = startup_session
+    api._pdftool_session = startup_session if startup_kind == "node" else None
+    kwargs = dict(width=1280, height=820, min_size=(900, 600))
+    geom = _load_geometry() if restore else None
+    if geom:
+        kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
+                      x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry(), js_api=api,   # title bar shows "… 3.9.5"
-        width=1280, height=820, min_size=(900, 600))
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.10.0"
     api._uid = win.uid  # bind after creation (storing the window object recurses)
+    if restore:
+        win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
     _bind_close(win, api)
     return {"ok": True}
 
@@ -144,7 +214,10 @@ class HostApi:
         self._core = core
         self._uid = uid
         self._dirty = False  # pushed from the React app for the close guard
-        self._startup_path = None  # .belegtool to open on load (first window only)
+        self._startup_path = None  # file to open on load (first window only)
+        self._startup_kind = "belegtool"  # 'belegtool' → organizer, 'pdf'/'node' → PDF-Tool
+        self._startup_session = None  # a pre-bound session (node binding) the surface fetches
+        self._pdftool_session = None  # a node-bound pdf-tool session to release on close
         self._session = None  # this window's session id (for the close-time lock release)
 
     def set_dirty(self, value):
@@ -183,9 +256,44 @@ class HostApi:
     def config(self):
         cfg = dict(self._core.config())
         if self._startup_path:
-            cfg["startup_path"] = self._startup_path  # React opens this on load
+            cfg["startup_path"] = self._startup_path  # the surface opens this on load
+            cfg["startup_kind"] = self._startup_kind  # 'belegtool' | 'pdf'
+        if self._startup_session:
+            cfg["startup_session"] = self._startup_session  # node binding: fetch its bytes
+            cfg["startup_kind"] = self._startup_kind  # 'node'
         cfg["dev"] = bool(os.environ.get("BELEG_DEV"))  # gate dev-only UI (Testmodus)
         return cfg
+
+    def get_pdf_bytes(self, session):
+        """PDF bytes of a PDF-bound session (base64) for the PDF-Tool surface."""
+        return self._core.get_pdf_bytes(session)
+
+    # PDF-Tool node binding (docs/pdf-tool.md)
+    def open_node_in_pdftool(self, session, node_id):
+        """Lock a node and open it in a new PDF-Tool window bound to it."""
+        try:
+            res = self._core.open_node_in_pdftool(session, node_id)
+            if not res.get("ok"):
+                return res
+            return _open_window(self._core, startup_kind="node", startup_session=res["session"])
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_node_back(self, pdftool_session, data_b64=None):
+        return self._core.save_node_back(pdftool_session, data_b64)
+
+    def save_pdf_bytes(self, session, data_b64=None):
+        """The plain „Speichern" for a PDF-Tool **bridge** session (a directly-opened .pdf, no
+        node binding): bake the edits into the session AND write the .pdf on disk."""
+        return self._core.save_pdf_bytes(session, data_b64)
+
+    def update_pdf_bytes(self, session, data_b64=None):
+        """Bake edits into a PDF-Tool **bridge** session WITHOUT writing disk — used before a
+        guarded DATEV write-back/file so a refused write-back never clobbers the local .pdf."""
+        return self._core.update_pdf_bytes(session, data_b64)
+
+    def break_node_binding(self, session, node_id):
+        return self._core.break_node_binding(session, node_id)
 
     def open(self, session=None, path=None):
         resp = self._core.open(session, path)
@@ -243,7 +351,19 @@ class HostApi:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
-        return self._core.export(session, path, node_ids, options)
+        result = self._core.export(session, path, node_ids, options)
+        # #13: a split would overwrite existing "_Teil_N" files (the native Save dialog
+        # only confirmed the base name) — confirm the ACTUAL part files before clobbering.
+        if not result.get("ok") and result.get("code") == "exists":
+            names = "\n".join(os.path.basename(p) for p in result.get("existing", []))
+            if not win.create_confirmation_dialog(
+                    "Dateien überschreiben?",
+                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names):
+                return {"ok": False, "error": "cancelled"}
+            opts = dict(options or {})
+            opts["overwrite"] = True
+            result = self._core.export(session, path, node_ids, opts)
+        return result
 
     def import_dialog(self, session, parent_id=None):
         win = self._win()
@@ -289,6 +409,43 @@ class HostApi:
         if isinstance(path, (tuple, list)):
             path = path[0]
         return self._core.save(session, path, store_alternatives)
+
+    # --- DATEV mode (lazy; ops delegate to CoreApi, dialogs run on this window) ---
+    def datev_status(self):
+        return self._core.datev_status()
+
+    def set_datev_mode(self, on):
+        return self._core.set_datev_mode(on)
+
+    def save_to_datev(self, session):
+        """Ask „nach DATEV zurückschreiben?" then perform the guarded write-back. Returns
+        the verdict so the React app can explain a non-ok result and offer a local save.
+        Cancelling the prompt is reported as ``declined`` (→ the UI does a normal save)."""
+        win = self._win()
+        if win is None:
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        if not win.create_confirmation_dialog(
+                "Nach DATEV zurückschreiben?",
+                "Die Änderungen in das verknüpfte DATEV-Dokument zurückschreiben?\n"
+                "(DATEV Dokumentenablage behält keine Revision — der alte Stand wird "
+                "überschrieben; eine lokale Sicherung wird vorher angelegt.)"):
+            return {"ok": False, "verdict": "declined"}
+        return self._core.datev_save_back(session, confirmed=True)
+
+    def datev_file(self, session, client_guid=None, mandant_number=None, description=None,
+                   domain_id=1, folder_id=None, register_id=None):
+        return self._core.datev_file(session, client_guid=client_guid,
+                                     mandant_number=mandant_number, description=description,
+                                     domain_id=domain_id, folder_id=folder_id,
+                                     register_id=register_id)
+
+    def datev_export(self, session, node_ids=None, options=None, client_guid=None,
+                     mandant_number=None, description=None, domain_id=1, folder_id=None,
+                     register_id=None):
+        return self._core.datev_export(session, node_ids=node_ids, options=options,
+                                       client_guid=client_guid, mandant_number=mandant_number,
+                                       description=description, domain_id=domain_id,
+                                       folder_id=folder_id, register_id=register_id)
 
 
 def _safe_http_port():
@@ -378,7 +535,7 @@ def _warn_clr_load_failed(exc):
         print(msg)
 
 
-def main(startup_path=None):
+def main(startup_target=None):
     # Fail loudly, not blank: without the WebView2 Runtime the window renders empty.
     # (BELEG_SKIP_WEBVIEW2_CHECK=1 bypasses, in case detection ever false-negatives.)
     skip = os.environ.get("BELEG_SKIP_WEBVIEW2_CHECK", "").lower() not in ("", "0", "false", "no")
@@ -386,7 +543,12 @@ def main(startup_path=None):
         _warn_missing_webview2()
         return
     core = CoreApi()  # shared across all windows; sessions are per window
-    _open_window(core, startup_path)
+    # The first window remembers its geometry (size / position / monitor across launches).
+    if startup_target:
+        _open_window(core, startup_target["path"], restore=True,
+                     startup_kind=startup_target["kind"])
+    else:
+        _open_window(core, restore=True)
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     # Pin a safe http port so the file server never lands on a Chromium-blocked one.
@@ -403,18 +565,24 @@ def main(startup_path=None):
         raise
 
 
-def _startup_path_from_argv(argv):
-    """A .belegtool handed on the command line (file association / 'open with' /
-    BelegTool.exe <file>). Honor only an existing .belegtool — open() loads via
-    load_belegtool; other types belong on the import path, not startup. Returns
-    None when there's nothing valid to open."""
+def _startup_target_from_argv(argv):
+    """A document handed on the command line (file association / 'open with' /
+    BelegTool.exe <file>): a .belegtool opens the organizer; a .pdf opens the
+    PDF-Tool bound to that file (see docs/pdf-tool.md). Returns
+    ``{'path': str, 'kind': 'belegtool'|'pdf'}`` or None when there is nothing
+    valid to open."""
     if len(argv) < 2:
         return None
     path = argv[1]
-    if path.lower().endswith(".belegtool") and os.path.isfile(path):
-        return path
+    if not os.path.isfile(path):
+        return None
+    low = path.lower()
+    if low.endswith(".belegtool"):
+        return {"path": path, "kind": "belegtool"}
+    if low.endswith(".pdf"):
+        return {"path": path, "kind": "pdf"}
     return None
 
 
 if __name__ == "__main__":
-    main(_startup_path_from_argv(sys.argv))
+    main(_startup_target_from_argv(sys.argv))

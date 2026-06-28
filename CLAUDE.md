@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.9.5**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.10.0**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -26,14 +26,18 @@ engine, bridge, session, api, render_policy) with `core/ipc/` for the named-pipe
 transport; `services/` = stateful infra (render cache, CPU fairness, variants);
 `formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
 compress_pdf_bytes); `universal_importer/` = multi-format import package;
-`infra/` = ports (tasks, log_config, tools); `host.py`/`version_info.py` =
+`datev/` = the lazy DATEVconnect integration (DATEV-mode only; never imported when
+off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`,
+`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF), `probe_gui` (research tool));
+`infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
+`file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
 ### Entry point & host
 
 | File | Role |
 |---|---|
-| `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. |
+| `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. The **first** window **persists its geometry** (size/position/monitor) to `%APPDATA%\…\window.json` on close and restores it on next launch; a saved geometry whose monitor is gone falls back to the default (validated by the pure [`infra/window_geometry.py`](infra/window_geometry.py), tested). |
 
 ### Data model
 
@@ -55,7 +59,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.9.5) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.10.0) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -108,9 +112,19 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/App.jsx` | Main component: toolbar (open/import/save/export/new-window/undo/redo), tree + preview panes, OS file-drop, keyboard shortcuts, dirty/notice state |
 | `webui/src/Tree.jsx` | Tree view + all drag-drop: internal move (into/before/after, slide-to-level ghost) **and** OS file import sharing the same zones |
 | `webui/src/PreviewControls.jsx` | Lazy working-preview compression (method dropdown loads on open → "Kompression läuft", apply via "Lesbarkeit geprüft"), rotate |
-| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js` incl. `mergeableIds`, `treeNav.js`, `status.js`, `messages.js`). |
+| `webui/src/ContextMenu.jsx`, `lib/core.js` | Right-click ops (incl. Merge→1 PDF / In neuen Ordner / Status incl. "Kein Status" + folder cascade); thin `window.pywebview.api` wrapper. Pure frontend logic lives in `webui/src/lib/` (`core.js`, `selection.js` incl. `mergeableIds`, `treeNav.js`, `status.js`, `messages.js`, `tags.js`, `tree.js`, `datev.js`, `zoomAnchor.js`). |
+| `webui/src/Toolbar.jsx` | Icon-only toolbar (open/import/export/new-window/undo/redo + 🏷️/DATEV toggles); labels in `title`/`aria-label`, export count badge. |
+| `webui/src/SaveSplitButton.jsx` | Save split-button: main part saves in place (dirty „•"), caret opens „Speichern unter…" via `hooks/useMenu.js`. |
+| `webui/src/DatevBar.jsx` | **The v3.10 in-app DATEV UI** — header „DATEV" toggle (`set_datev_mode`), „von DATEV" badge, write-back / „nach DATEV ablegen" actions. |
+| `webui/src/Preview.jsx`, `PreviewPane.jsx` | Virtualized windowed preview (IntersectionObserver + aspect placeholders + ±5 prefetch + per-node scroll memory + zoom anchor via `lib/zoomAnchor.js`); `PreviewPane` is its container. |
+| `webui/src/StatusBar.jsx` | Bottom status/notice bar (dirty, page position, notices/errors). |
+| `webui/src/ExportDialog.jsx`, `SaveDialog.jsx` | Export-options dialog (TOC / tag index / bookmarks / split + „Nach DATEV ablegen"); save/embed-variants prompt. |
+| `webui/src/TagEditor.jsx`, `TagViewBar.jsx` | Tag editor (favourites, multi-select union via `TagMany`) + the search/group view bar. |
+| `webui/src/hooks/` | UI hooks: `useKeyboard`, `useSelection`, `useOsFileDrop`, `useDialogs`, `useTagView`, `useResizablePane`, `useModal`, `useMenu` (shared roving-focus/dismiss menu). |
 | `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
+| `webui/src/lib/datev.js` | **Pure** DATEV-mode helpers: `isDatevConnected`, `datevVerdictKey` (verdict→localized message), `datevSavedNotice`, `localBaseName`. Shared by `App.jsx` (organizer) + `pdftool/main.js`. |
 | `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal (separate from the main UI language switcher): 🇩🇪/🇬🇧 flags toggle the two authoritative versions; help text authored best-effort for all UI languages, unknown → EN fallback; GitHub/mailto correction links. |
+| `webui/pdf-tool.html`, `webui/src/pdftool/` (`main.js`, `source.js`) | **PDF-Tool surface** (2nd Vite entry, PDF.js): the host routes a `.pdf`/node binding here (`host._entry_for_kind` / `startup_kind`), it fetches the bound bytes over the bridge (`CoreApi.get_pdf_bytes` / `open_node_in_pdftool` / `close_pdftool`) and renders a **selectable text layer + interactive AcroForm**, plus an **„✎ Text" tool** (PDF.js FreeText editor) and **„💾 Speichern"** → `saveDocument()` → `save_node_back(session, b64)` → `SetNodeBytes` (new source on the node, undoable in the organizer). Added text round-trips as editable FreeText on reopen. `source.js` (`chooseSource` / `base64ToUint8` / `uint8ToBase64`) is the pure, unit-tested logic. Design + roadmap: [`docs/pdf-tool.md`](docs/pdf-tool.md). |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
@@ -356,6 +370,96 @@ delete, allow read) — bit-for-bit Acrobat's; the OS frees it on process death 
 - **Deferred:** graphical on/off setting; Office-style autosave/recover of *unsaved* changes;
   read-only fallback when a file is in use.
 
+### In-app DATEV integration (v3.10.0, DATEV-mode only, lazy-loaded)
+
+Files / writes documents back into the local **DATEV Dokumentenablage** (DokAb) via
+DATEVconnect. **Off by default** behind a per-user setting; when off, the heavy `datev`
+package is **never imported** (normal launch stays lean). Authoritative design:
+[`docs/datev-integration-design.md`](docs/datev-integration-design.md); the live-verified
+mechanics: [`docs/datev-dokumentenablage-recipe.md`](docs/datev-dokumentenablage-recipe.md)
+and [`docs/datev-provenance.md`](docs/datev-provenance.md).
+
+- **Setting + toggle** ([`infra/settings.py`](infra/settings.py)) — `datev_mode` (+ optional
+  `dms_base_url`) persisted to `%APPDATA%\DigitalerUnterlagenOrdner\settings.json`, the sibling
+  of `window.json`. ⚠️ **Terminal-server safe: strictly per-user** (`%APPDATA%` Roaming is the
+  user's own profile, never machine-wide) — required because DATEV authenticates via **Windows
+  SSO as the logged-in user**. The header **„DATEV"** button ([`DatevBar.jsx`](webui/src/DatevBar.jsx))
+  flips it via `HostApi.set_datev_mode` → `CoreApi.set_datev_mode`.
+- **Lazy service** ([`datev/inapp.py`](datev/inapp.py) `DatevService`) — built on first use over
+  the reusable, injected-transport [`datev/client.py`](datev/client.py) (SSO curl). Imports the
+  `datev` package only when mode is on. `CoreApi._datev_get_service()` is the gate.
+- **Provenance** — the DATEV origin `{doc_guid, file_id, structure_item_id,
+  correspondence_partner_guid, source_name}` lives on the **root** `Node.datev` field and
+  **round-trips in `.belegtool`** (threaded through `model`/`pdf_node`/`bridge`/`pdf_storage`;
+  set/cleared by the in-process **`SetDatev`** command, applied silently — origin metadata, no
+  undo/dirty). The write-back **baseline** (opened sha256 + `change_date_time` + checked_out)
+  is per-session runtime state in `CoreApi._datev_baseline`, **not** persisted.
+- **On open** (`CoreApi._datev_capture_on_open`) — a DATEV **checkout path**
+  (`…\<doc-guid>\<file-id>`, via `parse_checkout_path`) captures provenance + baseline, shows a
+  „from DATEV" badge, and warns up front if the document was already checked out. ⚠️ The content
+  baseline hashes the **RAW checkout file on disk** (== the server file), **not** the
+  re-serialised effective bytes — `_datev_effective_bytes` runs the doc through `PdfWriter`
+  (normalises xref/streams → never byte-identical to the raw file), so hashing *that* made every
+  first write-back of an unedited checkout falsely report `conflict_content` (fixed; regression
+  `test_open_unedited_checkout_writeback_is_ok_not_false_conflict`).
+- **Two surfaces (`unterscheide`):** a DATEV checkout is a **`.pdf`**, which the host routes to
+  the **PDF-Tool** surface ([`webui/src/pdftool/main.js`](webui/pdf-tool.html)); a linked
+  **`.belegtool`** opens in the **organizer**. **Both** run through `CoreApi.open`, so provenance
+  is captured either way, and **both** offer DATEV write-back: the organizer via `DatevBar`, the
+  PDF-Tool via a „🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen" toolbar button
+  (revealed by the pure `datevAction({datevMode, connected})` only for a `.pdf` in DATEV mode).
+  The PDF-Tool bakes its edits before a DATEV op via **`CoreApi.update_pdf_bytes`** — a
+  **session-only** write of the first leaf (NO disk write), so a refused/declined write-back
+  **never clobbers the on-disk checkout `.pdf`**; the file is written only AFTER a successful
+  verdict by `_datev_local_persist`. The plain „💾 Speichern" instead uses `save_pdf_bytes`
+  (session + disk) for a bridge `.pdf`, or `save_node_back` for a node binding (`save_node_back`
+  rejects a bridge session — no binding — which is why the dedicated bridge path exists).
+- **Format-aware local save** (`_datev_local_persist`): the parallel local save writes the
+  bound path's **own format** — a `.belegtool` keeps the full structure + provenance (so the
+  link round-trips); a checkout **`.pdf`** is overwritten with the **clean effective PDF bytes**
+  (never inject the `.belegtool` structure into a DATEV checkout file). The result carries
+  `local_kind` ('belegtool' | 'pdf') and the UI shows the **saved file name** in the success
+  notice (`datevSavedNotice`) so the user can always tell which format landed on disk. Document
+  names that become a real temp/disk path (the `datev_export` part files, the `materialize_subset`
+  view title) are run through the shared **`CoreApi._safe_filename`** (strips path separators,
+  illegal chars, trailing dots/spaces, and Windows reserved device names like `NUL`/`COM1`).
+- **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
+  then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
+  [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
+  unchanged vs baseline · server bytes == opened original). `ok` → backup the fetched server
+  bytes to `%APPDATA%\…\datev_backups\`, then `upload_document_file` → `update_structure_item`
+  (the **stable** structure-item id; DokAb overwrites, no revision). **Any non-ok verdict
+  (`declined`/`locked`/`conflict_changed`/`conflict_content`/`no_structure_item`) writes
+  NOTHING** and the UI falls back to a filesystem save.
+- **Save As clears provenance** (Save As breaks the DATEV link). A not-connected file offers
+  **„nach DATEV ablegen"** = the create flow (`CoreApi.datev_file` → upload + `create_document`,
+  Mandant via `resolve_client_guid`, user via SID match, no state for class 1), then adopts the
+  new provenance.
+- **Export → DATEV (same client)** — the export dialog gains „Nach DATEV ablegen (gleicher
+  Mandant)" when connected; `CoreApi.datev_export` exports (single **or split**, honouring the
+  options) and files **every produced PDF** as its own new DATEV document under the source's
+  Mandant.
+- **Tests:** the pure logic + orchestration are covered headless (`tests/test_settings.py`,
+  `test_datev_provenance_roundtrip.py`, `test_datev_inapp.py` with a fake client,
+  `test_datev_coreapi.py` with a fake service; the existing `test_datev_client.py` /
+  `test_datev_writeback.py`). Frontend: `webui/src/DatevBar.test.jsx`, `lib/datev.test.js`, the
+  export-option cases in `ExportDialog.test.jsx`. Live end-to-end is the
+  [`manual_tests/10_datev.md`](manual_tests/10_datev.md) checklist (needs a DATEVconnect box).
+- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **maintained research
+  tooling**, not shipped in the BelegTool release. It is the live-DATEVconnect investigation
+  vehicle and is used for manual housekeeping (e.g. `delete_document` of test docs). It is the
+  **sole** caller of the `datev/client.py` read surface (`list_domains`/`list_documents`/
+  `get_document_raw`/`list_document_states`/`delete_document`), the `provenance.py` scorers
+  (`provenance_stats`/`match_entries`), and the file-config/urllib-transport path
+  (`config.load_config`/`resolve_auth_mode`, `transport.make_urllib_transport`). **These are NOT
+  dead code** — they are the probe's API; an audit that treats "probe = unshipped" will keep
+  flagging them. Keep them while the probe is maintained; only remove them if the probe is retired.
+- `DatevService.status()` returns `feature` + `keeps_revisions` (DokAb keeps no revision). The
+  in-app flow targets **DokAb only**, so the hard-coded "no revision — overwrite" warning in
+  `HostApi.save_to_datev`'s confirm dialog is always correct; `keeps_revisions` is a deliberate
+  backend status field (a future DMS/DokAbRev-aware conditional warning would consume it), not an
+  unused value to strip.
+
 ### Persistence / save policy (v3.6.0)
 The file stores **only `current_pdf_data` per node** — never a separate original.
 So a **committed** node ("Lesbarkeit geprüft" = a `Compress` was applied) saves only
@@ -497,7 +601,9 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current tag: **v3.9.5** (beta)
+Current tag: **v3.10.0** (beta) — icon-only toolbar, Save split-button, multi-select tagging,
+„Neuer Ordner" at selection, zoom-keeps-position, nested archive/mail + subfolders, configurable
+export split, PDF-Tool text editor, and the **in-app DATEV integration** (DATEV-mode only).
 
 ---
 
@@ -509,14 +615,31 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Windows-only.** PyInstaller `win64`, Edge WebView2 GUI, hard `pywin32`/`pythonnet` deps,
   COM-based Office import. The PDF core is cross-platform but no port is maintained
   (community RFC: [`docs/cross-platform-port.md`](docs/cross-platform-port.md)).
-- **Export > 100 pages stays a single PDF.** The auto-split-with-cross-references path exists
-  (`toc_export.export_pdf_split_with_toc`) but is **not wired into the UI export**.
+- **Split export uses its own TOC, not the front-matter toggles.** Splitting into several files
+  (Open items #13, shipped) always renders a per-file TOC with cross-references to the other parts,
+  and **ignores the tag-index / PDF-bookmarks / TOC-links checkboxes** (those apply to single-file
+  export only). Unifying the split path with the full front-matter options is a follow-up. The
+  page-level („mitten im Dokument") cut copies pages via `PdfWriter`, so it inherits the same
+  text-PDF limitation as the normal export (named destinations / link annotations dropped).
 - **Compression is irreversible after save.** A committed node ("Lesbarkeit geprüft") drops its
   source on save → re-compress/reset blocked, dropdown shows „bereits komprimiert (keine Quelle)".
 - **File lock has no graphical toggle** — single-writer locking is env-gated (`BELEG_FILE_LOCK=1`),
   off by default; no autosave/recover of unsaved changes, no read-only fallback when in use.
-- **Nested archives are not recursed** — a `.zip`/`.tar` inside an archive/e-mail becomes
-  „nicht importierbar" (anti-amplification choice; recursion is planned — see Open items #12).
+- **PDF-Tool edits add to the PDF; they don't rewrite its original text.** The second surface (a
+  `.pdf` or a node binding opens it) can now **add text (FreeText / typewriter) and fill AcroForms**,
+  saved back into the node via `saveDocument()` → `save_node_back` → `SetNodeBytes`. Self-authored
+  text **round-trips** — reopening the node reloads it as editable FreeText. Limits: it can't edit/reflow
+  the *original* body text of a PDF (a PDF stores positioned glyphs, not paragraphs — overlay only);
+  **OCR / page-rearrange / compression from this surface, and signing, are not wired yet**. ⚠ **Compression
+  flattens annotations** — compressing a node rasterizes the page, so any added text/forms become pixels
+  and stop being editable (acceptable: compression is an explicit, deliberate flatten). See
+  [`docs/pdf-tool.md`](docs/pdf-tool.md) for the roadmap.
+- **Nested containers are recursed, but bounded** *(since 2026-06-26, Open items #12)* — a
+  `.zip`/`.tar`/`.tgz`/`.eml`/`.msg` inside another container is extracted into a sub-folder.
+  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 3`** (a deeper container shows
+  „… zu tief verschachtelt"); the bomb budget is **shared across levels**, so when it is exhausted
+  mid-way a still-unread inner container degrades to „nicht importierbar" and **its already-decoded
+  children are not kept** (the whole inner container is dropped, never the import).
 - **No direct Outlook drag-and-drop** — Outlook hands items over as OLE virtual files; import a
   `.msg`/`.eml` instead. No automatic DATEV check-in on document close (manual re-import in DATEV).
 - **Multicore rasterization is GIL-limited (~1.2× on 4 threads)** — thread parallelism buys
@@ -524,6 +647,15 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Variants grow the file** — computed compression variants are embedded in the `.belegtool`
   (no sidecar). Split parts in **already-saved** files keep the old `no_compression` flag until
   re-split.
+- **DATEV mode (v3.10.0) — accepted bounds.** Off by default; **write-back only succeeds when the
+  document was opened from a DATEV checkout path and still byte-matches the server file** — a
+  reopened `.belegtool` (or any structural transform) safely reports `conflict_content` and
+  falls back to a local save (never a blind overwrite). DokAb keeps **no revision**, so the
+  write is a permanent overwrite (guarded; a local backup is written first). The **file-to-DATEV
+  placement** asks only for the Mandant number — domain/folder/register default (no graphical
+  folder picker yet). Live behaviour is verified only by the human `manual_tests/10_datev.md`
+  (no DATEVconnect in CI). The DATEVconnect OpenAPI specs in `import/` are **vendor IP —
+  gitignored, never committed**.
 
 > *Fixed 2026-06-18:* the keyboard-only context-menu bug (keyboard selection didn't arm the ▤ Menu /
 > Shift+F10 key) — the primary row now takes DOM focus on selection ([`Tree.jsx`](webui/src/Tree.jsx)),
@@ -558,14 +690,22 @@ as **v3.10.0**.
    machine** (no longer mocked-COM only). Storing golden *PDFs* in `tests/data/expected/` was
    dropped as redundant — the comparison is structural, and stored Office PDFs aren't
    deterministic.
-2. **Toolbar redesign — smaller icon buttons.** Shrink the toolbar to compact, recognisable
-   icons for Open / Import / Help / Save (+ Export, New window, Undo/Redo). Tooltips carry the
-   text labels; keep an `aria-label` per button.
-3. **„Speichern" as a split-button.** A normal click saves in place; a small dropdown caret on
-   the same button opens a menu with **„Speichern unter…"**. **Decided:** build the split-button
-   and evaluate it in use.
-4. **Rotate controls — swap display order.** In [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
-   reorder the two rotate buttons to **left-then-right** (currently right before left).
+2. **Toolbar redesign — smaller icon buttons. — DONE (2026-06-27).** [`Toolbar.jsx`](webui/src/Toolbar.jsx)
+   is now icon-only: every button drops its visible label, the text moves into the `title`
+   tooltip, and each carries an `aria-label` so screen readers and role/name queries keep the
+   full name. Export shows the selection count as a `.count-badge`; the Save split-button's main
+   part is icon-only with a dirty dot. Compact square buttons via `.tb-btn` in `App.css`. Tests
+   that clicked toolbar buttons by visible text now query by role+name; `Toolbar.test.jsx` locks
+   every icon's accessible name.
+3. **„Speichern" as a split-button. — DONE (2026-06-26).** The toolbar's two Save buttons are now
+   one split-button ([`SaveSplitButton.jsx`](webui/src/SaveSplitButton.jsx)): the main part saves in
+   place (shows the dirty „•"), a caret opens a small dropdown with **„Speichern unter…"**.
+   Accessible: `aria-haspopup`/`aria-expanded`, `role="menu"`/`menuitem`, closes on Escape and
+   outside-click, focus moves to the item on open. Covered by `SaveSplitButton.test.jsx` (8).
+   New i18n key `Weitere Speicheroptionen` (en done; others via PENDING_TRANSLATIONS batch).
+   **Note:** the dropdown now uses the **shared menu hook of #10** ([`hooks/useMenu.js`](webui/src/hooks/useMenu.js)).
+4. **Rotate controls — swap display order. — DONE (v3.10.0).** [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)
+   now renders the rotate buttons **left-then-right** (↺ before ↻); locked by `PreviewControls.test.jsx`.
 5. **Cross-window drag-and-drop (copy by default).** Drag a node out of one BelegTool window
    into **another** → **copy** by default (source keeps its node). Distinct from the Outlook
    drag-in (still won't-do; OLE virtual files).
@@ -575,8 +715,10 @@ as **v3.10.0**.
    so we avoid a cross-window drag entirely.
    All three candidate designs keep the drag **intra-window** (so the WebView2 cross-window limit
    never applies); shared/source contents come from the shared `CoreApi`.
-   **Decision (2026-06-09): build (A) now (v3.10.0); (B) and (C) are logged for later versions.**
-   - **(A) „Austausch-Pad" (interchange tray) — NOW.** A small shared tray in every window. Drag a
+   **Decision (2026-06-09): build (A) in v3.10.0; (B) and (C) are logged for later versions.**
+   **Revised (2026-06-27): (A) is CUT from v3.10.0 — not built; the in-app DATEV integration was
+   prioritised for v3.10.0 instead. (A)/(B)/(C) are all deferred to a later version.**
+   - **(A) „Austausch-Pad" (interchange tray) — deferred (was: NOW).** A small shared tray in every window. Drag a
      node *onto the pad* (same-window drag) → `CoreApi` stages the subtree; the pad shows in every
      window (shared `CoreApi`); drag the item *from the pad onto a tree* (same-window drag) → copy
      inserted (`materialize_subset` → insert). Simple; **copy-only**; doubles as a within-window
@@ -609,38 +751,80 @@ as **v3.10.0**.
    **rotate/split/merge drop editor mode** — the result becomes a plain rebuilt PDF
    (`editor_based=False`), avoiding "rebuild un-rotates the page" surprises. Plain-text first;
    rich text later if wanted.
-7. **Multi-select tagging.** When **more than one node is selected**, applying/removing a tag
-   should affect **all selected nodes** (today the tag editor acts on the single context-menu
-   node). Apply over `selectedIds` (resolve folder/child overlaps like the other multi-ops) as
-   one undoable step.
-8. **„Neuer Ordner" — insert at the selection + naming dialog.** New folder should be created
-   **at the selected node's position / parent**, not always at the root; and it should open a
-   **naming dialog** first (default name pre-filled) instead of creating an unnamed folder.
-9. **Zoom should keep the document position, not the viewframe position.** *(Finding from a
-   check — current behaviour:)* the preview lays pages out at `width = 560 * zoom`
-   ([`Preview.jsx`](webui/src/Preview.jsx)), so page heights scale with zoom, but **`scrollTop`
-   is not re-anchored** (no effect depends on `zoom`). Result: the pixel scroll position stays
-   fixed → the **document position drifts** when zooming while scrolled down (top-anchored zoom
-   is fine). Fix: before changing zoom, capture the anchor (visible page index + intra-page
-   fraction at the viewport top, or `scrollTop/scrollHeight`) and reapply it after the relayout.
-10. **Reusable accessible menu (keyboard nav).** *(Deferred audit item, folded here.)* Build one
-    accessible-menu pattern — `role="menu"`/`menuitem`, roving focus, ↑/↓ to move, Enter/Space to
-    activate, Esc to close, focus-first-on-open — and have **`ContextMenu.jsx` AND the planned #3
-    Save split-button dropdown share it**, rather than retrofitting today's ContextMenu and
-    rebuilding for the split-button. (Today: ContextMenu is mouse + Esc/backdrop only.)
+7. **Multi-select tagging. — DONE (2026-06-26).** When **more than one node is selected**, the tag
+   editor applies/removes a tag across **all** of them as one undo step via a new
+   **`TagMany(node_ids, tag, add)`** command ([`core/commands.py`](core/commands.py)) — it adds or
+   removes ONE tag per node, keeping each node's other tags (ids de-duped, missing ids skipped,
+   empty tag a no-op). Single-select still uses `SetTags` (whole-set replace) unchanged. The editor
+   ([`TagEditor.jsx`](webui/src/TagEditor.jsx)) shows the **union** of the selected nodes' tags with
+   a count badge; a tag not on every node is **partial** (`te-chip-partial`, hollow) and re-adding it
+   completes it across the selection. Pure union logic in
+   [`lib/tags.js`](webui/src/lib/tags.js) (`tagSelectionState`/`tagsOnAll`). Tests:
+   `tests/test_tag_many.py` (8), `lib/tags.test.js` (+5), `TagEditor.test.jsx` (+5). New i18n key
+   `{n} markiert` (en done; other languages via PENDING_TRANSLATIONS batch).
+8. **„Neuer Ordner" — insert at the selection + naming dialog. — DONE (v3.10.0).** The toolbar
+   „Ordner" button now creates the folder **inside a selected folder / as a sibling after a
+   selected leaf / at the root** (pure `newFolderTarget` in [`lib/tree.js`](webui/src/lib/tree.js),
+   unit-tested) and opens a **naming dialog** (default „Neuer Ordner" pre-filled) first. Wiring
+   covered by `App.addfolder.test.jsx`.
+9. **Zoom should keep the document position, not the viewframe position. — DONE (v3.10.0).**
+   [`Preview.jsx`](webui/src/Preview.jsx) lays pages out at `width = 560 * zoom`, so page heights
+   scale with zoom. It now captures a **logical anchor** (visible page index + intra-page fraction
+   at the viewport top) every scroll/relayout frame and re-applies it in a `useLayoutEffect([zoom])`
+   after the relayout, so the document position at the viewport top stays put. Anchor math is the
+   pure [`lib/zoomAnchor.js`](webui/src/lib/zoomAnchor.js) (`pageFraction` / `scrollForAnchor`),
+   unit-tested in `lib/zoomAnchor.test.js`; the visual behaviour is covered by `manual_tests`
+   MT-10 (jsdom has no layout, so the integration is verified by hand).
+10. **Reusable accessible menu (keyboard nav). — DONE (2026-06-27).** The shared menu contract now
+    lives in [`hooks/useMenu.js`](webui/src/hooks/useMenu.js): `rovingFocusKeydown` (↑/↓ cycle,
+    Home/End jump), `tagMenuItems` (role="menuitem" tagging), and `useMenuDismiss` (Escape +
+    outside-mousedown close while open). Both **`ContextMenu.jsx`** (roving focus + tagging) and the
+    **`SaveSplitButton.jsx`** dropdown (dismiss + roving focus) use it — duplication removed.
+    ContextMenu keeps its context-specific backdrop, Escape-via-window listener and viewport
+    clamping. Covered by `hooks/useMenu.test.jsx` (7) plus the existing ContextMenu/SaveSplitButton
+    suites. Enter/Space activate the focused `<button>` natively.
 11. **Error-code contract (architectural, optional).** *(Deferred audit High — the pragmatic
     `lib/messages.js` reverse-template localizer already covers it functionally.)* Optionally
     replace backend German error strings with stable **`{ code, params }`** so the UI owns all
     wording (kills the reverse-template matching). If not done, **new error paths from #1/#5/#6
     must follow the established convention**: raise the static German text as an `en.js` key (+
     full-coverage langs, bump the key-lock), and add a `messages.js` template for any dynamic parts.
-12. **Nested archive extraction.** A `.zip`/`.tar` *inside* another archive (or e-mail) is
-    currently **not** recursed — `UniversalImporter.convert` has no archive branch, so an inner
-    archive degrades to „nicht importierbar". Today this is a deliberate anti-amplification choice
-    (the per-archive bomb caps don't compound). Add **depth-bounded** recursion: route inner
-    archive members back through `archives.extract_*` with a small max-depth (e.g. 3) and a
-    **running, cross-level** decoded-byte/entry budget (not just per-archive) so nesting can't
-    multiply past `infra.limits.BOMB_CAP_BYTES`. (Logged from the 2026-06-16 audit, finding #6.)
+12. **Nested archive *and mail* extraction. — DONE (2026-06-26).** A `.zip`/`.tar`/`.tgz` **or a
+    `.msg`/`.eml`** nested *inside* another container is now **recursed** into a FOLDER of its
+    extracted members instead of degrading to „nicht importierbar". `archives._member_result` /
+    `_extract_nested` route an inner container back through the matching `extract_*` (cross-kind:
+    a `.msg` in a `.zip`, a `.zip` attached to an `.eml`, …), preserving the tree
+    (archive → mail → attachment). Recursion is bounded by **`_ARCHIVE_MAX_DEPTH = 3`** (anti
+    zip-quine → „zu tief verschachtelt"), and the bomb caps are now a **shared `_Budget`** (decoded
+    bytes + member count) threaded through every level, so nesting can't compound past
+    `infra.limits.BOMB_CAP_BYTES`/`BOMB_CAP_ENTRIES`. A corrupt/oversized inner container degrades to
+    „nicht importierbar" without aborting the import. Tests: `tests/test_archive_nested.py` (9 cases:
+    cross-kind recursion, depth bound, shared byte+member budget, corrupt-nested degrade); existing
+    `test_archive_*` unchanged. (Logged from the 2026-06-16 audit, finding #6; extended to nested
+    mail 2026-06-26.)
+    **Follow-up (2026-06-26): archive subfolders are now honored as folder nodes.** A zip/tar
+    member path like `rechnungen/2024/beleg.pdf` builds `Ordner rechnungen › Ordner 2024 ›
+    beleg.pdf` (helpers `_split_member_path`/`_ensure_folder`/`_insert_by_path` in `archives.py`),
+    merging siblings under shared folders — fixing the old zip **path-in-the-leaf-name** and the tar
+    **basename-flatten** (which also dropped same-named files in different folders). Composes with
+    the nesting above (a container at `sub/inner.zip` → `Ordner sub › Ordner inner.zip › …`). Tests:
+    `tests/test_archive_subfolders.py` (6).
+13. **Configurable export split. — DONE (2026-06-26).** The export dialog
+    ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)) gained **„In mehrere Dateien aufteilen"** with a
+    page **threshold** (`split_pages`, default 100; off = single PDF) and a **break level**
+    (`split_level`), asked at export time:
+    - **„oberste Ordner"** (`top`) — split only between top-level items; a top folder is never split.
+    - **„jeder Ordnergrenze"** (`folder`) — a large folder is split across parts at child boundaries;
+      a leaf is never split.
+    - **„mitten im Dokument"** (`page`) — a strict page-count cut that may split a single document
+      across files (the part name carries the original page range, e.g. `Rechnung (S. 1–3)`).
+    A shared grouping engine in [`toc_export.py`](formats/toc_export.py) — `_pack_units`,
+    `_leaves_with_path`, `_subtree_from_leaves`, `_subtree_from_pages`, `_slice_leaf`, `_plan_groups` —
+    packs atomic units (top-node / leaf / page) into ≤-threshold parts and rebuilds a pruned forest
+    per part; the existing cross-reference TOC assembly (`export_pdf_split_with_toc`) renders each.
+    `CoreApi.export` dispatches on `split_pages`/`split_level` and returns `paths` (the UI reports the
+    file count). Tests: `tests/test_export_split.py`, split cases in `tests/test_core_api.py`,
+    `ExportDialog.test.jsx`. i18n for all 7 new labels done across the full-coverage languages.
 
 ### Build hygiene — embed the version resource in BelegTool.exe (noted 2026-06-25)
 
@@ -680,6 +864,13 @@ embedded version). Low effort; do it on the next build bump.
 
 - **Accepted audit-info residuals (2026-06-12, deliberately not fixed):**
   `save()` reads `_locks`/`_paths` outside the lock (unreachable via the modal UI);
+  the **DATEV write-back parallel local save** (`datev_save_back`) snapshots `edited` before the
+  network round-trip but the in-sync local `.belegtool` save re-reads the *current* session
+  document afterwards — a concurrent same-session edit between the two would diverge DATEV (old
+  bytes) from the local file (new bytes); unreachable because the write-back runs under the
+  modal busy-state that disables edits (single-window UI), annotated at the call site;
+  `_safe_change_dt`/reopened-baseline use an extra `get_document` round-trip whose failure is
+  fail-safe (the next write-back re-establishes the baseline from the server);
   `SetPeriod` does no value validation; `office_via_com`'s
   CoInitialize/CoUninitialize balance on js threads is best-effort;
   `_friendly_import_error`'s raw-text fallback tail stays untranslated (known);
@@ -781,6 +972,17 @@ language maps German→target and **falls back to the German source** for any mi
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
 renders `LANGUAGE_NAMES`.
 
+- **Batch-translate policy (2026-06-26):** to keep UI feature work from being blocked on ~18
+  language files per string, **new UI strings ship in de (source) + en only**; the other
+  full-coverage languages are translated **later, in one batch**. The mechanism is a
+  **`PENDING_TRANSLATIONS`** set in [`i18n.test.js`](webui/src/i18n/i18n.test.js): a key listed
+  there must exist in `en.js` (still enforced — never ship an untranslated `t()`), but is
+  **exempt from the full-coverage assertion** until translated. Workflow: (1) add the German
+  `t()` literal, (2) add the `en.js` entry **and bump the en key-count**, (3) add the key to
+  `PENDING_TRANSLATIONS`. The batch pass translates them into every language and **empties the
+  pending set**. Until a key falls back to German in the untranslated languages, which is
+  acceptable in the interim.
+
 - **Localized errors (2026-06-08):** core `CommandError` messages are raised in **German**
   (the source language) and surfaced via `t(error)` in [`App.jsx`](webui/src/App.jsx), so they
   localize like any other string. The 13 user-facing command errors are translated in all
@@ -836,13 +1038,14 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.9.5`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.10.0`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
-- **Two known gaps that must NOT be reported as bugs** (the bug form's required
-  checkbox enforces this): (1) export >100 pages → single PDF, auto-split not wired
-  into the UI; (2) compression irreversible after save ("bereits komprimiert (keine
-  Quelle)"). **If either gap is fixed, remove it from the checkbox, BETA_TESTING.md
-  §4, and CONTRIBUTING.md** — otherwise testers are told a working feature is broken.
+- **One known gap that must NOT be reported as a bug** (the bug form's required
+  checkbox enforces this): compression irreversible after save ("bereits komprimiert
+  (keine Quelle)"). The former auto-split gap was removed when #13 (configurable
+  export split) shipped on the v3.10 branch. **If this gap is fixed, remove it from
+  the checkbox, BETA_TESTING.md §4, and CONTRIBUTING.md** — otherwise testers are
+  told a working feature is broken.
 - **Manual tests `01`–`08` are all current against the React UI** (01–04 rewritten
   2026-06-15; the removed Tk GUI is no longer referenced anywhere).
 - **Two run paths** (prebuilt onedir folder; from source: Python 3.12+ + Node, `pip

@@ -2,13 +2,14 @@
 // app's tree context menu), not as buttons.
 import { useState, useLayoutEffect, useEffect, useRef } from 'react'
 import { useT } from './i18n/LanguageProvider'
+import { rovingFocusKeydown, tagMenuItems } from './hooks/useMenu'
 
 // The status DATA keys (from config().statuses) → their German display text, which
 // t() then translates. Keys stay erfasst/zu erfassen/vorjahreswert (persisted data).
 const STATUS_DE = { '': 'Kein Status', erfasst: 'Erfasst', 'zu erfassen': 'Zu erfassen', vorjahreswert: 'Vorjahr' }
 const statusLabel = (t, key) => t(STATUS_DE[key] ?? key)  // internal helper; not exported (keeps fast-refresh happy)
 
-export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
+export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport, onDelete, onGroup, onOpenInPdfTool, selectedIds, onSetCollapsed, onExpandAll, onCollapseAll, statuses = [], editLocked = false }) {
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
@@ -27,10 +28,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
     // Reset the split flyout whenever the menu target changes
     setSplitOpen(false)
     // a11y (F-3): tag items as menuitems and move focus into the menu so it's
-    // immediately keyboard-operable (focus-first-on-open).
-    const btns = el.querySelectorAll('button')
-    btns.forEach((b) => b.setAttribute('role', 'menuitem'))
-    btns[0]?.focus()
+    // immediately keyboard-operable (focus-first-on-open). Shared helper (#10).
+    tagMenuItems(el)
+    el.querySelector('button')?.focus()
   }, [menu, x, y])
 
   // Escape closes the menu (mirrors the backdrop click; makes the CLAUDE.md
@@ -44,9 +44,7 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
 
   // Keep role="menuitem" on items that appear after the initial open (the split
   // flyout submenu) so arrow navigation and screen readers reach them too (F-3).
-  useEffect(() => {
-    menuRef.current?.querySelectorAll('button').forEach((b) => b.setAttribute('role', 'menuitem'))
-  }, [splitOpen])
+  useEffect(() => { tagMenuItems(menuRef.current) }, [splitOpen])
 
   if (!menu) return null
 
@@ -97,15 +95,8 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
 
   // Roving focus: ↑/↓ cycle the items, Home/End jump to the ends. Enter/Space
   // activate the focused <button> natively; Esc closes via the window listener (F-3).
-  const onMenuKey = (e) => {
-    const btns = Array.from(menuRef.current?.querySelectorAll('button') ?? [])
-    if (!btns.length) return
-    const i = btns.indexOf(document.activeElement)
-    if (e.key === 'ArrowDown') { e.preventDefault(); btns[i < 0 ? 0 : (i + 1) % btns.length].focus() }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); btns[i < 0 ? btns.length - 1 : (i - 1 + btns.length) % btns.length].focus() }
-    else if (e.key === 'Home') { e.preventDefault(); btns[0].focus() }
-    else if (e.key === 'End') { e.preventDefault(); btns[btns.length - 1].focus() }
-  }
+  // Shared helper (#10).
+  const onMenuKey = (e) => rovingFocusKeydown(menuRef.current, e)
 
   return (
     <>
@@ -125,6 +116,9 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
           </>
         )}
         <button onClick={rename}>{t('Umbenennen')}</button>
+        {!editLocked && isLeaf && onOpenInPdfTool && (
+          <button onClick={() => { onOpenInPdfTool(node); onClose() }}>{t('Im PDF-Tool öffnen')}</button>
+        )}
         {!editLocked && isLeaf && node.pdf_length > 1 && (
           <div className="cm-haschild" onMouseEnter={() => setSplitOpen(true)} onMouseLeave={() => setSplitOpen(false)}>
             <button className="cm-trigger" onClick={() => setSplitOpen((v) => !v)}>

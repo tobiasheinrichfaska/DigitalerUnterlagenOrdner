@@ -60,7 +60,35 @@ describe('ExportDialog — confirm / cancel', () => {
     fireEvent.click(screen.getByText('Exportieren'))
     expect(onChoose).toHaveBeenCalledWith({
       toc: true, toc_links: true, index: true, index_links: true, bookmarks: true,
+      split_pages: null, split_level: 'top', to_datev: false,
     })
+  })
+
+  it('returns the split threshold + level when splitting is enabled (#13)', () => {
+    const { onChoose } = renderDialog()
+    fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+    const num = document.querySelector('.exp-num')
+    fireEvent.change(num, { target: { value: '50' } })
+    fireEvent.change(document.querySelector('.exp-level'), { target: { value: 'folder' } })
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(
+      expect.objectContaining({ split_pages: 50, split_level: 'folder' }),
+    )
+  })
+
+  it('disables and clears the index + bookmarks while splitting (split renders its own TOC)', () => {
+    const { onChoose } = renderDialog({ hasTags: true })  // index + bookmarks on by default
+    fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+    expect(screen.getByLabelText('Stichwortverzeichnis (nach Tags)')).toBeDisabled()
+    expect(screen.getByLabelText('PDF-Lesezeichen (Seitenleiste)')).toBeDisabled()
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ index: false, bookmarks: false }))
+  })
+
+  it('keeps split_pages null while splitting is off', () => {
+    const { onChoose } = renderDialog()
+    fireEvent.click(screen.getByText('Exportieren'))
+    expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ split_pages: null }))
   })
 
   it('cancels via the button, the backdrop, and Esc', () => {
@@ -68,5 +96,28 @@ describe('ExportDialog — confirm / cancel', () => {
     fireEvent.click(screen.getByText('Abbrechen'))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onCancel).toHaveBeenCalled()
+  })
+
+  describe('DATEV export option (#export-to-DATEV, same client)', () => {
+    it('is hidden unless datevAvailable', () => {
+      renderDialog({ datevAvailable: false })
+      expect(screen.queryByLabelText('Nach DATEV ablegen (gleicher Mandant)')).toBeNull()
+    })
+
+    it('defaults off → to_datev false on confirm', () => {
+      const { onChoose } = renderDialog({ datevAvailable: true })
+      expect(screen.getByLabelText('Nach DATEV ablegen (gleicher Mandant)')).not.toBeChecked()
+      fireEvent.click(screen.getByText('Exportieren'))
+      expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ to_datev: false }))
+    })
+
+    it('checking it sets to_datev true (and still carries split options)', () => {
+      const { onChoose } = renderDialog({ datevAvailable: true })
+      fireEvent.click(screen.getByLabelText('Nach DATEV ablegen (gleicher Mandant)'))
+      fireEvent.click(screen.getByLabelText('In mehrere Dateien aufteilen'))
+      fireEvent.click(screen.getByText('Exportieren'))
+      expect(onChoose).toHaveBeenCalledWith(
+        expect.objectContaining({ to_datev: true, split_pages: 100 }))
+    })
   })
 })

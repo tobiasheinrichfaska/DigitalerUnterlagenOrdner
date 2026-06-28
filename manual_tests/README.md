@@ -46,6 +46,8 @@ dialogs, export results).
 | [06_status_cache_compression.md](06_status_cache_compression.md) | **Status bar**, render-cache gauge & ＋/− buttons, prefetch warming, default-to-smallest compression, apply, split-carries-compression, cancel-on-remove |
 | [07_keyboard_delete_language.md](07_keyboard_delete_language.md) | **Keyboard** structuring (Insert carry), collapse, **multi-delete + parent/child resolver**, inline rename, **language switcher**, layout (resizable pane, page indicator) |
 | [08_status_dots_help.md](08_status_dots_help.md) | **Status dots** aggregation (leaf/folder, mixed black dot, cascade), compression "undecided" red dot, **❓ Hilfe** modal |
+| [09_pdf_tool.md](09_pdf_tool.md) | **PDF-Tool** surface: open a leaf (folders can't), add text / fill forms, save back into the node, re-edit across sessions, compression-flatten caveat |
+| [10_datev.md](10_datev.md) | **DATEV mode** (v3.10.0): toggle on/off, „from DATEV" badge on a checked-out file, guarded write-back (incl. conflict/locked fallbacks), file-to-DATEV, export-to-DATEV (same client, every split part) — **requires a DATEVconnect box; skip where none is reachable** |
 
 > Keep these files current: whenever a user-facing flow changes, update the
 > matching test case. (Workspace convention — see the global CLAUDE.md.)

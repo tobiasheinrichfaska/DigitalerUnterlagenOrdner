@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BelegTool — PDF-Tool</title>
+    <style>
+      html, body { margin: 0; height: 100%; font: 14px system-ui, sans-serif; }
+      #pdftoolbar {
+        position: absolute; top: 0; left: 0; right: 0; height: 40px; z-index: 5;
+        display: flex; align-items: center; gap: 8px; padding: 0 10px;
+        background: #f3f4f6; border-bottom: 1px solid #d1d5db; box-sizing: border-box;
+      }
+      #pdftoolbar button {
+        font: inherit; padding: 5px 10px; border: 1px solid #c3c9d2;
+        background: #fff; border-radius: 6px; cursor: pointer;
+      }
+      #pdftoolbar button:hover:not(:disabled) { border-color: #2b6cb0; }
+      #pdftoolbar button:disabled { opacity: 0.5; cursor: default; }
+      #pdftoolbar button.on { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+      #pdf-status { margin-left: auto; color: #4b5563; }
+      /* PDF.js PDFViewer requires an absolutely-positioned, scrollable container. */
+      #viewerContainer { position: absolute; inset: 40px 0 0 0; overflow: auto; background: #525659; }
+    </style>
+  </head>
+  <body>
+    <div id="pdftoolbar">
+      <button id="btn-text" type="button" title="Textfeld einfügen (Schreibmaschine)">✎ Text</button>
+      <button id="btn-save" type="button" title="Änderungen ins Dokument speichern" disabled>💾 Speichern</button>
+      <button id="btn-datev" type="button" title="Mit DATEV verknüpftes Dokument zurückschreiben / ablegen" hidden></button>
+      <span id="pdf-status"></span>
+    </div>
+    <div id="viewerContainer"><div id="viewer" class="pdfViewer"></div></div>
+    <script type="module" src="/src/pdftool/main.js"></script>
+  </body>
+</html>

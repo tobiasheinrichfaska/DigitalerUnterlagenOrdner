@@ -193,7 +193,10 @@ def _render_toc_pdf(items: List[_TocItem],
             c.setFont("Helvetica-Oblique", 9)
             c.setFillColorRGB(0.55, 0.55, 0.55)
             c.drawString(x, y, name)
-            c.drawRightString(_A4_W - _MR, y, f"→ {item.other_file}")
+            # every part's TOC lists the SAME full item set, so all parts share one
+            # TOC page count → the entry's page in the other file is page_start+toc_offset.
+            ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + toc_offset}"
+            c.drawRightString(_A4_W - _MR, y, f"→ {ref}")
 
         elif item.is_folder:
             # ── Ordner-Überschrift ────────────────────────────────────────────
@@ -545,22 +548,163 @@ def _split_at_boundaries(nodes: List[PDFNode], max_pages: int) -> List[List[PDFN
     return groups
 
 
+def _pack_units(units, max_pages):
+    """Greedy: pack ``(ref, pages)`` units into ordered groups whose page sums stay
+    ``<= max_pages``; a single oversized unit gets its own group. Returns the refs
+    grouped: ``List[List[ref]]``. Shared by every break level (#13)."""
+    groups, cur, cur_n = [], [], 0
+    for ref, n in units:
+        if cur and cur_n + n > max_pages:
+            groups.append(cur)
+            cur, cur_n = [], 0
+        cur.append(ref)
+        cur_n += n
+    if cur:
+        groups.append(cur)
+    return groups
+
+
+def _leaves_with_path(nodes, _path=()):
+    """All non-empty leaves in document order, each paired with its folder-name path
+    (so a split part can be rebuilt with the document's folder structure)."""
+    out = []
+    for node in nodes:
+        if node.is_folder:
+            out.extend(_leaves_with_path(node.children, _path + (node.name,)))
+        elif count_node_pages(node) > 0:
+            out.append((node, _path))
+    return out
+
+
+def _subtree_from_leaves(items):
+    """Rebuild a pruned forest of folders holding the given ``(leaf, folder_path)``
+    items — preserving order and merging shared folders — so a split part keeps the
+    document's structure. Folder nodes are fresh; leaf nodes are reused as-is."""
+    roots = []
+    index = {}  # path tuple -> folder PDFNode
+
+    def ensure(path):
+        if not path:
+            return None
+        if path in index:
+            return index[path]
+        parent = ensure(path[:-1])
+        folder = PDFNode(name=path[-1], is_folder=True)
+        index[path] = folder
+        if parent is None:
+            roots.append(folder)
+        else:
+            parent.add_child(folder)
+        return folder
+
+    for leaf, path in items:
+        parent = ensure(path)
+        if parent is None:
+            roots.append(leaf)
+        else:
+            parent.add_child(leaf)
+    return roots
+
+
+def _slice_leaf(leaf, indices):
+    """A new leaf holding only ``indices`` (0-based) of ``leaf``'s pages — for the
+    page-level split, where a document is cut across files. The name carries the
+    original page range so each part stays identifiable."""
+    writer = PdfWriter()
+    try:
+        reader = PdfReader(io.BytesIO(leaf.current_pdf_data or b""))
+        for i in indices:
+            writer.add_page(reader.pages[i])
+    except Exception as e:  # keep the export going; a broken slice becomes empty
+        logger.warning("Seiten-Split von '%s' fehlgeschlagen: %s", leaf.name, e)
+    buf = io.BytesIO()
+    writer.write(buf)
+    part = PDFNode(name=f"{leaf.name} (S. {indices[0] + 1}–{indices[-1] + 1})",
+                   pdf_data=buf.getvalue())
+    part.pdf_length = len(indices)
+    part.tags = list(getattr(leaf, "tags", []) or [])
+    return part
+
+
+def _subtree_from_pages(group):
+    """Rebuild a part's forest from page units, coalescing consecutive same-leaf
+    pages into one (possibly partial) leaf and keeping folder paths. A run that
+    covers all of a leaf's pages reuses the leaf untouched; a partial run is sliced."""
+    runs = []  # [leaf, path, [indices]]
+    for leaf, path, pi in group:
+        if runs and runs[-1][0] is leaf and runs[-1][2][-1] == pi - 1:
+            runs[-1][2].append(pi)
+        else:
+            runs.append([leaf, path, [pi]])
+    items = []
+    for leaf, path, indices in runs:
+        part = leaf if len(indices) == count_node_pages(leaf) else _slice_leaf(leaf, indices)
+        items.append((part, path))
+    return _subtree_from_leaves(items)
+
+
+def _plan_groups(nodes, max_pages, level):
+    """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
+
+    ``level``:
+      ``'top'``    — units are the top-level nodes; a top folder is never split.
+      ``'folder'`` — units are leaves; a folder may be split across parts at child
+                     boundaries, but a leaf is never split.
+      ``'page'``   — units are pages; a leaf may be split across parts (mid-document).
+
+    Returns ``List[List[PDFNode]]`` — a pruned forest per part, ready for
+    ``_build_toc_items`` / ``_export_nodes_to_bytes``."""
+    if level == 'top':
+        return _split_at_boundaries(nodes, max_pages)
+    if level == 'folder':
+        leaves = _leaves_with_path(nodes)
+        units = [((leaf, path), count_node_pages(leaf)) for leaf, path in leaves]
+        return [_subtree_from_leaves(grp) for grp in _pack_units(units, max_pages)]
+    if level == 'page':
+        units = []
+        for leaf, path in _leaves_with_path(nodes):
+            for pi in range(count_node_pages(leaf)):
+                units.append(((leaf, path, pi), 1))
+        return [_subtree_from_pages(grp) for grp in _pack_units(units, max_pages)]
+    raise ValueError(f"unknown split level: {level!r}")
+
+
+def _part_paths(base_path, n):
+    """Output paths for an ``n``-part split — the base for a single part, else
+    ``<base>_Teil_<i>.<ext>``. Single source of truth for the part naming."""
+    if n <= 1:
+        return [base_path]
+    base_name = os.path.splitext(base_path)[0]
+    ext = os.path.splitext(base_path)[1] or ".pdf"
+    return [f"{base_name}_Teil_{i + 1}{ext}" for i in range(n)]
+
+
+def plan_split_paths(nodes: List[PDFNode], base_path: str, max_pages: int,
+                     level: str = 'top') -> List[str]:
+    """The file paths an export split WOULD write — without writing anything. Lets the
+    caller check for overwrites and confirm before clobbering existing files (#13)."""
+    top = PDFStorage.filter_keep_ancestors(nodes)
+    return _part_paths(base_path, len(_plan_groups(top, max_pages, level)))
+
+
 def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
-                               max_pages: int) -> List[str]:
+                               max_pages: int, level: str = 'top') -> List[str]:
     """
     Aufteilen in mehrere Dateien. Jede Datei hat einen TOC mit Querverweisen
     auf die anderen Dateien. Gibt Liste der erstellten Pfade zurück.
+    ``level`` ('top'/'folder'/'page') wählt die Bruchgrenze — siehe ``_plan_groups``.
     """
     top = PDFStorage.filter_keep_ancestors(nodes)
-    groups = _split_at_boundaries(top, max_pages)
+    groups = _plan_groups(top, max_pages, level)
+
+    if not groups:
+        return []  # nothing to export (empty forest) — write no file, report no paths
 
     if len(groups) == 1:
         export_pdf_with_toc(top, base_path)
         return [base_path]
 
-    base_name = os.path.splitext(base_path)[0]
-    ext = os.path.splitext(base_path)[1] or ".pdf"
-    paths = [f"{base_name}_Teil_{i + 1}{ext}" for i in range(len(groups))]
+    paths = _part_paths(base_path, len(groups))
     file_names = [os.path.basename(p) for p in paths]
 
     group_items = [_build_toc_items(g) for g in groups]
@@ -577,7 +721,7 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
                 for it in other_items:
                     full_items.append(_TocItem(
                         depth=it.depth, name=it.name,
-                        page_start=0, page_end=0,
+                        page_start=it.page_start, page_end=it.page_end,  # keep the page for the cross-ref
                         is_folder=it.is_folder, other_file=other_name,
                     ))
 

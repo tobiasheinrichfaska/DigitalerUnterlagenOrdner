@@ -4,8 +4,8 @@ Pure functions: PDF bytes -> page images / PNG bytes. Extracted from
 ``PDFNode._create_previews`` so the domain model no longer renders previews
 itself (Phase 1 of the React migration).
 
-- ``render_pdf_to_images`` returns PIL images — what the current Tkinter app
-  needs (it wraps them in ImageTk for the canvas).
+- ``render_pdf_to_images`` returns PIL images — the headless/test-facing form
+  (used by tests and the compression raster path; no GUI canvas anymore).
 - ``render_pdf_to_pngs`` returns PNG bytes — the web/React-facing form
   (the SPA shows them via ``<img>``); also the shape the core service will
   send over IPC.

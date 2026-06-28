@@ -341,6 +341,61 @@ def test_export_pdf_with_toc(tmp_path):
     assert r["ok"] and r["count"] == 2
     assert out.exists() and out.read_bytes().startswith(b"%PDF")
     assert "warning" not in r  # nothing skipped → no warning
+    assert r["paths"] == [str(out)]  # single file by default
+
+
+def test_export_split_writes_multiple_files(tmp_path):
+    # 6 pages over a 3-page threshold → several part files, each a valid PDF (#13).
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="B", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="C", pdf_length=2, original_data=create_valid_pdf(2)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    out = tmp_path / "Export.pdf"
+    r = api.export(sid, str(out), options={"split_pages": 3, "split_level": "top"})
+    assert r["ok"] and len(r["paths"]) >= 2
+    for p in r["paths"]:
+        assert os.path.exists(p)
+        with open(p, "rb") as f:
+            assert f.read(4) == b"%PDF"
+
+
+def test_export_no_split_when_under_threshold(tmp_path):
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", pdf_length=1, original_data=create_valid_pdf(1)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    out = tmp_path / "Export.pdf"
+    r = api.export(sid, str(out), options={"split_pages": 100, "split_level": "top"})
+    assert r["ok"] and r["paths"] == [str(out)]  # below threshold → single file
+    assert out.exists()
+
+
+def test_export_split_refuses_overwrite_without_confirm(tmp_path):
+    src = Document(Node(name="root", is_folder=True, children=(
+        Node(name="A", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="B", pdf_length=2, original_data=create_valid_pdf(2)),
+        Node(name="C", pdf_length=2, original_data=create_valid_pdf(2)),
+    )))
+    path = tmp_path / "s.belegtool"
+    save_belegtool(src, path)
+    api = CoreApi()
+    sid = api.open(path=str(path))["session"]
+    out = tmp_path / "Export.pdf"
+    opts = {"split_pages": 3, "split_level": "top"}
+    r1 = api.export(sid, str(out), options=opts)            # first run writes the parts
+    assert r1["ok"] and len(r1["paths"]) >= 2
+    r2 = api.export(sid, str(out), options=opts)            # parts exist → refused, nothing written
+    assert r2["ok"] is False and r2["code"] == "exists" and r2["existing"]
+    r3 = api.export(sid, str(out), options={**opts, "overwrite": True})  # confirmed → overwrites
+    assert r3["ok"] and len(r3["paths"]) >= 2
 
 
 def test_dirty_tracking_cleared_on_save(tmp_path):

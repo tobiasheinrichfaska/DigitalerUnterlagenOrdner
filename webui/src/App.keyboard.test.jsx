@@ -59,7 +59,7 @@ describe('App keyboard — modal gating', () => {
     fireEvent.click(screen.getByText(/beta/))
     // Click the Export PDF toolbar button — this synchronously opens the ExportDialog
     // (exportPdf() just calls setExportAsk({ids}) — no async, no bridge call)
-    fireEvent.click(screen.getByText(/Export PDF/))
+    fireEvent.click(screen.getByRole('button', { name: /Export PDF/ }))
     // Dialog is now open — the export dialog h2 should be visible
     expect(screen.getByText('PDF exportieren')).toBeInTheDocument()
     // Snapshot dispatch count before firing keyboard events

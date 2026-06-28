@@ -42,8 +42,10 @@ def test_tar_extracts_each_member_as_pdf():
             assert e["content"].getvalue().startswith(b"%PDF")
 
 
-def test_tar_unreadable_member_becomes_folder():
-    # A directory member (extractfile -> None) lands as a "nicht importierbar" folder.
+def test_tar_subfolder_member_nests_under_a_folder_node():
+    # A member under a subfolder ("sub/a.pdf") lands inside a "sub" folder node — the
+    # tar's own directory structure is preserved, not flattened to the basename.
+    # (The bare directory entry "sub/" is a non-file member and is skipped.)
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tf:
         d = tarfile.TarInfo("sub/")
@@ -54,7 +56,9 @@ def test_tar_unreadable_member_becomes_folder():
         f.size = len(payload)
         tf.addfile(f, io.BytesIO(payload))
     struct = archives.extract_tar_to_structure(buf.getvalue())
-    assert any(e["name"].endswith("a.pdf") for e in struct)
+    sub = next((e for e in struct if e["name"] == "sub" and "children" in e), None)
+    assert sub is not None
+    assert any(c["name"] == "a.pdf" for c in sub["children"])
 
 
 def test_tar_invalid_raises():

@@ -18,6 +18,10 @@ dist-ssr
 /blob-report/
 /.playwright/
 
+# One-off MS-Store screenshot generator: reads the gitignored .tmp/store/fixtures.json,
+# so it must NOT join the committed e2e gate. Kept locally for re-running.
+e2e/store.spec.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

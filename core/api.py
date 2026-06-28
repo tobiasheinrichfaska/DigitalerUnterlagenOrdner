@@ -1109,7 +1109,9 @@ class CoreApi:
         binding; that path uses ``save_node_back``): bake the edits into the session AND write
         them to the bound ``.pdf`` on disk now. (A DATEV write-back/file instead bakes via
         ``update_pdf_bytes`` and persists only after its guard passes.) Returns
-        ``{ok, local_saved, local_kind}``."""
+        ``{ok, local_saved, local_kind, local_error}`` — ``local_error`` is set (and
+        ``local_saved`` None) when the on-disk write failed though ``ok`` stays True; the JS
+        caller must check it to avoid reporting a false success."""
         data, err = self._decode_pdf_b64(data_b64)
         if err:
             return err

@@ -100,6 +100,22 @@ test.describe('PDF-Tool DATEV', () => {
     expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev'])  // no save_pdf_bytes
   })
 
+  test('an error verdict shows the raw cause prefixed DATEV and still saves locally', async ({ page }) => {
+    // Coverage (round 11, Low): the verdict:'error' branch (a mid-write network/HTTP failure)
+    // shows "DATEV: <res.error>" verbatim — NOT a guard message — and the fallback save still runs.
+    await installBridge(page, { connected: true, datevMode: true })
+    await page.addInitScript(() => { window.__sbResult = { ok: false, verdict: 'error', error: 'Netzwerk nicht erreichbar' } })
+    await page.goto('/pdf-tool.html')
+    const btn = page.locator('#btn-datev')
+    await expect(btn).toBeVisible({ timeout: 20000 })
+    await btn.click()
+    const status = page.locator('#pdf-status')
+    await expect(status).toHaveText(/DATEV: Netzwerk nicht erreichbar/, { timeout: 20000 })  // raw cause, prefixed
+    await expect(status).toHaveText(/lokal gesichert/)  // the edit was NOT lost
+    const calls = await page.evaluate(() => window.__calls.map((c) => c[0]))
+    expect(calls).toEqual(['update_pdf_bytes', 'save_to_datev', 'save_pdf_bytes'])
+  })
+
   test('a not-connected pdf shows file-anew; click files via datev_file with the Mandant', async ({ page }) => {
     await installBridge(page, { connected: false, datevMode: true })
     page.on('dialog', (d) => d.accept('10001'))  // the Mandant prompt

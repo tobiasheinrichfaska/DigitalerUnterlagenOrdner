@@ -59,15 +59,25 @@ function hasBinding() {
   return !!(bridge && boundSession && pdfDoc)
 }
 
-// Persist the current PDF.js edits (form values + added FreeText) into the bound session via
-// the method that matches HOW the surface was opened: a node binding (save_node_back, needs a
-// pdftool binding) vs a directly-opened .pdf 'bridge' session (save_pdf_bytes — the bridge open
-// creates NO node binding, so save_node_back would reject it). Returns the bridge result.
+// The plain 💾 Speichern: persist the current PDF.js edits (form values + added FreeText) to
+// the bound document AND to disk, via the method that matches HOW the surface was opened: a
+// node binding (save_node_back, needs a pdftool binding) vs a directly-opened .pdf 'bridge'
+// session (save_pdf_bytes — the bridge open creates NO node binding, so save_node_back rejects
+// it). Returns the bridge result.
 async function bakeEdits() {
   const b64 = uint8ToBase64(await pdfDoc.saveDocument())
   return sourceMode === 'session'
     ? bridge.save_node_back(boundSession, b64)
     : bridge.save_pdf_bytes(boundSession, b64)
+}
+
+// Bake edits into the SESSION ONLY (no disk) before a guarded DATEV op — the on-disk .pdf is
+// written by the DATEV op AFTER a successful verdict, so a refused/declined write-back never
+// clobbers the local checkout. DATEV is offered for a 'bridge' .pdf only (setupDatevUi), so
+// update_pdf_bytes is always the right primitive here.
+async function bakeForDatev() {
+  const b64 = uint8ToBase64(await pdfDoc.saveDocument())
+  return bridge.update_pdf_bytes(boundSession, b64)
 }
 
 async function saveBack() {
@@ -92,7 +102,7 @@ async function datevWriteBack() {
   if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   setStatus('Speichern…')
   try {
-    const saved = await bakeEdits()
+    const saved = await bakeForDatev()   // session only; disk write happens after the guard
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.save_to_datev(boundSession)
     if (res && res.ok) {
@@ -113,7 +123,7 @@ async function datevFileNew() {
   if (!num || !num.trim()) return
   setStatus('Ablegen…')
   try {
-    const saved = await bakeEdits()  // bake first; abort if it fails so we never file unedited bytes
+    const saved = await bakeForDatev()  // session only; abort if it fails so we never file unedited bytes
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.datev_file(boundSession, null, num.trim())
     if (res && res.ok) setStatus(datevSavedNotice('In DATEV abgelegt ✓', res))

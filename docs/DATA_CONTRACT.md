@@ -1,9 +1,8 @@
 # Data Contract — DigitalerUnterlagenOrdner (BelegTool)
 
-The stable shapes that decouple the **data** from any UI. Today the Tkinter app
-uses them in-process; the future core service (see
-[`REACT_MIGRATION_PLAN.md`](REACT_MIGRATION_PLAN.md), on `react-migration`) sends
-the same shapes over IPC to the React UI. Treat changes here as
+The stable shapes that decouple the **data** from any UI. The React/pywebview host
+uses them in-process (the legacy Tk GUI was removed in v3.6.0); the core service can
+send the same shapes over IPC to the React UI. Treat changes here as
 **data-format changes** (semantic-versioning MAJOR if a `.belegtool` written by
 an old build would no longer load).
 

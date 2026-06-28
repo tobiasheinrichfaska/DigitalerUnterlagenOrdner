@@ -866,7 +866,9 @@ class CoreApi:
         (materialize_subset's view title, datev_export's part files)."""
         import re as _re
         safe = _re.sub(r'[<>:"/\\|?*]', "_", (name or default)).strip().rstrip(". ")
-        if not safe or safe.upper() in cls._RESERVED_NAMES:
+        # Windows reserves device names even WITH an extension ("NUL.pdf", "COM1.foo"), so test
+        # the part before the first dot, not the whole string.
+        if not safe or safe.split(".")[0].upper() in cls._RESERVED_NAMES:
             return default
         return safe
 
@@ -1063,21 +1065,21 @@ class CoreApi:
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
         return {"ok": True, "owner": owner_session, "node": node_id}
 
-    def save_pdf_bytes(self, session: str, data_b64: str) -> dict:
-        """Persist PDF.js-edited bytes for a PDF-Tool **bridge** session — a plain single-leaf
-        document opened directly from a ``.pdf`` (NOT a node binding; that path uses
-        ``save_node_back``, which needs a binding the bridge open never creates). Writes the
-        edited bytes into the session's first leaf so a following DATEV write-back/file uploads
-        the edits, and (via ``_datev_local_persist``) saves them to the bound file on disk.
-        Returns ``{ok, local_saved, local_kind}``."""
+    @staticmethod
+    def _decode_pdf_b64(data_b64):
+        """Decode a PDF-Tool save payload. Returns ``(bytes, None)`` or ``(None, error_dict)``."""
         import base64
-        from core.commands import SetNodeBytes
         if not data_b64:
-            return {"ok": False, "error": "keine Daten zum Speichern"}
+            return None, {"ok": False, "error": "keine Daten zum Speichern"}
         try:
-            data = base64.b64decode(data_b64)
+            return base64.b64decode(data_b64), None
         except Exception:
-            return {"ok": False, "error": "ungültige Daten"}
+            return None, {"ok": False, "error": "ungültige Daten"}
+
+    def _dispatch_pdf_bytes(self, session, data):
+        """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
+        (``SetNodeBytes``). No disk write. Returns ``{ok}`` or an error dict."""
+        from core.commands import SetNodeBytes, CommandError
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -1085,8 +1087,35 @@ class CoreApi:
             leaves = [n for n in s.document.root.iter() if not n.is_folder]
             if not leaves:
                 return {"ok": False, "error": "kein PDF im Dokument"}
-            s.dispatch(SetNodeBytes(leaves[0].id, data))
-        res = {"ok": True}
+            try:
+                s.dispatch(SetNodeBytes(leaves[0].id, data))
+            except CommandError as e:
+                return {"ok": False, "error": str(e)}
+        return {"ok": True}
+
+    def update_pdf_bytes(self, session: str, data_b64: str) -> dict:
+        """Bake PDF.js-edited bytes into a PDF-Tool **bridge** session (a single-leaf ``.pdf``
+        opened via ``open``) — **SESSION ONLY, no disk write**. Used to bake an edit BEFORE a
+        guarded DATEV write-back/file: the on-disk ``.pdf`` is written only AFTER a successful
+        verdict (by ``_datev_local_persist``), so a refused/declined write-back never clobbers
+        the local checkout file. Returns ``{ok}``."""
+        data, err = self._decode_pdf_b64(data_b64)
+        if err:
+            return err
+        return self._dispatch_pdf_bytes(session, data)
+
+    def save_pdf_bytes(self, session: str, data_b64: str) -> dict:
+        """The plain „Speichern" for a directly-opened ``.pdf`` (bridge session, NOT a node
+        binding; that path uses ``save_node_back``): bake the edits into the session AND write
+        them to the bound ``.pdf`` on disk now. (A DATEV write-back/file instead bakes via
+        ``update_pdf_bytes`` and persists only after its guard passes.) Returns
+        ``{ok, local_saved, local_kind}``."""
+        data, err = self._decode_pdf_b64(data_b64)
+        if err:
+            return err
+        res = self._dispatch_pdf_bytes(session, data)
+        if not res.get("ok"):
+            return res
         res.update(self._datev_local_persist(session, data))   # write the .pdf on disk too
         return res
 
@@ -1434,7 +1463,7 @@ class CoreApi:
 
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:
-        """Import one file from disk into immutable Node(s) — mirrors the Tk import:
+        """Import one file from disk into immutable Node(s):
         .belegtool/PDF/zip/tar/email via PDFStorage, everything else (images,
         Office, …) via UniversalImporter. Heavy; call outside the lock."""
         from core.bridge import node_from_pdfnode

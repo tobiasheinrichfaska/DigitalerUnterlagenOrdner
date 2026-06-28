@@ -283,9 +283,14 @@ class HostApi:
         return self._core.save_node_back(pdftool_session, data_b64)
 
     def save_pdf_bytes(self, session, data_b64=None):
-        """Save edits for a PDF-Tool **bridge** session (a directly-opened .pdf, no node
-        binding) — used by the PDF-Tool's „Speichern" / DATEV actions for a checkout .pdf."""
+        """The plain „Speichern" for a PDF-Tool **bridge** session (a directly-opened .pdf, no
+        node binding): bake the edits into the session AND write the .pdf on disk."""
         return self._core.save_pdf_bytes(session, data_b64)
+
+    def update_pdf_bytes(self, session, data_b64=None):
+        """Bake edits into a PDF-Tool **bridge** session WITHOUT writing disk — used before a
+        guarded DATEV write-back/file so a refused write-back never clobbers the local .pdf."""
+        return self._core.update_pdf_bytes(session, data_b64)
 
     def break_node_binding(self, session, node_id):
         return self._core.break_node_binding(session, node_id)

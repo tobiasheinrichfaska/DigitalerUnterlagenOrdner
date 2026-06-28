@@ -25,6 +25,8 @@ export const en = {
   'Importieren': 'Import',
   'Speichern': 'Save',
   'Speichern unter…': 'Save as…',
+  'Weitere Speicheroptionen': 'More save options',
+  'Im PDF-Tool öffnen': 'Open in PDF tool',
   'Export PDF': 'Export PDF',
   // save dialog (compression alternatives)
   'Komprimierungs-Alternativen speichern?': 'Save compression alternatives?',
@@ -111,6 +113,8 @@ export const en = {
   'Zu Favoriten': 'Add to favourites',
   'Aus Favoriten entfernen': 'Remove from favourites',
   'Favorit hinzufügen': 'Add favourite',
+  '{n} markiert': '{n} selected',
+  'nur auf einigen markiert': 'on only some of the selection',
 
   // tag view bar (search / filtered view / group by tag)
   'Tags suchen…': 'Search tags…',
@@ -141,6 +145,13 @@ export const en = {
   'mit anklickbaren Links': 'with clickable links',
   'Stichwortverzeichnis (nach Tags)': 'Tag index',
   'PDF-Lesezeichen (Seitenleiste)': 'PDF bookmarks (sidebar)',
+  'In mehrere Dateien aufteilen': 'Split into multiple files',
+  'max. Seiten pro Datei': 'max. pages per file',
+  'Trennen bei:': 'Break at:',
+  'oberste Ordner': 'top-level folders',
+  'jeder Ordnergrenze': 'any folder boundary',
+  'mitten im Dokument': 'mid-document (by page count)',
+  '{n} Dateien': '{n} files',
   'Exportieren': 'Export',
   'Keine Tags im Dokument': 'No tags in the document',
 
@@ -203,4 +214,30 @@ export const en = {
     '{name}: archive/email could not be read ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: damaged or invalid file',
   '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: document references an external template/source and was not imported for security reasons',
+
+  // DATEV mode (v3.10.0; DATEV-mode only)
+  'DATEV-Modus ein-/ausschalten': 'Toggle DATEV mode',
+  'Mit DATEV verknüpft': 'Linked with DATEV',
+  'in DATEV ausgecheckt': 'checked out in DATEV',
+  'Nach DATEV zurückschreiben': 'Write back to DATEV',
+  'Nach DATEV ablegen': 'File to DATEV',
+  'Mandantennummer für die DATEV-Ablage': 'Client number for filing to DATEV',
+  'Nach DATEV zurückgeschrieben': 'Written back to DATEV',
+  'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.':
+    'Written back to DATEV, but not saved locally.',
+  'In DATEV abgelegt': 'Filed to DATEV',
+  'In DATEV abgelegt, aber lokal nicht gespeichert.':
+    'Filed to DATEV, but not saved locally.',
+  'In DATEV abgelegt ({n} Dokumente)': 'Filed to DATEV ({n} documents)',
+  'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.':
+    'DATEV: the document is checked out — only a local save is possible.',
+  'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.':
+    'DATEV: the document was changed in the meantime — please save locally.',
+  'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.':
+    'DATEV: the server version differs from the opened one — please save locally.',
+  'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.':
+    'DATEV: no structure item found — please save locally.',
+  'DATEV-Rückschreiben fehlgeschlagen.': 'Write-back to DATEV failed.',
+  'DATEV-Ablage fehlgeschlagen.': 'Filing to DATEV failed.',
+  'Nach DATEV ablegen (gleicher Mandant)': 'File to DATEV (same client)',
 }

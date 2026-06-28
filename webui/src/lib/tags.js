@@ -118,3 +118,27 @@ export function groupByTag(root, { untaggedLabel = 'Ohne Tags' } = {}) {
   }
   return { ...root, children }
 }
+
+/** Multi-select tagging (#7). Given the selected node objects, return the UNION of
+ *  their OWN tags as [{ tag, onAll }] in first-seen order: `onAll` true when EVERY
+ *  selected node carries the tag. Drives the editor's chip display — a tag on all is
+ *  removable-from-all; a "partial" tag (onAll=false) can be added to complete it. */
+export function tagSelectionState(nodes) {
+  const list = (nodes || []).filter(Boolean)
+  const order = []
+  const counts = new Map()
+  for (const n of list) {
+    for (const tg of n.tags || []) {
+      if (!counts.has(tg)) { counts.set(tg, 0); order.push(tg) }
+      counts.set(tg, counts.get(tg) + 1)
+    }
+  }
+  const total = list.length
+  return order.map((tag) => ({ tag, onAll: total > 0 && counts.get(tag) === total }))
+}
+
+/** Tags already on EVERY selected node — excluded from the add suggestions (adding
+ *  one would be a no-op). A partial tag stays suggestible so it can be completed. */
+export function tagsOnAll(nodes) {
+  return tagSelectionState(nodes).filter((s) => s.onAll).map((s) => s.tag)
+}

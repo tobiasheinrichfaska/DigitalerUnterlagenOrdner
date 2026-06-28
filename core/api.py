@@ -10,6 +10,7 @@ Every method returns a dict with ``ok: bool``; success carries ``session``,
 
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 import uuid
@@ -101,6 +102,18 @@ class CoreApi:
         self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
         self._view_touched = {}  # view_dir -> last os.utime, to rate-limit the keep-alive touch
         self._renderer_lock = threading.Lock()  # guards the lazy RenderService build
+        # PDF-Tool node binding (docs/pdf-tool.md): a node opened in the PDF-Tool is
+        # LOCKED in its organizer session while a pdf-tool session edits its bytes.
+        self._node_locks = {}        # (owner_session, node_id) -> pdftool_session
+        self._pdftool_bindings = {}  # pdftool_session -> (owner_session, node_id)
+        # DATEV mode (off by default → the heavy datev package is never imported on a
+        # normal launch). The live service is built lazily on first use; per-session
+        # write-back baselines (opened sha256 + change_date_time) live here at runtime.
+        from infra.settings import load_settings
+        self._datev_mode = bool(load_settings().get("datev_mode"))
+        self._datev_service = None    # lazy DatevService (built when DATEV mode is on)
+        self._datev_baseline = {}     # session -> {open_change_dt, was_checked_out_at_open, opened_sha256}
+        self._datev_lock = threading.Lock()  # guards the lazy service build
 
     # ----------------------------------------------------------------------
     # Render cache + windowed-prefetch coordination
@@ -351,6 +364,8 @@ class CoreApi:
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
+        if self._datev_mode and path:
+            resp = self._datev_capture_on_open(sid, path, resp)
         return resp
 
     def document_path(self, session: str):
@@ -410,6 +425,11 @@ class CoreApi:
     # ----------------------------------------------------------------------
     def dispatch(self, session: str, command: dict) -> dict:
         cmd = command_from_dict(command)
+        locked = self._locked_conflict(session, cmd)
+        if locked is not None:
+            return {"ok": False, "code": "node_locked", "node_id": locked,
+                    "error": "Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann "
+                             "nicht gleichzeitig geändert werden."}
         removed = self._removed_node_ids(session, cmd)
         if removed:
             with self._lock:
@@ -741,6 +761,7 @@ class CoreApi:
             s = self._sessions.pop(session, None)
             self._paths.pop(session, None)
             lock = self._locks.pop(session, None)
+            self._datev_baseline.pop(session, None)  # free the DATEV write-back baseline
             view_dir = self._view_dirs.pop(session, None)
             if view_dir is not None:
                 self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
@@ -799,20 +820,57 @@ class CoreApi:
             nodes = list(storage.root.children)
         if not nodes:
             return {"ok": False, "error": "nichts zu exportieren"}
-        from formats.toc_export import export_pdf, empty_leaf_names
+        from formats.toc_export import (
+            export_pdf, export_pdf_split_with_toc, plan_split_paths,
+            count_total_pages, empty_leaf_names)
 
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
         skipped = empty_leaf_names(nodes)
+        # #13: split into several files when a page threshold is set and exceeded.
+        opts = options or {}
+        split_pages = opts.get("split_pages")
+        split_level = opts.get("split_level", "top")
+        will_split = bool(split_pages) and count_total_pages(nodes) > int(split_pages)
+        # Guard the ACTUAL part files (not just the base name) against overwriting —
+        # the host confirms before we clobber them, then re-calls with overwrite=True.
+        if will_split and not opts.get("overwrite"):
+            planned = plan_split_paths(nodes, path, int(split_pages), split_level)
+            existing = [p for p in planned if os.path.exists(p)]
+            if existing:
+                return {"ok": False, "code": "exists", "existing": existing, "paths": planned}
         try:
-            export_pdf(nodes, path, options)
+            if will_split:
+                paths = export_pdf_split_with_toc(nodes, path, int(split_pages), split_level)
+            else:
+                export_pdf(nodes, path, options)
+                paths = [path]
         except Exception as e:
             logger.exception("export failed")
             return {"ok": False, "error": str(e)}
-        result = {"ok": True, "session": session, "path": path, "count": len(nodes)}
+        result = {"ok": True, "session": session, "path": paths[0],
+                  "paths": paths, "count": len(nodes)}
         if skipped:
             result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
         return result
+
+    _RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
+                       *(f"COM{i}" for i in range(1, 10)),
+                       *(f"LPT{i}" for i in range(1, 10))}
+
+    @classmethod
+    def _safe_filename(cls, name, default):
+        """A filesystem-safe base name (no extension) from an arbitrary user/tag/document
+        string: strip illegal chars, trailing dots/spaces, and Windows-reserved device names.
+        Used wherever such a name becomes a real temp/disk path with no native dialog to vet it
+        (materialize_subset's view title, datev_export's part files)."""
+        import re as _re
+        safe = _re.sub(r'[<>:"/\\|?*]', "_", (name or default)).strip().rstrip(". ")
+        # Windows reserves device names even WITH an extension ("NUL.pdf", "COM1.foo"), so test
+        # the part before the first dot, not the whole string.
+        if not safe or safe.split(".")[0].upper() in cls._RESERVED_NAMES:
+            return default
+        return safe
 
     def materialize_subset(self, session: str, node_ids, name=None) -> dict:
         """Write a NEW .belegtool containing only ``node_ids`` — the nodes a tag view
@@ -840,20 +898,12 @@ class CoreApi:
         new_root = prune(document.root)
         if not new_root.children:
             return {"ok": False, "error": "nichts angezeigt"}
-        import re
         import tempfile
         from core.bridge import save_belegtool
         # open() titles a document from its FILE NAME (stem), so encode the wanted name
         # there — in its own temp dir to avoid mkstemp's random suffix in the title.
-        # The name flows from a tag string → window title: strip illegal chars,
-        # Windows-reserved basenames, and trailing dots/spaces before it becomes a path.
-        safe = re.sub(r'[<>:"/\\|?*]', "_", (name or "Ansicht"))
-        safe = safe.strip().rstrip(". ")
-        _RESERVED = {"CON", "PRN", "AUX", "NUL",
-                     *(f"COM{i}" for i in range(1, 10)),
-                     *(f"LPT{i}" for i in range(1, 10))}
-        if not safe or safe.upper() in _RESERVED:
-            safe = "Ansicht"
+        # The name flows from a tag string → window title: make it a safe base name.
+        safe = self._safe_filename(name, "Ansicht")
         path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)
@@ -911,9 +961,515 @@ class CoreApi:
                     and not node.compression_no_gain):
                 s.apply_silent(SetNoGain((node_id,)))
 
+    def get_pdf_bytes(self, session: str) -> dict:
+        """Effective PDF bytes of a PDF-bound session (a single-leaf document, as
+        produced by opening a plain .pdf) as base64 — handed to PDF.js in the
+        PDF-Tool surface. Returns the first leaf's current (else original) bytes."""
+        import base64
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unknown session"}
+            leaves = [n for n in s.document.root.iter() if not n.is_folder]
+            data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+        if not data:
+            return {"ok": False, "error": "no pdf bytes in session"}
+        return {"ok": True, "data_b64": base64.b64encode(data).decode("ascii")}
+
+    # --- PDF-Tool node binding (lock + save-back) --------------------------
+    @staticmethod
+    def _content_mutated_ids(cmd) -> list:
+        """Node ids whose CONTENT/existence a command changes (not mere reposition /
+        metadata). These conflict with a PDF-Tool lock; Move/Rename/SetStatus/SetTags/
+        collapse do not."""
+        name = type(cmd).__name__
+        if name in ("Compress", "Rotate", "Split", "SplitInto", "Commit", "Reset", "Delete"):
+            return [cmd.node_id]
+        if name in ("Merge", "DeleteMany"):
+            return list(cmd.node_ids)
+        return []
+
+    def _locked_conflict(self, session, cmd):
+        """The locked node id a command would content-mutate, or None."""
+        with self._lock:
+            for nid in self._content_mutated_ids(cmd):
+                if (session, nid) in self._node_locks:
+                    return nid
+        return None
+
+    def node_locked(self, session: str, node_id: str) -> bool:
+        with self._lock:
+            return (session, node_id) in self._node_locks
+
+    def open_node_in_pdftool(self, session: str, node_id: str) -> dict:
+        """Bind a leaf to a new PDF-Tool session and LOCK it in its organizer session.
+        Returns the new session id (its single-leaf doc carries the node's effective
+        bytes; ``get_pdf_bytes`` serves them to PDF.js)."""
+        from core.model import Document, Node
+        with self._lock:
+            owner = self._sessions.get(session)
+            if owner is None:
+                return {"ok": False, "error": "unknown session"}
+            node = owner.document.find(node_id)
+            if node is None:
+                return {"ok": False, "error": f"node not found: {node_id}"}
+            if node.is_folder:
+                return {"ok": False, "error": "Ordner können nicht im PDF-Tool geöffnet werden."}
+            if (session, node_id) in self._node_locks:
+                return {"ok": False, "code": "node_locked",
+                        "error": "Dieser Knoten ist bereits im PDF-Tool geöffnet."}
+            data = node.current_data or node.original_data
+            if not data:
+                return {"ok": False, "error": "Knoten hat keine PDF-Daten."}
+            leaf = Node(name=node.name, original_data=data, pdf_length=node.pdf_length)
+            doc = Document(Node(name=node.name, is_folder=True, children=(leaf,)))
+            pt = self._new_locked(doc)
+            self._node_locks[(session, node_id)] = pt
+            self._pdftool_bindings[pt] = (session, node_id)
+            return {"ok": True, "session": pt}
+
+    def save_node_back(self, pdftool_session: str, data_b64: str = None) -> dict:
+        """Write the PDF-Tool session's edited bytes back into the bound node (new source
+        → compression reset), marking the organizer session dirty. Undoable there.
+        ``data_b64`` (PDF.js ``saveDocument()`` output: filled forms + added FreeText) is
+        the edited PDF — it also updates the tool session so a later reopen shows (and can
+        re-edit) the additions. Without it, the tool session's current bytes are used."""
+        import base64
+        from core.commands import SetNodeBytes
+        with self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
+            if binding is None:
+                return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
+            owner_session, node_id = binding
+            t = self._sessions.get(pdftool_session)
+            owner = self._sessions.get(owner_session)
+            if t is None or owner is None:
+                return {"ok": False, "error": "Sitzung nicht mehr vorhanden"}
+            leaves = [n for n in t.document.root.iter() if not n.is_folder]
+            data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+            if data_b64 is not None and leaves:
+                try:
+                    edited = base64.b64decode(data_b64)
+                except Exception:
+                    edited = None
+                if edited:
+                    # keep the tool session in sync (reopen shows + re-edits the additions)
+                    # AND write these edited bytes to the owner — the immutable document means
+                    # the post-dispatch leaf is a new object, so use `edited` directly here.
+                    t.dispatch(SetNodeBytes(leaves[0].id, edited))
+                    data = edited
+            if not data:
+                return {"ok": False, "error": "keine Daten zum Speichern"}
+            if owner.document.find(node_id) is None:
+                return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
+            owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
+        return {"ok": True, "owner": owner_session, "node": node_id}
+
+    @staticmethod
+    def _decode_pdf_b64(data_b64):
+        """Decode a PDF-Tool save payload. Returns ``(bytes, None)`` or ``(None, error_dict)``."""
+        import base64
+        if not data_b64:
+            return None, {"ok": False, "error": "keine Daten zum Speichern"}
+        try:
+            return base64.b64decode(data_b64), None
+        except Exception:
+            return None, {"ok": False, "error": "ungültige Daten"}
+
+    def _dispatch_pdf_bytes(self, session, data):
+        """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
+        (``SetNodeBytes``). No disk write. Returns ``{ok}`` or an error dict."""
+        from core.commands import SetNodeBytes  # CommandError is module-level (line 25)
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is None:
+                return {"ok": False, "error": "unbekannte Sitzung"}
+            leaves = [n for n in s.document.root.iter() if not n.is_folder]
+            if not leaves:
+                return {"ok": False, "error": "kein PDF im Dokument"}
+            try:
+                s.dispatch(SetNodeBytes(leaves[0].id, data))
+            except CommandError as e:
+                return {"ok": False, "error": str(e)}
+        return {"ok": True}
+
+    def update_pdf_bytes(self, session: str, data_b64: str) -> dict:
+        """Bake PDF.js-edited bytes into a PDF-Tool **bridge** session (a single-leaf ``.pdf``
+        opened via ``open``) — **SESSION ONLY, no disk write**. Used to bake an edit BEFORE a
+        guarded DATEV write-back/file: the on-disk ``.pdf`` is written only AFTER a successful
+        verdict (by ``_datev_local_persist``), so a refused/declined write-back never clobbers
+        the local checkout file. Returns ``{ok}``."""
+        data, err = self._decode_pdf_b64(data_b64)
+        if err:
+            return err
+        return self._dispatch_pdf_bytes(session, data)
+
+    def save_pdf_bytes(self, session: str, data_b64: str) -> dict:
+        """The plain „Speichern" for a directly-opened ``.pdf`` (bridge session, NOT a node
+        binding; that path uses ``save_node_back``): bake the edits into the session AND write
+        them to the bound ``.pdf`` on disk now. (A DATEV write-back/file instead bakes via
+        ``update_pdf_bytes`` and persists only after its guard passes.) Returns
+        ``{ok, local_saved, local_kind, local_error}`` — ``local_error`` is set (and
+        ``local_saved`` None) when the on-disk write failed though ``ok`` stays True; the JS
+        caller must check it to avoid reporting a false success."""
+        data, err = self._decode_pdf_b64(data_b64)
+        if err:
+            return err
+        res = self._dispatch_pdf_bytes(session, data)
+        if not res.get("ok"):
+            return res
+        res.update(self._datev_local_persist(session, data))   # write the .pdf on disk too
+        return res
+
+    def break_node_binding(self, session: str, node_id: str) -> dict:
+        """Release a node's PDF-Tool lock so the organizer op can proceed; the bound
+        pdf-tool session is detached (its later save-back will report no binding)."""
+        with self._lock:
+            pt = self._node_locks.pop((session, node_id), None)
+            if pt is not None:
+                self._pdftool_bindings.pop(pt, None)
+        return {"ok": True}
+
+    def close_pdftool(self, pdftool_session: str) -> dict:
+        """Close a PDF-Tool session: release its node lock and free the session."""
+        with self._lock:
+            binding = self._pdftool_bindings.pop(pdftool_session, None)
+            if binding is not None:
+                self._node_locks.pop(binding, None)
+            self._sessions.pop(pdftool_session, None)
+        return {"ok": True}
+
+    # ----------------------------------------------------------------------
+    # DATEV mode (lazy; the datev package is imported only when mode is ON)
+    # docs/datev-integration-design.md
+    # ----------------------------------------------------------------------
+    def _datev_get_service(self):
+        """The live DatevService, built lazily on first use (mode must be ON). Returns
+        None if DATEV mode is off or the connection can't be established."""
+        if not self._datev_mode:
+            return None
+        if self._datev_service is None:
+            with self._datev_lock:
+                if self._datev_service is None:
+                    try:
+                        from datev.inapp import DatevService
+                        from infra.settings import load_settings
+                        self._datev_service = DatevService.connect(load_settings())
+                    except Exception:
+                        logger.warning("[datev] connect failed", exc_info=True)
+                        return None
+        return self._datev_service
+
+    def datev_status(self) -> dict:
+        """DATEV-mode + connection state for the UI. When mode is OFF this never imports
+        the datev package (cheap, safe to call on every launch)."""
+        if not self._datev_mode:
+            return {"ok": True, "datev_mode": False, "connected": False}
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": True, "datev_mode": True, "connected": False,
+                    "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        st = svc.status()
+        st["datev_mode"] = True
+        return st
+
+    def set_datev_mode(self, on: bool) -> dict:
+        """Persist the DATEV-mode flag (per-user settings.json) and (re)build/drop the
+        service. Returns the refreshed status."""
+        from infra.settings import update_settings
+        on = bool(on)
+        update_settings(datev_mode=on)
+        with self._datev_lock:
+            self._datev_mode = on
+            self._datev_service = None  # rebuild on next use (or drop when off)
+        if not on:
+            # mode-off fully resets DATEV runtime state — no stale per-session baselines
+            # linger until each window's close_session.
+            with self._lock:
+                self._datev_baseline.clear()
+        return self.datev_status()
+
+    @staticmethod
+    def _datev_backup_dir():
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, APP_NAME, "datev_backups")
+
+    def _datev_effective_bytes(self, session):
+        """The working document's combined effective PDF bytes (what would be filed /
+        written back) — folders concatenate their children, a single leaf is itself."""
+        with self._lock:
+            s = self._sessions.get(session)
+            doc = s.document if s else None
+        if doc is None:
+            return None
+        from core.bridge import document_to_storage
+        return document_to_storage(doc).root.current_pdf_data
+
+    def _datev_provenance(self, session):
+        with self._lock:
+            s = self._sessions.get(session)
+            return (s.document.root.datev if s else None)
+
+    def _datev_set_provenance(self, session, provenance):
+        """Set/clear the root's provenance SILENTLY (origin metadata, not a user edit;
+        no undo/dirty), so a later save persists it."""
+        from core.commands import SetDatev
+        with self._lock:
+            s = self._sessions.get(session)
+            if s is not None:
+                s.apply_silent(SetDatev(provenance))
+
+    def _datev_capture_on_open(self, session, path, resp):
+        """On open in DATEV mode: if ``path`` is a checkout path, capture provenance +
+        the open-time baseline, persist provenance on the root, and annotate ``resp`` with
+        ``datev`` (so the UI shows the badge + a 'checked out at open' notice)."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return resp
+        try:
+            # Hash the RAW checkout file on disk — for a DATEV checkout this IS the server file
+            # DATEV materialised. The content guard compares this open-time baseline against the
+            # RAW server bytes at write-back, so hashing the re-serialised *effective* bytes here
+            # (PdfWriter normalises xref/streams → never byte-identical to the raw file) would
+            # make EVERY first write-back of an unedited checkout falsely report conflict_content.
+            try:
+                with open(path, "rb") as f:
+                    opened = f.read()
+            except OSError:
+                opened = self._datev_effective_bytes(session)   # fallback (in-memory effective)
+            prov, baseline = svc.capture_provenance(path, opened)
+        except Exception:
+            logger.warning("[datev] capture on open failed", exc_info=True)
+            return resp
+        if not prov:
+            return resp
+        with self._lock:
+            self._datev_baseline[session] = baseline
+        self._datev_set_provenance(session, prov)
+        with self._lock:
+            resp = self._doc_response_locked(session)  # tree now carries root.datev
+        resp["datev"] = {"connected": True, "source_name": prov.get("source_name"),
+                         "checked_out_at_open": baseline.get("was_checked_out_at_open", False)}
+        return resp
+
+    def _datev_local_persist(self, session, edited):
+        """Persist the working doc to its bound local path after a DATEV write/file, in sync.
+        A ``.belegtool`` path keeps the full structure + provenance (``save`` → mark_saved,
+        clears dirty); any OTHER path — a DATEV **checkout `.pdf`** opened in the PDF-Tool — is
+        overwritten with the clean effective PDF bytes, so the on-disk file stays consistent
+        with what DATEV received (never inject the ``.belegtool`` structure into a checkout
+        file). Returns ``{local_saved, local_error, local_kind}`` — ``local_kind`` ('belegtool'
+        | 'pdf') lets the UI state WHICH format was saved (the two surfaces save different
+        formats, so the user must be able to tell which one landed on disk)."""
+        local_path = self.document_path(session)
+        if not local_path:
+            logger.warning("[datev] no local path bound; local save skipped")
+            return {"local_saved": None, "local_error": "Kein lokaler Speicherort gebunden.",
+                    "local_kind": None}
+        if local_path.lower().endswith(".belegtool"):
+            save_res = self.save(session, local_path)
+            return {"local_saved": save_res.get("path") if save_res.get("ok") else None,
+                    "local_error": None if save_res.get("ok") else save_res.get("error"),
+                    "local_kind": "belegtool"}
+        try:
+            with open(local_path, "wb") as f:
+                f.write(edited or b"")
+            with self._lock:  # the on-disk file now matches the session — keep dirty coherent
+                s = self._sessions.get(session)
+                if s is not None:
+                    s.mark_saved()
+            return {"local_saved": local_path, "local_error": None, "local_kind": "pdf"}
+        except OSError as e:
+            return {"local_saved": None, "local_error": str(e), "local_kind": "pdf"}
+
+    def datev_save_back(self, session: str, confirmed: bool = True, comment: str = None) -> dict:
+        """Guarded write-back of the working document to its connected DATEV document.
+        Re-reads the server, runs the pure guard, and only on ``ok`` overwrites (after a
+        local backup). Any non-ok verdict is returned so the UI offers a filesystem save."""
+        if not self._datev_mode:
+            return {"ok": False, "error": "DATEV-Modus ist aus."}
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        prov = self._datev_provenance(session)
+        from datev.writeback import valid_provenance
+        if not valid_provenance(prov):
+            # not connected, OR a crafted/garbled provenance from an untrusted .belegtool
+            # (non-GUID doc_guid / non-int ids) — refuse before any server call.
+            return {"ok": False, "error": "Dieses Dokument ist nicht (gültig) mit DATEV verknüpft."}
+        with self._lock:
+            baseline = self._datev_baseline.get(session)
+        if baseline is None:
+            # reopened .belegtool: provenance persisted but no live baseline — re-establish
+            # it from the server now (the opened bytes are the current effective bytes) and
+            # cache it, so repeated write-back attempts on the same reopened file don't re-read.
+            baseline = self._datev_reestablish_baseline(svc, session, prov)
+            with self._lock:
+                self._datev_baseline.setdefault(session, baseline)
+        edited = self._datev_effective_bytes(session)
+        if not edited:
+            return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
+        try:
+            res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
+                                comment=comment or APP_NAME, backup_dir=self._datev_backup_dir())
+        except Exception as e:  # never let a write-back error cross the bridge as a raw rejection
+            logger.exception("[datev] write-back failed")
+            return {"ok": False, "verdict": "error", "error": str(e)}
+        if res.get("ok"):
+            new_prov = res.get("provenance") or prov
+            self._datev_set_provenance(session, new_prov)
+            with self._lock:
+                self._datev_baseline[session] = {
+                    "open_change_dt": res.get("new_change_dt"),
+                    "was_checked_out_at_open": False,
+                    # prefer the server's stored-bytes hash (the service reads it back); fall
+                    # back to the uploaded bytes only if the service didn't supply it.
+                    "opened_sha256": res.get("new_sha256") or hashlib.sha256(edited).hexdigest()}
+            # Persist the LOCAL destination alongside DATEV, in sync (no Save As prompt): a
+            # .belegtool keeps its structure+provenance; a DATEV checkout .pdf is overwritten
+            # with the clean effective bytes (see _datev_local_persist). local_kind tells the UI
+            # which format landed so it can say so.
+            # NOTE (accepted residual): the write-back snapshot (`edited`) was taken before the
+            # network round-trip; this local save re-reads the *current* session document. The
+            # modal busy-state disables edits during write-back, so the two can't diverge in the
+            # single-window UI — see the residual note in CLAUDE.md.
+            res.update(self._datev_local_persist(session, edited))
+        return res
+
+    def _datev_reestablish_baseline(self, svc, session, prov):
+        """Best-effort baseline for a reopened .belegtool (no live open-time baseline): the
+        content guard will compare server bytes to the current effective bytes, which only
+        matches when the file is byte-identical to the DATEV original — otherwise the guard
+        safely reports conflict_content and the UI falls back to a filesystem save."""
+        edited = self._datev_effective_bytes(session)
+        baseline = {"open_change_dt": None, "was_checked_out_at_open": False,
+                    "opened_sha256": hashlib.sha256(edited or b"").hexdigest()}
+        try:
+            _, fresh = svc.capture_provenance(
+                f"x/{prov.get('doc_guid')}/{prov.get('file_id')}", edited)
+            if fresh:
+                baseline["open_change_dt"] = fresh.get("open_change_dt")
+        except Exception:
+            pass
+        return baseline
+
+    @staticmethod
+    def _datev_resolve_guid(svc, client_guid, mandant_number):
+        """Resolve the target client GUID: an explicit ``client_guid`` wins, else resolve the
+        Mandant number via the service. Returns ``(guid_or_None, error_dict_or_None)`` — the
+        caller applies its own fallback (datev_export defaults to the connected source's Mandant)."""
+        if client_guid:
+            return client_guid, None
+        if mandant_number is not None:
+            try:
+                return svc.resolve_client(mandant_number).get("guid"), None
+            except Exception as e:
+                return None, {"ok": False, "error": str(e)}
+        return None, None
+
+    def datev_file(self, session: str, client_guid: str = None, mandant_number=None,
+                   description: str = None, domain_id: int = 1, folder_id=None,
+                   register_id=None) -> dict:
+        """File the working document as a NEW DATEV document (the create flow), then adopt
+        its provenance (→ connected). ``client_guid`` direct, or ``mandant_number`` resolved."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
+        if err:
+            return err
+        if not guid:
+            return {"ok": False, "error": "Kein Mandant angegeben."}
+        data = self._datev_effective_bytes(session)
+        if not data:
+            return {"ok": False, "error": "Keine Daten zum Ablegen."}
+        name = (self.document_name(session) or "Beleg").strip() or "Beleg"
+        try:
+            res = svc.file_document(data, client_guid=guid, description=description or name,
+                                    domain_id=domain_id, folder_id=folder_id,
+                                    register_id=register_id, structure_name=f"{name}.pdf")
+        except Exception as e:  # never let a create error cross the bridge as a raw rejection
+            logger.exception("[datev] file_document failed")
+            return {"ok": False, "verdict": "error", "error": str(e)}
+        if res.get("ok") and res.get("provenance"):
+            self._datev_set_provenance(session, res["provenance"])
+            with self._lock:
+                self._datev_baseline.pop(session, None)  # a fresh create resets the baseline
+            # Persist the new DATEV link locally NOW (a .belegtool keeps the provenance so the
+            # link survives a window close; a .pdf is overwritten with the filed bytes). Mirror
+            # datev_save_back. local_kind tells the UI which format was saved.
+            res.update(self._datev_local_persist(session, data))
+        return res
+
+    def datev_export(self, session: str, node_ids=None, options=None, client_guid: str = None,
+                     mandant_number=None, description: str = None, domain_id: int = 1,
+                     folder_id=None, register_id=None) -> dict:
+        """Export to PDF (single or **split**, honouring ``options``) and file EVERY produced
+        PDF as a new DATEV document under the same client. Returns ``{ok, filed, parts}``."""
+        svc = self._datev_get_service()
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
+        if err:
+            return err
+        if not guid:
+            # default to the connected source's Mandant ("same client")
+            prov = self._datev_provenance(session) or {}
+            guid = prov.get("correspondence_partner_guid")
+        if not guid:
+            return {"ok": False, "error": "Kein Mandant angegeben."}
+        import tempfile
+        import shutil
+        # The document name becomes a real temp path here (no native dialog to vet it), so make
+        # it a safe base name (path separators / illegal chars / reserved device names stripped)
+        # — shared with materialize_subset via _safe_filename.
+        base_name = self._safe_filename(self.document_name(session), "Export")
+        tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
+        try:
+            out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),
+                              node_ids, options)
+            if not out.get("ok"):
+                return out
+            # defensive: an ok export must yield at least one path; never open(None).
+            paths = [p for p in (out.get("paths") or [out.get("path")]) if p]
+            if not paths:
+                return {"ok": False, "error": "Export lieferte keine Datei."}
+            filed = []
+            multi = len(paths) > 1
+            for p in paths:
+                with open(p, "rb") as f:
+                    data = f.read()
+                label = os.path.splitext(os.path.basename(p))[0]
+                # On a split each part is its own DATEV document — give each a DISTINCT
+                # description (suffix the per-part label) so the N (revision-less, no-rollback)
+                # documents are identifiable; a single export keeps the plain description.
+                part_desc = (f"{description} — {label}" if description and multi
+                             else (description or label))
+                try:
+                    r = svc.file_document(data, client_guid=guid,
+                                          description=part_desc,
+                                          domain_id=domain_id, folder_id=folder_id,
+                                          register_id=register_id, structure_name=f"{label}.pdf")
+                except Exception as e:  # one part's failure must not abort the rest / crash
+                    r = {"ok": False, "error": str(e)}
+                filed.append({"name": label, "ok": r.get("ok"),
+                              "doc_guid": (r.get("provenance") or {}).get("doc_guid"),
+                              "error": r.get("error")})
+            done = sum(1 for f in filed if f["ok"])
+            ok = done == len(filed) and bool(filed)
+            result = {"ok": ok, "filed": filed, "parts": len(filed), "filed_ok": done}
+            if not ok:
+                # DokAb has no rollback — a half-filed split leaves the OK parts in DATEV.
+                # Tell the user exactly how many landed (and where) so duplicates can be cleaned.
+                result["error"] = (f"Nur {done} von {len(filed)} Teil(en) nach DATEV abgelegt — "
+                                   "die bereits abgelegten bleiben in DATEV.")
+            return result
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
     # --- import ------------------------------------------------------------
     def _import_path(self, path: str) -> list:
-        """Import one file from disk into immutable Node(s) — mirrors the Tk import:
+        """Import one file from disk into immutable Node(s):
         .belegtool/PDF/zip/tar/email via PDFStorage, everything else (images,
         Office, …) via UniversalImporter. Heavy; call outside the lock."""
         from core.bridge import node_from_pdfnode

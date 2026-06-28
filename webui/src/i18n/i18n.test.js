@@ -43,12 +43,13 @@ describe('translate (source-string keys)', () => {
   })
 
   it('the en base has the full, fixed key set (lock against silent drift)', () => {
-    // Canonical key count = 125 UI strings (incl. the 3 Tree.jsx drag-ghost keys
-    // and the ContextMenu aria-label) + 13 backend command-error messages + 14
-    // host-level error/warning strings (host.py + core/api.py + lib/messages.js). If
-    // a string is added, bump this deliberately — and add it to every full-coverage
-    // language file.
-    expect(Object.keys(en).length).toBe(152)
+    // Canonical key count = 163 (the v3.9 set: UI strings incl. the Tree drag-ghost keys,
+    // ContextMenu aria-label, #7 multi-select, #3 Save split-button, #13 export-split labels;
+    // + 13 backend command-error messages + 14 host-level error/warning strings) PLUS the 16
+    // v3.10.0 DATEV-mode strings (toggle/badge/actions/verdict messages + the export option +
+    // the write-back- and file-ok-but-local-save-failed notices) = 181. If a string is added,
+    // bump this deliberately — and add it to every full-coverage language file (or PENDING).
+    expect(Object.keys(en).length).toBe(181)
   })
 })
 
@@ -57,14 +58,42 @@ describe('full-coverage languages', () => {
   const PARTIAL = ['tlh', 'qya', 'sjn']
   const FULL = Object.keys(TRANSLATIONS).filter((c) => !PARTIAL.includes(c))
 
-  it.each(FULL)('"%s" has exactly the same key set as the en base', (code) => {
+  // Batch-translate policy (CLAUDE.md i18n): a NEW UI string ships in de + en only;
+  // the other full-coverage languages are translated later in one batch. A key listed
+  // here MUST exist in en.js (still enforced below) but is exempt from the
+  // full-coverage assertion until translated. It falls back to German meanwhile.
+  // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
+  const PENDING_TRANSLATIONS = new Set([
+    'Im PDF-Tool öffnen',
+    // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
+    'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
+    'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',
+    'Nach DATEV zurückgeschrieben', 'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.',
+    'In DATEV abgelegt', 'In DATEV abgelegt, aber lokal nicht gespeichert.',
+    'In DATEV abgelegt ({n} Dokumente)',
+    'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.',
+    'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.',
+    'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.',
+    'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.',
+    'DATEV-Rückschreiben fehlgeschlagen.', 'DATEV-Ablage fehlgeschlagen.',
+    'Nach DATEV ablegen (gleicher Mandant)',
+  ])
+
+  it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
     // Locks the "n languages = full key set" claim per language — a key silently
     // missing from one map would otherwise just fall back to German unnoticed.
     const keys = new Set(Object.keys(TRANSLATIONS[code]))
-    const missing = Object.keys(en).filter((k) => !keys.has(k))
+    const missing = Object.keys(en).filter((k) => !keys.has(k) && !PENDING_TRANSLATIONS.has(k))
     const extra = [...keys].filter((k) => !(k in en))
     expect(missing, `missing in ${code}`).toEqual([])
     expect(extra, `extra in ${code} (not in en)`).toEqual([])
+  })
+
+  it('every PENDING_TRANSLATIONS key still exists in the en base', () => {
+    // A pending key may skip the other languages, but must never be untranslated in en
+    // (that would ship a raw German t() string in English) — guards misuse of the set.
+    const notInEn = [...PENDING_TRANSLATIONS].filter((k) => !(k in en))
+    expect(notInEn, 'pending keys must be present in en.js').toEqual([])
   })
 })
 
@@ -90,8 +119,8 @@ describe('translation coverage', () => {
   // Scan the components for literal t('…') / t("…") calls and require an English
   // entry for each — so a newly-added German string can't ship untranslated.
   const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
-                 'Toolbar.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx', 'HelpModal.jsx',
-                 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'lib/status.js']
+                 'Toolbar.jsx', 'SaveSplitButton.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx',
+                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'DatevBar.jsx', 'lib/status.js']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   // Resolve from THIS file's location (src/i18n/) → src/, not process.cwd(), so the

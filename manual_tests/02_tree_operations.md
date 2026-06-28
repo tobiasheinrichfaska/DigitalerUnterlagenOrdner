@@ -53,14 +53,21 @@ deep test in `05_react_ui.md` MT-40.)
 **Preconditions:** A document with at least one node.
 
 **Steps:**
-1. Click **＋ Ordner** in the toolbar → a new folder is created (prompts/uses a default
-   name); right-click a **folder** → **Ordner anlegen** creates a new folder **inside** it.
+1. Click **＋ Ordner** in the toolbar → a name dialog appears (default **Neuer Ordner**);
+   confirm. The new folder is placed **relative to the current selection**:
+   - **nothing selected** → at the top level (root);
+   - a **folder** selected → **inside** that folder;
+   - a **leaf** (document) selected → as a **sibling right after** that node.
+   Right-click a **folder** → **Ordner anlegen** also creates a new folder **inside** it.
 2. Select a node, press **F2** (inline) — or right-click → **Umbenennen** — type a new
    name, confirm.
 3. Select a node, press **Entf** (or right-click → **Löschen**). For a multi-selection the
    item reads **Löschen (N)** and deletes the whole selection in one undo step.
 
 **Expected:**
+- *Not obvious:* the toolbar **＋ Ordner** is **selection-aware** — it lands the folder
+  inside a selected folder, or directly after a selected document, not always at the end.
+  Cancelling the name dialog (Esc / empty name) creates nothing.
 - Folders appear at the stated positions; the renamed node shows the new name.
 - After delete, the node is gone and the **selection moves** to a neighbour (left sibling,
   else the parent) so you can keep working; the deleted nodes' cached renders are freed.

@@ -169,8 +169,9 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         {applied ? `✓ ${t('übernommen')}` : `❓ ${t('Lesbarkeit geprüft')}`}
       </button>
       <span className="sep" />
-      <button title={t('rechts drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
+      {/* left-then-right reads naturally (v3.10.0, planned item #4) */}
       <button title={t('links drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'left' })}>↺</button>
+      <button title={t('rechts drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
     </div>
   )
 }

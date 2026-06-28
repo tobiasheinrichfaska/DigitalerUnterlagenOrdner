@@ -85,6 +85,20 @@ class SetTags:
 
 
 @dataclass(frozen=True)
+class TagMany:
+    """Add or remove ONE tag across several nodes at once (one undo step), keeping
+    each node's other tags. Powers multi-select tagging — SetTags replaces a whole
+    set and only ever targeted a single node."""
+    node_ids: Tuple[str, ...]
+    tag: str
+    add: bool  # True = add the tag to each node, False = remove it from each
+
+    def __post_init__(self):
+        if not isinstance(self.node_ids, tuple):
+            object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
 class SetNoGain:
     """Mark leaves as 'evaluated, nothing smaller found' (compression_no_gain=True).
     This is a DERIVED verdict, not a human edit: the API dispatches it SILENTLY (no
@@ -96,6 +110,18 @@ class SetNoGain:
     def __post_init__(self):
         if not isinstance(self.node_ids, tuple):
             object.__setattr__(self, "node_ids", tuple(self.node_ids))
+
+
+@dataclass(frozen=True)
+class SetDatev:
+    """Set (or clear) the DATEV provenance on the document ROOT — DATEV mode only.
+    ``provenance`` is a dict ({doc_guid, file_id, structure_item_id, …}) or None to
+    disconnect (Save As breaks the link). Set in-process by CoreApi (open from a
+    checkout path / file-to-DATEV / Save As), never from the JS wire command set, so
+    it is excluded from ``_COMMAND_TYPES``. Applied SILENTLY (no undo/dirty) — it is
+    origin metadata, not a user edit — but it DOES change the document so a later save
+    persists it (round-trips in .belegtool via the root's ``datev`` field)."""
+    provenance: Optional[dict]
 
 
 @dataclass(frozen=True)
@@ -145,6 +171,16 @@ class InsertNodes:
     def __post_init__(self):
         if not isinstance(self.nodes, tuple):
             object.__setattr__(self, "nodes", tuple(self.nodes))
+
+
+@dataclass(frozen=True)
+class SetNodeBytes:
+    """Replace a leaf's content with new PDF bytes — the PDF-Tool save-back (form-fill /
+    OCR / page edit done on the bound bytes). Carries bytes, so (like InsertNodes) it is
+    created in-process and never part of the wire/JSON command set. The new bytes become
+    the node's *source* and the compression state is reset (mirrors Rotate)."""
+    node_id: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -215,13 +251,13 @@ class Merge:
 
 
 Command = Union[AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags,
-                SetNoGain, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes, Compress,
-                Commit, Reset, Rotate, Split, SplitInto, Merge]
+                TagMany, SetNoGain, SetDatev, Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, InsertNodes,
+                SetNodeBytes, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge]
 
 # Wire/JSON-serialisable commands (command_from_dict). InsertNodes is deliberately
 # excluded — it carries Node objects with bytes and is only dispatched in-process.
 _COMMAND_TYPES = {c.__name__: c for c in (
-    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, SetNoGain,
+    AddFolder, Rename, SetStatus, SetStatusMany, SetCollapsed, SetAllCollapsed, SetPeriod, SetTags, TagMany, SetNoGain,
     Delete, DeleteMany, Move, MoveMany, GroupIntoFolder, Compress, Commit, Reset, Rotate, Split, SplitInto, Merge,
 )}
 
@@ -393,6 +429,40 @@ def _set_tags(doc: Document, cmd: SetTags, engine=None) -> Document:
     return doc.update_node(cmd.node_id, tags=clean)
 
 
+@_handler(TagMany)
+def _tag_many(doc: Document, cmd: TagMany, engine=None) -> Document:
+    """Add or remove ONE tag across several nodes (one undo step), keeping each
+    node's other tags. Ids are de-duped; ids already gone (stale selection) are
+    skipped; an empty/whitespace tag is a no-op. Adding an already-present tag (or
+    removing an absent one) leaves that node unchanged — no duplicates, no churn."""
+    tag = (cmd.tag or "").strip()
+    if not tag:
+        return doc
+    for nid in dict.fromkeys(cmd.node_ids):
+        node = doc.find(nid)
+        if node is None:
+            continue
+        cur = tuple(node.tags or ())
+        if cmd.add:
+            if tag not in cur:
+                doc = doc.update_node(nid, tags=cur + (tag,))
+        elif tag in cur:
+            doc = doc.update_node(nid, tags=tuple(t for t in cur if t != tag))
+    return doc
+
+
+@_handler(SetNodeBytes)
+def _set_node_bytes(doc: Document, cmd: SetNodeBytes, engine=None) -> Document:
+    """PDF-Tool save-back: the edited bytes become the leaf's new source; compression
+    state is reset (the bytes changed, so any variant/no-gain verdict is stale)."""
+    _require_leaf(doc, cmd.node_id)
+    if not cmd.data:
+        raise CommandError("Keine Daten zum Speichern.")
+    return doc.update_node(cmd.node_id, original_data=cmd.data, current_data=None,
+                           is_compressed=False, dpi_current=None,
+                           compression_method=None, compression_no_gain=False)
+
+
 @_handler(SetNoGain)
 def _set_no_gain(doc: Document, cmd: SetNoGain, engine=None) -> Document:
     """Flag each existing LEAF as compression_no_gain=True (folders / missing ids are
@@ -403,6 +473,12 @@ def _set_no_gain(doc: Document, cmd: SetNoGain, engine=None) -> Document:
         if node is not None and not node.is_folder and not node.compression_no_gain:
             doc = doc.update_node(nid, compression_no_gain=True)
     return doc
+
+
+@_handler(SetDatev)
+def _set_datev(doc: Document, cmd: SetDatev, engine=None) -> Document:
+    """Set/clear the DATEV provenance on the ROOT node (idempotent)."""
+    return doc.update_node(doc.root.id, datev=cmd.provenance)
 
 
 @_handler(Delete)

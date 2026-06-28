@@ -40,6 +40,7 @@ class PDFNode:
         self.collapsed: bool = False  # folder collapsed in the tree view (persisted)
         self.compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data
         self.tags: List[str] = []  # free-form labels (persisted)
+        self.datev: Optional[Dict[str, Any]] = None  # DATEV provenance (root only; persisted)
 
         if pdf_data and not is_folder:
             self.set_original_and_current_data(
@@ -85,6 +86,7 @@ class PDFNode:
             "collapsed": self.collapsed,
             "compression_method": self.compression_method,
             "tags": list(self.tags),
+            "datev": self.datev,  # DATEV provenance (root only; None elsewhere)
             "children": [child.to_dict() for child in self.children],
         }
 

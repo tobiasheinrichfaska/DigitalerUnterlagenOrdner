@@ -1,6 +1,6 @@
 # Beta Testing BelegTool 🧪
 
-Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.9.5** — a
+Thanks for helping test **BelegTool** (DigitalerUnterlagenOrdner) **v3.10.0** — a
 Windows desktop app that collects PDFs, scans, photos, Office files, e-mails and
 archives into one foldered tree, then compresses, previews and exports the whole
 thing as a single bookmarked PDF with a table of contents.
@@ -25,7 +25,7 @@ and e-mails still works fine.
 ## 1. Get & run the app
 
 ### Path A — Prebuilt download (easiest, no Python/Node)
-1. Download **`BelegTool-v3.9.5-win64.zip`** from the
+1. Download **`BelegTool-v3.10.0-win64.zip`** from the
    [**latest release**](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/releases/latest).
 2. Unzip it anywhere.
 3. Double-click **`BelegTool\BelegTool.exe`**. That's it — no installation.
@@ -106,13 +106,15 @@ contents and bookmarks), and **save & reload** a `.belegtool` file.
 
 ---
 
-## 4. Two known gaps — please DON'T report these as bugs
+## 4. One known gap — please DON'T report this as a bug
 
-1. **Large export = one PDF.** Exporting more than 100 pages produces a *single*
-   PDF; the auto-split-into-multiple-files feature is not wired into the UI yet.
-2. **Compression is irreversible after saving.** Once you apply compression to a
+1. **Compression is irreversible after saving.** Once you apply compression to a
    node and save, the original source is dropped — you can't undo it later, and
    the option shows *"bereits komprimiert (keine Quelle)"*. This is by design.
+
+> Large exports now offer a split: the export dialog lets you split into multiple
+> PDFs by page count and break level (top node / any folder / mid-document), so a
+> big tree no longer has to be one giant file.
 
 ---
 

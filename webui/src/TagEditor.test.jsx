@@ -3,7 +3,7 @@
 // favourites set. Every mutation goes out as a single SetTags dispatch that
 // replaces the whole tag set. German source strings (no provider).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { TagEditor } from './TagEditor'
 
 const FAV_KEY = 'beleg.tagFavourites'
@@ -102,5 +102,52 @@ describe('TagEditor — favourites (localStorage)', () => {
     const opts = [...container.querySelectorAll('#te-suggest option')].map((o) => o.value)
     // 'a' is already on the node, so it is filtered out of the suggestions
     expect(opts).toEqual(['b', 'c'])
+  })
+})
+
+describe('TagEditor — multi select (#7: TagMany)', () => {
+  // A(Steuer, 2024) + B(Steuer) → Steuer on all; 2024 only on A (partial)
+  const nodes = [{ id: 'A', tags: ['Steuer', '2024'] }, { id: 'B', tags: ['Steuer'] }]
+  const setupMulti = () => {
+    const dispatch = vi.fn()
+    const utils = render(<TagEditor node={nodes[0]} nodes={nodes} docTags={[]} dispatch={dispatch} />)
+    return { ...utils, dispatch }
+  }
+
+  it('shows a "N markiert" badge with the selection count', () => {
+    setupMulti()
+    expect(screen.getByText('2 markiert')).toBeInTheDocument()
+  })
+
+  it('renders the tag UNION; a tag not on every node is partial', () => {
+    const { container } = setupMulti()
+    const partial = container.querySelectorAll('.te-chip-partial')
+    expect(partial.length).toBe(1)
+    expect(partial[0].textContent).toContain('2024')
+    const solid = [...container.querySelectorAll('.te-chip')].filter((c) => !c.classList.contains('te-chip-partial'))
+    expect(solid.length).toBe(1)
+    expect(solid[0].textContent).toContain('Steuer')
+  })
+
+  it('adding a tag dispatches TagMany add over ALL selected ids', () => {
+    const { dispatch } = setupMulti()
+    const input = screen.getByPlaceholderText('+ Tag')
+    fireEvent.change(input, { target: { value: 'Wichtig' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'TagMany', node_ids: ['A', 'B'], tag: 'Wichtig', add: true })
+  })
+
+  it('removing a full chip dispatches TagMany remove over ALL selected ids', () => {
+    const { container, dispatch } = setupMulti()
+    const solid = [...container.querySelectorAll('.te-chip')].find((c) => !c.classList.contains('te-chip-partial'))
+    fireEvent.click(within(solid).getByTitle('Tag entfernen'))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'TagMany', node_ids: ['A', 'B'], tag: 'Steuer', add: false })
+  })
+
+  it('Backspace does NOT remove a tag in multi mode (avoids a surprise bulk delete)', () => {
+    const { dispatch } = setupMulti()
+    const input = screen.getByPlaceholderText('+ Tag')
+    fireEvent.keyDown(input, { key: 'Backspace' })
+    expect(dispatch).not.toHaveBeenCalled()
   })
 })

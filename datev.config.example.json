@@ -1,0 +1,8 @@
+{
+  "_comment": "DATEVconnect-Verbindung fuer BelegTool (nur im DATEV-Modus genutzt). Diese Datei liegt NEBEN BelegTool.exe und kann bearbeitet werden. base_url = Host:Port Ihres DATEVconnect-Servers. Standard ist der Platzhalter your-datev-server:58452 (echten Host eintragen) (BelegTool laeuft am Arbeitsplatz, DATEVconnect am Server). Laeuft DATEVconnect lokal, hier https://localhost:58452 eintragen. Der Pfad (/datev/api/...) wird automatisch ergaenzt. Leeres user/password = SSO (Windows-Anmeldung). verify_tls=false akzeptiert das selbstsignierte DATEV-Zertifikat.",
+  "base_url": "https://your-datev-server:58452",
+  "auth": "sso",
+  "user": "",
+  "password": "",
+  "verify_tls": false
+}

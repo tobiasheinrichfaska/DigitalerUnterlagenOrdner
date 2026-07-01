@@ -8,10 +8,25 @@ import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { EventBus, PDFViewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
-import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { openFileDialog } from './fileDialog.js'
 import { datevSavedNotice, datevVerdictKey } from '../lib/datev.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+
+// PDF.js v6 fetches its image decoders (wasm) + cmap/standard-font data at render time. DATEV
+// documents are SCANS (JBIG2 / JPEG2000), which decode via wasm/jbig2.wasm + wasm/openjpeg.wasm
+// — without these served the page count is correct but every page renders BLANK. The vite
+// `pdfjsAssets` plugin serves them at /pdfjs/* (dev) and copies them into the build (prod);
+// absolute URLs (resolved against baseURI) so the PDF.js worker can fetch them too.
+const PDFJS_ASSET_BASE = new URL('pdfjs/', document.baseURI).href
+const PDFJS_ASSET_OPTS = {
+  cMapUrl: `${PDFJS_ASSET_BASE}cmaps/`,
+  cMapPacked: true,
+  standardFontDataUrl: `${PDFJS_ASSET_BASE}standard_fonts/`,
+  wasmUrl: `${PDFJS_ASSET_BASE}wasm/`,
+  iccUrl: `${PDFJS_ASSET_BASE}iccs/`,
+}
 
 const container = document.getElementById('viewerContainer')
 const eventBus = new EventBus()
@@ -36,14 +51,19 @@ eventBus.on('annotationlayerrendered', () => { window.__viewerFormLayerReady = t
 let bridge = null
 let boundSession = null
 let pdfDoc = null
-let sourceMode = null        // 'session' | 'bridge' | 'url' — DATEV UI only for a 'bridge' .pdf
+let sourceMode = null        // 'session' | 'bridge' | 'url' — DATEV UI for a 'bridge' .pdf or a 'session' node
 let datevConnected = false   // the open .pdf is a DATEV checkout (provenance from its path)
+let datevCheckedOut = false  // the DATEV doc is checked out at open → no API write-back (use Speichern)
+let datevSourceName = ''     // the linked DATEV source file name (for the "verknüpft" badge)
+let suggestedName = ''       // default Bezeichnung for the filing dialog (the source file name)
 
 const textBtn = document.getElementById('btn-text')
 const saveBtn = document.getElementById('btn-save')
 const datevBtn = document.getElementById('btn-datev')
 const statusEl = document.getElementById('pdf-status')
-const setStatus = (t) => { if (statusEl) statusEl.textContent = t }
+// status text is ellipsized in the toolbar (so long errors don't squash the buttons) →
+// mirror the full text into the tooltip so the user can still read all of it on hover.
+const setStatus = (t) => { if (statusEl) { statusEl.textContent = t; statusEl.title = t || '' } }
 
 // Toggle the FreeText (typewriter) tool. NONE = selection/idle, FREETEXT = place text.
 let textOn = false
@@ -107,10 +127,24 @@ async function datevWriteBack() {
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.save_to_datev(boundSession)
     if (res && res.ok) {
-      setStatus(datevSavedNotice('Nach DATEV zurückgeschrieben ✓', res)
-        + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
+      // checked_out_self = the doc is checked out by ME → DATEV won't take an API write-back, so we
+      // saved the local working copy; the user checks it in via DATEV. Say exactly that.
+      const msg = res.verdict === 'checked_out_self'
+        ? '📥 In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken'
+        : 'Nach DATEV zurückgeschrieben ✓'
+      setStatus(datevSavedNotice(msg, res) + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
+    } else if (res && res.verdict === 'checked_out_self') {
+      // checked out by me, but the local working copy could not be written (locked) → nothing more
+      // we can do (DATEV refuses the API write while checked out); surface it, don't re-try locally.
+      setStatus('DATEV: Ausgecheckte Datei konnte nicht gespeichert werden (gesperrt?)'
+        + (res.local_error ? ` — ${res.local_error}` : ''))
     } else if (res && res.verdict === 'declined') {
-      setStatus('Abgebrochen — nicht zurückgeschrieben')
+      // "Nein" = only update the local checked-out file (no DATEV push); the bake was session-only
+      // so persist the edited .pdf to disk now. The user checks it in via DATEV later.
+      const local = await bridge.save_pdf_bytes(boundSession, b64)
+      setStatus(local && local.ok && !local.local_error
+        ? datevSavedNotice('Nur lokal gespeichert (nicht in DATEV)', local)
+        : `Fehler beim lokalen Speichern: ${(local && local.local_error) || 'unbekannt'}`)
     } else {
       // conflict/locked/error → DATEV refused, but the edit is real work and must not be lost.
       // The bake above was session-only (never touched disk), so persist it to the on-disk .pdf
@@ -120,7 +154,8 @@ async function datevWriteBack() {
       // "DATEV-Rückschreiben fehlgeschlagen."); the 'error' verdict carries the real cause in
       // res.error — show THAT with a "DATEV: " prefix, not the raw code. Mirrors App.jsx.
       const guard = res && res.verdict && res.verdict !== 'error'
-      const head = guard ? datevVerdictKey(res.verdict) : `DATEV: ${(res && res.error) || 'fehlgeschlagen'}`
+      const who = res && res.checkout_by ? ` (${res.checkout_by})` : ''  // locked → WHO has it
+      const head = (guard ? datevVerdictKey(res.verdict) : `DATEV: ${(res && res.error) || 'fehlgeschlagen'}`) + who
       const local = await bridge.save_pdf_bytes(boundSession, b64)
       // save_pdf_bytes returns ok:true once the session bake succeeds, even if the on-disk
       // write inside _datev_local_persist failed (local_error set). Only claim "lokal gesichert"
@@ -133,16 +168,32 @@ async function datevWriteBack() {
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }
 
-// Not-connected .pdf → file it as a NEW DATEV document under a prompted Mandant.
+// Not-connected .pdf → file it as a NEW DATEV document. Opens the same filing dialog as the
+// organizer (searchable Mandant + folder/register + Belegdatum + Veranlagung year/month). No
+// client data ⇒ filing is refused (the user's rule) rather than a blind prompt.
 async function datevFileNew() {
   if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
-  const num = window.prompt('Mandantennummer für die DATEV-Ablage')
-  if (!num || !num.trim()) return
+  setStatus('Mandanten werden geladen…')
+  let clientsRes, placeRes
+  try {
+    [clientsRes, placeRes] = await Promise.all([bridge.datev_clients(), bridge.datev_placements()])
+  } catch (e) { setStatus(`Fehler: ${e}`); return }
+  if (!clientsRes || !clientsRes.ok) {
+    setStatus(`DATEV: ${(clientsRes && clientsRes.error) || 'Mandantenliste nicht verfügbar'}`); return
+  }
+  const clients = clientsRes.clients || []
+  if (!clients.length) { setStatus('Keine Mandanten gefunden — DATEV-Ablage nicht möglich.'); return }
+  const opts = await openFileDialog({ clients,
+    placements: (placeRes && placeRes.ok && placeRes.folders) || [],
+    currentYear: new Date().getFullYear(), defaultName: suggestedName })
+  if (!opts) { setStatus(''); return }  // cancelled
   setStatus('Ablegen…')
   try {
     const saved = await bakeForDatev()  // session only; abort if it fails so we never file unedited bytes
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
-    const res = await bridge.datev_file(boundSession, null, num.trim())
+    const res = await bridge.datev_file(boundSession, opts.clientGuid, null, opts.description ?? null, 1,
+      opts.folderId ?? null, opts.registerId ?? null, opts.documentDate ?? null,
+      opts.fiscalYear ?? null, opts.fiscalMonth ?? null)
     // On success the parallel local save may still have failed (filed in DATEV but the on-disk
     // .pdf wasn't updated → now stale). Surface res.local_error too, never a bare "✓" — mirrors
     // App.jsx fileToDatev and datevWriteBack's ok-path so the user knows to re-save locally.
@@ -153,31 +204,87 @@ async function datevFileNew() {
   } catch (e) { setStatus(`Fehler: ${e}`) }
 }
 
-// Reveal the DATEV button only for a .pdf opened in DATEV mode ('bridge' source); a write-back
-// for a connected checkout, else a file-anew. DATEV mode off (or a node binding) → no DATEV UI.
+// Reveal the DATEV button for a PDF opened in DATEV mode — either a directly-opened .pdf
+// ('bridge') or a node opened "in PDF-Tool" ('session'). A connected checkout (.pdf only)
+// offers write-back; everything else offers file-anew. A node binding is never "connected"
+// (the organizer owns any DATEV link), so it always offers file-anew. DATEV mode off → no UI.
 async function setupDatevUi() {
-  if (!datevBtn || !bridge || sourceMode !== 'bridge') return
+  if (!datevBtn || !bridge || (sourceMode !== 'bridge' && sourceMode !== 'session')) return
   let datevMode = false
-  try { const st = await bridge.datev_status(); datevMode = !!(st && st.datev_mode) } catch { /* off */ }
-  const action = datevAction({ datevMode, connected: datevConnected })
-  if (!action) return
+  let st = null
+  try { st = await bridge.datev_status(); datevMode = !!(st && st.datev_mode) } catch { /* off */ }
+  if (!datevMode) return
+  // action: 'writeback' (connected + NOT checked out), 'file' (not connected), or null (connected
+  // AND checked out → no API write-back; the user updates the working copy with 💾 Speichern and
+  // checks it in via DATEV). DATEV mode off already returned above.
+  const action = datevAction({ datevMode, connected: datevConnected, checkedOut: datevCheckedOut })
   if (action === 'writeback') {
     datevBtn.textContent = '🔗 Nach DATEV zurückschreiben'
     datevBtn.onclick = datevWriteBack
-  } else {
+    datevBtn.hidden = false
+  } else if (action === 'file') {
     datevBtn.textContent = '📤 Nach DATEV ablegen'
     datevBtn.onclick = datevFileNew
+    datevBtn.hidden = false
+  } else {
+    datevBtn.hidden = true   // connected + checked out → no write-back button (use 💾 Speichern)
   }
-  datevBtn.hidden = false
+  // A persistent "linked to DATEV" badge (a connected checkout) — the user could not tell a
+  // checkout was DATEV-linked from the action button alone. When checked out, the badge also says
+  // HOW to save (Speichern → check in via DATEV), since there is no write-back button.
+  const linkEl = document.getElementById('datev-link')
+  if (linkEl && datevConnected) {
+    const co = datevCheckedOut ? ' · ausgecheckt (💾 Speichern → in DATEV einchecken)' : ''
+    linkEl.textContent = `🔗 Mit DATEV verknüpft${datevSourceName ? ` · ${datevSourceName}` : ''}${co}`
+    linkEl.hidden = false
+  }
+  if (datevBtn.hidden) return   // no action button → no connection polling needed
+  // Never offer a DATEV write without a connection — disable + explain instead of a dead click.
+  // The connect runs in the background (slow SSO), so while it is still in flight (connecting)
+  // re-poll ~every 1.5s and re-enable once it settles, mirroring the organizer (App.jsx) — a
+  // single read would otherwise latch the button disabled even after the connect succeeds.
+  const applyConn = (status) => {
+    const connected = !!(status && status.connected)
+    datevBtn.disabled = !connected
+    datevBtn.title = connected ? '' : (status && status.connecting
+      ? 'Verbindung zur DATEV-Schnittstelle…' : 'Keine Verbindung zur DATEV-Schnittstelle')
+    if (!connected && status && status.connecting) {
+      // Promise.resolve so a sync bridge return (tests) works as well as the real async bridge.
+      setTimeout(() => Promise.resolve(bridge.datev_status()).then(applyConn).catch(() => {}), 1500)
+    }
+  }
+  applyConn(st)
 }
 
-// pywebview injects window.pywebview early and populates .api on 'pywebviewready'.
-// A plain browser (dev/e2e) has no window.pywebview → no bridge, no wait.
-async function getBridge() {
-  if (typeof window.pywebview === 'undefined') return null
-  if (window.pywebview.api) return window.pywebview.api
-  await new Promise((resolve) => window.addEventListener('pywebviewready', resolve, { once: true }))
-  return window.pywebview.api || null
+// The bridge methods the surface needs to LOAD a bound document. The PDF-Tool is
+// ALWAYS a runtime-created (2nd) window, where pywebview can expose window.pywebview
+// — and even .api — a beat BEFORE the methods are actually bound (the exact race
+// lib/core.js guards for the organizer). The old getBridge() bailed to null the
+// instant window.pywebview was missing, so a fresh window lost the bridge and fell
+// through to the dev sample PDF (the "SPIKE" form) for BOTH node and .pdf opens.
+const BRIDGE_METHODS = ['config', 'get_pdf_bytes', 'open']
+
+// The live api iff window.pywebview.api exists AND every method we need is bound.
+const bridgeReady = () => readyBridge(window, BRIDGE_METHODS)
+
+// Resolve the host bridge, waiting out the 2nd-window injection race. Fast path:
+// the 'pywebviewready' event. Safety net: poll until the methods bind. After the
+// timeout with still no host (a plain browser / e2e) → null, so the surface loads a
+// sample/URL document instead of hanging. Matches lib/core.js's 4 s budget.
+async function getBridge(timeoutMs = 4000) {
+  const ready = bridgeReady()
+  if (ready) return ready
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    const tick = () => {
+      const api = bridgeReady()
+      if (api) return resolve(api)
+      if (Date.now() - t0 >= timeoutMs) return resolve(null)  // no host → sample URL
+      setTimeout(tick, 50)
+    }
+    window.addEventListener('pywebviewready', tick, { once: true })
+    tick()
+  })
 }
 
 async function resolveDocumentArgs() {
@@ -185,30 +292,42 @@ async function resolveDocumentArgs() {
   const urlFallback = fileParam || '/spike-form.pdf'
   const api = await getBridge()
   bridge = api
-  const cfg = api ? await api.config() : null
-  const src = chooseSource({ hasBridge: !!api, cfg, fileParam })
+  // No host at all (plain browser / e2e / dev) → load the sample or ?file= URL.
+  if (!api) { sourceMode = 'url'; return { url: urlFallback } }
+  const cfg = await api.config()
+  const src = chooseSource({ hasBridge: true, cfg, fileParam })
   sourceMode = src.mode
+  // In the host a PDF-Tool window is ALWAYS bound (node or .pdf). If the bridge call
+  // fails we surface the REAL reason instead of silently rendering the dev sample —
+  // a fake document the user can't tell from their own. The sample only ever shows
+  // with no host or an explicit ?file= override (src.mode === 'url').
   if (src.mode === 'session') {
-    // node binding: the host already opened the bound session; just fetch its bytes
     boundSession = src.session
     const res = await api.get_pdf_bytes(src.session)
     if (res?.ok) return { data: base64ToUint8(res.data_b64) }
-  } else if (src.mode === 'bridge') {
-    const opened = await api.open(null, src.path)
-    if (opened?.ok) {
-      boundSession = opened.session
-      // a DATEV checkout path captures provenance on open → the open response flags it
-      datevConnected = !!(opened.datev && opened.datev.connected)
-      const res = await api.get_pdf_bytes(opened.session)
-      if (res?.ok) return { data: base64ToUint8(res.data_b64) }
-    }
-    // bridge open/fetch failed → fall back to a URL rather than a blank window
+    throw new Error(`Dokument konnte nicht geladen werden: ${(res && res.error) || 'unbekannt'}`)
   }
-  return { url: urlFallback }
+  if (src.mode === 'bridge') {
+    const opened = await api.open(null, src.path)
+    if (!opened?.ok) {
+      throw new Error(`Öffnen fehlgeschlagen: ${(opened && opened.error) || 'unbekannt'}`)
+    }
+    boundSession = opened.session
+    // default Bezeichnung for a file-anew = the source file's name (without the .pdf extension)
+    suggestedName = String(src.path).split(/[\\/]/).pop().replace(/\.pdf$/i, '')
+    // a DATEV checkout path captures provenance on open → the open response flags it
+    datevConnected = !!(opened.datev && opened.datev.connected)
+    datevCheckedOut = !!(opened.datev && opened.datev.checked_out_at_open)
+    datevSourceName = (opened.datev && opened.datev.source_name) || ''
+    const res = await api.get_pdf_bytes(opened.session)
+    if (res?.ok) return { data: base64ToUint8(res.data_b64) }
+    throw new Error(`Dokument konnte nicht geladen werden: ${(res && res.error) || 'unbekannt'}`)
+  }
+  return { url: urlFallback }  // host present but nothing bound (shouldn't happen)
 }
 
 resolveDocumentArgs()
-  .then((args) => pdfjsLib.getDocument(args).promise)
+  .then((args) => pdfjsLib.getDocument({ ...args, ...PDFJS_ASSET_OPTS }).promise)
   .then((pdfDocument) => {
     pdfDoc = pdfDocument
     linkService.setDocument(pdfDocument, null)
@@ -221,4 +340,6 @@ resolveDocumentArgs()
   .catch((err) => {
     window.__viewerError = String(err)
     console.error('pdf-tool load failed', err)
+    // Show the real reason in the status bar instead of a blank window.
+    setStatus(`Fehler: ${(err && err.message) || err}`)
   })

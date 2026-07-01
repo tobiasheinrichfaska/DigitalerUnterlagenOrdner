@@ -1,6 +1,7 @@
 # log_config.py
 import logging
 import os
+import sys
 
 # Write log to %LOCALAPPDATA%\PDF-Storage\ (always user-writable, even when
 # installed in Program Files). Fall back to home dir if LOCALAPPDATA is unset.
@@ -61,3 +62,31 @@ if LOGGING_ENABLED:
 else:
     # Kein Handler → kein I/O. Eine NullHandler verhindert "No handlers could be found" Warnungen.
     logger.addHandler(logging.NullHandler())
+
+
+# --- always-on diagnostic breadcrumb (independent of LOGLEVEL) -------------------------------
+# Some field issues (slow startup, DATEV checkout ownership) are hard to reproduce and the normal
+# logger is OFF by default. `diag()` appends a timestamped line to belegtool_diag.log NEXT TO THE
+# EXE (so it's trivial to find) — falling back to %LOCALAPPDATA% when the exe dir is read-only.
+# Best-effort + size-bounded; never raises.
+def _diag_targets():
+    name = "belegtool_diag.log"
+    # Frozen exe → next to the exe (easy to find) + the user log dir as fallback. Dev/tests →
+    # ONLY the user log dir (never write into the source tree).
+    if getattr(sys, "frozen", False):
+        return [os.path.join(os.path.dirname(sys.executable), name), os.path.join(_log_dir, name)]
+    return [os.path.join(_log_dir, name)]
+
+
+def diag(msg: str) -> None:
+    from datetime import datetime
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n"
+    for path in _diag_targets():
+        try:
+            if os.path.exists(path) and os.path.getsize(path) > 1_000_000:
+                os.remove(path)  # bound growth (diag events are infrequent)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+            return
+        except OSError:
+            continue

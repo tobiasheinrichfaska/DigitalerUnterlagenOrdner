@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.10.0**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.11.1**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -59,7 +59,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.10.0) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.11.1) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -402,9 +402,14 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   (normalises xref/streams → never byte-identical to the raw file), so hashing *that* made every
   first write-back of an unedited checkout falsely report `conflict_content` (fixed; regression
   `test_open_unedited_checkout_writeback_is_ok_not_false_conflict`).
-- **Two surfaces (`unterscheide`):** a DATEV checkout is a **`.pdf`**, which the host routes to
-  the **PDF-Tool** surface ([`webui/src/pdftool/main.js`](webui/pdf-tool.html)); a linked
-  **`.belegtool`** opens in the **organizer**. **Both** run through `CoreApi.open`, so provenance
+- **Two surfaces (`unterscheide`) — the host routes by file TYPE.** ⚠️ **DATEV stores, checks out,
+  and returns a document as the exact file type it was handed** (confirmed live from use, 2026-07-01):
+  a document filed as a **`.belegtool`** is checked out again as a **`.belegtool`** → the
+  **organizer** (full tree — the `/JSONStructure` is preserved end-to-end, never flattened); a genuine
+  **`.pdf`** document is checked out as a **`.pdf`** → the **PDF-Tool** surface
+  ([`webui/src/pdftool/main.js`](webui/pdf-tool.html)). A structure-bearing document therefore never
+  returns on the single-PDF surface, so the two never cross (an audit that assumed "a checkout is
+  always a `.pdf`" was a false positive on exactly this point). **Both** run through `CoreApi.open`, so provenance
   is captured either way, and **both** offer DATEV write-back: the organizer via `DatevBar`, the
   PDF-Tool via a „🔗 Nach DATEV zurückschreiben" / „📤 Nach DATEV ablegen" toolbar button
   (revealed by the pure `datevAction({datevMode, connected})` only for a `.pdf` in DATEV mode).
@@ -601,9 +606,39 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current tag: **v3.10.0** (beta) — icon-only toolbar, Save split-button, multi-select tagging,
+Current version: **v3.11.2** (changelog below). Built on **v3.11.1** — terminal-server / DATEV-checkout hardening on top of v3.11.0:
+**scanned PDFs render** in the PDF-Tool (bundled PDF.js JBIG2/JPEG2000 wasm + cmaps), the DATEV
+checkout write-back is **fixed end-to-end** (server returns `structure_item_id` as a numeric string;
+the checkout-path number can be a DokOrg working-copy id, so the real `document_file_id` +
+`structure_item_id` are resolved from the server via the doc GUID), **checkout ownership** is matched
+by the Windows session user (the machine label / Nutzer-GUID / SID are unreliable on the TS — DATEV
+ticket), and a **checked-out document is saved the native way** (💾 Speichern → local working copy →
+check in via DATEV; the „🔗 Nach DATEV zurückschreiben" button is hidden while checked out). The DATEV
+write-back is now **structure-preserving** — a `.belegtool` is uploaded as its own bytes (pages **+**
+embedded `/JSONStructure`), so DATEV shows a normal PDF *and* the tree round-trips on re-open instead
+of being flattened (a checkout `.pdf` still uploads its plain PDF). Startup is instrumented
+(`belegtool_startup.log`) and the install-to-local-disk rule is documented. A lean always-on
+`belegtool_diag.log` trail remains for field diagnosis.
+
+**v3.11.2 changelog:** (1) *DATEV type-preservation clarified.* DATEV
+stores/checks out a document **as the file type it was given**, so a `.belegtool` filed to DATEV is
+checked out again as a `.belegtool` (→ organizer, `/JSONStructure` preserved end-to-end) and only a
+genuine `.pdf` rides the PDF-Tool — the two never cross. An audit that assumed "a checkout is always a
+`.pdf`" (and inferred a structure-flattening / leaf-0 data-loss bug) was a **false positive** and is
+retracted. (2) *Stale DATEV connect-worker race fixed* via a `_datev_connect_epoch` token: a connect
+worker from a superseded epoch (an off→on toggle mid-connect) now discards its result instead of
+adopting a stale service (regression test in `test_datev_coreapi.py`). (3) *Checkout-ownership
+diagnostic enriched* — the `[datev] checkout ownership:` breadcrumb now logs both sides (checkout
+computer / session-user / user id+is_deleted vs. this session's computername / username / SID /
+connection-user + `same_session_user`/`same_dms_user`/`sid_match`), so the match can be hardened to a
+computer+owner match once a field rerun confirms the deleted-Nutzer is resolved.
+
+v3.11.0 extended the v3.10.0 beta (icon-only toolbar, Save split-button, multi-select tagging,
 „Neuer Ordner" at selection, zoom-keeps-position, nested archive/mail + subfolders, configurable
-export split, PDF-Tool text editor, and the **in-app DATEV integration** (DATEV-mode only).
+export split, PDF-Tool text editor, in-app DATEV integration) with the **DATEV filing dialog**
+(searchable Mandant + folder/register + Belegdatum + Veranlagungsjahr/-monat), a **non-blocking
+background DATEV connect**, `datev.config.json` host config, and the **no-connection /
+no-client-list ⇒ no DATEV write** guard.
 
 ---
 
@@ -615,6 +650,41 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Windows-only.** PyInstaller `win64`, Edge WebView2 GUI, hard `pywin32`/`pythonnet` deps,
   COM-based Office import. The PDF core is cross-platform but no port is maintained
   (community RFC: [`docs/cross-platform-port.md`](docs/cross-platform-port.md)).
+- **Install to LOCAL disk — never a roaming/redirected profile (terminal-server startup).**
+  *(Diagnosed 2026-06-29.)* The onedir bootloader loads hundreds of `_internal/` DLLs **before**
+  any app code runs. Launched from a **network-backed/redirected user-profile path** (e.g.
+  `C:\Users\<user>\Downloads`) on a terminal server, that load is over the network → **~13 s**
+  startup vs **~3 s** on local disk. **Not** Mark-of-the-Web (unblock didn't change it) and **not**
+  Defender (an exclusion didn't change it). Fix: install to a **local machine path**
+  (`C:\Program Files\BelegTool` / `C:\BelegTool`). Startup is instrumented — `belegtool_startup.log`
+  next to the exe times each phase (process→main is the bootloader; main→first-paint is our code),
+  and on RDP WebView2 is forced to software rendering. The connect is non-blocking, so DATEV mode
+  never delays startup.
+- **A checked-out DATEV document is NEVER written back via the API — save the local working copy +
+  check in via DATEV (mechanism A).** *(Confirmed live 2026-06-30.)* The DATEVconnect server refuses
+  `update_structure_item` on a checked-out document with **"The document can't be changed because it
+  is checked out"**. So BelegTool does not API-write-back a checkout: the PDF-Tool **hides the
+  „🔗 Nach DATEV zurückschreiben" button when the doc is checked out** ([source.js](webui/src/pdftool/source.js)
+  `datevAction` returns `null`), and **💾 Speichern** writes the local working copy (the user checks
+  it in via DATEV). The backend keeps a safety net: if the write-back is invoked anyway (e.g. the
+  non-blocking connect wasn't ready at open, so the button showed), `writeback()` returns verdict
+  `checked_out_self` and `datev_save_back` saves the local working copy instead of pushing to DATEV.
+  The in-place API write-back still applies to a connected doc that is **not** checked out.
+- **DATEV checkout ownership is matched by the Windows *session user*, not the Nutzer GUID — DATEV
+  data problem (internal DATEV support-ticket note, kept locally).**
+  *(Diagnosed 2026-06-29/30 on the live terminal server.)* Deciding whether a checkout is **yours**
+  (to allow it / to know it's not someone else's) can't rely on either signal we'd expect: (1)
+  `checkout_computer` is `"WTS (USER1)"` — `WTS` is a DATEV/terminal-server **session label**, not the
+  Windows `COMPUTERNAME` (`TSHOST`), so the machine string never matches; (2) the checkout was
+  stamped by a **now-deleted Nutzer** (`id 11111111…, is_deleted=true`) whose GUID differs from the
+  live connection's (`22222222…`), and **zero IAM records are linked to the running Windows SID**
+  (`records_sharing_my_sid=0`, `checkout_user_sid=None`) — so neither the Nutzer-GUID nor the SID can
+  map "current Windows user ↔ Nutzer". **Accepted behaviour:** ownership is decided by the **Windows
+  session user** in the label (`USER1 == user1`), which uniquely identifies the person on the
+  single-TS setup; the DMS-id remains an *additional* accept signal. **The root cause — a deleted
+  Nutzer holding a live checkout / no SID linkage — is a DATEV-side issue (support ticket drafted).**
+  Evidence: `belegtool_diag.log` `[datev] checkout ownership:` lines. Consequence: two *different* Windows
+  users with checkouts are still correctly distinguished; the machine label is intentionally ignored.
 - **Split export uses its own TOC, not the front-matter toggles.** Splitting into several files
   (Open items #13, shipped) always renders a per-file TOC with cross-references to the other parts,
   and **ignores the tag-index / PDF-bookmarks / TOC-links checkboxes** (those apply to single-file
@@ -647,16 +717,55 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 - **Variants grow the file** — computed compression variants are embedded in the `.belegtool`
   (no sidecar). Split parts in **already-saved** files keep the old `no_compression` flag until
   re-split.
-- **DATEV mode (v3.10.0) — accepted bounds.** Off by default; **write-back only succeeds when the
-  document was opened from a DATEV checkout path and still byte-matches the server file** — a
-  reopened `.belegtool` (or any structural transform) safely reports `conflict_content` and
-  falls back to a local save (never a blind overwrite). DokAb keeps **no revision**, so the
-  write is a permanent overwrite (guarded; a local backup is written first). The **file-to-DATEV
-  placement** asks only for the Mandant number — domain/folder/register default (no graphical
-  folder picker yet). Live behaviour is verified only by the human `manual_tests/10_datev.md`
-  (no DATEVconnect in CI). The DATEVconnect OpenAPI specs in `import/` are **vendor IP —
-  gitignored, never committed**.
+- **DATEV mode (v3.10.0, extended v3.11.0) — accepted bounds.** Off by default; **write-back only
+  succeeds when the document was opened from a DATEV checkout path and still byte-matches the server
+  file** — a reopened `.belegtool` (or any structural transform) safely reports `conflict_content`
+  and falls back to a local save (never a blind overwrite). DokAb keeps **no revision**, so the write
+  is a permanent overwrite (guarded; a local backup is written first). **v3.11.0 — file-to-DATEV now
+  uses a filing dialog** (a required **Bezeichnung** = the DATEV document **name**, prefilled from the
+  document name; searchable Mandant dropdown + folder/register pickers + Belegdatum +
+  Veranlagungsjahr/-monat → DocumentCreate `description`/`receipt_date`/`year`/`month`) in BOTH the
+  organizer and the PDF-Tool; **filing is refused without a Bezeichnung** (so a filed document is never
+  nameless — the "pdf lacks Name" fix) and **without a client list** (master-data unreachable → no safe
+  target). The **PDF-Tool offers DATEV for BOTH a directly-opened `.pdf` (bridge) and a node opened
+  "in PDF-Tool" (session binding)** — a node binding is never "connected" (the organizer owns any DATEV
+  link), so it always offers **file-anew**: filing it creates a new DATEV document AND pushes the baked
+  bytes back to the **owner node** (`local_kind: "node"`) so the organizer reflects the edit.
+  The connect runs on a **background thread** (the SSO handshake is slow), so the UI never freezes and
+  reports `connecting` while it settles; **DATEV writes are refused without a live connection**;
+  `datev.config.json` next to the exe drives the host (default **`your-datev-server:58452`** placeholder,
+  self-signed trusted). ⚠️ **Opening a DATEV checkout `.pdf` is NON-BLOCKING** (api `_datev_capture_on_open`): it
+  no longer waits on the SSO handshake (the v3.10.0 "checkout open takes 12-20 s" freeze). When the
+  service is already up it does the full capture as before; while it is still connecting it captures
+  only the cheap content baseline (`opened_sha256` from the local file) + marks the server half
+  `pending_server`, and `datev_save_back` completes it (`_datev_complete_baseline`) when it runs.
+  Trade-off: the up-front "already checked out by someone else" hint then surfaces as a `LOCKED`
+  verdict at write-back instead of on open — still safe, just later. The DATEV DocumentCreate fields
+  `year`/`month`/`receipt_date` are mapped per the DMS spec but **not yet round-trip-verified on the
+  live box** (do this before relying on Veranlagung filing). Live behaviour is verified only by the
+  human `manual_tests/10_datev.md` (no DATEVconnect in CI). A failed connect does **not auto-retry**
+  (no SSO storm) — toggle DATEV off/on or trigger a write to retry. The DATEVconnect OpenAPI specs in
+  `import/` are **vendor IP — gitignored, never committed**.
 
+> *Fixed 2026-06-29 (PDF-Tool renders scanned PDFs — was BLANK):* PDF.js **v6** keeps its image
+> decoders + font/cmap data out of the main bundle — JBIG2 / JPEG2000 (the encodings DATEV scans use)
+> decode via `wasm/jbig2.wasm` + `wasm/openjpeg.wasm`, and missing/CJK fonts need `cmaps` +
+> `standard_fonts`. `pdftool/main.js` previously set only `workerSrc`, so a scanned PDF **parsed (page
+> count correct) but every page rendered blank** (vector/text PDFs were fine — hence the e2e spike-form
+> test passed and missed it). Fix: a Vite plugin ([`vite.config.js`](webui/vite.config.js) `pdfjsAssets`)
+> copies `cmaps`/`standard_fonts`/`wasm`/`iccs` into `dist/pdfjs/` (and dev-serves them from
+> node_modules), and `getDocument` is given `cMapUrl`/`cMapPacked`/`standardFontDataUrl`/`wasmUrl`/`iccUrl`
+> (absolute, via `baseURI`, so the worker resolves them). Verified the wasm lands in the PyInstaller
+> bundle (`_internal/webui/dist/pdfjs/wasm/`). ⚠️ **Live-verify with a real scanned DATEV checkout** —
+> the e2e only covers a vector form.
+>
+> *Fixed 2026-06-29 (DATEV filing dialog):* (1) a **sole matching client now auto-selects** so „Ablegen"
+> enables without a click — a one-option `<select size>` listbox doesn't fire `change` on click in
+> WebView2 (pure `soleClientGuid`; the React dialog *derives* the effective selection rather than
+> setState-in-effect, and also drops a pick that the search narrows out of view). (2) The dialog no
+> longer **jumps** when a long client name appears — `.datev-file-dialog` CSS caps every control to the
+> modal width (`min-width:0`, `box-sizing:border-box`).
+>
 > *Fixed 2026-06-18:* the keyboard-only context-menu bug (keyboard selection didn't arm the ▤ Menu /
 > Shift+F10 key) — the primary row now takes DOM focus on selection ([`Tree.jsx`](webui/src/Tree.jsx)),
 > and `onContextMenu` anchors at the row rect when the key supplies no pointer coords. Covered by
@@ -964,9 +1073,10 @@ embedded version). Low effort; do it on the next build bump.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (151 keys =
-124 UI strings + 13 backend command-error messages + 14 host-level error/warning
-strings; locked by `i18n.test.js`, which also asserts every full-coverage language's
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**206 keys** —
+the v3.9 base of 163 strings plus the DATEV v3.10/v3.11 additions: mode toggle, no-connection guard,
+filing dialog, Bezeichnung, checked-out-self notice; the exact count is asserted by `i18n.test.js`
+(`Object.keys(en).length === 206`), which also asserts every full-coverage language's
 key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
@@ -1007,7 +1117,7 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **19 languages are 100% (all 151 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all 206 keys, incl. error messages)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Intentional **partials** (only
@@ -1038,7 +1148,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.10.0`** (bug form default + BETA_TESTING heading) → bump when `version_info.py` changes.
+- **Version `3.11.2`** (bug form default + BETA_TESTING heading) → keep in sync with `version_info.py`.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **One known gap that must NOT be reported as a bug** (the bug form's required
   checkbox enforces this): compression irreversible after save ("bereits komprimiert

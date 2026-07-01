@@ -48,13 +48,16 @@ class FakeService:
         return (self.prov, self.baseline) if self.prov else (None, None)
 
     def writeback(self, prov, baseline, edited, *, user_confirmed=True, comment=None, backup_dir=None):
+        self.writeback_bytes = edited          # what would be uploaded to DATEV
         return self.writeback_result
 
     def file_document(self, data, *, client_guid, description, domain_id=1, folder_id=None,
-                      register_id=None, structure_name="beleg.pdf"):
+                      register_id=None, structure_name="beleg.pdf", document_date=None,
+                      fiscal_year=None, fiscal_month=None):
         idx = len(self.filed)
         self.filed.append({"data": data, "client_guid": client_guid, "description": description,
-                           "structure_name": structure_name})
+                           "structure_name": structure_name, "document_date": document_date,
+                           "fiscal_year": fiscal_year, "fiscal_month": fiscal_month})
         if idx in self.fail_file_calls:
             return {"ok": False, "error": "boom"}
         return self.file_result or {"ok": True,
@@ -65,12 +68,30 @@ class FakeService:
     def resolve_client(self, number):
         return {"guid": self.client_guid, "name": "Muster", "number": number}
 
+    def list_clients(self):
+        return [{"guid": self.client_guid, "number": "10001", "name": "Muster GmbH"}]
+
+    def list_placements(self, domain_id=1):
+        return [{"id": 177, "name": "Stammakte", "registers": [{"id": 461, "name": "Korrespondenz"}]}]
+
 
 def _core_with_service(svc):
     core = CoreApi()
     core._datev_mode = True
     core._datev_service = svc
     return core
+
+
+def _wait_connect(core, timeout=10.0):
+    """Wait for the background connect thread to settle (it builds the service off the
+    bridge thread now, so set_datev_mode/__init__ return before it finishes)."""
+    import time as _t
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        with core._datev_lock:
+            if not core._datev_connecting and core._datev_attempted:
+                return
+        _t.sleep(0.02)
 
 
 # --- mode gate -------------------------------------------------------------
@@ -89,11 +110,40 @@ def test_set_datev_mode_persists_and_rebuilds(monkeypatch, tmp_path):
                         classmethod(lambda cls, *a, **k: FakeService(prov=None)))
     core = CoreApi()
     st = core.set_datev_mode(True)
-    assert st["datev_mode"] is True and st["connected"] is True
+    assert st["datev_mode"] is True  # returns immediately (connect runs in the background)
+    _wait_connect(core)
+    assert core.datev_status()["connected"] is True
     from infra.settings import load_settings
     assert load_settings()["datev_mode"] is True
     off = core.set_datev_mode(False)
     assert off == {"ok": True, "datev_mode": False, "connected": False}
+
+
+def test_datev_connect_worker_discards_superseded_epoch(monkeypatch, tmp_path):
+    """A background connect from a SUPERSEDED epoch (an off→on toggle started a fresh connect
+    while it was still in flight) must DISCARD its result — never adopt its now-stale service
+    nor clear the current epoch's in-flight flag. Regression for the stale-worker race: before
+    the epoch guard the worker adopted any result as long as mode was still on, so a connect
+    built with pre-toggle settings could win over the fresh one."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from datev import inapp
+    fake = FakeService(prov=None)
+    monkeypatch.setattr(inapp.DatevService, "connect",
+                        classmethod(lambda cls, *a, **k: fake))
+    core = CoreApi()
+    core._datev_mode = True
+    core._datev_connect_epoch = 5   # a fresh (epoch-5) connect is the current one…
+    core._datev_connecting = True   # …and it is in flight
+
+    # a worker started in an EARLIER epoch (3) finishes now → must not touch current state
+    core._datev_connect_worker(3)
+    assert core._datev_service is None
+    assert core._datev_connecting is True   # left for the current-epoch worker to clear
+
+    # the current-epoch worker adopts its result and clears the in-flight flag
+    core._datev_connect_worker(5)
+    assert core._datev_service is fake
+    assert core._datev_connecting is False
 
 
 # --- open capture ----------------------------------------------------------
@@ -320,6 +370,84 @@ def test_datev_file_to_pdf_path_overwrites_with_filed_bytes(tmp_path):
     assert pdf.read_bytes().startswith(b"%PDF") and pdf.read_bytes() == svc.filed[0]["data"]
 
 
+def test_save_back_belegtool_preserves_local_structure(tmp_path):
+    # ANALYSIS (2026-06-30): "writing back a NON-checkout .belegtool to DATEV loses the structure —
+    # only pdf-pages survive." DATEV holds a single flat PDF (expected on the server side), but the
+    # LOCAL .belegtool must KEEP its tree (root folder + 2 leaves) — _datev_local_persist saves it
+    # via self.save(). If this fails (1 flat leaf), computing the effective bytes is mutating the
+    # session document in place before the save.
+    from core.bridge import document_from_storage, load_belegtool
+    from formats.pdf_storage import PDFStorage
+    # root -> [ leaf "a", folder "sub" -> [ leaf "b", leaf "c" ] ] : a nested tree, not flat pages
+    doc = Document(Node(name="root", is_folder=True, children=(
+        Node(name="a", original_data=_pdf(1), pdf_length=1),
+        Node(name="sub", is_folder=True, children=(
+            Node(name="b", original_data=_pdf(1), pdf_length=1),
+            Node(name="c", original_data=_pdf(1), pdf_length=1),
+        )),
+    )))
+    path = str(tmp_path / "structured.belegtool")
+    save_belegtool(doc, path)
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "new_sha256": "h", "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=path)["session"]
+    core._datev_set_provenance(sid, prov)
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res.get("local_kind") == "belegtool"
+    # (a) the LOCAL .belegtool keeps its tree
+    reloaded = load_belegtool(path)
+    folders = sorted(n.name for n in reloaded.root.iter() if n.is_folder)
+    leaves = sorted(n.name for n in reloaded.root.iter() if not n.is_folder)
+    assert leaves == ["a", "b", "c"] and "sub" in folders, \
+        f"local .belegtool structure lost: folders={folders} leaves={leaves}"
+    # (b) the bytes UPLOADED to DATEV carry the structure (a .belegtool PDF, not the flat PDF), so
+    #     the structure survives in DATEV and round-trips when re-opened — DATEV does NOT flatten.
+    uploaded = core._datev_service.writeback_bytes
+    assert b"/JSONStructure" in uploaded, "DATEV upload is a flat PDF — structure stripped"
+    from_datev = document_from_storage(PDFStorage(uploaded))  # re-open the bytes DATEV would store
+    assert sorted(n.name for n in from_datev.root.iter() if not n.is_folder) == ["a", "b", "c"]
+    assert "sub" in sorted(n.name for n in from_datev.root.iter() if n.is_folder)
+
+
+def test_save_back_checked_out_self_saves_local_working_copy(tmp_path, monkeypatch):
+    # Confirmed live 2026-06-30: DATEV refuses an API write to a checked-out doc → writeback returns
+    # verdict CHECKED_OUT_SELF. The CoreApi must persist the edit to the LOCAL working copy (the user
+    # checks it in via DATEV) and report ok with that verdict — NOT an error.
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    core = _core_with_service(FakeService(
+        prov=prov, writeback_result={"ok": False, "verdict": "checked_out_self"}))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    working = tmp_path / "checkout.pdf"
+    working.write_bytes(b"%PDF-old")
+    monkeypatch.setattr(core, "document_path", lambda s: str(working))
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "checked_out_self"
+    assert res["local_saved"] == str(working)
+    assert working.read_bytes().startswith(b"%PDF")   # working copy overwritten with the edit
+
+
+def test_save_back_checked_out_self_locked_working_copy_reports_error(tmp_path, monkeypatch):
+    # If the local working copy can't be written (locked), the checked-out save has nowhere to go →
+    # ok False, verdict CHECKED_OUT_SELF, error set (no silent loss).
+    import os
+    import stat
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    core = _core_with_service(FakeService(
+        prov=prov, writeback_result={"ok": False, "verdict": "checked_out_self"}))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    locked = tmp_path / "checkout.pdf"
+    locked.write_bytes(b"%PDF-old")
+    os.chmod(locked, stat.S_IREAD)
+    monkeypatch.setattr(core, "document_path", lambda s: str(locked))
+    try:
+        res = core.datev_save_back(sid, confirmed=True)
+    finally:
+        os.chmod(locked, stat.S_IWRITE)
+    assert not res["ok"] and res["verdict"] == "checked_out_self" and res["error"]
+
+
 def test_save_back_checkout_pdf_local_write_failure_reports_error(tmp_path, monkeypatch):
     # DATEV ok but the on-disk checkout .pdf can't be written (read-only / removed) → ok stays,
     # local_error names it, local_kind 'pdf'.
@@ -332,6 +460,32 @@ def test_save_back_checkout_pdf_local_write_failure_reports_error(tmp_path, monk
     res = core.datev_save_back(sid, confirmed=True)
     assert res["ok"] and res["verdict"] == "ok"
     assert res["local_kind"] == "pdf" and res["local_saved"] is None and res["local_error"]
+
+
+def test_save_back_checkout_pdf_locked_local_file_is_nonfatal(tmp_path, monkeypatch):
+    # REGRESSION (2026-06-29): a DokOrg-Pro checkout .pdf is held LOCKED by DATEV, so after a
+    # SUCCESSFUL write-back the in-sync local overwrite fails with PermissionError ([Errno 13]).
+    # DATEV is authoritative (it re-materializes on next checkout) → this must NOT surface as an
+    # error: ok stays, local_locked flags it, and local_error is dropped. Previously the PDF-Tool
+    # showed "Nach DATEV zurückgeschrieben ✓ — lokal: [Errno 13] Permission denied".
+    import os
+    import stat
+    prov = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2}
+    wb = {"ok": True, "verdict": "ok", "new_file_id": 9001, "new_change_dt": "t1",
+          "new_sha256": "h", "provenance": {**prov, "file_id": 9001}}
+    core = _core_with_service(FakeService(prov=prov, writeback_result=wb))
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    locked = tmp_path / "checkout.pdf"
+    locked.write_bytes(b"%PDF-old")
+    os.chmod(locked, stat.S_IREAD)  # read-only → open(...,'wb') raises PermissionError on Windows
+    monkeypatch.setattr(core, "document_path", lambda s: str(locked))
+    try:
+        res = core.datev_save_back(sid, confirmed=True)
+    finally:
+        os.chmod(locked, stat.S_IWRITE)  # restore so pytest can clean up tmp_path
+    assert res["ok"] and res["verdict"] == "ok" and res["local_kind"] == "pdf"
+    assert res["local_locked"] is True and res["local_saved"] is None
+    assert res["local_error"] is None  # suppressed — DATEV already has the edit
 
 
 # --- save-back -------------------------------------------------------------
@@ -383,6 +537,80 @@ def test_open_unedited_checkout_writeback_is_ok_not_false_conflict(tmp_path):
     assert res["local_kind"] == "pdf" and res["local_saved"] == str(checkout)
     uploaded = svc._client.uploaded[0]
     assert checkout.read_bytes() == uploaded and checkout.read_bytes().startswith(b"%PDF")
+
+
+def test_open_checkout_does_not_block_on_connecting_service(tmp_path):
+    # REGRESSION (v3.11.0 "startup 12-20 s" / PDF-Tool checkout open freeze): opening a DATEV
+    # checkout while the SSO connect is still IN FLIGHT must NOT wait on it. With no service ready
+    # the open captures only the cheap, service-free content baseline (badge + opened_sha256) and
+    # returns immediately; the server half is deferred (pending_server) and filled at write-back.
+    from datev.inapp import DatevService
+    raw = _pdf(1)
+    fid = 1085411
+    checkout = tmp_path / GUID / f"{fid}.pdf"
+    checkout.parent.mkdir(parents=True)
+    checkout.write_bytes(raw)
+
+    class _Client:
+        def get_document(self, g):
+            return {"change_date_time": "t0", "checked_out": False,
+                    "correspondence_partner_guid": "client-x"}
+
+        def get_document_file(self, f):
+            return raw
+
+        def list_structure_items(self, g):
+            return [{"id": 1085409, "document_file_id": fid}]
+
+        def upload_document_file(self, data):
+            return 9001
+
+        def update_structure_item(self, g, sid, f, revision_comment=None):
+            return {"http_status": 204}
+
+    core = CoreApi()
+    core._datev_mode = True
+    core._datev_connecting = True   # simulate "connect in flight" → _datev_get_service(block=False)
+    core._datev_service = None      # returns None, so capture takes the cheap path (no real curl)
+    resp = core.open(path=str(checkout))
+    sid = resp["session"]
+    assert resp["datev"]["connected"] is True                       # badge shows immediately
+    base = core._datev_baseline[sid]
+    assert base["pending_server"] is True                           # server half deferred
+    assert base["opened_sha256"]                                    # content guard from the local file
+    assert core._datev_provenance(sid)["structure_item_id"] is None  # not yet known (no server call)
+    # the connect "finishes": inject the live service. write-back completes the deferred baseline.
+    core._datev_connecting = False
+    core._datev_service = DatevService(_Client())
+    res = core.datev_save_back(sid, confirmed=True)
+    assert res["ok"] and res["verdict"] == "ok", res
+    # the deferred server half was completed before the guard ran (the durable PUT handle is now
+    # known) — proof the lazy completion worked. (After a successful write-back the baseline is
+    # reset to the fresh post-write server state, so it no longer carries the pending flag.)
+    assert core._datev_provenance(sid)["structure_item_id"] == 1085409
+    assert "pending_server" not in core._datev_baseline[sid]
+
+
+def test_datev_file_from_pdftool_node_binding_pushes_to_owner(tmp_path):
+    # REGRESSION (v3.11.0 "opening in pdf-tool lacks all DATEV capability"): a node opened "in
+    # PDF-Tool" (a node binding, not a bridge .pdf) must be fileable to DATEV — file its (baked)
+    # bytes as a NEW document AND push them back to the OWNER node so the organizer reflects it,
+    # with the user's Bezeichnung carried as the DATEV description.
+    import base64
+    core = _core_with_service(FakeService(prov=None))
+    owner = core.open(path=_belegtool(tmp_path))["session"]
+    leaf_id = [n for n in core._sessions[owner].document.root.iter() if not n.is_folder][0].id
+    pt = core.open_node_in_pdftool(owner, leaf_id)["session"]
+    core.update_pdf_bytes(pt, base64.b64encode(_pdf(3)).decode())   # bake a 3-page edit (session only)
+    res = core.datev_file(pt, client_guid="cli", description="Eingangsrechnung")
+    assert res["ok"], res
+    assert res["local_kind"] == "node" and res["local_error"] is None   # persisted to the owner node
+    owner_leaf = core._sessions[owner].document.find(leaf_id)
+    # SetNodeBytes installs the edit as the node's NEW SOURCE (original_data, current_data reset),
+    # so check the EFFECTIVE bytes — the organizer now reflects the 3-page edit filed to DATEV.
+    effective = owner_leaf.current_data or owner_leaf.original_data
+    assert fitz.open(stream=effective, filetype="pdf").page_count == 3
+    assert core._datev_service.filed[-1]["description"] == "Eingangsrechnung"  # Bezeichnung reached DATEV
 
 
 def test_save_back_ok_updates_provenance_and_marks_saved(tmp_path):
@@ -454,6 +682,104 @@ def test_set_datev_mode_off_clears_baselines(tmp_path, monkeypatch):
     assert core._datev_baseline == {}          # mode-off frees stale per-session baselines
 
 
+def test_datev_status_does_not_block_on_a_slow_connect(monkeypatch):
+    # REGRESSION (v3.10.0 "startup takes 20-30 s"): datev_status() ran on the organizer's
+    # mount and BLOCKED the bridge thread for the whole curl SSO handshake. It must now return
+    # immediately with connecting:True while the connect runs in the background.
+    import time as _t
+    from datev import inapp
+
+    def _slow_connect(cls, *a, **k):
+        _t.sleep(2.0)  # stand-in for the 20-30 s SSO handshake
+        return FakeService(prov=None)
+    monkeypatch.setattr(inapp.DatevService, "connect", classmethod(_slow_connect))
+
+    core = CoreApi()
+    core._datev_mode = True
+    t0 = _t.monotonic()
+    st = core.datev_status()                      # must NOT wait for the 2 s connect
+    assert _t.monotonic() - t0 < 0.5
+    assert st == {"ok": True, "datev_mode": True, "connected": False, "connecting": True}
+    _wait_connect(core)
+    assert core.datev_status()["connected"] is True   # background connect eventually lands
+
+
+def test_open_normal_pdf_does_not_block_on_a_slow_connect(monkeypatch, tmp_path):
+    # REGRESSION (v3.10.0 "start with pdf is slow"): a normal .pdf is NOT a DATEV checkout, so
+    # opening it must never wait on (or even trigger) the connect — the checkout-path test gates
+    # it. Open must return promptly even while a slow connect is in flight.
+    import time as _t
+    from datev import inapp
+    monkeypatch.setattr(inapp.DatevService, "connect",
+                        classmethod(lambda cls, *a, **k: (_t.sleep(2.0), FakeService(prov=None))[1]))
+    pdf = tmp_path / "normal.pdf"
+    pdf.write_bytes(_pdf(1))
+    core = CoreApi()
+    core._datev_mode = True
+    t0 = _t.monotonic()
+    resp = core.open(path=str(pdf))
+    assert resp["ok"] and _t.monotonic() - t0 < 0.5   # not blocked by the 2 s connect
+    assert "datev" not in resp                         # not a checkout → no provenance block
+
+
+def test_failed_connect_does_not_retry_forever_and_reports_error(monkeypatch):
+    # REGRESSION (audit): a failed background connect must SETTLE to the error state, not leave
+    # datev_status() returning connecting:true forever while re-arming a fresh 20-30s SSO handshake
+    # on every poll. After a failure, status reports the error and further polls start NO new connect.
+    from datev import inapp
+    calls = {"n": 0}
+
+    def _fail(cls, *a, **k):
+        calls["n"] += 1
+        raise RuntimeError("DATEV host unreachable")
+    monkeypatch.setattr(inapp.DatevService, "connect", classmethod(_fail))
+
+    core = CoreApi()
+    core._datev_mode = True
+    core.datev_status()           # kicks off the (failing) background connect
+    _wait_connect(core)
+    st = core.datev_status()      # settled: error branch, not connecting-forever
+    assert st["connected"] is False and "Verbindung" in st.get("error", "")
+    assert st.get("connecting") is not True
+    n = calls["n"]
+    core.datev_status(); core.datev_status()   # further polls must NOT re-arm a connect
+    _wait_connect(core)
+    assert calls["n"] == n        # gated — no retry storm
+
+
+def test_explicit_op_forces_one_retry_after_a_failure(monkeypatch):
+    # A user-initiated op (block=True) MAY retry once after a failure (status polls do not).
+    from datev import inapp
+    calls = {"n": 0}
+
+    def _fail(cls, *a, **k):
+        calls["n"] += 1
+        raise RuntimeError("unreachable")
+    monkeypatch.setattr(inapp.DatevService, "connect", classmethod(_fail))
+    core = CoreApi()
+    core._datev_mode = True
+    core.datev_status(); _wait_connect(core)   # first attempt fails → gated
+    assert calls["n"] == 1
+    core.datev_clients()                       # block=True op → forces a fresh attempt
+    _wait_connect(core)
+    assert calls["n"] == 2
+
+
+def test_set_datev_mode_resets_connect_flags(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from datev import inapp
+    monkeypatch.setattr(inapp.DatevService, "connect",
+                        classmethod(lambda cls, *a, **k: FakeService(prov=None)))
+    core = CoreApi()
+    core._datev_failed = True
+    core._datev_connecting = True   # simulate a stale in-flight flag
+    core.set_datev_mode(True)
+    with core._datev_lock:
+        assert core._datev_failed is False
+    _wait_connect(core)
+    assert core.datev_status()["connected"] is True
+
+
 def test_datev_status_connect_failed_reports_error(monkeypatch):
     core = CoreApi()
     core._datev_mode = True
@@ -511,8 +837,9 @@ def test_set_datev_mode_true_drops_old_service_and_rebuilds(tmp_path, monkeypatc
     monkeypatch.setattr(inapp.DatevService, "connect", classmethod(lambda cls, *a, **k: fresh))
     core = CoreApi()
     core._datev_service = object()             # a stale "already built" instance
-    core.set_datev_mode(True)
-    assert core._datev_service is fresh         # old dropped, rebuilt on next use
+    core.set_datev_mode(True)                  # drops the stale one, connects in the background
+    _wait_connect(core)
+    assert core._datev_service is fresh         # old dropped, rebuilt
 
 
 def test_datev_export_errors_when_export_yields_no_path(tmp_path, monkeypatch):
@@ -649,6 +976,37 @@ def test_datev_export_resolve_failure_returns_error(tmp_path):
     sid = core.open(path=_belegtool(tmp_path))["session"]
     res = core.datev_export(sid, mandant_number=999)
     assert not res["ok"] and "resolve down" in res["error"]
+
+
+def test_datev_clients_lists_for_the_dropdown(tmp_path):
+    core = _core_with_service(FakeService(prov=None))
+    res = core.datev_clients()
+    assert res["ok"] and res["clients"][0]["number"] == "10001"
+
+
+def test_datev_clients_no_connection_disables_filing(monkeypatch):
+    core = CoreApi()
+    core._datev_mode = True
+    monkeypatch.setattr(core, "_datev_get_service", lambda block=False, timeout=45.0: None)
+    res = core.datev_clients()
+    assert not res["ok"] and "Verbindung" in res["error"]   # no client data → UI disables filing
+
+
+def test_datev_placements_lists_folders(tmp_path):
+    core = _core_with_service(FakeService(prov=None))
+    res = core.datev_placements()
+    assert res["ok"] and res["folders"][0]["registers"][0]["id"] == 461
+
+
+def test_datev_file_forwards_date_and_veranlagung(tmp_path):
+    svc = FakeService(prov=None)
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+    res = core.datev_file(sid, mandant_number=10001, document_date="2025-03-14T00:00:00",
+                          fiscal_year=2025, fiscal_month=3)
+    assert res["ok"]
+    assert svc.filed[0]["document_date"] == "2025-03-14T00:00:00"
+    assert svc.filed[0]["fiscal_year"] == 2025 and svc.filed[0]["fiscal_month"] == 3
 
 
 def test_datev_file_creates_and_adopts_provenance(tmp_path):

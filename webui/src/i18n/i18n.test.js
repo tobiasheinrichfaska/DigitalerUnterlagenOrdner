@@ -8,12 +8,16 @@ import { en } from './en'
 // Lookup maps that use variable-keyed t(MAP[x]) — the literal scanner misses these.
 // Import them here and assert each value is a valid en.js key.
 import { DOT_LABEL } from '../lib/status'
+import { DATEV_VERDICT_KEY } from '../lib/datev'
 // STATUS_DE and METHOD_DE are not exported, but their values are known constants:
 const STATUS_DE_VALUES = ['Kein Status', 'Erfasst', 'Zu erfassen', 'Vorjahr']
 // METHOD_DE values (from PreviewControls.jsx):
 const METHOD_DE_VALUES = ['JPEG (Graustufen)', 'JPEG (Farbe)', 'PNG (Graustufen)', 'Struktur (Farbe erhalten)']
 // Count plural keys (from App.jsx doExport):
 const COUNT_KEYS = ['Eintrag', 'Einträge']
+// validateFiling (lib/datevFiling.js) error messages — dynamic t(valid.error) at DatevFileDialog.jsx.
+const VALIDATE_FILING_MESSAGES = ['Bitte einen Mandanten wählen.', 'Bitte eine Bezeichnung eingeben.',
+  'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.']
 
 describe('translate (source-string keys)', () => {
   it('returns the German source for the default language', () => {
@@ -47,9 +51,16 @@ describe('translate (source-string keys)', () => {
     // ContextMenu aria-label, #7 multi-select, #3 Save split-button, #13 export-split labels;
     // + 13 backend command-error messages + 14 host-level error/warning strings) PLUS the 16
     // v3.10.0 DATEV-mode strings (toggle/badge/actions/verdict messages + the export option +
-    // the write-back- and file-ok-but-local-save-failed notices) = 181. If a string is added,
-    // bump this deliberately — and add it to every full-coverage language file (or PENDING).
-    expect(Object.keys(en).length).toBe(181)
+    // the write-back- and file-ok-but-local-save-failed notices) = 181, PLUS the 6 v3.11.0
+    // DATEV no-connection guard strings (2 refusal notices + the bar's hint/title strings) = 187,
+    // PLUS the 14 v3.11.0 DATEV filing-dialog strings (client search/list, folder/register, dates,
+    // Veranlagung year+month, the Ablegen action + 2 validation messages) = 201, PLUS the 3
+    // v3.11.0 Bezeichnung/name strings (the field label + placeholder + "enter a name" validation,
+    // the "pdf lacks Name" fix) = 204, PLUS the 1 v3.11.0 checked-out-self notice ("saved to the
+    // checked-out file — check in via DATEV", for the doc you have checked out) = 205, PLUS the 1
+    // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206.
+    // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
+    expect(Object.keys(en).length).toBe(206)
   })
 })
 
@@ -69,14 +80,29 @@ describe('full-coverage languages', () => {
     'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
     'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',
     'Nach DATEV zurückgeschrieben', 'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.',
+    'In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken',
     'In DATEV abgelegt', 'In DATEV abgelegt, aber lokal nicht gespeichert.',
     'In DATEV abgelegt ({n} Dokumente)',
     'DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.',
     'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.',
     'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.',
     'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.',
+    'DATEV: Ausgecheckte Datei konnte nicht gespeichert werden (gesperrt?)',
     'DATEV-Rückschreiben fehlgeschlagen.', 'DATEV-Ablage fehlgeschlagen.',
     'Nach DATEV ablegen (gleicher Mandant)',
+    // DATEV no-connection guard (v3.11.0) — de + en only for now
+    'Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.',
+    'Keine Verbindung zur DATEV-Schnittstelle — nicht abgelegt.',
+    'Keine Verbindung zur DATEV-Schnittstelle', 'Verbindung zur DATEV-Schnittstelle',
+    'verbinde…', 'keine Verbindung',
+    // DATEV filing dialog (v3.11.0) — de + en only for now
+    'Mandanten werden geladen…', 'Mandantenliste nicht verfügbar',
+    'Keine Mandanten gefunden — DATEV-Ablage nicht möglich.', 'Mandant',
+    'Suchen (Nummer oder Name)…', 'Mandant suchen', 'Register', '— ohne —', 'Belegdatum',
+    'Veranlagungsjahr', 'Veranlagungsmonat', 'Ablegen', 'Bitte einen Mandanten wählen.',
+    'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.',
+    // DATEV filing dialog — Bezeichnung/name (v3.11.0 "pdf lacks Name" fix) — de + en only for now
+    'Bezeichnung', 'Name des Dokuments in DATEV', 'Bitte eine Bezeichnung eingeben.',
   ])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {
@@ -120,7 +146,8 @@ describe('translation coverage', () => {
   // entry for each — so a newly-added German string can't ship untranslated.
   const files = ['App.jsx', 'Tree.jsx', 'ContextMenu.jsx', 'PreviewControls.jsx', 'Preview.jsx',
                  'Toolbar.jsx', 'SaveSplitButton.jsx', 'TagEditor.jsx', 'TagViewBar.jsx', 'ExportDialog.jsx',
-                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'DatevBar.jsx', 'lib/status.js']
+                 'HelpModal.jsx', 'PreviewPane.jsx', 'SaveDialog.jsx', 'StatusBar.jsx', 'DatevBar.jsx',
+                 'DatevFileDialog.jsx', 'lib/status.js']
   const re = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g
 
   // Resolve from THIS file's location (src/i18n/) → src/, not process.cwd(), so the
@@ -170,6 +197,18 @@ describe('i18n — variable-keyed lookup maps are fully covered', () => {
   it('count plural keys (Eintrag / Einträge) are present in en.js', () => {
     const missing = COUNT_KEYS.filter((v) => !(v in en))
     expect(missing, 'count plural keys missing from en.js').toEqual([])
+  })
+
+  // DATEV_VERDICT_KEY values (App.jsx / pdftool use t(datevVerdictKey(verdict)))
+  it('every DATEV_VERDICT_KEY value is a key in en.js', () => {
+    const missing = Object.values(DATEV_VERDICT_KEY).filter((v) => !(v in en))
+    expect(missing, 'DATEV_VERDICT_KEY values missing from en.js').toEqual([])
+  })
+
+  // validateFiling error messages (DatevFileDialog.jsx uses t(valid.error))
+  it('every validateFiling error message is a key in en.js', () => {
+    const missing = VALIDATE_FILING_MESSAGES.filter((v) => !(v in en))
+    expect(missing, 'validateFiling messages missing from en.js').toEqual([])
   })
 })
 

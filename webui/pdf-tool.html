@@ -14,11 +14,16 @@
       #pdftoolbar button {
         font: inherit; padding: 5px 10px; border: 1px solid #c3c9d2;
         background: #fff; border-radius: 6px; cursor: pointer;
+        flex: 0 0 auto; white-space: nowrap;  /* never shrink/distort when status text is long */
       }
       #pdftoolbar button:hover:not(:disabled) { border-color: #2b6cb0; }
       #pdftoolbar button:disabled { opacity: 0.5; cursor: default; }
       #pdftoolbar button.on { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
-      #pdf-status { margin-left: auto; color: #4b5563; }
+      /* the two text spans absorb overflow (ellipsis) so the buttons keep their shape */
+      #datev-link { color: #047857; font-weight: 600; white-space: nowrap;
+        flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      #pdf-status { margin-left: auto; color: #4b5563; white-space: nowrap;
+        flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       /* PDF.js PDFViewer requires an absolutely-positioned, scrollable container. */
       #viewerContainer { position: absolute; inset: 40px 0 0 0; overflow: auto; background: #525659; }
     </style>
@@ -28,6 +33,7 @@
       <button id="btn-text" type="button" title="Textfeld einfügen (Schreibmaschine)">✎ Text</button>
       <button id="btn-save" type="button" title="Änderungen ins Dokument speichern" disabled>💾 Speichern</button>
       <button id="btn-datev" type="button" title="Mit DATEV verknüpftes Dokument zurückschreiben / ablegen" hidden></button>
+      <span id="datev-link" hidden></span>
       <span id="pdf-status"></span>
     </div>
     <div id="viewerContainer"><div id="viewer" class="pdfViewer"></div></div>

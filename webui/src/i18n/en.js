@@ -225,6 +225,8 @@ export const en = {
   'Nach DATEV zurückgeschrieben': 'Written back to DATEV',
   'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.':
     'Written back to DATEV, but not saved locally.',
+  'In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken':
+    'Saved to the checked-out file — please check it in via DATEV',
   'In DATEV abgelegt': 'Filed to DATEV',
   'In DATEV abgelegt, aber lokal nicht gespeichert.':
     'Filed to DATEV, but not saved locally.',
@@ -237,7 +239,37 @@ export const en = {
     'DATEV: the server version differs from the opened one — please save locally.',
   'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.':
     'DATEV: no structure item found — please save locally.',
+  'DATEV: Ausgecheckte Datei konnte nicht gespeichert werden (gesperrt?)':
+    'DATEV: the checked-out file could not be saved (locked?)',
   'DATEV-Rückschreiben fehlgeschlagen.': 'Write-back to DATEV failed.',
   'DATEV-Ablage fehlgeschlagen.': 'Filing to DATEV failed.',
   'Nach DATEV ablegen (gleicher Mandant)': 'File to DATEV (same client)',
+  'Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.':
+    'No connection to the DATEV interface — not written back.',
+  'Keine Verbindung zur DATEV-Schnittstelle — nicht abgelegt.':
+    'No connection to the DATEV interface — not filed.',
+  'Keine Verbindung zur DATEV-Schnittstelle': 'No connection to the DATEV interface',
+  'Verbindung zur DATEV-Schnittstelle': 'Connection to the DATEV interface',
+  'verbinde…': 'connecting…',
+  'keine Verbindung': 'no connection',
+  // DATEV filing dialog (v3.11.0)
+  'Mandanten werden geladen…': 'Loading clients…',
+  'Mandantenliste nicht verfügbar': 'Client list unavailable',
+  'Keine Mandanten gefunden — DATEV-Ablage nicht möglich.':
+    'No clients found — filing to DATEV is not possible.',
+  'Mandant': 'Client',
+  'Suchen (Nummer oder Name)…': 'Search (number or name)…',
+  'Mandant suchen': 'Search client',
+  'Register': 'Register',
+  '— ohne —': '— none —',
+  'Belegdatum': 'Document date',
+  'Veranlagungsjahr': 'Assessment year',
+  'Veranlagungsmonat': 'Assessment month',
+  'Ablegen': 'File',
+  'Bezeichnung': 'Name',
+  'Name des Dokuments in DATEV': 'Document name in DATEV',
+  'Bitte einen Mandanten wählen.': 'Please choose a client.',
+  'Bitte eine Bezeichnung eingeben.': 'Please enter a name.',
+  'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.':
+    'A month without a year is not possible — please choose a year.',
 }

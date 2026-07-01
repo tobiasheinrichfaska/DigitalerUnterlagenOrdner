@@ -87,12 +87,28 @@ foreach ($k in "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$g","HKL
 }
 if (-not $wv2) { Write-Warning 'WebView2 Runtime not detected - the GUI will render blank until it is installed (https://developer.microsoft.com/microsoft-edge/webview2/).' }
 
+# a running BelegTool locks BelegTool.exe so robocopy /MIR can't replace it - warn (maintenance window)
+$running = @(Get-Process -Name 'BelegTool' -ErrorAction SilentlyContinue)
+if ($running.Count -gt 0) {
+  Write-Warning "$($running.Count) BelegTool process(es) are running - robocopy may fail on the locked exe. Close BelegTool in all sessions (maintenance window) before updating."
+}
+
 if ($PSCmdlet.ShouldProcess($InstallDir, "Install BelegTool onedir + register .belegtool (HKLM)")) {
-  # 1. copy payload (mirror = clean update)
+  # 1. copy payload (mirror = clean update). PRESERVE a configured datev.config.json (host/port)
+  #    across updates: exclude it from the mirror so an existing one is neither overwritten nor
+  #    deleted, then seed the dist template only if the target has none yet (fresh install).
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-  & robocopy.exe $Source $InstallDir /MIR /R:1 /W:1 /NJH /NJS /NFL /NDL | Out-Null
+  & robocopy.exe $Source $InstallDir /MIR /XF datev.config.json /R:1 /W:1 /NJH /NJS /NFL /NDL | Out-Null
   if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit $LASTEXITCODE) copying payload to $InstallDir." }
   if (-not (Test-Path $ExePath)) { throw "Install copy failed - $ExePath missing." }
+  $cfgDst = Join-Path $InstallDir 'datev.config.json'
+  $cfgSrc = Join-Path $Source 'datev.config.json'
+  if (-not (Test-Path $cfgDst) -and (Test-Path $cfgSrc)) {
+    Copy-Item $cfgSrc $cfgDst -Force
+    "seeded datev.config.json template (set host/port for this RDS before using DATEV mode)"
+  } else {
+    "kept existing datev.config.json (not overwritten by the update)"
+  }
 
   # 2. ProgId
   Set-Default "HKLM:\SOFTWARE\Classes\$ProgId" 'BelegTool-Dokument'

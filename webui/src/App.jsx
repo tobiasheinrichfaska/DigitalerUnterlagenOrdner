@@ -9,6 +9,7 @@ import { Toolbar } from './Toolbar'
 import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { DatevBar } from './DatevBar'
+import { DatevFileDialog } from './DatevFileDialog'
 import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
 import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
@@ -57,6 +58,10 @@ export default function App() {
   const [pending, setPending] = useState([]) // optimistic import placeholders in the tree
   const [grab, setGrab] = useState(null) // keyboard carry: { id, tree } (optical preview until drop)
   const [datevMode, setDatevMode] = useState(false) // DATEV mode on (per-user host setting)
+  // SERVICE connection: null = off/unknown, true = connected, false = mode on but no connection.
+  // Gates the DATEV write actions — never attempt a save/file when there is no connection.
+  const [datevServiceConnected, setDatevServiceConnected] = useState(null)
+  const [datevFileDialog, setDatevFileDialog] = useState(null) // {open, loading, clients, placements, error}
   const [datevOpen, setDatevOpen] = useState(null) // {checked_out_at_open, source_name} from the open response
   const { width: treeWidth, startResize } = useResizablePane()
   // Ctrl + mouse-wheel zooms the preview (native non-passive listener so we can
@@ -181,11 +186,25 @@ export default function App() {
   // (A Python-side flag, not evaluate_js — the latter hangs during window close.)
   useEffect(() => { core.setDirty(dirty).catch(() => {}) }, [dirty])
 
-  // DATEV mode: read the per-user setting once on mount (cheap; when off the host
-  // never imports the datev package). The bar lets the user flip it.
+  // DATEV mode + SERVICE connection. The connect runs in the background on the host now
+  // (it does a slow SSO handshake), so status can come back connecting:true — poll until it
+  // settles so the bar can reflect the real connection (and refuse DATEV writes when there
+  // is none). When mode is off the host never imports the datev package.
+  // Re-runs whenever DATEV mode flips (incl. the header toggle) so enabling it mid-session
+  // resumes polling — not just at mount. While connecting, serviceConnected is null (bar shows
+  // „verbinde…"); connected → true; a settled failure → false („keine Verbindung").
   useEffect(() => {
-    core.datevStatus().then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) }).catch(() => {})
-  }, [])
+    let stop = false
+    let timer = null
+    const tick = () => core.datevStatus().then((s) => {
+      if (stop || !s?.ok) return
+      setDatevMode(!!s.datev_mode)
+      setDatevServiceConnected(!s.datev_mode ? null : s.connected ? true : s.connecting ? null : false)
+      if (s.datev_mode && !s.connected && s.connecting) timer = setTimeout(tick, 1500)
+    }).catch(() => {})
+    tick()
+    return () => { stop = true; if (timer) clearTimeout(timer) }
+  }, [datevMode])
 
   useEffect(() => {
     // Fetch config first so we can honour a startup_path (a .belegtool handed
@@ -460,12 +479,23 @@ export default function App() {
   const datevConnected = isDatevConnected(datevProvenance)
   const patchProvenance = (prov) =>
     setState((p) => (p?.tree ? { ...p, tree: { ...p.tree, datev: prov } } : p))
+  // Flip mode; the [datevMode] poll effect then re-arms and tracks the (background) connection,
+  // so a runtime enable shows „verbinde…" → connected instead of latching on the single response.
   const toggleDatevMode = () =>
     run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
-  const saveToDatev = () => run(core.saveToDatev(session)).then((res) => {
+  const saveToDatev = () => {
+    if (datevServiceConnected !== true) {  // never attempt a write-back without a connection
+      setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.')); return undefined
+    }
+    return run(core.saveToDatev(session)).then((res) => {
     if (res?.ok) {
       if (res.provenance) patchProvenance(res.provenance)
-      if (res.local_error) {
+      if (res.verdict === 'checked_out_self') {
+        // The DATEV doc is checked out by ME → an API write-back is impossible; the local working
+        // copy was saved instead and the user checks it in via DATEV.
+        setDirty(false)
+        setNotice(datevSavedNotice(t('In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken'), res))
+      } else if (res.local_error) {
         // DATEV got the edit, but the parallel local save failed. Say BOTH facts (an error
         // alone would read as "the write-back failed") and KEEP the document dirty so the
         // user can re-save the local copy to a writable location.
@@ -477,21 +507,45 @@ export default function App() {
         setDirty(false)
         setNotice(datevSavedNotice(t('Nach DATEV zurückgeschrieben'), res))
       }
-    } else if (res && res.verdict !== 'declined') {
+    } else if (res && res.verdict === 'declined') {
+      // "Nein" in the confirm = only update the local file, no DATEV push.
+      saveFile()
+    } else if (res) {
       // Nothing was overwritten in DATEV (guard refused / network error). Explain why and
       // OFFER the filesystem save fallback the design promises, so the edit isn't lost.
       // A guard verdict (locked/conflict_*/no_structure_item) has a localized message; the
       // 'error' verdict (mid-write network/HTTP failure) carries the real cause in res.error
       // — show THAT, not the generic fallback (which would hide why it failed).
       const guard = res.verdict && res.verdict !== 'error'
-      setError(guard ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.')))
+      const who = res.checkout_by ? ` (${res.checkout_by})` : ''  // locked → WHO has it checked out
+      setError((guard ? t(datevVerdictKey(res.verdict)) : (res.error || t('DATEV-Rückschreiben fehlgeschlagen.'))) + who)
       saveFile()
     }
-  })
+    })
+  }
+  // Open the filing dialog: load the client list + folder/register tree first. No client data
+  // (no connection / master-data unavailable) ⇒ the dialog shows the reason and filing is
+  // disabled (the user's rule). The dialog collects Mandant + folder/register + Belegdatum +
+  // Veranlagungszeitraum (year/month), then submitDatevFile files it.
   const fileToDatev = () => {
-    const num = window.prompt(t('Mandantennummer für die DATEV-Ablage'))
-    if (num == null || !num.trim()) return
-    run(core.datevFile(session, { mandantNumber: num.trim() })).then((res) => {
+    if (datevServiceConnected !== true) {  // never attempt filing without a connection
+      setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht abgelegt.')); return
+    }
+    setDatevFileDialog({ open: true, loading: true, clients: [], placements: [], error: null })
+    Promise.all([core.datevClients(), core.datevPlacements()]).then(([c, p]) => {
+      if (!c?.ok) {
+        setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+          error: c?.error || t('Mandantenliste nicht verfügbar') })
+        return
+      }
+      setDatevFileDialog({ open: true, loading: false, clients: c.clients || [],
+        placements: (p?.ok && p.folders) || [], error: null })
+    }).catch((e) => setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+      error: String(e) }))
+  }
+  const submitDatevFile = (opts) => {
+    setDatevFileDialog(null)
+    run(core.datevFile(session, opts)).then((res) => {
       if (res?.ok) {
         if (res.provenance) patchProvenance(res.provenance)
         if (res.local_error) {
@@ -608,6 +662,7 @@ export default function App() {
         />
         <DatevBar
           datevMode={datevMode} connected={datevConnected}
+          serviceConnected={datevServiceConnected}
           sourceName={datevProvenance?.source_name || datevOpen?.source_name}
           checkedOutAtOpen={!!datevOpen?.checked_out_at_open}
           onToggleMode={toggleDatevMode} onSaveBack={saveToDatev} onFile={fileToDatev}
@@ -679,6 +734,14 @@ export default function App() {
         <ExportDialog hasTags={allTags(state?.tree).length > 0}
           datevAvailable={datevMode && datevConnected}
           onCancel={() => setExportAsk(null)} onChoose={doExport} />
+      )}
+
+      {datevFileDialog?.open && (
+        <DatevFileDialog
+          clients={datevFileDialog.clients} placements={datevFileDialog.placements}
+          loading={datevFileDialog.loading} error={datevFileDialog.error}
+          currentYear={new Date().getFullYear()} defaultName={baseTree?.name || ''}
+          onSubmit={submitDatevFile} onCancel={() => setDatevFileDialog(null)} />
       )}
 
       {helpOpen && (

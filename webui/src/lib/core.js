@@ -101,9 +101,12 @@ export const core = {
   datevStatus: () => call('datev_status'),
   setDatevMode: (on) => call('set_datev_mode', on),
   saveToDatev: (session) => call('save_to_datev', session),
+  datevClients: () => call('datev_clients'),
+  datevPlacements: (domainId = 1) => call('datev_placements', domainId),
   datevFile: (session, opts = {}) => call('datev_file', session, opts.clientGuid ?? null,
     opts.mandantNumber ?? null, opts.description ?? null, opts.domainId ?? 1,
-    opts.folderId ?? null, opts.registerId ?? null),
+    opts.folderId ?? null, opts.registerId ?? null,
+    opts.documentDate ?? null, opts.fiscalYear ?? null, opts.fiscalMonth ?? null),
   datevExport: (session, nodeIds = null, options = null, opts = {}) =>
     call('datev_export', session, nodeIds, options, opts.clientGuid ?? null,
       opts.mandantNumber ?? null, opts.description ?? null, opts.domainId ?? 1,

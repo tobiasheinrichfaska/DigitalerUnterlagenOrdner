@@ -16,28 +16,31 @@ _GUID_RE = re.compile(
 
 
 def parse_checkout_path(path):
-    """EXACT provenance: DATEV materializes a checked-out document at
-    ``…\\<document-guid>\\<document-file-id>[.pdf]``. Pull the source document GUID +
-    ``document_file_id`` from such a path. Returns ``{"doc_guid", "file_id"}`` (file_id omitted
-    if not numeric), or ``{}`` when the pattern isn't present. This is how a BelegTool file knows
-    which DATEV document it came from — no size/title guessing needed when a path is available."""
+    """EXACT provenance: DATEV materializes a checked-out document under
+    ``…\\<document-guid>\\<document-file-id>``. Pull the source document GUID +
+    ``document_file_id``. Two materialization shapes are seen in the wild:
+
+    - **DMS:** ``…\\<guid>\\<file-id>`` — the file itself is named ``<file-id>`` (the optional
+      ``.pdf`` is stripped to the numeric stem);
+    - **DokOrg Pro:** ``…\\<guid>\\<file-id>\\<name.ext>`` — ``<file-id>`` is a FOLDER and the real
+      file (any name/extension, often none) sits inside it, e.g.
+      ``…\\DokorgPro\\739381c4-…\\1085416\\Rechnung``.
+
+    Returns ``{"doc_guid", "file_id"}`` (or ``{}`` when no GUID→numeric pair is present at the
+    tail). Anchored to the TAIL — the last ``<GUID>\\<numeric>`` pair — so a stray GUID earlier
+    in the path (a temp dir) can't false-match, while both depths are recognized."""
     if not path:
         return {}
     parts = [p for p in re.split(r"[\\/]", str(path)) if p]
-    if len(parts) < 2:
-        return {}
-    # Anchored to the documented shape: the GUID must be the file's PARENT directory
-    # (second-to-last segment, named EXACTLY the GUID) and the file name's stem the numeric
-    # document-file id. A loose "GUID anywhere in the path" match would falsely flag any file
-    # that merely lives somewhere under a GUID-named folder as a DATEV checkout.
-    m = _GUID_RE.fullmatch(parts[-2])
-    if not m:
-        return {}
-    out = {"doc_guid": m.group(0)}
-    stem = os.path.splitext(parts[-1])[0]
-    if stem.isdigit():
-        out["file_id"] = int(stem)
-    return out
+    # gi = index of the GUID; the segment right after it is the numeric document-file id.
+    # Try the file's parent (DMS) first, then its grandparent (DokOrg Pro folder shape).
+    for gi in (len(parts) - 2, len(parts) - 3):
+        if gi < 0 or not _GUID_RE.fullmatch(parts[gi]):
+            continue
+        stem = os.path.splitext(parts[gi + 1])[0]
+        if stem.isdigit():
+            return {"doc_guid": parts[gi], "file_id": int(stem)}
+    return {}
 
 
 def provenance_stats(entries):

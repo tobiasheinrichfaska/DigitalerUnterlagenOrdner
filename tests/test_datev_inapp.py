@@ -62,6 +62,16 @@ class FakeClient:
     def resolve_client_guid(self, number):
         return {"guid": "client-guid", "name": "Muster", "number": number}
 
+    def list_clients(self):
+        return [{"id": "g-2", "number": "10002", "name": "Beta GmbH"},
+                {"id": "g-1", "number": "10001", "name": "Alpha AG"},
+                {"number": "10003", "name": "no-guid → dropped"}]
+
+    def list_domains(self):
+        return [{"id": 1, "name": "Mandanten", "folders": [
+            {"id": 177, "name": "Stammakte", "registers": [{"id": 461, "name": "Korrespondenz"}]},
+            {"id": 178, "name": "Jahresakte", "registers": []}]}]
+
 
 # --- pure helpers ----------------------------------------------------------
 def test_pick_connection_user_prefers_sid_match():
@@ -100,6 +110,89 @@ def test_build_create_payload_has_mandatory_set_and_no_state():
 def test_build_create_payload_omits_optional_placement():
     p = build_create_payload(file_id=1, client_guid="c", description="d", user_guid="u")
     assert "folder" not in p and "register" not in p
+    assert "year" not in p and "month" not in p and "receipt_date" not in p
+
+
+def test_build_create_payload_sets_veranlagung_year_and_month_and_receipt_date():
+    # the DATEV DMS Document properties: year (int32) + month (int16) = Veranlagungszeitraum/-monat;
+    # receipt_date = the document's own date (Belegdatum). All optional, ints for the period.
+    p = build_create_payload(file_id=1, client_guid="c", description="d", user_guid="u",
+                             receipt_date="2025-03-14T00:00:00", fiscal_year="2025", fiscal_month="3")
+    assert p["year"] == 2025 and isinstance(p["year"], int)
+    assert p["month"] == 3 and isinstance(p["month"], int)
+    assert p["receipt_date"] == "2025-03-14T00:00:00"
+    # the structure-item technical dates are NOT the document date (default = now)
+    assert p["structure_items"][0]["creation_date"] != "2025-03-14T00:00:00"
+
+
+def test_build_create_payload_year_without_month_is_valid_month_alone_dropped():
+    p1 = build_create_payload(file_id=1, client_guid="c", description="d", user_guid="u", fiscal_year=2024)
+    assert p1["year"] == 2024 and "month" not in p1
+    p2 = build_create_payload(file_id=1, client_guid="c", description="d", user_guid="u", fiscal_month=6)
+    assert "month" not in p2 and "year" not in p2          # a month with no year is meaningless
+
+
+def test_service_list_clients_normalizes_and_sorts_and_drops_guidless():
+    svc = DatevService(FakeClient())
+    rows = svc.list_clients()
+    assert [r["number"] for r in rows] == ["10001", "10002"]   # sorted, the guid-less row dropped
+    assert rows[0] == {"guid": "g-1", "number": "10001", "name": "Alpha AG"}
+
+
+def test_service_list_placements_parses_folders_and_registers():
+    svc = DatevService(FakeClient())
+    folders = svc.list_placements(domain_id=1)
+    assert [f["id"] for f in folders] == [177, 178]
+    assert folders[0]["name"] == "Stammakte"
+    assert folders[0]["registers"] == [{"id": 461, "name": "Korrespondenz"}]
+    assert folders[1]["registers"] == []
+
+
+def test_service_list_placements_empty_on_shape_surprise():
+    class Bad(FakeClient):
+        def list_domains(self):
+            raise RuntimeError("master-data off")
+    assert DatevService(Bad()).list_placements() == []
+
+
+def test_file_document_passes_veranlagung_and_receipt_date_to_create(monkeypatch):
+    fc = FakeClient()
+    svc = DatevService(fc, my_sid="s")
+    monkeypatch.setattr("datev.inapp.pick_connection_user", lambda users, sid: {"id": "u-guid"})
+    svc.file_document(b"%PDF", client_guid="c", description="Rechnung",
+                      document_date="2025-03-14T00:00:00", fiscal_year=2025, fiscal_month=3)
+    payload = fc.creates[0]
+    assert payload["year"] == 2025 and payload["month"] == 3
+    assert payload["receipt_date"] == "2025-03-14T00:00:00"
+
+
+def test_connect_honours_datev_config_json_base_url(tmp_path, monkeypatch):
+    # REGRESSION (v3.10.0): connect() ignored datev.config.json — it only read a settings
+    # override, so a shipped config never changed the host (always localhost:58452). It must
+    # now resolve the DMS host:port from the file's base_url and pin the DMS path.
+    from datev import inapp, config
+    (tmp_path / "datev.config.json").write_text(
+        '{"base_url": "https://DatevServer:58452", "verify_tls": false}', encoding="utf-8")
+    monkeypatch.setattr(config, "basis_dir", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    captured = {}
+
+    class _Probe:
+        def __init__(self, cfg, transport, master_data_base=None):
+            captured["base_url"] = cfg.base_url
+
+        def get_info(self):
+            return {"feature": "DokAb"}
+    monkeypatch.setattr(inapp, "DatevConnectClient", _Probe, raising=False)
+    # connect() imports DatevConnectClient lazily inside the function, so patch the source module
+    monkeypatch.setattr("datev.client.DatevConnectClient", _Probe)
+
+    svc = inapp.DatevService.connect(settings={})
+    assert captured["base_url"] == "https://DatevServer:58452/datev/api/dms/v2"
+    st = svc.status()
+    assert st["base_url"] == "https://DatevServer:58452/datev/api/dms/v2"
+    assert st["config_present"] is True and st["config_path"].endswith("datev.config.json")
 
 
 def test_structure_item_id_for_file_matches_document_file_id():
@@ -108,6 +201,20 @@ def test_structure_item_id_for_file_matches_document_file_id():
     assert structure_item_id_for_file(items, 1085411) == 1085409
     assert structure_item_id_for_file(items, 12345) is None
     assert structure_item_id_for_file({"structure_items": items}, 1085411) == 1085409
+
+
+def test_resolve_structure_item():
+    from datev.inapp import resolve_structure_item
+    items = [{"id": "s1", "document_file_id": 111}, {"id": "s2", "document_file_id": 222}]
+    # path number matches a document_file_id → that item (DMS / DokorgPro path, number IS the id)
+    assert resolve_structure_item(items, 222) == {"id": "s2", "document_file_id": 222}
+    # no match + several items → None (ambiguous; caller refuses rather than guess)
+    assert resolve_structure_item(items, 999) is None
+    # no match + SOLE item → that item (DokOrg CheckOut working-copy id case)
+    one = [{"id": "only", "document_file_id": 555}]
+    assert resolve_structure_item(one, 999) == {"id": "only", "document_file_id": 555}
+    assert resolve_structure_item({"structure_items": one}, None) == {"id": "only", "document_file_id": 555}
+    assert resolve_structure_item([], 1) is None
 
 
 # --- capture provenance ----------------------------------------------------
@@ -125,6 +232,22 @@ def test_capture_provenance_from_checkout_path():
     assert baseline["open_change_dt"] == "2026-06-27T10:00:00"
     assert baseline["was_checked_out_at_open"] is False
     assert baseline["opened_sha256"] == sha256(b"%PDF opened")
+
+
+def test_capture_provenance_dokorg_checkout_resolves_real_file_id():
+    # REGRESSION (2026-06-30, REAL data): the DokOrg "CheckOut" path embeds a WORKING-COPY number
+    # (1085522) that is NOT a server document_file_id → get_document_file 404s ("document_file with
+    # id 1085522 not found") and the structure-item lookup fails (prov_sid=None). Resolve the REAL
+    # document_file_id + structure_item_id from the server (the sole structure item) via doc_guid.
+    client = FakeClient(
+        document={"change_date_time": "t0", "checked_out": True,
+                  "correspondence_partner_guid": "client-guid"},
+        structure_items=[{"id": "1085416", "document_file_id": 1085600}])
+    path = rf"C:\Users\Tobias\AppData\Roaming\DokOrg\CheckOut\{GUID}\1085522\datev-probe-test.pdf"
+    prov, baseline = DatevService(client).capture_provenance(path, b"%PDF opened")
+    assert prov["doc_guid"] == GUID
+    assert prov["file_id"] == 1085600          # OVERRIDDEN to the server file id (not the path 1085522)
+    assert prov["structure_item_id"] == "1085416"
 
 
 def test_capture_provenance_non_checkout_path_returns_none():
@@ -195,11 +318,33 @@ def test_writeback_change_dt_advanced_is_conflict():
     assert client.puts == []
 
 
-def test_writeback_checked_out_now_is_locked():
+def test_writeback_my_own_checkout_returns_checked_out_self(monkeypatch):
+    # Confirmed live 2026-06-30: DATEV refuses an API update on a checked-out doc ("can't be changed
+    # because it is checked out"). So MY OWN checkout → verdict CHECKED_OUT_SELF and NOTHING is
+    # pushed to the server (the caller saves the local working copy; the user checks in via DATEV).
+    # Uses a TS label "WTS (user1)" — machine "WTS" ≠ COMPUTERNAME, recognised by session user.
+    monkeypatch.setenv("COMPUTERNAME", "TSHOST")
+    monkeypatch.setenv("USERNAME", "user1")
     client, prov, baseline = _connected()
     client.document["checked_out"] = True
+    client.document["checkout_computer"] = "WTS (USER1)"
+    client.document["checkout_user"] = {"id": "11111111", "is_deleted": True, "name": "User One"}
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", comment="BelegTool")
+    assert not res["ok"] and res["verdict"] == "checked_out_self"
+    assert client.puts == [] and client.uploaded == []   # nothing written to the server
+
+
+def test_writeback_foreign_checkout_is_locked_and_names_who(monkeypatch):
+    # A checkout by ANOTHER user / on ANOTHER computer BLOCKS (LOCKED) and surfaces WHO has it.
+    monkeypatch.setenv("COMPUTERNAME", "MYBOX")
+    monkeypatch.setenv("USERNAME", "tobias")
+    client, prov, baseline = _connected()
+    client.document["checked_out"] = True
+    client.document["checkout_computer"] = "OTHERBOX (andrea)"
+    client.document["checkout_user"] = {"id": "u2", "name": "Andrea Müller"}
     res = DatevService(client).writeback(prov, baseline, b"x")
-    assert res["verdict"] == "locked" and client.puts == []
+    assert not res["ok"] and res["verdict"] == "locked" and client.puts == []
+    assert "Andrea Müller" in res["checkout_by"] and "OTHERBOX" in res["checkout_by"]
 
 
 def test_writeback_server_bytes_changed_is_conflict_content():
@@ -207,6 +352,41 @@ def test_writeback_server_bytes_changed_is_conflict_content():
     client.file_bytes = b"%PDF DIFFERENT server bytes"   # same change_dt, different content
     res = DatevService(client).writeback(prov, baseline, b"x")
     assert res["verdict"] == "conflict_content" and client.puts == []
+
+
+def test_is_my_checkout_and_label_pure():
+    from datev.inapp import checkout_label, is_my_checkout
+    me = dict(my_machine="MYBOX", my_user="tobias", my_dms_id="u1")
+    # the session user (the "(user)" in checkout_computer) matches my Windows USERNAME → mine
+    assert is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (tobias)"}, **me)
+    # DMS user id match is an ADDITIONAL accept signal (session label differs) → mine
+    assert is_my_checkout({"checked_out": True, "checkout_computer": "SOMEHOST (svc)",
+                           "checkout_user": {"id": "u1"}}, **me)
+    # REGRESSION (2026-06-29, terminal-server data pattern): the checkout label is "WTS (USER1)"
+    # — "WTS" is a DATEV/TS session label, NOT the Windows COMPUTERNAME (TSHOST); AND the
+    # checkout was stamped by a now-DELETED Nutzer whose GUID differs from the live connection's.
+    # So neither the machine string nor the DMS id matches — ONLY the Windows session user does
+    # (USER1 == user1), and that must identify ME. Earlier this blocked every TS write-back as
+    # "locked". (The deleted/duplicate Nutzer is a DATEV-side data problem.)
+    me_ts = dict(my_machine="TSHOST", my_user="user1",
+                 my_dms_id="22222222-2222-2222-2222-222222222222")
+    assert is_my_checkout({"checked_out": True, "checkout_computer": "WTS (USER1)",
+                           "checkout_user": {"id": "11111111-1111-1111-1111-111111111111",
+                                             "is_deleted": True}}, **me_ts)
+    # session-user match is case-insensitive
+    assert is_my_checkout({"checked_out": True, "checkout_computer": "WTS (User1)"},
+                          my_machine="TSHOST", my_user="USER1")
+    # another USER (a different "(windows-user)") → NOT mine, even on the same box / foreign DMS id
+    assert not is_my_checkout({"checked_out": True, "checkout_computer": "WTS (ANDREA)",
+                               "checkout_user": {"id": "u2"}}, **me)
+    assert not is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (andrea)",
+                               "checkout_user": {"id": "u2"}}, **me)
+    # not checked out / no checkout info → NOT mine (conservative → blocks)
+    assert not is_my_checkout({"checked_out": False, "checkout_computer": "MYBOX (tobias)"}, **me)
+    assert not is_my_checkout({"checked_out": True}, **me)
+    assert checkout_label({"checked_out": True, "checkout_user": {"name": "Andrea"},
+                           "checkout_computer": "WTS"}) == "Andrea (WTS)"
+    assert checkout_label({"checked_out": False}) is None
 
 
 def test_writeback_without_structure_item_refuses():
@@ -362,8 +542,11 @@ def test_file_document_no_user_errors():
 
 
 def test_status_reports_feature_and_revision_policy():
-    assert DatevService(FakeClient(), feature="DokAb").status() == {
-        "ok": True, "connected": True, "feature": "DokAb", "keeps_revisions": False}
+    st = DatevService(FakeClient(), feature="DokAb", base_url="https://h:58452/x").status()
+    assert st["ok"] and st["connected"] is True and st["feature"] == "DokAb"
+    assert st["keeps_revisions"] is False
+    assert st["base_url"] == "https://h:58452/x"           # surfaced for the user (diagnose host)
+    assert "config_path" in st and "config_present" in st
     assert DatevService(FakeClient(), feature="DMS").status()["keeps_revisions"] is True
     assert DatevService(FakeClient(), feature=None).status()["connected"] is False
 

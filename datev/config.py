@@ -11,6 +11,12 @@ DMS_PATH = "/datev/api/dms/v2"  # the Dokumentenablage API base path (spec: docu
 MASTER_DATA_PATH = "/datev/api/master-data/v1"  # client master data (spec: Client Master Data 1.7.1)
 IAM_PATH = "/datev/api/iam/v1"  # identity/users (per the Mitarbeiter domain link)
 
+# The on-prem DATEVconnect host to use when no datev.config.json is present — a PLACEHOLDER
+# (BelegTool runs on a workstation, DATEVconnect on the server). Set the REAL host in the
+# site-specific, gitignored datev.config.json; this hard-coded default is only a fallback.
+DEFAULT_HOST = "your-datev-server:58452"
+DEFAULT_BASE = f"https://{DEFAULT_HOST}"
+
 
 def basis_dir():
     """Where to look for config: next to the exe when frozen, else cwd (as in OPOS)."""
@@ -47,11 +53,12 @@ def resolve_auth_mode(cfg):
     return "basic" if (cfg or {}).get("user") else "sso"
 
 
-def dms_base_url(cfg, default="https://localhost:58452" + DMS_PATH):
+def dms_base_url(cfg, default=DEFAULT_BASE + DMS_PATH):
     """The Dokumentenablage base, taking host+port from the config but **pinning the DMS
     path**. An OPOS ``datev.config.json`` points ``base_url`` at the *accounting* API
     (``/datev/api/accounting/v1``); reusing it here would 404 on ``/info``. We keep its host
-    (``DatevHeinrich:58452``) and force ``/datev/api/dms/v2``. No usable host ⇒ ``default``."""
+    and force ``/datev/api/dms/v2``. No usable host ⇒ ``default``
+    (the on-prem DATEV server, not localhost)."""
     raw = (cfg or {}).get("base_url")
     if not raw:
         return default
@@ -61,7 +68,7 @@ def dms_base_url(cfg, default="https://localhost:58452" + DMS_PATH):
     return f"{p.scheme}://{p.netloc}{DMS_PATH}"
 
 
-def master_data_base_url(dms_base, default="https://localhost:58452" + MASTER_DATA_PATH):
+def master_data_base_url(dms_base, default=DEFAULT_BASE + MASTER_DATA_PATH):
     """The Client-Master-Data base, taking host+port from the DMS base but pinning the
     master-data path. Round 2 needs ``…/master-data/v1/clients`` to turn a Mandant number
     into the ``correspondence_partner_guid`` a document create requires; the live box serves
@@ -72,7 +79,7 @@ def master_data_base_url(dms_base, default="https://localhost:58452" + MASTER_DA
     return f"{p.scheme}://{p.netloc}{MASTER_DATA_PATH}"
 
 
-def iam_base_url(dms_base, default="https://localhost:58452" + IAM_PATH):
+def iam_base_url(dms_base, default=DEFAULT_BASE + IAM_PATH):
     """The IAM base (host+port from the DMS base, IAM path pinned) — for listing users to
     fill the document's mandatory ``user`` with a live, non-deleted GUID."""
     p = urlparse(dms_base or "")
@@ -82,8 +89,13 @@ def iam_base_url(dms_base, default="https://localhost:58452" + IAM_PATH):
 
 
 def self_signed_allowed(cfg, base_url):
-    """Explicit ``verify_tls`` wins; else trust the self-signed cert only for a loopback host."""
+    """Explicit ``verify_tls`` wins; else trust the self-signed cert for a loopback host OR the
+    default on-prem DATEV host (DATEVconnect serves an internal/self-signed cert there — there is
+    no public CA on the practice LAN). Any OTHER host must opt in via ``verify_tls: false``."""
     v = (cfg or {}).get("verify_tls")
     if isinstance(v, bool):
         return not v
-    return is_loopback(base_url)
+    if is_loopback(base_url):
+        return True
+    host = (urlparse(base_url or "").hostname or "").lower()
+    return host == DEFAULT_HOST.split(":")[0].lower()

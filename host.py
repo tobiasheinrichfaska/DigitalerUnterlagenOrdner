@@ -13,7 +13,10 @@ Run:
 import io
 import json
 import os
+import re
 import sys
+import threading
+import time
 
 import webview
 
@@ -91,6 +94,95 @@ def _import_file_types():
         return (f"Unterstützte Dateien ({all_pattern})", "Alle Dateien (*.*)")
     except Exception:
         return ("Alle Dateien (*.*)",)
+
+
+# --- startup timing/diagnostics ------------------------------------------------------------
+# Slow first paint on a terminal server is hard to diagnose remotely, so time the startup phases
+# and write them to a log NEXT TO THE EXE (falling back to %APPDATA% / temp when the exe sits on
+# a read-only share). Always on — it's a handful of lines. Read belegtool_startup.log to see
+# WHERE the seconds go (CoreApi build · window create · the gap until WebView2 paints · prewarm).
+_T0 = time.perf_counter()
+_STARTUP_LOG = []
+_first_paint = threading.Event()  # set when the first window paints (gates prewarm)
+
+
+def _process_start_offset():
+    """Seconds from PROCESS creation to now — i.e. the PyInstaller bootloader + Python init +
+    top-level imports that run BEFORE this module's _T0. On a terminal server / from a freshly
+    downloaded folder (Mark-of-the-Web → per-DLL AV scan of the onedir) this is often the DOMINANT
+    startup cost, none of which is our main() code. Windows-only; None on failure."""
+    try:
+        import ctypes
+        from ctypes import POINTER, byref, wintypes
+        k = ctypes.windll.kernel32
+        # Set proper types — GetCurrentProcess returns a 64-bit pseudo-handle (-1); without an
+        # explicit HANDLE restype ctypes passes it as a truncated int and GetProcessTimes fails.
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.GetProcessTimes.argtypes = [wintypes.HANDLE] + [POINTER(wintypes.FILETIME)] * 4
+        c = wintypes.FILETIME(); e = wintypes.FILETIME()
+        kt = wintypes.FILETIME(); ut = wintypes.FILETIME()
+        if not k.GetProcessTimes(k.GetCurrentProcess(), byref(c), byref(e), byref(kt), byref(ut)):
+            return None
+        now = wintypes.FILETIME()
+        k.GetSystemTimeAsFileTime(byref(now))
+        to100ns = lambda ft: (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+        return (to100ns(now) - to100ns(c)) / 1e7
+    except Exception:
+        return None
+
+
+def _slog(msg):
+    line = f"[{time.perf_counter() - _T0:7.3f}s] {msg}"
+    _STARTUP_LOG.append(line)
+    try:
+        logger.info("startup %s", line)
+    except Exception:
+        pass
+
+
+def _startup_log_targets():
+    name = "belegtool_startup.log"
+    here = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+        else os.path.dirname(os.path.abspath(__file__))
+    appdata = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), APP_NAME)
+    import tempfile
+    return [os.path.join(here, name), os.path.join(appdata, name),
+            os.path.join(tempfile.gettempdir(), name)]
+
+
+def _flush_startup_log():
+    body = "\n".join(_STARTUP_LOG) + "\n"
+    for path in _startup_log_targets():
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(body)
+            return path
+        except OSError:
+            continue
+    return None
+
+
+def _configure_webview2_env():
+    """On a terminal-server / RDP session WebView2 has no GPU; GPU-process init can stall startup
+    (and software paths glitch). Force software rendering there. Overridable:
+    BELEG_WEBVIEW2_GPU=1 keeps GPU on; BELEG_WEBVIEW2_SOFTWARE=1 forces software anywhere."""
+    def _flag(name):
+        return os.environ.get(name, "").lower() in ("1", "true", "yes", "on")
+    if os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") or _flag("BELEG_WEBVIEW2_GPU"):
+        _slog("WebView2: GPU left as-is (override)")
+        return
+    remote = False
+    try:
+        from services.cpu import is_remote_session
+        remote = is_remote_session()
+    except Exception:
+        pass
+    if _flag("BELEG_WEBVIEW2_SOFTWARE") or remote:
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--disable-gpu --disable-gpu-compositing"
+        _slog(f"WebView2: software rendering forced (remote_session={remote})")
+    else:
+        _slog(f"WebView2: GPU default (remote_session={remote})")
 
 
 def _entry():
@@ -197,10 +289,17 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.10.0"
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.11.1"
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
+        # First-paint timing: the gap between 'webview.start' and this 'loaded' is the WebView2
+        # init + content load — the dominant cost of a slow terminal-server startup.
+        def _on_loaded():
+            _slog("first window CONTENT LOADED (first paint)")
+            _first_paint.set()  # release prewarm now that the UI has painted
+            _flush_startup_log()
+        win.events.loaded += _on_loaded
     _bind_close(win, api)
     return {"ok": True}
 
@@ -425,19 +524,29 @@ class HostApi:
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
         if not win.create_confirmation_dialog(
-                "Nach DATEV zurückschreiben?",
-                "Die Änderungen in das verknüpfte DATEV-Dokument zurückschreiben?\n"
-                "(DATEV Dokumentenablage behält keine Revision — der alte Stand wird "
-                "überschrieben; eine lokale Sicherung wird vorher angelegt.)"):
+                "In DATEV aktualisieren?",
+                "Ja:  Änderungen nach DATEV zurückschreiben (einchecken). DATEV "
+                "Dokumentenablage behält keine Revision — der alte Stand wird überschrieben; "
+                "eine lokale Sicherung wird vorher angelegt.\n\n"
+                "Nein:  nur die ausgecheckte Datei lokal speichern — Sie checken später in "
+                "DATEV ein."):
             return {"ok": False, "verdict": "declined"}
         return self._core.datev_save_back(session, confirmed=True)
 
+    def datev_clients(self):
+        return self._core.datev_clients()
+
+    def datev_placements(self, domain_id=1):
+        return self._core.datev_placements(domain_id)
+
     def datev_file(self, session, client_guid=None, mandant_number=None, description=None,
-                   domain_id=1, folder_id=None, register_id=None):
+                   domain_id=1, folder_id=None, register_id=None, document_date=None,
+                   fiscal_year=None, fiscal_month=None):
         return self._core.datev_file(session, client_guid=client_guid,
                                      mandant_number=mandant_number, description=description,
                                      domain_id=domain_id, folder_id=folder_id,
-                                     register_id=register_id)
+                                     register_id=register_id, document_date=document_date,
+                                     fiscal_year=fiscal_year, fiscal_month=fiscal_month)
 
     def datev_export(self, session, node_ids=None, options=None, client_guid=None,
                      mandant_number=None, description=None, domain_id=1, folder_id=None,
@@ -536,24 +645,42 @@ def _warn_clr_load_failed(exc):
 
 
 def main(startup_target=None):
+    _slog(f"main() entry · frozen={getattr(sys, 'frozen', False)} · exe={sys.executable}")
+    _pre = _process_start_offset()
+    if _pre is not None:
+        _slog(f"≈ {_pre:.3f}s elapsed BEFORE main() (bootloader + DLL load + imports; "
+              f"dominated by AV/Mark-of-the-Web on a downloaded onedir)")
+    _configure_webview2_env()
     # Fail loudly, not blank: without the WebView2 Runtime the window renders empty.
     # (BELEG_SKIP_WEBVIEW2_CHECK=1 bypasses, in case detection ever false-negatives.)
     skip = os.environ.get("BELEG_SKIP_WEBVIEW2_CHECK", "").lower() not in ("", "0", "false", "no")
     if not skip and not _webview2_installed():
         _warn_missing_webview2()
         return
+    _slog("WebView2 runtime check done")
     core = CoreApi()  # shared across all windows; sessions are per window
+    _slog(f"CoreApi constructed (datev_mode={getattr(core, '_datev_mode', '?')})")
     # The first window remembers its geometry (size / position / monitor across launches).
     if startup_target:
         _open_window(core, startup_target["path"], restore=True,
                      startup_kind=startup_target["kind"])
     else:
         _open_window(core, restore=True)
+    _slog("first window created · entering GUI loop (webview.start)")
     # Warm up only AFTER the window is up (start's func runs on its own thread once
     # the GUI loop is live), so warming doesn't compete with window creation.
     # Pin a safe http port so the file server never lands on a Chromium-blocked one.
+    def _warm():
+        # Wait for the first paint so the heavy, GIL-holding warm-imports don't compete with the
+        # initial React/WebView2 content load (the data showed prewarm running 1.7–3.9 s, BEFORE
+        # first paint at 5.3 s). Timeout fallback in case 'loaded' never fires.
+        _first_paint.wait(timeout=20)
+        _slog("prewarm start (after first paint)")
+        _prewarm()
+        _slog("prewarm done")
+        _flush_startup_log()
     try:
-        webview.start(_prewarm, http_port=_safe_http_port())
+        webview.start(_warm, http_port=_safe_http_port())
     except Exception as e:
         # pythonnet/.NET failing to load is almost always Mark-of-the-Web on a
         # downloaded build — give a clear unblock hint, not a cryptic traceback.
@@ -565,10 +692,30 @@ def main(startup_target=None):
         raise
 
 
+# DATEV DokOrg checkout shape: …\<document-guid>\<document-file-id>[\<name>] — the materialized
+# file often has NO extension (…\<guid>\<file-id>) or sits one folder deeper under the numeric
+# file-id (…\DokorgPro\739381c4-…\1085416\<name>). Recognized inline (a plain regex, no import)
+# so a normal launch never pulls the datev package; mirrors the authoritative
+# datev/provenance.parse_checkout_path (the last <GUID>\<numeric> pair at the tail).
+_DATEV_GUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _is_datev_checkout_path(path):
+    parts = [p for p in re.split(r"[\\/]", str(path)) if p]
+    for gi in (len(parts) - 2, len(parts) - 3):
+        if gi >= 0 and _DATEV_GUID_RE.fullmatch(parts[gi]) \
+                and os.path.splitext(parts[gi + 1])[0].isdigit():
+            return True
+    return False
+
+
 def _startup_target_from_argv(argv):
     """A document handed on the command line (file association / 'open with' /
-    BelegTool.exe <file>): a .belegtool opens the organizer; a .pdf opens the
-    PDF-Tool bound to that file (see docs/pdf-tool.md). Returns
+    BelegTool.exe <file>): a .belegtool opens the organizer; a .pdf — OR a DATEV
+    checkout file (…\\<guid>\\<file-id>, no extension) — opens the PDF-Tool bound to
+    that file (see docs/pdf-tool.md). The checkout opens in the PDF-Tool so it captures
+    DATEV provenance (the link badge) and offers write-back. Returns
     ``{'path': str, 'kind': 'belegtool'|'pdf'}`` or None when there is nothing
     valid to open."""
     if len(argv) < 2:
@@ -579,7 +726,7 @@ def _startup_target_from_argv(argv):
     low = path.lower()
     if low.endswith(".belegtool"):
         return {"path": path, "kind": "belegtool"}
-    if low.endswith(".pdf"):
+    if low.endswith(".pdf") or _is_datev_checkout_path(path):
         return {"path": path, "kind": "pdf"}
     return None
 

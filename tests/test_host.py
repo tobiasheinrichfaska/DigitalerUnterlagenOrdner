@@ -139,6 +139,31 @@ def test_argv_pdf_becomes_pdf_target(tmp_path):
         "path": str(pdf), "kind": "pdf"}
 
 
+def test_argv_datev_checkout_opens_pdf_tool_both_shapes(tmp_path):
+    # A DATEV DokOrg checkout materializes the file under …\<guid>\<file-id> — often with NO
+    # extension (so the plain .pdf/.belegtool routing skipped it → empty organizer, no DATEV link).
+    # Both shapes must open the PDF-Tool so provenance is captured.
+    guid = "739381c4-8806-4095-9525-d085f34e84d0"
+    a = tmp_path / "a" / "DokorgPro" / guid
+    a.mkdir(parents=True)
+    fa = a / "1085416"                       # shape A: file named <file-id>, no extension
+    fa.write_bytes(b"%PDF-1.4")
+    assert host._startup_target_from_argv(["host.py", str(fa)]) == {"path": str(fa), "kind": "pdf"}
+    b = tmp_path / "b" / "DokorgPro" / guid / "1085416"
+    b.mkdir(parents=True)
+    fb = b / "Rechnung"                      # shape B: <file-id> is a folder, file inside (any name)
+    fb.write_bytes(b"%PDF-1.4")
+    assert host._startup_target_from_argv(["host.py", str(fb)]) == {"path": str(fb), "kind": "pdf"}
+
+
+def test_is_datev_checkout_path_recognizes_shapes_and_rejects_others():
+    guid = "739381c4-8806-4095-9525-d085f34e84d0"
+    assert host._is_datev_checkout_path(f"C:\\Temp\\DokorgPro\\{guid}\\1085416")            # A
+    assert host._is_datev_checkout_path(f"C:\\Temp\\DokorgPro\\{guid}\\1085416\\Rechnung")  # B
+    assert not host._is_datev_checkout_path(f"C:\\Temp\\{guid}\\notnumeric")                # file-id not numeric
+    assert not host._is_datev_checkout_path("C:\\Temp\\normal\\beleg.pdf")                  # no GUID at the tail
+
+
 def test_argv_no_file_is_no_target():
     assert host._startup_target_from_argv(["host.py"]) is None  # bare launch
     assert host._startup_target_from_argv(["host.py", "C:\\nope.belegtool"]) is None  # missing file

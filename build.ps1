@@ -39,6 +39,17 @@ Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
     --workpath "$Root\build" `
     --noconfirm
 
+# Ship an EDITABLE datev.config.json NEXT TO the exe (PyInstaller datas land under
+# _internal/, but the app reads the config from the exe's own dir). Only seed it if the
+# user hasn't already placed/edited one in the dist folder.
+Write-Host "=== datev.config.json bereitstellen ===" -ForegroundColor Cyan
+$cfgDst = "$Root\dist\BelegTool\datev.config.json"
+if (-not (Test-Path $cfgDst)) {
+    Copy-Item "$Root\datev.config.example.json" $cfgDst
+    Write-Host "    datev.config.json (Vorlage) neben die exe gelegt" -ForegroundColor Green
+}
+
 Write-Host "=== Fertig ===" -ForegroundColor Green
 Write-Host "    App:   dist\BelegTool\BelegTool.exe" -ForegroundColor Green
 Write-Host "    Datei: dist\BelegTool\BelegTool.exe <datei.belegtool>" -ForegroundColor Green
+Write-Host "    DATEV: dist\BelegTool\datev.config.json (Host/Port anpassen)" -ForegroundColor Green

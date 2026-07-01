@@ -317,6 +317,16 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 .modal .muted { color: var(--muted); font-size: 0.9em; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
 .modal-actions .primary { font-weight: 600; }
+/* DATEV filing dialog — keep the layout from jumping when a long client name appears.
+   Every control is width-capped to the modal and flex children may shrink (min-width:0),
+   so the client <select> can never widen the dialog as the filtered list changes. */
+.datev-file-dialog .field { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
+.datev-file-dialog .field-label { font-size: 0.9em; color: var(--muted); }
+.datev-file-dialog .field-row { display: flex; gap: 10px; }
+.datev-file-dialog .field-row .field { flex: 1 1 0; min-width: 0; }
+.datev-file-dialog input, .datev-file-dialog select { width: 100%; box-sizing: border-box; min-width: 0; }
+.datev-client-list { width: 100%; box-sizing: border-box; }
+.datev-client-list option { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* export options dialog */
 .exp-row { display: flex; align-items: center; gap: 8px; margin: 7px 0; cursor: pointer; }
 .exp-row.exp-sub { margin-left: 24px; color: var(--muted); font-size: 0.92em; }

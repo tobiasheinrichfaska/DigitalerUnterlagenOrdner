@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
+import time
 import uuid
 import zlib
 from collections import OrderedDict
@@ -28,7 +29,7 @@ from core.commands import (
 from core.engine import RealEngine
 from core.model import Document, STATUSES
 from core.session import DocumentSession
-from infra.log_config import logger
+from infra.log_config import diag, logger
 from version_info import APP_NAME
 
 
@@ -111,9 +112,23 @@ class CoreApi:
         # write-back baselines (opened sha256 + change_date_time) live here at runtime.
         from infra.settings import load_settings
         self._datev_mode = bool(load_settings().get("datev_mode"))
-        self._datev_service = None    # lazy DatevService (built when DATEV mode is on)
+        self._datev_service = None    # the live DatevService once the connect finishes
         self._datev_baseline = {}     # session -> {open_change_dt, was_checked_out_at_open, opened_sha256}
-        self._datev_lock = threading.Lock()  # guards the lazy service build
+        # The DATEV connect does a curl SSO handshake (Kerberos/NTLM → domain controller),
+        # which costs 20-30 s on a domain box. It MUST NOT run on a bridge thread or it
+        # freezes the UI (the v3.10.0 "startup takes 20-30 s" bug — datev_status() on mount
+        # blocked on it). So the connect runs on a background daemon thread; callers that
+        # only need state (datev_status) never block, and the few user-initiated ops that
+        # truly need the service (checkout capture / file / write-back) wait on it briefly.
+        self._datev_lock = threading.Lock()  # guards the service + connect flags below
+        self._datev_connecting = False  # a background connect thread is in flight
+        self._datev_attempted = False   # a connect has been started since the last mode-on (test wait signal)
+        self._datev_failed = False      # the last connect failed → don't auto-retry (status polls); a
+                                        # mode toggle or an explicit op (force) clears it and retries
+        self._datev_connect_epoch = 0   # bumped on every mode toggle; a connect worker only adopts
+                                        # its result if its captured epoch still matches (no stale adopt)
+        if self._datev_mode:
+            self._datev_start_connect()  # warm the connection so first use is ready
 
     # ----------------------------------------------------------------------
     # Render cache + windowed-prefetch coordination
@@ -578,8 +593,9 @@ class CoreApi:
     def set_render_budget(self, mb: int) -> dict:
         """Set the render-cache budget (MB). Returns the refreshed stats."""
         self._renderer().set_budget(max(0, int(mb)) * 1024 * 1024)
-        if self._last_seed:  # fill the new headroom right away
-            self._kick_prewarm(self._last_seed[0])
+        seed = self._last_seed  # snapshot once — close_session may null it concurrently (cf. line 198)
+        if seed:  # fill the new headroom right away
+            self._kick_prewarm(seed[0])
         return {"ok": True, **self._renderer().stats()}
 
     def page_count(self, session: str, node_id: str) -> dict:
@@ -909,6 +925,8 @@ class CoreApi:
             save_belegtool(Document(new_root), path)
         except Exception as e:
             logger.exception("materialize_subset failed")
+            import shutil
+            shutil.rmtree(os.path.dirname(path), ignore_errors=True)  # don't orphan the empty temp dir
             return {"ok": False, "error": str(e)}
         with self._lock:  # remember the temp dir until its new window opens (then per-session)
             self._pending_view_dirs.add(os.path.dirname(path))
@@ -1143,35 +1161,85 @@ class CoreApi:
     # DATEV mode (lazy; the datev package is imported only when mode is ON)
     # docs/datev-integration-design.md
     # ----------------------------------------------------------------------
-    def _datev_get_service(self):
-        """The live DatevService, built lazily on first use (mode must be ON). Returns
-        None if DATEV mode is off or the connection can't be established."""
+    def _datev_connect_worker(self, epoch):
+        """Build the DatevService off the bridge thread (the curl SSO handshake is slow).
+        Stores the result and clears the in-flight flag; on failure records it so status
+        polls don't re-arm an endless reconnect loop (only a mode toggle / explicit op retries).
+        Re-checks mode AND the connect epoch under the lock so a connect that finishes AFTER a
+        mode-off — or after an off→on toggle already started a fresh connect — isn't adopted: a
+        worker from a superseded epoch discards its result and leaves the current state untouched."""
+        svc = None
+        try:
+            from datev.inapp import DatevService
+            from infra.settings import load_settings
+            svc = DatevService.connect(load_settings())
+        except Exception:
+            logger.warning("[datev] connect failed", exc_info=True)
+        with self._datev_lock:
+            if epoch != self._datev_connect_epoch:
+                return  # superseded by a newer connect epoch (mode toggled since) — discard silently
+            self._datev_service = svc if self._datev_mode else None  # drop a now-stale result
+            self._datev_connecting = False
+            self._datev_failed = self._datev_mode and svc is None
+
+    def _datev_start_connect(self, force: bool = False):
+        """Kick off a single background connect if mode is on and none is ready/in-flight.
+        Idempotent: a second call while connecting (or after success) is a no-op. After a failed
+        connect it stays a no-op (no auto-retry storm) UNLESS ``force`` — an explicit user op
+        retries once; status polls do not."""
+        with self._datev_lock:
+            if (not self._datev_mode or self._datev_service is not None
+                    or self._datev_connecting or (self._datev_failed and not force)):
+                return
+            self._datev_connecting = True
+            self._datev_attempted = True
+            self._datev_failed = False
+            epoch = self._datev_connect_epoch
+        threading.Thread(target=self._datev_connect_worker, args=(epoch,), daemon=True,
+                         name="datev-connect").start()
+
+    def _datev_get_service(self, block: bool = False, timeout: float = 45.0):
+        """The live DatevService (mode must be ON). NON-BLOCKING by default: returns the
+        service if the background connect has finished, else None — so status polls never
+        freeze the UI and a failed connect doesn't spin. ``block=True`` waits up to ``timeout`` s
+        for an in-flight connect (and forces ONE retry after a prior failure), for the few
+        user-initiated ops that genuinely need the service (checkout capture, file-anew, write-back)."""
         if not self._datev_mode:
             return None
-        if self._datev_service is None:
+        with self._datev_lock:
+            if self._datev_service is not None:
+                return self._datev_service
+        self._datev_start_connect(force=block)  # status polls: respect the failed gate; ops: retry once
+        if not block:
+            return None
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             with self._datev_lock:
-                if self._datev_service is None:
-                    try:
-                        from datev.inapp import DatevService
-                        from infra.settings import load_settings
-                        self._datev_service = DatevService.connect(load_settings())
-                    except Exception:
-                        logger.warning("[datev] connect failed", exc_info=True)
-                        return None
-        return self._datev_service
+                if self._datev_service is not None:
+                    return self._datev_service
+                if not self._datev_connecting:
+                    return None  # connect finished and failed — don't spin
+            time.sleep(0.05)
+        return None
 
     def datev_status(self) -> dict:
         """DATEV-mode + connection state for the UI. When mode is OFF this never imports
-        the datev package (cheap, safe to call on every launch)."""
+        the datev package (cheap, safe to call on every launch). NON-BLOCKING: while the
+        background connect is still running it reports ``connecting`` so the UI can poll
+        instead of freezing for the whole SSO handshake."""
         if not self._datev_mode:
             return {"ok": True, "datev_mode": False, "connected": False}
-        svc = self._datev_get_service()
-        if svc is None:
-            return {"ok": True, "datev_mode": True, "connected": False,
-                    "error": "Keine Verbindung zur DATEV-Schnittstelle."}
-        st = svc.status()
-        st["datev_mode"] = True
-        return st
+        svc = self._datev_get_service()  # non-blocking; starts the connect if needed
+        if svc is not None:
+            st = svc.status()
+            st["datev_mode"] = True
+            return st
+        with self._datev_lock:
+            connecting = self._datev_connecting
+        if connecting:
+            return {"ok": True, "datev_mode": True, "connected": False, "connecting": True}
+        return {"ok": True, "datev_mode": True, "connected": False,
+                "error": "Keine Verbindung zur DATEV-Schnittstelle."}
 
     def set_datev_mode(self, on: bool) -> dict:
         """Persist the DATEV-mode flag (per-user settings.json) and (re)build/drop the
@@ -1182,11 +1250,19 @@ class CoreApi:
         with self._datev_lock:
             self._datev_mode = on
             self._datev_service = None  # rebuild on next use (or drop when off)
+            # reset the connect flags so a re-enable starts a fresh connect (and a connect that
+            # was in flight during a mode-off can't block the next start via a stale _connecting).
+            self._datev_connecting = False
+            self._datev_attempted = False
+            self._datev_failed = False
+            self._datev_connect_epoch += 1  # supersede any in-flight connect from the previous epoch
         if not on:
             # mode-off fully resets DATEV runtime state — no stale per-session baselines
             # linger until each window's close_session.
             with self._lock:
                 self._datev_baseline.clear()
+        else:
+            self._datev_start_connect()  # warm the connection in the background
         return self.datev_status()
 
     @staticmethod
@@ -1195,15 +1271,25 @@ class CoreApi:
         return os.path.join(base, APP_NAME, "datev_backups")
 
     def _datev_effective_bytes(self, session):
-        """The working document's combined effective PDF bytes (what would be filed /
-        written back) — folders concatenate their children, a single leaf is itself."""
+        """The document's bytes for DATEV (the upload AND the content-guard baseline — they must
+        match). MIRRORS the local save's format-awareness (``_datev_local_persist``): a
+        ``.belegtool`` is itself a valid PDF that ALSO embeds its ``/JSONStructure`` tree, so DATEV
+        displays the pages AND BelegTool can restore the full structure when the document is
+        re-opened from DATEV — send THOSE bytes (``to_bytes``), never the structure-stripped flat
+        PDF (DATEV does not require flattening — it stores whatever PDF it is given). A checkout
+        ``.pdf`` (single PDF, no structure) returns its plain combined PDF — also what is written
+        back to the local checkout file, so the two stay byte-consistent."""
+        local_path = self.document_path(session)
         with self._lock:
             s = self._sessions.get(session)
             doc = s.document if s else None
         if doc is None:
             return None
         from core.bridge import document_to_storage
-        return document_to_storage(doc).root.current_pdf_data
+        storage = document_to_storage(doc)
+        if local_path and str(local_path).lower().endswith(".belegtool"):
+            return storage.to_bytes()   # pages + /JSONStructure → structure survives in DATEV
+        return storage.root.current_pdf_data
 
     def _datev_provenance(self, session):
         with self._lock:
@@ -1220,27 +1306,59 @@ class CoreApi:
                 s.apply_silent(SetDatev(provenance))
 
     def _datev_capture_on_open(self, session, path, resp):
-        """On open in DATEV mode: if ``path`` is a checkout path, capture provenance +
-        the open-time baseline, persist provenance on the root, and annotate ``resp`` with
-        ``datev`` (so the UI shows the badge + a 'checked out at open' notice)."""
-        svc = self._datev_get_service()
-        if svc is None:
-            return resp
-        try:
-            # Hash the RAW checkout file on disk — for a DATEV checkout this IS the server file
-            # DATEV materialised. The content guard compares this open-time baseline against the
-            # RAW server bytes at write-back, so hashing the re-serialised *effective* bytes here
-            # (PdfWriter normalises xref/streams → never byte-identical to the raw file) would
-            # make EVERY first write-back of an unedited checkout falsely report conflict_content.
+        """On open in DATEV mode: capture a checkout's provenance + open-time content baseline,
+        persist provenance on the root, and annotate ``resp`` (badge + 'checked out at open').
+
+        ⚠️ NON-BLOCKING (v3.11.0 fix for the "12-20 s PDF-Tool checkout open" regression). The
+        open path must NEVER wait on the slow SSO handshake. So we peek at the service
+        NON-BLOCKING (``block=False``):
+        - service already up → full capture exactly as before (``svc.capture_provenance``);
+        - service still connecting AND this is a checkout path → capture only the CHEAP, service-
+          free half (provenance from the path + the content guard ``opened_sha256`` hashed from
+          the LOCAL checkout file, which IS the server file DATEV materialised) and mark the
+          server half ``pending_server``; ``datev_save_back`` completes it later
+          (``_datev_complete_baseline``) since it blocks for the service anyway;
+        - not a checkout and no service → nothing to capture (a normal .pdf is never connected).
+        Trade-off when still connecting: the up-front 'already checked out by someone else' hint
+        surfaces as a LOCKED verdict at write-back instead of on open — still safe, just later."""
+        from datev.provenance import parse_checkout_path
+        _parsed = parse_checkout_path(path)
+        is_checkout = bool(_parsed.get("doc_guid"))
+        # breadcrumb (belegtool_diag.log next to the exe): whether this open was recognized as a
+        # DATEV checkout. A "nicht verknüpft" write-back means is_checkout=False here.
+        diag(f"[datev] open: is_checkout={is_checkout} path={path!r}")
+        svc = self._datev_get_service(block=False)  # ⚠️ never block the open on the SSO connect
+        if svc is None and not is_checkout:
+            return resp  # not a checkout and no service yet → nothing to capture, no wasted read
+        opened = b""
+        if is_checkout:
+            # Hash the RAW checkout file on disk — for a checkout this IS the server file. Hashing
+            # the re-serialised *effective* bytes (PdfWriter normalises xref/streams) would make
+            # every first write-back of an unedited checkout falsely report conflict_content. Only
+            # a checkout needs these bytes; a normal .belegtool open never reads the whole file.
             try:
                 with open(path, "rb") as f:
                     opened = f.read()
             except OSError:
-                opened = self._datev_effective_bytes(session)   # fallback (in-memory effective)
-            prov, baseline = svc.capture_provenance(path, opened)
-        except Exception:
-            logger.warning("[datev] capture on open failed", exc_info=True)
-            return resp
+                opened = self._datev_effective_bytes(session)  # fallback (in-memory effective)
+        if svc is not None:
+            try:
+                prov, baseline = svc.capture_provenance(path, opened)  # non-checkout → (None, None)
+            except Exception:
+                logger.warning("[datev] capture on open failed", exc_info=True)
+                return resp
+        elif is_checkout:
+            # connect still in flight → cheap, service-free capture so the file opens instantly
+            # and write-back stays enabled; the server half is filled at write-back.
+            parsed = parse_checkout_path(path)
+            prov = {"doc_guid": parsed.get("doc_guid"), "file_id": parsed.get("file_id"),
+                    "structure_item_id": None, "correspondence_partner_guid": None,
+                    "source_name": os.path.basename(str(path)) or None}
+            baseline = {"open_change_dt": None, "was_checked_out_at_open": False,
+                        "opened_sha256": hashlib.sha256(opened or b"").hexdigest(),
+                        "pending_server": True}
+        else:
+            return resp  # not a checkout and no service yet → nothing to capture
         if not prov:
             return resp
         with self._lock:
@@ -1251,6 +1369,42 @@ class CoreApi:
         resp["datev"] = {"connected": True, "source_name": prov.get("source_name"),
                          "checked_out_at_open": baseline.get("was_checked_out_at_open", False)}
         return resp
+
+    def _datev_complete_baseline(self, svc, session):
+        """Fill the SERVER half of a checkout baseline (``open_change_dt`` /
+        ``was_checked_out_at_open`` + the provenance's ``structure_item_id`` /
+        ``correspondence_partner_guid``) without re-hashing — preserves the open-time
+        ``opened_sha256`` (the real content guard). Called synchronously by ``datev_save_back``
+        once the service is up, so the non-blocking open above stays correct for write-back."""
+        prov = self._datev_provenance(session) or {}
+        doc_guid, file_id = prov.get("doc_guid"), prov.get("file_id")
+        if not doc_guid:
+            return
+        try:
+            # reuse capture_provenance with a synthetic path; the bytes only affect its own
+            # opened_sha256, which we ignore (we keep the open-time hash).
+            fresh_prov, fresh_baseline = svc.capture_provenance(f"x/{doc_guid}/{file_id}", b"")
+        except Exception:
+            logger.warning("[datev] complete baseline failed", exc_info=True)
+            return
+        with self._lock:
+            b = self._datev_baseline.get(session)
+            if b is not None and b.get("pending_server"):
+                b["open_change_dt"] = (fresh_baseline or {}).get("open_change_dt")
+                b["was_checked_out_at_open"] = bool((fresh_baseline or {}).get("was_checked_out_at_open"))
+                b["pending_server"] = False
+        if fresh_prov:
+            merged = dict(prov)
+            if fresh_prov.get("structure_item_id") is not None:
+                merged["structure_item_id"] = fresh_prov["structure_item_id"]
+            if fresh_prov.get("correspondence_partner_guid"):
+                merged["correspondence_partner_guid"] = fresh_prov["correspondence_partner_guid"]
+            # the cheap (non-blocking) open captured file_id from the PATH number, which may be a
+            # DokOrg working-copy id; adopt the server-resolved document_file_id so the write-back
+            # reads/guards the real file (avoids "document_file <n> not found").
+            if fresh_prov.get("file_id") is not None:
+                merged["file_id"] = fresh_prov["file_id"]
+            self._datev_set_provenance(session, merged)
 
     def _datev_local_persist(self, session, edited):
         """Persist the working doc to its bound local path after a DATEV write/file, in sync.
@@ -1263,6 +1417,21 @@ class CoreApi:
         formats, so the user must be able to tell which one landed on disk)."""
         local_path = self.document_path(session)
         if not local_path:
+            # A PDF-Tool NODE BINDING (a node opened "in PDF-Tool") has no disk path — its local
+            # target is the OWNER node in the organizer document. Push the filed bytes there so
+            # the organizer reflects the edit (mirrors save_node_back) instead of a misleading
+            # "no local path" error.
+            from core.commands import SetNodeBytes
+            with self._lock:
+                binding = self._pdftool_bindings.get(session)
+                owner = self._sessions.get(binding[0]) if binding else None
+                node_id = binding[1] if binding else None
+                if owner is not None and node_id is not None and owner.document.find(node_id) is not None:
+                    try:
+                        owner.dispatch(SetNodeBytes(node_id, edited or b""))
+                        return {"local_saved": node_id, "local_error": None, "local_kind": "node"}
+                    except CommandError as e:
+                        return {"local_saved": None, "local_error": str(e), "local_kind": "node"}
             logger.warning("[datev] no local path bound; local save skipped")
             return {"local_saved": None, "local_error": "Kein lokaler Speicherort gebunden.",
                     "local_kind": None}
@@ -1279,6 +1448,15 @@ class CoreApi:
                 if s is not None:
                     s.mark_saved()
             return {"local_saved": local_path, "local_error": None, "local_kind": "pdf"}
+        except PermissionError as e:
+            # The local file is locked — for a DATEV checkout .pdf this is the NORMAL case: DokOrg
+            # keeps the materialized copy open while it is checked out in the app, so the in-sync
+            # overwrite can't land (Errno 13). Flag it with ``local_locked`` so a caller that has
+            # ALREADY written to DATEV can treat it as non-fatal (DATEV is authoritative and
+            # re-materializes the file on next checkout), while a caller that RELIES on the local
+            # save (declined / DATEV-refused fallback) still surfaces the error.
+            return {"local_saved": None, "local_error": str(e), "local_locked": True,
+                    "local_kind": "pdf"}
         except OSError as e:
             return {"local_saved": None, "local_error": str(e), "local_kind": "pdf"}
 
@@ -1287,15 +1465,25 @@ class CoreApi:
         Re-reads the server, runs the pure guard, and only on ``ok`` overwrites (after a
         local backup). Any non-ok verdict is returned so the UI offers a filesystem save."""
         if not self._datev_mode:
+            diag("[datev] save_back ABORT: DATEV mode off")
             return {"ok": False, "error": "DATEV-Modus ist aus."}
-        svc = self._datev_get_service()
+        svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
+            diag("[datev] save_back ABORT: no service (Keine Verbindung)")
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        # A checkout opened NON-BLOCKING (api fix for the 12-20 s freeze) carries only the LOCAL
+        # half of its baseline; now that the service is up, fill the server half
+        # (open_change_dt / checked_out + the provenance structure_item_id) BEFORE the guard.
+        with self._lock:
+            _pending = (self._datev_baseline.get(session) or {}).get("pending_server")
+        if _pending:
+            self._datev_complete_baseline(svc, session)
         prov = self._datev_provenance(session)
         from datev.writeback import valid_provenance
         if not valid_provenance(prov):
             # not connected, OR a crafted/garbled provenance from an untrusted .belegtool
             # (non-GUID doc_guid / non-int ids) — refuse before any server call.
+            diag("[datev] save_back ABORT: invalid provenance")
             return {"ok": False, "error": "Dieses Dokument ist nicht (gültig) mit DATEV verknüpft."}
         with self._lock:
             baseline = self._datev_baseline.get(session)
@@ -1308,13 +1496,29 @@ class CoreApi:
                 self._datev_baseline.setdefault(session, baseline)
         edited = self._datev_effective_bytes(session)
         if not edited:
+            diag("[datev] save_back ABORT: empty effective bytes (Keine Daten)")
             return {"ok": False, "error": "Keine Daten zum Zurückschreiben."}
         try:
             res = svc.writeback(prov, baseline, edited, user_confirmed=confirmed,
                                 comment=comment or APP_NAME, backup_dir=self._datev_backup_dir())
         except Exception as e:  # never let a write-back error cross the bridge as a raw rejection
             logger.exception("[datev] write-back failed")
+            diag(f"[datev] save_back ABORT: writeback raised {e!r}")
             return {"ok": False, "verdict": "error", "error": str(e)}
+        diag(f"[datev] save_back result: ok={res.get('ok')} verdict={res.get('verdict')!r} "
+             f"error={res.get('error')!r}")
+        if res.get("verdict") == "checked_out_self":
+            # The document is checked out by ME → DATEV refuses an API write-back ("can't be changed
+            # because it is checked out"). Persist the edit to the LOCAL working copy instead; the
+            # user checks it in via DATEV (which uploads this file as the new version). This is the
+            # native DokOrg flow and the only thing that works for a checked-out doc.
+            local = self._datev_local_persist(session, edited)
+            diag(f"[datev] save_back checked_out_self → local save: "
+                 f"saved={local.get('local_saved')!r} error={local.get('local_error')!r}")
+            if local.get("local_saved"):
+                return {"ok": True, "verdict": "checked_out_self", **local}
+            return {"ok": False, "verdict": "checked_out_self", **local,
+                    "error": local.get("local_error") or "Ausgecheckte Datei ist nicht beschreibbar."}
         if res.get("ok"):
             new_prov = res.get("provenance") or prov
             self._datev_set_provenance(session, new_prov)
@@ -1334,6 +1538,10 @@ class CoreApi:
             # modal busy-state disables edits during write-back, so the two can't diverge in the
             # single-window UI — see the residual note in CLAUDE.md.
             res.update(self._datev_local_persist(session, edited))
+            if res.get("local_locked"):
+                # DATEV already has the edit (this is the ok-path); a locked local checkout file
+                # is expected, not a failure → drop the noise error so the UI shows a clean ✓.
+                res["local_error"] = None
         return res
 
     def _datev_reestablish_baseline(self, svc, session, prov):
@@ -1367,12 +1575,40 @@ class CoreApi:
                 return None, {"ok": False, "error": str(e)}
         return None, None
 
+    def datev_clients(self) -> dict:
+        """The DATEV client list for the filing dialog's searchable dropdown. Non-empty list ⇒
+        DATEV filing is possible; an error/empty list ⇒ the UI DISABLES filing (no client data,
+        no safe target — the user's rule). Blocks briefly to wait for the connect."""
+        svc = self._datev_get_service(block=True)
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        try:
+            return {"ok": True, "clients": svc.list_clients()}
+        except Exception as e:
+            logger.warning("[datev] list_clients failed", exc_info=True)
+            return {"ok": False, "error": str(e)}
+
+    def datev_placements(self, domain_id: int = 1) -> dict:
+        """Folders (+ registers) of a domain for the dialog's optional placement pickers.
+        Best-effort: an empty list just means the dialog falls back to plain id entry."""
+        svc = self._datev_get_service(block=True)
+        if svc is None:
+            return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        try:
+            return {"ok": True, "folders": svc.list_placements(domain_id)}
+        except Exception as e:
+            logger.warning("[datev] list_placements failed", exc_info=True)
+            return {"ok": False, "error": str(e)}
+
     def datev_file(self, session: str, client_guid: str = None, mandant_number=None,
                    description: str = None, domain_id: int = 1, folder_id=None,
-                   register_id=None) -> dict:
+                   register_id=None, document_date=None, fiscal_year=None,
+                   fiscal_month=None) -> dict:
         """File the working document as a NEW DATEV document (the create flow), then adopt
-        its provenance (→ connected). ``client_guid`` direct, or ``mandant_number`` resolved."""
-        svc = self._datev_get_service()
+        its provenance (→ connected). ``client_guid`` direct, or ``mandant_number`` resolved.
+        ``document_date`` (ISO) + ``fiscal_year``/``fiscal_month`` (Veranlagungszeitraum/-monat)
+        and ``folder_id``/``register_id`` are the optional metadata from the filing dialog."""
+        svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
@@ -1387,7 +1623,9 @@ class CoreApi:
         try:
             res = svc.file_document(data, client_guid=guid, description=description or name,
                                     domain_id=domain_id, folder_id=folder_id,
-                                    register_id=register_id, structure_name=f"{name}.pdf")
+                                    register_id=register_id, structure_name=f"{name}.pdf",
+                                    document_date=document_date, fiscal_year=fiscal_year,
+                                    fiscal_month=fiscal_month)
         except Exception as e:  # never let a create error cross the bridge as a raw rejection
             logger.exception("[datev] file_document failed")
             return {"ok": False, "verdict": "error", "error": str(e)}
@@ -1406,7 +1644,7 @@ class CoreApi:
                      folder_id=None, register_id=None) -> dict:
         """Export to PDF (single or **split**, honouring ``options``) and file EVERY produced
         PDF as a new DATEV document under the same client. Returns ``{ok, filed, parts}``."""
-        svc = self._datev_get_service()
+        svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)

@@ -18,7 +18,7 @@ describe('isDatevConnected', () => {
 
 describe('datevVerdictKey', () => {
   it('maps each non-ok verdict to its own message key', () => {
-    for (const v of ['locked', 'conflict_changed', 'conflict_content', 'no_structure_item']) {
+    for (const v of ['locked', 'conflict_changed', 'conflict_content', 'no_structure_item', 'checked_out_self']) {
       expect(datevVerdictKey(v)).toBe(DATEV_VERDICT_KEY[v])
       expect(datevVerdictKey(v)).toContain('DATEV')
     }

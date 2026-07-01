@@ -14,6 +14,9 @@ export const DATEV_VERDICT_KEY = {
   conflict_changed: 'DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.',
   conflict_content: 'DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.',
   no_structure_item: 'DATEV: Kein Strukturelement gefunden — bitte lokal speichern.',
+  // checked_out_self (ok:false) = the doc is checked out by ME and the local working-copy save ALSO
+  // failed (locked); mirrors the PDF-Tool surface's message so both surfaces read identically.
+  checked_out_self: 'DATEV: Ausgecheckte Datei konnte nicht gespeichert werden (gesperrt?)',
 }
 
 export function datevVerdictKey(verdict) {

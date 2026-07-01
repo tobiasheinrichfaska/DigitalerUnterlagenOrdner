@@ -220,10 +220,18 @@ def test_parse_checkout_path_extracts_guid_and_file_id():
     assert parse_checkout_path("nothing-here.pdf") == {}
     assert parse_checkout_path(r"\\srv\0a0a0a01-0000-4000-8000-000000000001\9085411") \
         ["doc_guid"] == "0a0a0a01-0000-4000-8000-000000000001"
-    # anchored: a GUID folder that is NOT the file's parent must NOT be captured (no false
+    # anchored: a GUID folder NOT followed by a NUMERIC segment must NOT be captured (no false
     # "from DATEV" for an ordinary file that merely lives under a GUID-named directory).
     assert parse_checkout_path(
         r"C:\0a0a0a01-0000-4000-8000-000000000001\sub\rechnung.pdf") == {}
+    # DokOrg Pro shape: …\<guid>\<file-id>\<name> — <file-id> is a FOLDER and the materialized file
+    # (any name / no extension) sits inside it, so the GUID is the GRANDPARENT, not the parent.
+    p2 = r"C:\Users\user1\Temp\41\DokorgPro\0a0a0a02-0000-4000-8000-000000000002\9085416\Rechnung"
+    assert parse_checkout_path(p2) == {
+        "doc_guid": "0a0a0a02-0000-4000-8000-000000000002", "file_id": 9085416}
+    # no-extension DMS shape …\<guid>\<file-id> (the file IS the numeric file-id)
+    assert parse_checkout_path(r"C:\x\0a0a0a02-0000-4000-8000-000000000002\9085416") == {
+        "doc_guid": "0a0a0a02-0000-4000-8000-000000000002", "file_id": 9085416}
 
 
 def test_provenance_stats_and_match():
@@ -255,7 +263,7 @@ def test_delete_document_sends_delete():
 def test_master_data_base_url_pins_path_from_dms_base():
     assert master_data_base_url("https://your-datev-server:58452/datev/api/dms/v2") == \
         "https://your-datev-server:58452/datev/api/master-data/v1"
-    assert master_data_base_url("") == "https://localhost:58452/datev/api/master-data/v1"
+    assert master_data_base_url("") == "https://your-datev-server:58452/datev/api/master-data/v1"
 
 
 # --- url builder -----------------------------------------------------------
@@ -325,13 +333,15 @@ def test_dms_base_url_pins_path_from_opos_accounting_config():
     # already-correct DMS url is idempotent
     dms = {"base_url": "https://your-datev-server:58452/datev/api/dms/v2"}
     assert dms_base_url(dms) == "https://your-datev-server:58452/datev/api/dms/v2"
-    # no/garbage base_url ⇒ default
-    assert dms_base_url({}) == "https://localhost:58452/datev/api/dms/v2"
-    assert dms_base_url({"base_url": "not-a-url"}) == "https://localhost:58452/datev/api/dms/v2"
+    # no/garbage base_url ⇒ the on-prem DATEV server default (not localhost)
+    assert dms_base_url({}) == "https://your-datev-server:58452/datev/api/dms/v2"
+    assert dms_base_url({"base_url": "not-a-url"}) == "https://your-datev-server:58452/datev/api/dms/v2"
 
 
 def test_self_signed_allowed_loopback_default_and_override():
     assert self_signed_allowed({}, "https://localhost/x")            # loopback ⇒ trust
-    assert not self_signed_allowed({}, "https://lan-host/x")         # LAN ⇒ strict
+    assert self_signed_allowed({}, "https://your-datev-server:58452/x")  # default DATEV host ⇒ trust
+    assert not self_signed_allowed({}, "https://lan-host/x")         # other LAN host ⇒ strict
     assert self_signed_allowed({"verify_tls": False}, "https://lan-host/x")    # explicit wins
+    assert not self_signed_allowed({"verify_tls": True}, "https://your-datev-server/x")  # explicit wins
     assert not self_signed_allowed({"verify_tls": True}, "https://localhost/x")

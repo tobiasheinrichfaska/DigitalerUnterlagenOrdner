@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chooseSource, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
 
 describe('chooseSource', () => {
   it('uses the bridge when a .pdf is bound in the host', () => {
@@ -42,12 +42,39 @@ describe('chooseSource', () => {
   })
 })
 
-describe('datevAction', () => {
-  it('offers write-back for a connected checkout in DATEV mode', () => {
-    expect(datevAction({ datevMode: true, connected: true })).toBe('writeback')
+describe('readyBridge', () => {
+  const METHODS = ['config', 'get_pdf_bytes', 'open']
+  const fn = () => {}
+
+  it('returns null when there is no host at all (plain browser / e2e)', () => {
+    expect(readyBridge({}, METHODS)).toBeNull()
+    expect(readyBridge({ pywebview: {} }, METHODS)).toBeNull()
   })
-  it('offers file-anew for a not-connected pdf in DATEV mode', () => {
+
+  it('returns null while a 2nd window has .api but its methods are NOT bound yet', () => {
+    // The spike-form regression: the old guard returned the api the instant it existed,
+    // so a startup call hit "api.config is not a function" and fell through to the sample.
+    const win = { pywebview: { api: { config: fn } } }  // get_pdf_bytes/open not bound yet
+    expect(readyBridge(win, METHODS)).toBeNull()
+  })
+
+  it('returns the api once every needed method is bound', () => {
+    const api = { config: fn, get_pdf_bytes: fn, open: fn }
+    expect(readyBridge({ pywebview: { api } }, METHODS)).toBe(api)
+  })
+})
+
+describe('datevAction', () => {
+  it('offers write-back for a connected checkout that is NOT checked out', () => {
+    expect(datevAction({ datevMode: true, connected: true, checkedOut: false })).toBe('writeback')
+    expect(datevAction({ datevMode: true, connected: true })).toBe('writeback')  // default not-checked-out
+  })
+  it('offers NO write-back for a connected doc that IS checked out (use 💾 Speichern + check in)', () => {
+    expect(datevAction({ datevMode: true, connected: true, checkedOut: true })).toBeNull()
+  })
+  it('offers file-anew for a not-connected pdf in DATEV mode (checkout state irrelevant)', () => {
     expect(datevAction({ datevMode: true, connected: false })).toBe('file')
+    expect(datevAction({ datevMode: true, connected: false, checkedOut: true })).toBe('file')
   })
   it('offers nothing when DATEV mode is off', () => {
     expect(datevAction({ datevMode: false, connected: true })).toBeNull()

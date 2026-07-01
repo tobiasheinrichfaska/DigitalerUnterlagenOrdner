@@ -9,7 +9,10 @@ afterEach(cleanup)
 
 const render_ = (props = {}) => {
   const handlers = { onToggleMode: vi.fn(), onSaveBack: vi.fn(), onFile: vi.fn() }
-  render(<DatevBar datevMode={false} connected={false} busy={false} {...handlers} {...props} />)
+  // default serviceConnected:true — these tests exercise the document/mode logic; the
+  // service-connection GATE has its own tests below.
+  render(<DatevBar datevMode={false} connected={false} serviceConnected busy={false}
+    {...handlers} {...props} />)
   return handlers
 }
 
@@ -59,5 +62,23 @@ describe('DatevBar', () => {
   it('disables the actions while busy', () => {
     render_({ datevMode: true, connected: true, busy: true })
     expect(screen.getByText('Nach DATEV zurückschreiben')).toBeDisabled()
+  })
+
+  // --- service-connection gate (never write to DATEV without a connection) ---
+  it('no service connection: write-back is disabled and a "keine Verbindung" hint shows', () => {
+    render_({ datevMode: true, connected: true, serviceConnected: false })
+    expect(screen.getByText('Nach DATEV zurückschreiben')).toBeDisabled()
+    expect(screen.getByText(/keine Verbindung/)).toBeInTheDocument()
+  })
+
+  it('no service connection: file-anew is disabled too', () => {
+    render_({ datevMode: true, connected: false, serviceConnected: false })
+    expect(screen.getByText('Nach DATEV ablegen')).toBeDisabled()
+  })
+
+  it('still connecting (serviceConnected null): actions disabled with a "verbinde…" hint', () => {
+    render_({ datevMode: true, connected: false, serviceConnected: null })
+    expect(screen.getByText('Nach DATEV ablegen')).toBeDisabled()
+    expect(screen.getByText(/verbinde/)).toBeInTheDocument()
   })
 })

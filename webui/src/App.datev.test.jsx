@@ -20,6 +20,8 @@ function installApi(overrides = {}) {
   const base = {
     config: () => ({ ok: true, dev: false, default_dpi: 150 }),
     datev_status: () => ({ ok: true, datev_mode: true, connected: true, feature: 'DokAb' }),
+    datev_clients: () => ({ ok: true, clients: [{ guid: 'cg-1', number: '10001', name: 'Muster GmbH' }] }),
+    datev_placements: () => ({ ok: true, folders: [] }),
     open: () => ({ ok: true, session: 's', tree: CONNECTED_TREE, can_undo: false, can_redo: false,
                    datev: { connected: true, source_name: 'Rechnung.pdf', checked_out_at_open: false } }),
     set_dirty: () => ({ ok: true }),
@@ -66,6 +68,24 @@ describe('App — DATEV mode', () => {
     expect(called(calls, 'set_datev_mode')[0].args[0]).toBe(false)
   })
 
+  it('enabling DATEV mode at runtime re-polls and reflects the connection (not stuck offline)', async () => {
+    // REGRESSION (audit): the status poll effect re-runs on the [datevMode] dep, so toggling DATEV
+    // on mid-session resumes polling and the bar reaches connected — it used to latch on the single
+    // toggle response and stay "keine Verbindung" until the window was reopened.
+    let n = 0
+    await renderApp({
+      open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
+      datev_status: () => (n++ === 0
+        ? { ok: true, datev_mode: false, connected: false }                    // mount: mode off
+        : { ok: true, datev_mode: true, connected: true, feature: 'DokAb' }),  // after toggle: connected
+      set_datev_mode: () => ({ ok: true, datev_mode: true, connected: false, connecting: true }),
+    })
+    expect(screen.queryByText('Nach DATEV ablegen')).toBeNull()   // mode off → no DATEV action
+    fireEvent.click(screen.getByTitle('DATEV-Modus ein-/ausschalten'))
+    const fileBtn = await screen.findByText('Nach DATEV ablegen')  // effect re-polled → connected
+    await waitFor(() => expect(fileBtn).not.toBeDisabled())        // online, not stuck offline
+  })
+
   it('a successful write-back names the saved file (format explicit) and does NOT Save-As', async () => {
     const calls = await renderApp({
       save_to_datev: () => ({ ok: true, verdict: 'ok', provenance: CONNECTED_TREE.datev,
@@ -99,13 +119,16 @@ describe('App — DATEV mode', () => {
       .toBeGreaterThan(0))   // the local-save fallback is still offered
   })
 
-  it('a declined write-back neither errors nor saves locally', async () => {
+  it('a declined write-back ("only the local file") saves locally without an error', async () => {
+    // "Nein" in the „In DATEV aktualisieren?" confirm = only update the local file, no DATEV push —
+    // it falls through to a normal local save (so the edit is never lost) and shows NO error.
     const calls = await renderApp({
       save_to_datev: () => ({ ok: false, verdict: 'declined' }),
     })
     fireEvent.click(screen.getByText('Nach DATEV zurückschreiben'))
     await waitFor(() => expect(called(calls, 'save_to_datev').length).toBe(1))
-    expect(called(calls, 'save_info').length + called(calls, 'save_file').length).toBe(0)
+    await waitFor(() => expect(called(calls, 'save_file').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/⚠/)).toBeNull()
   })
 
   it('write-back OK but local save failed surfaces BOTH facts (DATEV landed + local failed)', async () => {
@@ -121,17 +144,26 @@ describe('App — DATEV mode', () => {
       .toBeInTheDocument()
   })
 
-  it('a not-connected document files via datev_file with the prompted Mandant', async () => {
+  // The file-anew flow now opens the DatevFileDialog (searchable client + folder/register +
+  // Belegdatum + Veranlagung), then files the chosen client GUID. Helper: open the dialog,
+  // pick the (only) client, click Ablegen.
+  const fileViaDialog = async () => {
+    fireEvent.click(screen.getByText('Nach DATEV ablegen'))      // opens the dialog (loads clients)
+    const list = await screen.findByLabelText('Mandant')
+    fireEvent.change(list, { target: { value: 'cg-1' } })        // pick the loaded client
+    fireEvent.click(screen.getByText('Ablegen'))
+  }
+
+  it('a not-connected document files via the dialog with the chosen client GUID', async () => {
     const calls = await renderApp({
       open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
       datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 },
                            local_saved: 'C:\\Kanzlei\\Beleg.belegtool', local_kind: 'belegtool' }),
     })
-    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    await fileViaDialog()
     await waitFor(() => expect(called(calls, 'datev_file').length).toBe(1))
-    // datev_file(session, clientGuid=null, mandantNumber, …) → the prompted Mandant is arg[2]
-    expect(called(calls, 'datev_file')[0].args[2]).toBe('10001')
-    // the success notice names the saved file so the .belegtool/.pdf format is explicit
+    // datev_file(session, clientGuid, mandantNumber, …) → the dialog passes the GUID as arg[1]
+    expect(called(calls, 'datev_file')[0].args[1]).toBe('cg-1')
     await screen.findByText(/In DATEV abgelegt · Beleg\.belegtool/)
   })
 
@@ -140,7 +172,7 @@ describe('App — DATEV mode', () => {
       open: () => ({ ok: true, session: 's', tree: UNLINKED_TREE, can_undo: false, can_redo: false }),
       datev_file: () => ({ ok: false, error: 'Mandant 999 unbekannt' }),
     })
-    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    await fileViaDialog()
     expect(await screen.findByText(/Mandant 999 unbekannt/)).toBeInTheDocument()
   })
 
@@ -150,7 +182,7 @@ describe('App — DATEV mode', () => {
       datev_file: () => ({ ok: true, provenance: { doc_guid: 'new-guid', file_id: 1 },
                            local_error: 'Speichern fehlgeschlagen' }),
     })
-    fireEvent.click(screen.getByText('Nach DATEV ablegen'))
+    await fileViaDialog()
     expect(await screen.findByText(/abgelegt, aber lokal nicht gespeichert.*Speichern fehlgeschlagen/))
       .toBeInTheDocument()
   })

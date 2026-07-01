@@ -64,3 +64,12 @@ packaging/out/
 
 # User documents — never commit real .belegtool files (may contain personal data)
 *.belegtool
+
+# Live DATEV connection config next to the exe (site-specific host/auth). The shipped
+# template datev.config.example.json IS tracked; the real datev.config.json is not.
+datev.config.json
+
+# Internal DATEV diagnostics / handoff notes — contain real SIDs, Nutzer-GUIDs, hostnames.
+# NEVER commit to this PUBLIC repo; kept locally as reference only.
+docs/datev-ticket-deleted-nutzer.md
+docs/SESSION_HANDOFF.md

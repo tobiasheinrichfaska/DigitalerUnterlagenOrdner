@@ -1,113 +1,200 @@
-# 08 — Status dots, F2 rename, Help (v3.9.0)
+# 08 — Status-Punkte, F2, Hilfe, Exportoptionen, Dateisperre
 
-Covers the new status-dot model, the persisted compression "undecided" dot, F2 rename,
-and the Help modal. Run the app (`python host.py`, or the prebuilt exe).
+Die Regeln der Status-Punkte, der rote Punkt „Komprimierung noch nicht entschieden“, Umbenennen mit F2, das Hilfe-Fenster, die Optionen beim Export und die Dateisperre für gemeinsam genutzte Ablagen.
 
 ---
 
-## MT-50: New nodes have no status
-**Preconditions:** App open, a few documents imported.
-**Steps:**
-1. Look at the freshly imported documents in the tree.
-**Expected:** No status dot at the **end** of those rows — new nodes start with **no status**
-(not "zu erfassen" as before).
+## MT-50: Neue Einträge haben keinen Status
 
-## MT-51: Set a status on a single document
-**Preconditions:** A document selected.
-**Steps:**
-1. Right-click it → **Status** → **Zu erfassen**.
-2. Right-click again → **Erfasst**, then → **Vorjahr**, then → **Kein Status**.
-**Expected:** A trailing dot appears and changes colour: **yellow** (Zu erfassen) → **green**
-(Erfasst) → **red** (Vorjahr). **Kein Status** removes the dot entirely.
+**Beispieldateien:** `Rechnung_5_Seiten.pdf`, `Teil_A_1_Seite.pdf`
 
-## MT-52: Folder status cascade
-**Preconditions:** A folder with several documents (incl. a sub-folder with documents).
-**Steps:**
-1. Right-click the **folder** → **Status (gesamter Inhalt)** → **Erfasst**.
-**Expected:** **Every** document inside (children *and* grandchildren) turns green. One Undo
-reverts the whole cascade in a single step. The folder itself shows no own status.
+**Voraussetzungen:** BelegTool ist gestartet.
 
-## MT-53: Folder aggregate dots + black dot
-**Preconditions:** A folder containing one **Erfasst** (green) doc, one **Vorjahr** (red) doc,
-and one **no-status** doc.
-**Steps:**
-1. Collapse the folder and look at its row.
-**Expected:** The folder shows a **red** and a **green** dot (one per contained status, ordered
-red→yellow→green) **plus a black dot** — the black dot means "some contents have a status and
-some don't". If you then set the no-status doc to a status, the **black dot disappears**.
+**Schritte:**
+1. Beide Dateien importieren und die neuen Zeilen im Baum ansehen.
 
-## MT-54: Merge / Split status rules
-**Steps:**
-1. Select two **Erfasst** documents → right-click → **Zusammenführen**.
-2. Select one **Erfasst** and one **Vorjahr** document → **Zusammenführen**.
-3. Select a multi-page document with a status → **Splitten → pro Seite**.
-**Expected:** (1) merged node stays **green**. (2) merged node has **no status** (mixed inputs).
-(3) every split part keeps the **original's** status.
+**Erwartet:**
+- Am **Zeilenende** steht **kein** Status-Punkt – neue Einträge beginnen **ohne Status**.
 
-## MT-55: Compression "undecided" red dot (front)
-**Preconditions:** A freshly imported, uncompressed document (≤5 pages).
-**Steps:**
-1. Look at the **front** of the row before selecting it (large/unviewed docs).
-2. Select it; open the compression method dropdown; pick a method; click **❓ Lesbarkeit geprüft**.
-**Expected:** A **red dot at the front** marks "compression not yet decided". After applying
-("Lesbarkeit geprüft"), the front red dot **disappears**. *Not obvious:* if the document can't be
-made smaller, the dot also disappears (auto-decided) — and **stays gone after save + reopen**
-(it is not re-evaluated).
+---
 
-## MT-55b: No-gain dots clear on their own (no view needed)
-**Preconditions:** Open a `.belegtool` with several **small (≤5-page)** documents, some of which
-can't be compressed smaller (e.g. already-optimised PDFs).
-**Steps:**
-1. Just after opening, watch the front dots **without** clicking the nodes.
-**Expected:** Within a short moment the front red dots on the **no-gain ≤5-page** documents
-clear by themselves (a background pass evaluates the cheap ones). Documents that *can* be made
-smaller keep their red dot until you apply a compression. **Large** documents keep the red dot
-until you open them (too costly to sweep). The status bar may briefly show compression activity.
+## MT-51: Status an einem einzelnen Dokument setzen
 
-## MT-56: F2 renames
-**Steps:**
-1. Select a node, press **F2**.
-**Expected:** The name turns into an inline edit field (same as clicking an already-selected row).
-Enter confirms, Esc cancels. Works in a tag/search view too (rename is a content edit).
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-## MT-57: Help modal + language flags + report links
-**Steps:**
-1. Click **❓ Hilfe** in the toolbar.
-2. Click the **🇬🇧** flag, then the **🇩🇪** flag.
-3. Click **▸ GitHub** and **✉ E-Mail** in the footer.
-**Expected:** A modal opens with how-to sections in the current UI language (English if that
-language isn't translated yet). The flags switch the text to authoritative **English / German**.
-**▸ GitHub** opens a pre-filled new-issue page in the browser; **✉ E-Mail** opens a pre-filled
-mail draft. Esc or ✕ closes the modal.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-## MT-58: Export options (TOC / tag index / bookmarks)
-**Preconditions:** A document open; some documents carry **tags** (turn 🏷️ on and add a tag or two).
-**Steps:**
-1. Click **⬇ Export PDF**.
-2. In the dialog, note the checkboxes: **Inhaltsverzeichnis** (+ *mit anklickbaren Links*),
-   **Stichwortverzeichnis (nach Tags)** (+ links), **PDF-Lesezeichen (Seitenleiste)**.
-3. Leave all on → **Exportieren**. Save; open the PDF.
-4. Export again with **Stichwortverzeichnis** unchecked; compare.
-**Expected:** The save dialog's **default filename is the document name + `.pdf`** (not "Export.pdf").
-The first PDF has a table of contents **and** a „Stichwortverzeichnis" page listing each tag with its
-documents and page numbers; entries are clickable; the PDF has sidebar bookmarks. *Not obvious:* the
-index option is **disabled when the document has no tags**; with tags removed from the export it is
-absent in the second PDF. Unchecking links makes the TOC/index entries non-clickable; unchecking
-bookmarks removes the sidebar outline.
+**Schritte:**
+1. Rechtsklick auf ein Dokument → unter **Status** auf **Zu erfassen** klicken.
+2. Erneut rechtsklicken → **Erfasst**; dann **Vorjahr**; dann **Kein Status**.
 
-## MT-59: File lock — single-writer (opt-in)
-**Preconditions:** Windows. Start the app with the lock enabled: set `BELEG_FILE_LOCK=1`
-before launching (`set BELEG_FILE_LOCK=1` then `python host.py`, or the exe from a shell
-with that variable). Have a saved `.belegtool` file, ideally on the shared/SMB store.
-**Steps:**
-1. Open the file in this instance.
-2. From a **second** instance (or another PC, also with `BELEG_FILE_LOCK=1`), try to open
-   the **same** file.
-3. While it's open in instance 1, try to **rename or delete** the file in Windows Explorer.
-4. Back in instance 1: rename a node and **Save** (Ctrl+S). Then close the window.
-5. After closing, open the file again from the second instance.
-**Expected:** (2) the second instance refuses with *„Diese Datei wird bereits bearbeitet …"*.
-(3) Explorer refuses to rename/delete (file in use). (4) Save succeeds in place; no `.bak`
-file remains afterwards. (5) Once instance 1's window is closed the file is free and the
-second instance opens it. *Not obvious:* with `BELEG_FILE_LOCK` unset (default) none of this
-applies — the file is not locked at all.
+**Erwartet:**
+- Am Zeilenende erscheint ein Punkt, der die Farbe wechselt: **gelb** (Zu erfassen) → **grün** (Erfasst) → **rot** (Vorjahr).
+- **Kein Status** entfernt den Punkt vollständig.
+
+---
+
+## MT-52: Status am Ordner gilt für den ganzen Inhalt
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet. Der Ordner **02 Bank** enthält Dokumente und den Unterordner **Darlehen** mit weiteren Dokumenten.
+
+**Schritte:**
+1. Rechtsklick auf den Ordner **02 Bank** → unter **Status (gesamter Inhalt)** auf **Erfasst** klicken.
+2. Den Unterordner **Darlehen** aufklappen und die Zeilen ansehen.
+3. Einmal **↶ Rückgängig** klicken.
+
+**Erwartet:**
+- **Jedes** Dokument darin wird grün – in **02 Bank** selbst **und** im Unterordner **Darlehen**.
+- Der Ordner hat keinen eigenen Status; er zeigt die Punkte seines Inhalts.
+- **Ein** Rückgängig-Schritt nimmt die ganze Übertragung zurück.
+
+---
+
+## MT-53: Sammelpunkte am Ordner und der schwarze Punkt
+
+**Beispieldateien:** `Beispielmappe_mit_Status.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe_mit_Status.belegtool` ist geöffnet. Der Ordner **04 Statusmix** enthält ein Dokument mit Status **Erfasst** (grün), eines mit **Vorjahr** (rot) und eines **ohne Status**.
+
+**Schritte:**
+1. Den Ordner **04 Statusmix** zuklappen und seine Zeile ansehen.
+2. Den Ordner aufklappen, `Beleg_ohne_Status.pdf` rechtsklicken und einen Status setzen.
+
+**Erwartet:**
+- Schritt 1: Der Ordner zeigt einen **roten** und einen **grünen** Punkt – je enthaltenem Status einen, in der Reihenfolge rot → gelb → grün – **und zusätzlich einen schwarzen Punkt**.
+- Der schwarze Punkt bedeutet: „Ein Teil des Inhalts hat einen Status, ein Teil nicht.“
+- Schritt 2: Sobald auch das dritte Dokument einen Status hat, **verschwindet der schwarze Punkt**.
+
+---
+
+## MT-54: Statusregeln beim Zusammenführen und Splitten
+
+**Beispieldateien:** `Beispielmappe_mit_Status.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe_mit_Status.belegtool` ist geöffnet, der Ordner **01 Eingangsrechnungen** ist aufgeklappt. Darin sind `Telefon_2025-01.pdf` und `Strom_Abschlag_2025-01.pdf` grün (Erfasst), `Buerobedarf_Quittung.pdf` ist rot (Vorjahr) und `Sammelrechnung_Wartung.pdf` (4 Seiten) ist gelb (Zu erfassen).
+
+**Schritte:**
+1. Die beiden grünen Dokumente mit Strg+Klick markieren → Rechtsklick auf eines davon → **Zusammenführen → 1 PDF (2)**.
+2. Das eben entstandene grüne Dokument und das rote `Buerobedarf_Quittung.pdf` markieren → **Zusammenführen → 1 PDF (2)**.
+3. Rechtsklick auf `Sammelrechnung_Wartung.pdf` → **Splitten ▸** → **pro Seite**.
+
+**Erwartet:**
+- Schritt 1: Das zusammengeführte Dokument bleibt **grün** (alle Teile hatten denselben Status).
+- Schritt 2: Das Ergebnis hat **keinen Status** (unterschiedliche Status der Teile).
+- Schritt 3: **Jeder** der vier Teile trägt den Status des Originals (gelb).
+
+---
+
+## MT-55: Roter Punkt vorn – „Komprimierung noch nicht entschieden“
+
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist frisch importiert.
+
+**Schritte:**
+1. Den **Anfang** der Zeile ansehen, bevor der Eintrag angeklickt wird.
+2. Den Eintrag anklicken, in der Auswahlliste ein Verfahren wählen und auf **❓ Lesbarkeit geprüft** klicken.
+
+**Erwartet:**
+- Schritt 1: Ein **roter Punkt vorn** in der Zeile bedeutet „Komprimierung noch nicht entschieden“ (so lautet auch der Hinweistext).
+- Schritt 2: Nach dem Übernehmen **verschwindet** der rote Punkt vorn.
+- *Nicht offensichtlich:* Lässt sich ein Dokument gar nicht verkleinern, verschwindet der Punkt ebenfalls (automatisch entschieden) – und **bleibt nach Speichern und erneutem Öffnen weg**.
+- Nicht verwechseln: Der Punkt **vorn** betrifft die Komprimierung, die Punkte am **Zeilenende** den Status.
+
+---
+
+## MT-55b: Punkte verschwinden von selbst, wenn nichts einzusparen ist
+
+**Beispieldateien:** `Viele_kleine_Belege.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet.
+
+**Schritte:**
+1. Die Datei öffnen, alle Ordner aufklappen und die roten Punkte vorn beobachten, **ohne** einen Eintrag anzuklicken.
+
+**Erwartet:**
+- Innerhalb weniger Sekunden verschwinden die roten Punkte bei den 24 Text-Belegen in **Eingang** und **Ausgang** von selbst – ein Hintergrundlauf prüft die kleinen Dokumente (bis 5 Seiten).
+- Die beiden Dokumente im Ordner **Scans** **behalten** ihren roten Punkt, bis eine Komprimierung übernommen wird – sie lassen sich verkleinern.
+- Die Statusleiste kann währenddessen kurz **⚙ Komprimiere …** anzeigen.
+- *Nicht offensichtlich:* **Große** Dokumente (mehr als 5 Seiten) behalten den Punkt, bis sie angeklickt werden – sie vorab zu prüfen wäre zu aufwendig.
+
+---
+
+## MT-56: Umbenennen mit F2
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
+
+**Schritte:**
+1. Einen Eintrag markieren und **F2** drücken.
+2. Einen neuen Namen tippen und mit **Enter** bestätigen; bei einem zweiten Versuch mit **Esc** abbrechen.
+
+**Erwartet:**
+- Der Name wird zum Eingabefeld direkt in der Zeile (wie beim Klick auf einen bereits markierten Namen).
+- **Enter** übernimmt, **Esc** verwirft.
+- Das funktioniert auch in einer gefilterten Tag-Ansicht – Umbenennen ist eine inhaltliche Änderung.
+
+---
+
+## MT-57: Hilfe-Fenster, Sprachflaggen, Meldelinks
+
+**Voraussetzungen:** BelegTool ist gestartet.
+
+**Schritte:**
+1. In der Symbolleiste auf **❓ Hilfe** klicken.
+2. Auf die Flagge **🇬🇧** klicken, danach auf **🇩🇪**.
+3. In der Fußzeile auf **▸ GitHub** und auf **✉ E-Mail** klicken.
+4. Das Fenster mit **Esc** oder **✕** schließen.
+
+**Erwartet:**
+- Es öffnet sich ein Fenster mit Anleitungen in der aktuellen Sprache der Oberfläche (Englisch, falls diese Sprache noch nicht übersetzt ist).
+- Die Flaggen schalten auf den maßgeblichen **englischen** bzw. **deutschen** Text um.
+- **▸ GitHub** öffnet im Browser eine vorausgefüllte Seite für eine neue Meldung; **✉ E-Mail** öffnet einen vorausgefüllten E-Mail-Entwurf.
+
+---
+
+## MT-58: Exportoptionen (Inhaltsverzeichnis / Stichwortverzeichnis / Lesezeichen)
+
+**Beispieldateien:** `Beispielmappe_mit_Tags.belegtool`, `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe_mit_Tags.belegtool` ist geöffnet.
+
+**Schritte:**
+1. Auf **⬇ Export PDF** klicken.
+2. Die Kontrollkästchen im Dialog ansehen: **Inhaltsverzeichnis** (darunter **mit anklickbaren Links**), **Stichwortverzeichnis (nach Tags)** (darunter **mit anklickbaren Links**), **PDF-Lesezeichen (Seitenleiste)**.
+3. Alles angehakt lassen → **Exportieren** → speichern → das PDF öffnen.
+4. Erneut exportieren, diesmal ohne **Stichwortverzeichnis** und ohne **mit anklickbaren Links** beim Inhaltsverzeichnis; die beiden PDFs vergleichen.
+5. `Beispielmappe.belegtool` (ohne Tags) öffnen und den Exportdialog ansehen.
+
+**Erwartet:**
+- Der vorgeschlagene Dateiname ist der **Dokumentname + `.pdf`** (nicht „Export.pdf“).
+- Das erste PDF hat ein Inhaltsverzeichnis **und** eine Seite „Stichwortverzeichnis“, die zu jedem Tag die Dokumente mit Seitenzahl nennt. Die Einträge sind anklickbar; die Seitenleiste zeigt Lesezeichen.
+- Im zweiten PDF fehlt das Stichwortverzeichnis und die Einträge des Inhaltsverzeichnisses sind nicht anklickbar. Ohne den Haken bei den Lesezeichen fehlt die Gliederung in der Seitenleiste.
+- Schritt 5: *Nicht offensichtlich:* Enthält das Dokument **keine Tags**, ist das Stichwortverzeichnis **ausgegraut** (Hinweistext „Keine Tags im Dokument“).
+
+---
+
+## MT-59: Dateisperre – nur eine Person bearbeitet (muss eingeschaltet werden)
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** Die Dateisperre ist **standardmäßig aus**. Zum Einschalten vor dem Start von BelegTool die Umgebungsvariable `BELEG_FILE_LOCK` auf `1` setzen: Windows-Suche → „Umgebungsvariablen für dieses Konto bearbeiten“ → **Neu…** → Name `BELEG_FILE_LOCK`, Wert `1` → OK. Danach BelegTool neu starten. Die Beispielmappe liegt idealerweise auf einem gemeinsam genutzten Netzlaufwerk.
+
+**Schritte:**
+1. Die Datei in BelegTool öffnen.
+2. BelegTool **ein zweites Mal starten** (oder an einem zweiten PC, dort ebenfalls mit gesetzter Variable) und **dieselbe** Datei öffnen.
+3. Während die Datei im ersten BelegTool offen ist: im Windows-Explorer versuchen, sie **umzubenennen oder zu löschen**.
+4. Im ersten BelegTool einen Eintrag umbenennen und mit **Strg+S** speichern. Danach das Fenster schließen.
+5. Die Datei jetzt im zweiten BelegTool öffnen.
+
+**Erwartet:**
+- Schritt 2: Das zweite BelegTool lehnt ab: „Diese Datei wird bereits bearbeitet und kann nur von einer Person gleichzeitig geöffnet werden.“
+- Schritt 3: Der Explorer verweigert Umbenennen und Löschen (Datei in Verwendung).
+- Schritt 4: Das Speichern gelingt an Ort und Stelle; im Ordner bleibt danach **keine** `.bak`-Datei zurück.
+- Schritt 5: Nach dem Schließen des ersten Fensters ist die Datei frei und lässt sich öffnen.
+- *Nicht offensichtlich:* Ohne die Variable gilt nichts davon – die Datei wird dann gar nicht gesperrt.
+
+**Hinweis:** Nach dem Test die Umgebungsvariable wieder **löschen**, sonst bleibt die Sperre für alle weiteren Tests eingeschaltet.

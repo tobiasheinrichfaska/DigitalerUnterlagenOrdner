@@ -1,166 +1,153 @@
-# 06 — Status bar, render cache & compression UX
+# 06 — Statusleiste, Vorschau-Cache und Komprimierungsablauf
 
-Covers the bottom **status bar**, the **render-cache** behaviour, and the
-compression workflow (default-to-smallest, remembered choice, carry-on-split,
-cancel-on-remove). Launch with `python host.py` and open a document with several
-multi-page nodes (a real scanned `.belegtool` is ideal).
+Die **Statusleiste** am unteren Fensterrand, das Verhalten des **Vorschau-Caches** und der Ablauf der Komprimierung: kleinste Fassung als Vorgabe, gemerkte Auswahl, Übernahme beim Splitten, Abbruch beim Entfernen.
 
 ---
 
-## MT-40: Status bar — background activity & cache gauge
+## MT-40: Statusleiste – Hintergrundarbeit und Cache-Anzeige
 
-**Preconditions:** A document with a few multi-page nodes is open.
+**Beispieldateien:** `Grosses_Dokument_120_Seiten.pdf`, `Farbscan_Rechnung_6_Seiten.pdf`, `Kontoauszug_8_Seiten.pdf`
 
-**Steps:**
-1. Look at the **bottom bar**. Note the right-hand readout `📦 Cache x/y MB · n/m Seiten`.
-2. Click through several nodes quickly and watch the left side of the bar.
-3. Hover the cache readout.
+**Voraussetzungen:** BelegTool ist gestartet; die drei Dateien sind importiert.
 
-**Expected:**
-- Left side shows live background work: **Komprimiere N**, **Vorschau lädt N**,
-  **Cache füllt** — or **Bereit** when idle. *Not obvious:* **Komprimiere** counts
-  **distinct nodes**, not operations.
-- The cache readout climbs as pages render: **used / budget MB** and
-  **cached / total pages**. *Not obvious:* cached pages can **exceed** the document's
-  page count — a node caches its plain render *and* its compressed variant separately.
-- The tooltip shows the free MB.
+**Schritte:**
+1. Die **Leiste am unteren Rand** ansehen. Rechts steht die Anzeige `📦 Cache x/y MB · n/m Seiten`.
+2. Schnell zwischen den Einträgen hin- und herklicken und die linke Seite der Leiste beobachten.
+3. Beim Farbscan die Auswahlliste der Verfahren öffnen und die linke Seite beobachten.
+4. Mit der Maus auf der Cache-Anzeige verweilen.
 
----
-
-## MT-41: Cache grow / shrink buttons (＋ / −)
-
-**Steps:**
-1. Browse a large document until the cache MB rises.
-2. Click **＋** (next to the cache readout) a few times.
-3. Click **−** several times, below the current usage.
-
-**Expected:**
-- **＋** raises the budget by 50 MB each click; the prefetch immediately starts
-  **filling the new headroom** (watch "Cache füllt" and the MB climb).
-- **−** lowers the budget by 50 MB (floor 50 MB) and, if usage was above the new
-  budget, **frees memory right away** (the used-MB drops to fit).
+**Erwartet:**
+- Links steht, was im Hintergrund läuft: **⚙ Komprimiere N**, **Vorschau lädt N**, **Cache füllt** – oder **Bereit**, wenn nichts zu tun ist.
+- *Nicht offensichtlich:* **Komprimiere N** zählt **Dokumente**, nicht einzelne Rechenschritte.
+- Die Cache-Anzeige steigt, während Seiten gezeichnet werden: **belegt / Budget in MB** und **zwischengespeicherte / gesamte Seiten**.
+- *Nicht offensichtlich:* Die Zahl der zwischengespeicherten Seiten kann die Seitenzahl des Dokuments **übersteigen** – die normale und die komprimierte Darstellung eines Dokuments werden getrennt gespeichert.
+- Schritt 4: Der Hinweistext nennt den freien Speicher („Vorschau-Cache · … MB frei“).
 
 ---
 
-## MT-42: Background prefetch warms the whole document
+## MT-41: Cache vergrößern und verkleinern (＋ / −)
 
-**Preconditions:** A document larger than a couple of nodes; let it sit idle.
+**Beispieldateien:** `Grosses_Dokument_120_Seiten.pdf`
 
-**Steps:**
-1. Open a document (or import files) and **don't click anything**.
-2. Watch the cache `n/m Seiten` for ~10–30 s.
-3. Select a node, then jump to a far-away node and scroll.
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert.
 
-**Expected:**
-- Warming **starts on its own after opening/importing** (no node click needed) and
-  keeps climbing toward the budget across the **whole** document, nearest nodes first.
-- Pages you scroll to are usually **already rendered** (little or no "Seite N"
-  placeholder). *Not obvious:* warming **pauses while a compression runs** (so it gets
-  the CPU) and **resumes automatically** when the compression finishes.
+**Schritte:**
+1. Im großen Dokument scrollen, bis die MB-Anzeige des Caches gestiegen ist.
+2. Einige Male auf **＋** neben der Cache-Anzeige klicken.
+3. Mehrmals auf **−** klicken – bis unter die aktuell belegte Menge.
 
----
-
-## MT-43: Compression defaults to the smallest variant (≤ 5 pages)
-
-**Preconditions:** A node with **2–5 pages** that compresses well (a scan).
-
-**Steps:**
-1. Select the node. Wait a moment.
-2. Open the compression dropdown (top of the preview).
-3. Select a different method, then re-select the node later.
-
-**Expected:**
-- On display, the preview **switches to the smallest variant by default** (the
-  dropdown shows that method selected, with sizes). *Not obvious:* this only happens
-  automatically for nodes **≤ 5 pages**; larger nodes stay on the original until you
-  open the dropdown.
-- The **"unkomprimierte Fassung"** entry shows the source size.
-- Your last chosen method is **remembered** for that node when you come back.
-- *Low-res files:* if nothing is smaller than the original, only **"unkomprimierte
-  Fassung"** is offered — that is correct.
+**Erwartet:**
+- **＋** erhöht das Budget je Klick um 50 MB; das Vorausladen beginnt sofort, den neuen Platz zu **füllen** („Cache füllt“, die MB steigen).
+- **−** senkt das Budget je Klick um 50 MB (Untergrenze 50 MB). Lag die Belegung über dem neuen Budget, wird **sofort Speicher freigegeben** – die belegten MB fallen auf das Budget.
 
 ---
 
-## MT-44: Apply compression — "Lesbarkeit geprüft"
+## MT-42: Vorausladen wärmt das ganze Dokument an
 
-**Steps:**
-1. On a node, pick a method, check the preview is readable.
-2. Click **❓ Lesbarkeit geprüft**.
-3. Save, close, reopen the file; select the node.
+**Beispieldateien:** `Grosses_Dokument_120_Seiten.pdf`, `Kontoauszug_8_Seiten.pdf`
 
-**Expected:**
-- The preview updates to the committed result **immediately** (no manual scroll
-  needed). The button shows **✓ übernommen**.
-- *Not obvious:* an **un-applied** variant is **not saved** — only after "Lesbarkeit
-  geprüft" is the compressed result stored. After reopening, a committed node shows
-  **"bereits komprimiert (keine Quelle)"** and can't be re-compressed/reset.
+**Voraussetzungen:** BelegTool ist frisch gestartet.
 
----
+**Schritte:**
+1. Beide Dateien importieren und danach **nichts anklicken**.
+2. Die Anzeige `n/m Seiten` etwa 10–30 Sekunden lang beobachten.
+3. Einen Eintrag anklicken, zum anderen wechseln und dort scrollen.
 
-## MT-45: Split carries the compression; cancel on split
-
-**Preconditions:** A multi-page node with an **applied** compression (MT-44), source
-still present (not yet saved+reopened).
-
-**Steps:**
-1. Right-click the node → **Splitten ▸ pro Seite**.
-2. Inspect the resulting one-page parts (open the compression dropdown on one).
-3. Separately: select a large node so it starts compressing (watch **Komprimiere 1**),
-   then immediately split or delete it.
-
-**Expected:**
-- The split parts arrive **already compressed** (same quality — verbatim slice) **and**
-  still editable; no recompute needed. *Not obvious:* if the winning method was the
-  structural **pikepdf** one, parts recompute from source instead.
-- Splitting/deleting a node that is **currently compressing** **stops** that
-  compression — the **Komprimiere N** count drops (it doesn't run to completion on a
-  node that's gone).
+**Erwartet:**
+- Das Anwärmen **beginnt von selbst nach dem Öffnen oder Importieren** (ohne Klick) und läuft über das **ganze** Dokument weiter in Richtung des Budgets – die nächstliegenden Einträge zuerst.
+- Seiten, zu denen Sie scrollen, sind meist **schon gezeichnet** (kaum Platzhalter).
+- *Nicht offensichtlich:* Das Anwärmen **pausiert, während eine Komprimierung läuft**, und setzt danach von selbst wieder ein.
 
 ---
 
-## MT-46: Compression variants persist across reload
+## MT-43: Die kleinste Fassung ist die Vorgabe (bis 5 Seiten)
 
-**Preconditions:** A node that compresses well, **not** yet applied.
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`, `Farbscan_Rechnung_6_Seiten.pdf`, `Rechnung_5_Seiten.pdf`
 
-**Steps:**
-1. Select the node; open the compression dropdown and let the method **sizes** load
-   (the variants are now computed for this session). Do **not** click "Lesbarkeit
-   geprüft".
-2. **Save** the file (💾). Close the app. Reopen it and open the same file.
-3. Select that node and open the compression dropdown again.
+**Voraussetzungen:** BelegTool ist gestartet; die drei Dateien sind importiert.
 
-**Expected:**
-- The method list and previews come back **instantly** — no "Kompression läuft …",
-  no multi-second wait. The variants were embedded in the `.belegtool` (as hidden
-  per-node attachments) and reloaded. *Not obvious:* the file still opens normally in
-  any PDF viewer (the variants are attachments, not pages); a committed node has no
-  source and stores no variants.
+**Schritte:**
+1. Den Eintrag `Farbscan_Rechnung_3_Seiten` anklicken und einen Moment warten.
+2. Die Auswahlliste der Verfahren über der Vorschau öffnen.
+3. Ein anderes Verfahren wählen, einen anderen Eintrag anklicken und wieder zurückkehren.
+4. `Farbscan_Rechnung_6_Seiten` anklicken und warten.
+5. `Rechnung_5_Seiten` anklicken, warten und die Auswahlliste öffnen.
+
+**Erwartet:**
+- Schritt 1: Die Vorschau wechselt **von selbst auf die kleinste Fassung**; die Liste zeigt dieses Verfahren mit Größe und dem Zusatz **„· beste“**.
+- Der Eintrag **„unkomprimierte Fassung“** nennt die Größe der Quelle.
+- Schritt 3: Das zuletzt gewählte Verfahren ist für dieses Dokument **gemerkt**.
+- Schritt 4: *Nicht offensichtlich:* Die automatische Vorgabe gilt nur bis **5 Seiten**. Größere Dokumente bleiben auf dem Original, bis Sie die Liste öffnen.
+- Schritt 5: Bei einem reinen Text-PDF ist nichts kleiner als das Original – die Liste bietet nur **„unkomprimierte Fassung“** an. Das ist richtig so.
 
 ---
 
-## MT-47: Red "undecided" dot stays gone for incompressible docs (move + reopen)
+## MT-44: Komprimierung übernehmen – „Lesbarkeit geprüft“
 
-**Preconditions:** A document with **many (≥ 20) low-resolution / already-small leaf
-documents** that have **no worthwhile compression** — e.g. a folder full of small,
-mostly-text single-page PDFs. (Each shows a **red dot at the front of its row** until
-its compression has been evaluated.)
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
 
-**Steps:**
-1. Open the document and **wait a few seconds** without clicking — the background sweep
-   evaluates the small leaves. Watch the red front dots disappear as each resolves.
-2. Once the red dots are gone, **drag one of those leaves** to a different folder /
-   position (or use Insert to move it).
-3. **Save** (💾), close the app, and **reopen** the same file.
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert und angeklickt.
 
-**Expected:**
-- After the sweep, the incompressible leaves show **no red front dot** (nothing smaller
-  was found → the decision is made).
-- **Moving** a leaf does **not** bring its red dot back — and crucially, moving one does
-  not make *other* already-resolved leaves light up again. *(This was the bug fixed in
-  v3.9.5: with more than ~16 such documents the verdict used to be forgotten, so the red
-  dots reappeared on move or reopen.)*
-- After **reopen**, the incompressible leaves are **still dot-free** without any new wait
-  — the "nothing smaller found" verdict was saved in the file.
-- *Contrast:* a leaf that **does** have a smaller variant available but not yet applied
-  **keeps** its red dot (a decision is still pending) — that is correct, not a bug.
+**Schritte:**
+1. Ein Verfahren wählen und prüfen, ob die Vorschau gut lesbar ist.
+2. Auf **❓ Lesbarkeit geprüft** klicken.
+3. Speichern, das Fenster schließen, die Datei erneut öffnen und den Eintrag anklicken.
 
+**Erwartet:**
+- Schritt 2: Die Vorschau zeigt **sofort** das übernommene Ergebnis (kein Scrollen nötig). Die Schaltfläche zeigt **✓ übernommen**.
+- *Nicht offensichtlich:* Eine **nicht übernommene** Fassung wird nicht zum Dokument – erst „Lesbarkeit geprüft“ macht das komprimierte Ergebnis verbindlich.
+- Schritt 3: Das übernommene Dokument zeigt **„bereits komprimiert (keine Quelle)“** und lässt sich weder erneut komprimieren noch zurücksetzen.
+
+---
+
+## MT-45: Splitten übernimmt die Komprimierung; Abbruch beim Entfernen
+
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`, `Grosses_Dokument_120_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; beide Dateien sind importiert. Beim Farbscan ist ein JPEG-Verfahren mit **❓ Lesbarkeit geprüft** übernommen, das Dokument aber noch **nicht** gespeichert und neu geöffnet.
+
+**Schritte:**
+1. Rechtsklick auf den Farbscan → **Splitten ▸** → **pro Seite**.
+2. Einen der entstandenen Einseiter anklicken und die Auswahlliste öffnen.
+3. `Grosses_Dokument_120_Seiten` anklicken, die Auswahlliste der Verfahren öffnen (links unten erscheint **⚙ Komprimiere 1**) und den Eintrag **sofort** mit **Entf** löschen.
+
+**Erwartet:**
+- Schritt 1–2: Die Teile kommen **bereits komprimiert** an (gleiche Qualität) und bleiben bearbeitbar; es muss nichts neu berechnet werden.
+- *Nicht offensichtlich:* War das beste Verfahren **Struktur (Farbe erhalten)**, werden die Teile stattdessen aus der Quelle neu berechnet.
+- Schritt 3: Das Löschen (oder Splitten) eines Dokuments, das **gerade komprimiert wird**, **stoppt** diese Berechnung – die Zahl hinter **Komprimiere** fällt, statt dass für ein nicht mehr vorhandenes Dokument weitergerechnet wird.
+
+---
+
+## MT-46: Berechnete Fassungen bleiben über das Speichern hinweg erhalten
+
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert. **Nicht** auf „Lesbarkeit geprüft“ klicken.
+
+**Schritte:**
+1. Den Eintrag anklicken und warten, bis die Verfahren mit ihren **Größen** in der Liste stehen.
+2. Mit **💾** speichern und im Dialog **Wie geplant speichern** wählen. BelegTool schließen, neu starten und die Datei öffnen.
+3. Den Eintrag anklicken und die Auswahlliste öffnen.
+
+**Erwartet:**
+- Die Verfahren und ihre Vorschauen sind **sofort** da – kein „Kompression läuft …“, keine sekundenlange Wartezeit. Die berechneten Fassungen wurden in der `.belegtool`-Datei mitgespeichert.
+- *Nicht offensichtlich:* Die Datei lässt sich weiterhin in jedem PDF-Betrachter öffnen – die Fassungen sind unsichtbare Anhänge, keine Seiten. Ein bereits übernommenes Dokument hat keine Quelle mehr und speichert keine Fassungen.
+
+---
+
+## MT-47: Roter Punkt „noch nicht entschieden“ bleibt weg (Verschieben und erneutes Öffnen)
+
+**Beispieldateien:** `Viele_kleine_Belege.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet. Die Beispieldatei enthält 24 einseitige Text-Belege, bei denen sich **nichts einsparen** lässt, und im Ordner **Scans** zwei Dokumente, die sich verkleinern lassen. Jedes Dokument zeigt zunächst einen **roten Punkt vorn in der Zeile**.
+
+**Schritte:**
+1. Die Datei öffnen, alle Ordner aufklappen und **einige Sekunden warten**, ohne etwas anzuklicken. Beobachten, wie die roten Punkte verschwinden.
+2. Wenn die Punkte in **Eingang** und **Ausgang** weg sind: einen dieser Belege in den jeweils anderen Ordner **ziehen**.
+3. Über **▾ → Speichern unter…** speichern, BelegTool schließen und die gespeicherte Datei **erneut öffnen**.
+
+**Erwartet:**
+- Schritt 1: Die 24 Text-Belege verlieren ihren roten Punkt vorn von selbst (es wurde nichts Kleineres gefunden – die Entscheidung ist damit getroffen).
+- Schritt 2: Das **Verschieben** bringt den roten Punkt **nicht** zurück – auch nicht bei den **anderen**, bereits entschiedenen Belegen.
+- Schritt 3: Nach dem erneuten Öffnen sind die 24 Belege **weiterhin ohne Punkt**, ohne neue Wartezeit. Das Ergebnis „nichts Kleineres gefunden“ steht in der Datei.
+- *Gegenprobe:* Die beiden Dokumente im Ordner **Scans** **behalten** ihren roten Punkt – für sie gibt es eine kleinere Fassung, über die noch nicht entschieden wurde. Das ist richtig und kein Fehler.

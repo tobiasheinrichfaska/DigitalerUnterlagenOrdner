@@ -104,6 +104,24 @@ def test_path_import_still_accepts_a_real_file(tmp_path):
     assert result.data.getvalue().startswith(b"%PDF")
 
 
+# --- KNOWN GAP: the app's own single-file .pdf path skips the gate ---------
+# Found 2026-10-10 while building the manual-test samples (MT-05). The three tests above
+# call UniversalImporter.convert() directly; the app does not — CoreApi._import_path hands
+# *.pdf straight to PDFStorage, so a disguised EXE becomes an empty 0-page node, silently.
+# strict xfail: fails today by design, and turns red the moment the gap is closed, so the
+# marker cannot outlive the fix. See CLAUDE.md → Known Limitations.
+@pytest.mark.xfail(strict=True, reason="single-file .pdf import bypasses verify_content_matches_extension")
+def test_app_import_refuses_exe_masquerading_as_pdf(tmp_path):
+    from core.api import CoreApi
+    f = tmp_path / "rechnung.pdf"
+    f.write_bytes(b"MZ\x90\x00 not a pdf at all")
+    api = CoreApi()
+    session = api.open()["session"]
+    resp = api.import_paths(session, [str(f)])
+    assert resp["ok"] is False
+    assert "Programm" in resp["error"]
+
+
 # --- text/HTML render bound (audit 2026-06-16, finding #1) ----------------
 from infra.limits import BOMB_CAP_BYTES
 from universal_importer.converters import html_to_pdf, txt_to_pdf

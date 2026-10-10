@@ -64,6 +64,9 @@ packaging/out/
 
 # User documents — never commit real .belegtool files (may contain personal data)
 *.belegtool
+# …except the synthetic samples of the generated tester kit (invented data only,
+# built by scripts/build_testkit.py)
+!manual_tests/testpakete/**/*.belegtool
 
 # Live DATEV connection config next to the exe (site-specific host/auth). The shipped
 # template datev.config.example.json IS tracked; the real datev.config.json is not.

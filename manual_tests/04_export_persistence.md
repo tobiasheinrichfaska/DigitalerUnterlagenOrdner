@@ -1,121 +1,142 @@
-# 04 — Export & persistence
+# 04 — Export, Speichern und Öffnen
 
-Covers exporting to PDF and saving/reloading the `.belegtool` format, in the
-**React/pywebview UI**. Toolbar: **⬇ Export PDF** and **💾 Speichern**; opening is
-**📂 Öffnen**. There is no menu bar.
+PDF-Export (**⬇ Export PDF**), Speichern und erneutes Öffnen im Format `.belegtool` (**💾 Speichern**, **📂 Öffnen**).
 
 ---
 
-## MT-14: Export to a PDF with table of contents
+## MT-14: Export als PDF mit Inhaltsverzeichnis
 
-**Preconditions:** A document with several nodes/folders.
+**Beispieldateien:** `Beispielmappe_mit_Tags.belegtool`
 
-**Steps:**
-1. Click **⬇ Export PDF** (or **Strg+E**) — or Ctrl-select some nodes first and right-click
-   → **Auswahl als PDF exportieren (N)** (a single node → **Als PDF exportieren**).
-2. In the **export-options dialog**, leave **TOC**, **Stichwortverzeichnis** (only offered
-   when the document has tags) and **PDF-Lesezeichen** as desired, then confirm.
-3. Choose a target `.pdf` path (the default filename is the **document name + .pdf**) and save.
-4. Open the exported PDF in a normal PDF viewer.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe_mit_Tags.belegtool` ist geöffnet.
 
-**Expected:**
-- The PDF opens and contains **every exported node's pages**.
-- With TOC on, the first page(s) are a printed **table of contents** whose entries are
-  **clickable** and jump to the right page; the viewer's sidebar shows matching **bookmarks**;
-  a tag index appears when enabled.
-- A green **"✓ PDF exportiert (N …)"** notice appears on success.
+**Schritte:**
+1. Auf **⬇ Export PDF** klicken (oder **Strg+E**).
+2. Im Dialog „PDF exportieren“ **Inhaltsverzeichnis**, **Stichwortverzeichnis (nach Tags)** und **PDF-Lesezeichen (Seitenleiste)** angehakt lassen und auf **Exportieren** klicken.
+3. Einen Speicherort wählen – der vorgeschlagene Dateiname ist der **Dokumentname + .pdf** – und speichern.
+4. Das exportierte PDF in einem PDF-Betrachter öffnen.
+5. Zurück in BelegTool: einige Einträge mit Strg+Klick markieren → Rechtsklick auf einen davon → **Auswahl als PDF exportieren (N)**. (Bei einem einzelnen Eintrag heißt der Menüpunkt **Als PDF exportieren**.)
 
-**Split into several files (#13):**
-5. Export again; in the dialog tick **„In mehrere Dateien aufteilen"**, set a small
-   **max. Seiten pro Datei** (e.g. 2), pick a **Trennen bei** level, and confirm.
-   - **oberste Ordner** — a top-level folder is kept whole even if it exceeds the limit.
-   - **jeder Ordnergrenze** — a large folder is split across files, but each document stays whole.
-   - **mitten im Dokument** — a single document may be split across files at the page count.
+**Erwartet:**
+- Das PDF enthält die Seiten **aller** Dokumente der Mappe (18 Seiten Inhalt).
+- Davor stehen ein gedrucktes **Inhaltsverzeichnis** und ein **Stichwortverzeichnis**; die Einträge sind **anklickbar** und springen zur richtigen Seite. Die Seitenleiste des Betrachters zeigt passende **Lesezeichen**.
+- In BelegTool erscheint eine grüne Meldung **„✓ PDF exportiert (N Einträge)“**.
+- Schritt 5: Das PDF enthält nur die markierten Einträge. Solange etwas markiert ist, zeigt **⬇** die Anzahl als kleine Zahl am Symbol.
 
-**Expected (split):**
-- Several files are written next to the chosen name (e.g. `Export_Teil_1.pdf`, `…_Teil_2.pdf`);
-  the notice reads **„… — N Dateien"**.
-- Each part is a valid PDF with its **own TOC** that **cross-references** the other parts
-  (grey entries pointing at the other files).
-- *Not obvious:* with **mitten im Dokument**, a document split across two files shows its
-  **page range** in the name (e.g. `Rechnung (S. 1–2)` then `Rechnung (S. 3–4)`). Split mode
-  always renders a TOC and **ignores** the index / bookmarks / TOC-links checkboxes.
+**Schritte (Aufteilen in mehrere Dateien – ab Version 3.10.0):**
+6. Erneut exportieren. Im Dialog **In mehrere Dateien aufteilen** anhaken, bei **max. Seiten pro Datei** `6` eintragen, bei **Trennen bei:** eine Stufe wählen und exportieren. Mit jeder der drei Stufen wiederholen:
+   - **oberste Ordner** – ein Ordner der obersten Ebene bleibt zusammen, auch wenn er die Grenze überschreitet;
+   - **jeder Ordnergrenze** – ein großer Ordner wird auf mehrere Dateien verteilt, jedes Dokument bleibt aber ganz;
+   - **mitten im Dokument** – auch ein einzelnes Dokument darf an der Seitengrenze geteilt werden.
+
+**Erwartet (Aufteilen):**
+- Neben dem gewählten Namen entstehen mehrere Dateien (`…_Teil_1.pdf`, `…_Teil_2.pdf`, …); die Meldung lautet **„… — N Dateien“**. Mit der Beispielmappe und 6 Seiten sind es 3 Dateien (**oberste Ordner**), 4 Dateien (**jeder Ordnergrenze**) bzw. 3 Dateien (**mitten im Dokument**).
+- Jede Teildatei ist ein gültiges PDF mit **eigenem Inhaltsverzeichnis**, das auf die anderen Teile **verweist** (graue Einträge).
+- *Nicht offensichtlich:* Bei **mitten im Dokument** trägt ein geteiltes Dokument den **Seitenbereich** im Namen – hier `Sammelrechnung_Wartung.pdf (S. 1–3)` in der ersten und `Sammelrechnung_Wartung.pdf (S. 4–4)` in der zweiten Datei.
+- *Nicht offensichtlich:* Beim Aufteilen sind Stichwortverzeichnis und Lesezeichen im Dialog ausgegraut – die Teildateien bekommen immer ihr eigenes Inhaltsverzeichnis.
 
 ---
 
-## MT-15: Save and reload a `.belegtool` file (round-trip)
+## MT-15: Speichern und wieder öffnen (.belegtool)
 
-**Preconditions:** A document with folders, several nodes, mixed statuses, some collapsed
-folders, and at least one compressed node.
+**Beispieldateien:** `Beispielmappe_mit_Status.belegtool`, `Farbscan_Rechnung_3_Seiten.pdf`
 
-**Steps:**
-1. Press **💾 Speichern** (or **Strg+S**). On a document that has **no path yet**, this
-   prompts for a location (Save-as); afterwards it saves **in place** without asking.
-2. Click the small **caret (▾)** on the right of the Save button → a dropdown with
-   **„Speichern unter…"** appears; choose it and pick a new location.
-3. Close the window.
-4. **📂 Öffnen** the `.belegtool` file you just saved.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe_mit_Status.belegtool` ist geöffnet. Zur Vorbereitung:
+- `Farbscan_Rechnung_3_Seiten.pdf` importieren, ein Verfahren wählen und mit **❓ Lesbarkeit geprüft** übernehmen;
+- einen Ordner über den Pfeil **▾** zuklappen;
+- einen Eintrag umbenennen.
 
-**Expected:**
-- The tree comes back **exactly as before**: same folder structure, names, order, **node
-  ids**, statuses (dots), **collapsed** folders, tags, and compression state.
-- Previews render again (a striped placeholder may flash first).
-- *Not obvious:* the Save control is a **split-button** — the main part saves in place
-  (and clears the **"•"** dirty marker, showing a green **"✓ Gespeichert"** notice), the
-  **caret** opens the dropdown with **„Speichern unter…"** (always prompts for a new path).
-  The dropdown closes on **Esc**, on a click outside, or after you pick the entry.
+**Schritte:**
+1. Auf **💾 Speichern** klicken (oder **Strg+S**).
+2. Auf den kleinen Pfeil **▾** rechts neben **💾** klicken → **Speichern unter…** wählen und einen neuen Speicherort angeben.
+3. Das Fenster schließen.
+4. BelegTool starten und die eben gespeicherte Datei mit **📂 Öffnen** laden.
 
----
-
-## MT-17: Committed compression drops the source (irreversible)
-
-Verifies the v3.6.0 save policy: once a node is compressed ("Lesbarkeit geprüft"), the saved
-file keeps only the compressed result — the uncompressed original is dropped, and a reloaded
-committed node can no longer be re-compressed or reset.
-
-**Preconditions:** the app running (`python host.py`); a multi-page colour PDF imported as a node.
-
-**Steps:**
-1. Select the imported node. In the compression controls, pick a method (e.g.
-   **JPG (Farbe)** or **JPG (Graustufen)**) and click **✓ Lesbarkeit geprüft**.
-2. **💾 Speichern** the document as a `.belegtool` file.
-3. Close the window, then **📂 Öffnen** that saved `.belegtool` again.
-4. Select the same node and open the compression dropdown.
-
-**Expected:**
-- After saving, the file is noticeably smaller than the original import (only the compressed
-  result is stored, not the source). On reload the node still previews correctly (rendered
-  from the compressed bytes).
-- *Not obvious / important:* the compression dropdown for that node now shows
-  **"bereits komprimiert (keine Quelle)"** and is **disabled** — you cannot re-compress or
-  reset it, because the original was intentionally discarded on save. This is by design and
-  **irreversible**.
-- A node you did **not** compress before saving keeps its source and remains fully
-  compressible after reload.
+**Erwartet:**
+- Der Baum kommt **genau so** zurück: dieselben Ordner, Namen, Reihenfolge, Status-Punkte, **zugeklappte** Ordner, Tags und derselbe Komprimierungsstand.
+- Die Vorschau zeigt die Seiten wieder (ein gestreifter Platzhalter kann kurz aufblitzen).
+- *Nicht offensichtlich:* **💾** speichert eine bereits gespeicherte Datei **an Ort und Stelle** ohne Rückfrage; das **„•“** verschwindet und es erscheint **„✓ Gespeichert“**. Ein Dokument ohne Speicherort fragt beim ersten Speichern nach dem Ziel.
+- *Ab Version 3.10.0:* Speichern ist eine **geteilte Schaltfläche** – der Hauptteil speichert, der Pfeil **▾** öffnet das Menü mit **Speichern unter…** (fragt immer nach einem neuen Ziel). Das Menü schließt mit **Esc**, bei einem Klick daneben oder nach der Auswahl. In älteren Versionen stehen dafür zwei getrennte Schaltflächen in der Symbolleiste.
 
 ---
 
-## MT-19: Save dialog — store compression alternatives or not
+## MT-15b: Datei per Doppelklick öffnen (Dateizuordnung)
 
-Verifies the save-time choice that appears only when there are **computed-but-unapplied**
-compression alternatives to embed.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Preconditions:** the app running; a multi-page colour PDF imported as a node.
+**Voraussetzungen:** BelegTool ist **aus dem Microsoft Store** installiert und im Moment **nicht** gestartet. (Die ZIP-Version registriert keine Dateizuordnung – dort ist dieser Test nicht durchführbar.)
 
-**Steps:**
-1. Import the node but **do not** click "Lesbarkeit geprüft". Select it and open the
-   **compression dropdown** so the methods compute (you'll see method sizes appear).
-2. Press **💾 Speichern** (Ctrl+S) and choose a path.
-3. Observe the dialog, then click **Wie geplant speichern**. Note the file size.
-4. Repeat the save to a second file, this time clicking **Original speichern**. Compare sizes.
+**Schritte:**
+1. Im Windows-Explorer das Symbol und den Dateityp von `Beispielmappe.belegtool` ansehen.
+2. Die Datei **doppelklicken**.
+3. BelegTool schließen. Rechtsklick auf die Datei → **Öffnen mit**.
 
-**Expected:**
-- A dialog **„Komprimierungs-Alternativen speichern?"** appears with three buttons:
-  **Wie geplant speichern · Original speichern · Abbrechen**.
-- *Not obvious:* the dialog appears **only** when alternatives exist. If you never opened the
-  compression dropdown (nothing computed), or every node is committed, Save proceeds **without**
-  the dialog.
-- **Wie geplant** → larger file; reopening shows the compression options instantly (no
-  "Kompression läuft …"). **Original speichern** → smaller file; reopening recomputes the
-  options on demand. **Abbrechen** → nothing is saved; the title bar still shows unsaved
-  changes (•).
+**Erwartet:**
+- Schritt 1: Der Explorer zeigt als Typ **„BelegTool-Dokument“** und das BelegTool-Symbol.
+- Schritt 2: BelegTool startet und zeigt die Beispielmappe direkt an – ohne den Umweg über **📂 Öffnen**.
+- Schritt 3: **BelegTool** wird in der Liste „Öffnen mit“ angeboten.
+- *Nicht offensichtlich:* Sind mehrere BelegTool-Varianten installiert (z. B. Store und eine ältere Testversion), kann Windows beim ersten Doppelklick fragen, welche App die Datei öffnen soll.
+
+---
+
+## MT-15c: Ein einzelnes PDF mit „Öffnen“ laden
+
+**Beispieldateien:** `Rechnung_5_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet (leeres Dokument, keine ungespeicherten Änderungen).
+
+**Schritte:**
+1. Auf **📂 Öffnen** klicken. Im Dateidialog den Dateityp auf **„PDF (*.pdf)“** stellen und `Rechnung_5_Seiten.pdf` wählen.
+2. Den Eintrag im Baum anklicken.
+3. Über **▾ → Speichern unter…** als `.belegtool` an einem neuen Ort speichern.
+
+**Erwartet:**
+- Schritt 1: Das PDF wird als **neues Dokument** geöffnet. Der Dokumenttitel ist der Dateiname („Rechnung_5_Seiten“); im Baum steht ein Eintrag mit 5 Seiten.
+- Schritt 3: Es entsteht eine `.belegtool`-Datei; die ursprüngliche PDF-Datei bleibt unverändert.
+- *Unterschied zu Importieren:* **📂 Öffnen** ersetzt das angezeigte Dokument, **📥 Importieren** fügt die Datei dem geöffneten Dokument hinzu.
+
+**Hinweis:** **💾 Speichern** (ohne „unter…“) schreibt bei einem so geöffneten PDF **direkt in die PDF-Datei zurück**. Sie bleibt ein normales PDF, das jeder Betrachter öffnet, wird dabei aber überschrieben. Wer das Original behalten will, nimmt **Speichern unter…**.
+
+---
+
+## MT-17: Übernommene Komprimierung verwirft die Quelle (nicht umkehrbar)
+
+Sobald ein Dokument komprimiert übernommen („Lesbarkeit geprüft“) und gespeichert ist, enthält die Datei nur noch das komprimierte Ergebnis. Das unkomprimierte Original wird verworfen.
+
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert.
+
+**Schritte:**
+1. Den Eintrag anklicken, ein Verfahren wählen (z. B. **JPEG (Farbe)** oder **JPEG (Graustufen)**) und auf **❓ Lesbarkeit geprüft** klicken.
+2. Mit **💾 Speichern** als `.belegtool` speichern.
+3. Das Fenster schließen, BelegTool starten und die gespeicherte Datei mit **📂 Öffnen** laden.
+4. Denselben Eintrag anklicken und die Auswahlliste der Verfahren ansehen.
+
+**Erwartet:**
+- Die gespeicherte Datei ist deutlich **kleiner** als die importierte PDF-Datei (im Explorer vergleichen). Nach dem Öffnen wird das Dokument weiterhin korrekt angezeigt.
+- *Wichtig:* Die Auswahlliste zeigt **„bereits komprimiert (keine Quelle)“** und ist **gesperrt**. Erneutes Komprimieren und Zurücksetzen sind nicht mehr möglich, weil das Original beim Speichern absichtlich verworfen wurde. Das ist gewollt und **nicht umkehrbar**.
+- Ein Dokument, das vor dem Speichern **nicht** übernommen wurde, behält seine Quelle und bleibt nach dem Öffnen voll komprimierbar.
+
+---
+
+## MT-19: Speichern-Dialog – Komprimierungs-Alternativen mitspeichern oder nicht
+
+Die Rückfrage erscheint nur, wenn es **berechnete, aber noch nicht übernommene** Komprimierungs-Alternativen gibt.
+
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert. **Nicht** auf „Lesbarkeit geprüft“ klicken.
+
+**Schritte:**
+1. Den Eintrag anklicken und warten, bis in der Auswahlliste die Verfahren mit Größen stehen.
+2. **💾 Speichern** (Strg+S) und einen Speicherort wählen.
+3. Den erscheinenden Dialog lesen und auf **Wie geplant speichern** klicken. Die Dateigröße im Explorer notieren.
+4. Über **▾ → Speichern unter…** in eine zweite Datei speichern, diesmal mit **Original speichern**. Größen vergleichen.
+
+**Erwartet:**
+- Es erscheint der Dialog **„Komprimierungs-Alternativen speichern?“** mit drei Schaltflächen: **Wie geplant speichern**, **Original speichern**, **Abbrechen**.
+- **Wie geplant speichern** → größere Datei; nach dem Öffnen stehen die Verfahren sofort bereit (kein „Kompression läuft …“).
+- **Original speichern** → kleinere Datei; nach dem Öffnen werden die Verfahren bei Bedarf neu berechnet.
+- **Abbrechen** → es wird nichts gespeichert; das **„•“** bleibt stehen.
+- *Nicht offensichtlich:* Der Dialog erscheint **nur**, wenn Alternativen vorhanden sind. Wurde nichts berechnet oder ist jedes Dokument bereits übernommen, speichert BelegTool ohne Rückfrage.

@@ -582,9 +582,46 @@ references are in `tests/data/expected/`.
 ### Manual tests (human tester)
 
 Step-by-step manual test instructions for a non-developer live in
-[`manual_tests/`](manual_tests/README.md) — import, tree operations, preview/
-compression, export, persistence, and the in-app Test mode. Keep them current
-when user-facing flows change (workspace convention).
+[`manual_tests/`](manual_tests/README.md) — **German since 2026-10-10** (workspace rule:
+product text incl. `manual_tests` is German). 11 areas (`00_installation` … `10_datev`),
+83 test cases. Keep them current when user-facing flows change (workspace convention).
+
+**Tester kit (generated).** The Markdown files are the single source; from them
+`scripts/build_testkit.py` builds [`manual_tests/testpakete/`](manual_tests/testpakete/):
+one folder per test case with the instruction **PDF** and a `Beispieldateien/` folder
+holding exactly the sample files that case needs, plus `00_Start_hier.pdf` (overview +
+index) and the Store installation guide
+([`docs/installation-microsoft-store.md`](docs/installation-microsoft-store.md) →
+`docs/Installation_Microsoft_Store.pdf`, copied into the kit).
+
+```powershell
+.build_venv\Scripts\python.exe scripts\build_testkit.py            # samples + all PDFs
+.build_venv\Scripts\python.exe scripts\build_testkit.py --check    # validate sources only
+```
+
+| File | Role |
+|---|---|
+| `scripts/build_testkit.py` | CLI + orchestration; owns `manual_tests/testpakete/` (prunes what it did not write); writes `manual_tests/testpakete.manifest.json` (sha256 of the HTML each PDF was printed from) |
+| `scripts/testkit/cases.py` | **Pure** model: parse `NN_<area>.md` → `Area`/`Case`/`Section`, `validate`, `slugify`. Case format documented in `manual_tests/README.md` |
+| `scripts/testkit/markdown.py` | **Pure** Markdown-subset → HTML (no Markdown lib in the build venv) |
+| `scripts/testkit/page.py` | HTML/CSS page templates (presentation only) |
+| `scripts/testkit/pdf.py` | Headless **Edge** print (`--print-to-pdf`, own profile dir) + metadata normalisation → byte-reproducible PDFs |
+| `scripts/testkit/samples.py` | Sample catalog (name → description + builder): text PDFs, colour "scans", images, mails, archives, `.belegtool` trees declared as data. All synthetic, all reproducible |
+| `tests/test_testkit.py` | Parser/renderer tests, the real sources, and each sample run through the app's own code (compressible vs. no-gain, refusals, nesting limit) |
+
+- **Definition of done:** edit a test → rerun the build in the same session.
+  `test_kit_on_disk_matches_the_sources` fails on a stale kit (it recomputes the manifest —
+  no browser needed). A **version bump changes every PDF** (the footer states the version),
+  so regenerate on release.
+- PDFs are printed through Edge on purpose: the app's toolbar is emoji rendered by
+  WebView2, so the instructions show the identical glyphs. Needs Microsoft Edge.
+- Kit PDFs/JPG/PNG/HEIC go to **Git LFS** (existing `.gitattributes` rules); the synthetic
+  sample `.belegtool` files are exempted from the `*.belegtool` ignore rule. ⚠ GitHub's
+  "Download ZIP" contains LFS **pointers**, not the PDFs — hand testers a zip of the folder
+  (or attach it to a Release).
+- **Test ids are unique only within an area** (MT-50 exists in 07, 08 and 09 — historical).
+  PDF names carry the area number; renumbering is open (it would invalidate ids already
+  cited in issues).
 
 ---
 
@@ -747,6 +784,32 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   (no SSO storm) — toggle DATEV off/on or trigger a write to retry. The DATEVconnect OpenAPI specs in
   `import/` are **vendor IP — gitignored, never committed**.
 
+- **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
+  fixed yet — triage pending):**
+  - **Single-file `.pdf` import bypasses the content gate.** `CoreApi._import_path` hands
+    `*.pdf` straight to `PDFStorage`, never to `UniversalImporter.convert`, so
+    `verify_content_matches_extension` does not run. A disguised EXE (`MZ…` named `.pdf`), an
+    empty file or plain text is imported as a **0-page node, `ok: true`, no message** —
+    contradicting the "gate runs on both branches" claim under *Import hardening* and
+    `manual_tests` MT-05 step 1 (the archive/e-mail member path refuses correctly). Not code
+    execution (bytes are never run). The existing path tests call `convert()` directly, i.e.
+    not the route the app takes. Guard: `test_app_import_refuses_exe_masquerading_as_pdf`
+    (**strict xfail** — goes red when fixed). Fix needs a decision: a strict `%PDF` prefix
+    check would also reject PDFs with leading junk that `sanitize_pdf` repairs today; and
+    importing `universal_importer` on the PDF path costs its ~2.6 s cold import.
+  - **Password-protected PDF imports silently** (page count readable, `ok: true`) but cannot
+    be rendered — the "Datei ist passwortgeschützt" branch of `_friendly_import_error` is
+    unreachable on this path.
+  - **Multi-page TIFF: only the first page is imported**, silently (`standard_image`).
+  - **`.rtf` is imported as plain text** — the PDF shows raw RTF control words.
+  - **📂 Öffnen on a plain `.pdf` binds the session to that path**, so 💾 Speichern writes the
+    BelegTool-structured PDF **over the original file** without asking. Possibly intended
+    (PDF-editor semantics) — confirm; `manual_tests` MT-15c warns the tester.
+  - **Store version lags the repo.** The listing is live (Store ID `9PL4D25N00XD`, last
+    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11 was built. Test cases that
+    need newer features carry `**Ab Version:**`.
+  - Compression/DPI defects: see *Planned changes — requested 2026-10-10* item 3.
+
 > *Fixed 2026-06-29 (PDF-Tool renders scanned PDFs — was BLANK):* PDF.js **v6** keeps its image
 > decoders + font/cmap data out of the main bundle — JBIG2 / JPEG2000 (the encodings DATEV scans use)
 > decode via `wasm/jbig2.wasm` + `wasm/openjpeg.wasm`, and missing/CJK fonts need `cmaps` +
@@ -774,6 +837,81 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
 ---
 
 ## Open / deferred items
+
+### Planned changes — requested 2026-10-10 (recorded, NOT built)
+
+Requested by Tobias while the tester kit was built. Each item changes a user-facing flow:
+when it ships, update the named `manual_tests` cases and rebuild the kit in the same session.
+
+1. **Decide "do not compress" — keep the original as a deliberate choice.** A document must be
+   markable as *not to be compressed* even though smaller variants exist: the same act as
+   „Lesbarkeit geprüft", but for the **original** data. Today that is impossible — with
+   „unkomprimierte Fassung" selected the button is disabled (`applied` is true for an
+   uncompressed node in [`PreviewControls.jsx`](webui/src/PreviewControls.jsx)), so the red
+   "undecided" dot of a compressible document can never be cleared without compressing.
+   The model already has `Node.no_compression` (excluded from `compression_undecided`, blocks
+   `Compress`); decide whether to reuse it or add a separate "decided: original" flag —
+   `no_compression` is also set by merge on a DPI conflict, and the decision must stay
+   reversible (undoable, and re-openable to compress later). Tests: 03 MT-12, 06 MT-44/MT-47,
+   08 MT-55.
+2. **Rename the apply button: „Lesbarkeit geprüft" → „Nur diese Version behalten".** With
+   item 1 it becomes one action for whichever version is shown (a compressed variant *or* the
+   original). i18n: key change in `en.js` + every full-coverage language; the label is quoted
+   16× in `manual_tests/*.md` and in the help texts of `help/content.js` (20 lines).
+3. **DPI handling is defective — verified 2026-10-10** (repro with
+   `Farbscan_Rechnung_3_Seiten.pdf` from the kit; options at 50–150 DPI = jpg + jpg_color
+   (plus png at 50), 200/250 = jpg only, **300 = none**):
+   - a. **A "nothing smaller" result at ONE dpi marks the document no-gain for ALL.**
+     `CoreApi.compress_options` calls `_mark_no_gain` whenever the evaluated DPI yields no
+     option. Evaluating 300 sets `compression_no_gain=True` (persisted) although 50–250 offer
+     variants; a later evaluation at 150 returns options but the flag stays, the red dot stays
+     cleared, and auto-evaluation skips the node. Fix: derive the verdict only from the
+     reference DPI (or the lowest), or keep it per DPI, and clear it when any DPI finds a variant.
+   - b. **Applying a method that is not offered at the current DPI is a silent no-op.**
+     `_compress` returns the document unchanged when `engine.compress` yields `None` → `ok: true`,
+     no undo step, no message. In the UI the slider reloads the list, the selected method can
+     drop out of it, the `<select>` then *shows* „unkomprimierte Fassung" while its state still
+     holds the old method, and the apply button stays clickable. Fix: on reload fall back to
+     the best/original and say so; make `_compress` raise a `CommandError`.
+   - c. **The slider only takes effect on mouse-up/touch-end.** Keyboard changes move the
+     number but neither reload the list nor the preview; with „unkomprimierte Fassung" selected
+     the slider does nothing, so the list keeps the previous DPI's sizes. The apply button then
+     uses the slider value even if that DPI was never previewed.
+   - d. **The DPI is not remembered per document** (the method is, via `methodMemory`); after
+     re-selecting an uncommitted node the slider is back at 150 next to the remembered method.
+   - e. **Compression shrinks landscape/rotated pages physically.** `CompressionConfig.max_width_pt
+     = 595` scales every page wider than 595 pt: A4 landscape 842×595 pt → **595×420 pt**, image
+     1228 px wide instead of 1754 (effective ~106 DPI at "150"). A portrait scan rotated with ↻
+     and then compressed shrinks the same way. Fix: cap relative to the page (long edge /
+     oversized MediaBoxes only) and keep the physical page size.
+   - f. The upper slider range rarely helps (re-rendering above the source resolution cannot
+     shrink) and an empty list is shown without explanation — add a hint instead.
+   Tests: 03 MT-11, 05 MT-33, 06 MT-43; add a case for landscape pages once (e) is fixed.
+4. **Auto-status on import.** As soon as **any** node of the document carries a status
+   (Erfassungskennzeichen), newly imported documents get **„Zu erfassen"** automatically;
+   in a document without any status, imports stay status-less (today's behaviour). Clarify
+   when building: does it cover every import path (dialog, drop, archive/e-mail members) and
+   what happens to statuses carried by an imported `.belegtool`. Tests: 08 MT-50 (new nodes
+   have no status — becomes conditional), 01 MT-01b.
+5. **Exporting a single document: no table of contents by default.** When exactly one
+   **document** (leaf) is exported, „Inhaltsverzeichnis" and „PDF-Lesezeichen" (and the tag
+   index) start **unchecked**; the user can still tick them. Tests: 04 MT-14 step 5,
+   05 MT-36, 08 MT-58.
+6. **Default file name of an export = the exported node, with its path.** Rule as stated:
+   when **one node** is exported (no sibling selected at the top level of the selection — also
+   for a single leaf), the suggested name is the node name, prefixed by its ancestors from the
+   root down, joined with underscores: `<root>_<folder>_…_<node>.pdf` (e.g.
+   `Beispielmappe_02 Bank_Darlehen_Tilgungsplan.pdf`). Whole-document export keeps the
+   document name. To settle when building: whether a node directly under the root is
+   `<root>_<node>` or just `<node>`; strip a trailing `.pdf` from node names before appending
+   the extension; run the result through `CoreApi._safe_filename`. Today the suggestion is
+   always the document name (`host.export_dialog`). Tests: 04 MT-14, 08 MT-58.
+7. **Copy nodes within a document** (not only move) — e.g. **Strg + drag**, Explorer-style.
+   Today a drag always moves ([`Tree.jsx`](webui/src/Tree.jsx) sets `effectAllowed = 'move'`;
+   there is no copy command). Strg+click stays multi-select; the drag ghost must show the copy
+   intent; the copy is a deep copy with **new node ids** (variants are keyed by id). The
+   README's "deep-copy" feature claim is currently not backed by the UI. Related, still
+   deferred: cross-window copy (item 5 of the 2026-06-08 list below). Tests: 02 MT-09/MT-09b.
 
 ### Next version — planned features (2026-06-08)
 Captured from a planning pass; **not yet built.** Items 2–6 are real UI features (→ a MINOR
@@ -1156,12 +1294,14 @@ report known gaps, give the wrong version, etc.).
   export split) shipped on the v3.10 branch. **If this gap is fixed, remove it from
   the checkbox, BETA_TESTING.md §4, and CONTRIBUTING.md** — otherwise testers are
   told a working feature is broken.
-- **Manual tests `01`–`08` are all current against the React UI** (01–04 rewritten
-  2026-06-15; the removed Tk GUI is no longer referenced anywhere).
-- **Two run paths** (prebuilt onedir folder; from source: Python 3.12+ + Node, `pip
-  install -r requirements.txt`, `cd webui && npm install && npm run build`, `python
-  host.py`) and **no published Release yet** — update BETA_TESTING.md §1 once a
-  Release/installer exists.
+- **Manual tests `00`–`10` are German and describe the current UI** (rewritten 2026-10-10
+  against the source; UI labels checked against `en.js` and the components). Testers get the
+  generated kit `manual_tests/testpakete/` (one PDF + sample files per case) — BETA_TESTING.md
+  §2/§3 point there.
+- **Three install paths**: Microsoft Store (live since 2026-06-08, Store ID `9PL4D25N00XD`,
+  guide `docs/Installation_Microsoft_Store.pdf` — **may lag the repo version**), prebuilt
+  onedir zip from GitHub Releases, and from source (Python 3.12+ + Node, `pip install -r
+  requirements.txt`, `cd webui && npm install && npm run build`, `python host.py`).
 - **Fixtures in `tests/data/input/`** (regen `python tests/make_fixtures.py`).
 - The `config.yml` and template links hardcode the repo URL
   `tobiasheinrichfaska/DigitalerUnterlagenOrdner` and the `master` branch.

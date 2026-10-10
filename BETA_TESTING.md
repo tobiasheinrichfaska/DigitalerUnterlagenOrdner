@@ -24,6 +24,13 @@ and e-mails still works fine.
 
 ## 1. Get & run the app
 
+### Microsoft Store (simplest — but check the version)
+BelegTool is in the Microsoft Store: <https://apps.microsoft.com/detail/9PL4D25N00XD>
+(no SmartScreen/antivirus warnings, automatic updates). Step-by-step guide in German:
+[`docs/Installation_Microsoft_Store.pdf`](docs/Installation_Microsoft_Store.pdf).
+⚠️ The Store build can be **older** than the version named above — the window title shows
+the installed version. For testing the newest features use Path A.
+
 ### Path A — Prebuilt download (easiest, no Python/Node)
 1. Download **`BelegTool-v3.11.2-win64.zip`** from the
    [**latest release**](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner/releases/latest).
@@ -55,8 +62,8 @@ may sandbox or quarantine files (often `Python.Runtime.dll`). It's a **false ala
 malware: restore the quarantined files and add an **exclusion** for the BelegTool folder
 (Norton → *Security History/Quarantine* → restore; *Settings → Antivirus → Exclusions*).
 
-A signed Microsoft Store version is planned, which removes these warnings. **Please don't
-file these as bugs** — they're known limitations of the unsigned beta.
+The signed Microsoft Store version (see above) does not show these warnings. **Please don't
+file these as bugs** — they're known limitations of the unsigned zip.
 
 ### Path B — From source
 1. Install **Python 3.12 or newer** (on PATH) and **Node.js**. *(3.13 and 3.14 work for
@@ -75,29 +82,28 @@ file these as bugs** — they're known limitations of the unsigned beta.
 
 ## 2. Sample files to test with
 
-The repo ships ready-made PDFs in **`tests/data/input/`**:
-`sample.pdf`, `split_sample.pdf`, `compress_sample.pdf`, `merge1_a.pdf`,
-`merge1_b.pdf`. If they're missing, regenerate with
-`python tests/make_fixtures.py`. Bring your own files too — a JPG/PNG/HEIC image,
-a `.zip`, an `.eml`/`.msg` e-mail with an attachment, and (if you have Office) a
-Word/Excel file.
+Every manual test comes with its own sample files: the tester kit
+[`manual_tests/testpakete/`](manual_tests/testpakete/) has one folder per test case,
+each with the instruction PDF and a `Beispieldateien` folder (PDFs, scans, images, mails,
+archives, Office files, ready-made `.belegtool` documents — all invented data). Start with
+`00_Start_hier.pdf`. Bring your own files too — real-world scans and an Outlook `.msg`
+are the most valuable additions.
+
+> Getting the kit: GitHub's "Download ZIP" delivers Git-LFS pointer files instead of the
+> PDFs. Clone the repository with Git LFS installed, or ask for the kit as a zip.
 
 ---
 
 ## 3. Recommended test path
 
-Walk through the manual-test guides in [`manual_tests/`](manual_tests/README.md).
-Use these three — they match the current app:
+Walk through the manual tests in [`manual_tests/`](manual_tests/README.md) — they are
+written in **German** (the app's source language) and cover 11 areas, from installation
+(`00`) through import, tree editing, preview/compression, export, the PDF tool and the
+DATEV mode (`10`, needs a DATEV workstation). Each test is self-contained; a good first
+pass is `01_import`, `02_tree_operations` and `04_export_persistence`.
 
-- **[`05_react_ui.md`](manual_tests/05_react_ui.md)** — import & drag-drop, tree
-  editing, compression preview, multi-window, export, shortcuts.
-- **[`06_status_cache_compression.md`](manual_tests/06_status_cache_compression.md)**
-  — status bar, render-cache gauge, compression default-to-smallest, apply.
-- **[`07_keyboard_delete_language.md`](manual_tests/07_keyboard_delete_language.md)**
-  — keyboard structuring, multi-delete, inline rename, language switcher.
-
-> All files **`01`–`08` describe the current React/pywebview UI** (toolbar +
-> right-click menu; no menu bar).
+> Tests marked **„erst ab Version … testbar"** need at least that version — tick
+> „Nicht durchführbar" if your build is older (typical for the Store build).
 
 Core workflows to make sure you exercise: **import** (several formats),
 **tree view** (folders, move, rename), **split / merge / compress**,

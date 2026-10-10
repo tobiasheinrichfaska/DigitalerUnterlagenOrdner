@@ -1,125 +1,135 @@
-# 07 — Keyboard structuring, multi-delete & language
+# 07 — Tastatur, Löschen mehrerer Einträge, Sprache
 
-Covers keyboard tree-structuring, folder collapse, multi-select **delete** with the
-parent/child resolver, inline rename, the **language switcher**, and the layout
-tweaks (resizable pane, chevrons, one-line names, page indicator).
+Umbauen des Baums mit der Tastatur, Löschen einer Mehrfachauswahl mit Rückfrage bei Ordnern, Umbenennen direkt in der Zeile, die **Sprachauswahl** und die Darstellung (verschiebbare Trennlinie, Seitenanzeige).
 
 ---
 
-## MT-50: Keyboard navigation, collapse, and the Insert "carry" move
+## MT-50: Mit der Tastatur bewegen, zuklappen und Einträge „tragen“
 
-**Preconditions:** A document with folders and several nodes.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Steps:**
-1. Click a node, then use **↑/↓** to move the selection.
-2. On a folder, press **→** to expand, **←** to collapse (or click the chevron).
-3. Select a node, press **Insert** (the row gets a dashed outline). Press **↑/↓** to
-   reorder, **→** to nest into the folder above, **←** to move out a level.
-4. Press **Insert** again to drop. Repeat but press **Esc** instead.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-**Expected:**
-- ↑/↓ move through the **visible** rows (skipping collapsed folders).
-- While carried, the node moves **only visually**; **Insert** commits it (a single
-  undoable move), **Esc** reverts with no change. *Not obvious:* Ctrl is multi-select,
-  so the move key is **Insert**, not Ctrl+Arrow.
-- Folder collapse is **remembered in the file** (save, reopen → still collapsed).
+**Schritte:**
+1. Einen Eintrag anklicken und mit **↑ / ↓** die Markierung bewegen.
+2. Auf einem Ordner **→** zum Aufklappen und **←** zum Zuklappen drücken (oder den Pfeil vor dem Ordner anklicken).
+3. Einen Eintrag markieren und **Einfg** drücken. Mit **↑ / ↓** umsortieren, mit **→** in den Ordner darüber schieben, mit **←** eine Ebene herausholen.
+4. **Einfg** erneut drücken, um abzulegen. Den Vorgang wiederholen, aber mit **Esc** beenden.
 
----
-
-## MT-50b: Multi-node Insert carry — move a whole selection at once
-
-**Preconditions:** A document with several sibling nodes (and ideally a folder to drop into).
-
-**Steps:**
-1. **Ctrl-click** two or more nodes so several rows are selected; note which one is the
-   **primary** (the one with the preview / strongest highlight — usually the last clicked).
-2. Press **Insert**. The primary gets the dashed "carry" outline.
-3. Press **↑/↓** (and optionally **→/←**) to move the carry to a new position, then press
-   **Insert** again to drop. Press **Ctrl+Z** afterwards.
-
-**Expected:**
-- During the carry, **only the primary moves visually**; the other selected rows **stay
-  put but remain selected** (they are "locked in"). *Not obvious:* the others don't visibly
-  travel with the cursor — they jump to join the primary only on drop.
-- On drop, **all selected nodes move together** to the primary's position, in their existing
-  order, as **one step**. **Ctrl+Z** undoes the whole move at once (it's a single `MoveMany`,
-  not one undo per node).
-- Dropping without having moved the primary changes nothing.
+**Erwartet:**
+- **↑ / ↓** bewegen sich durch die **sichtbaren** Zeilen und überspringen zugeklappte Ordner.
+- Nach **Einfg** hat die Zeile einen gestrichelten Rahmen. Solange getragen wird, wandert der Eintrag **nur optisch**.
+- **Einfg** legt ab (eine rückgängig machbare Verschiebung), **Esc** stellt den Ausgangszustand ohne Änderung wieder her.
+- *Nicht offensichtlich:* Die Verschiebe-Taste ist **Einfg** und nicht Strg+Pfeil, weil Strg für die Mehrfachauswahl gebraucht wird.
+- Zugeklappte Ordner werden **in der Datei gemerkt** (speichern, neu öffnen → weiterhin zugeklappt).
 
 ---
 
-## MT-51: Multi-select delete — all selected, focus moves on
+## MT-50b: Mehrere Einträge auf einmal tragen
 
-**Steps:**
-1. **Ctrl-click** several independent nodes (leaves in different folders).
-2. Press **Entf** (Delete) — or right-click → **Löschen (N)**.
-3. After deletion, look at the selection.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Expected:**
-- **All** selected nodes are deleted in **one undo step** (earlier only one was
-  removed). The context-menu entry shows the count, e.g. **Löschen (3)**.
-- Focus **moves to the next remaining node** automatically — a second delete needs no
-  extra click.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet, alle Ordner sind aufgeklappt.
 
----
+**Schritte:**
+1. Mit **Strg+Klick** zwei oder mehr Einträge markieren. Merken, welcher der **Haupteintrag** ist – der mit der Vorschau und der kräftigsten Hervorhebung, in der Regel der zuletzt angeklickte.
+2. **Einfg** drücken.
+3. Mit **↑ / ↓** (und bei Bedarf **→ / ←**) an eine neue Stelle bewegen und mit **Einfg** ablegen.
+4. **Strg+Z** drücken.
 
-## MT-52: Delete with a folder in the selection (resolver)
-
-The data layer **rejects** a mixed folder+child selection; the UI resolves it first.
-
-**Steps:**
-1. Select **only a folder** that has contents → **Entf**.
-2. Select a folder **and one of its children** (Ctrl-click) → **Entf**.
-3. Repeat (2) but answer differently.
-
-**Expected:**
-- (1) Folder + none of its children selected → a **warning**: its unselected contents
-  will be deleted too — **OK** deletes the folder, **Abbrechen** keeps everything.
-- (2) Folder + some children selected → you are asked per problematic folder:
-  **OK = alle Elemente löschen** (delete the whole folder), next **OK = nur die
-  ausgewählten Elemente, Ordner behalten** (delete only the selected children), or
-  **Abbrechen** = nothing. *Not obvious:* if a folder's **all** children are selected,
-  there is **no prompt** — the folder simply covers them.
+**Erwartet:**
+- Schritt 2: Der Haupteintrag bekommt den gestrichelten Rahmen.
+- Schritt 3: Während des Tragens bewegt sich **nur der Haupteintrag**; die übrigen markierten Zeilen **bleiben stehen, sind aber weiter markiert**.
+- *Nicht offensichtlich:* Die übrigen Einträge wandern nicht sichtbar mit – sie springen erst **beim Ablegen** zum Haupteintrag.
+- Beim Ablegen ziehen **alle markierten Einträge gemeinsam** an die neue Stelle, in ihrer bisherigen Reihenfolge und als **ein** Schritt. Schritt 4 nimmt die ganze Verschiebung auf einmal zurück.
+- Ablegen, ohne den Haupteintrag bewegt zu haben, verändert nichts.
 
 ---
 
-## MT-53: Inline rename (Explorer-style)
+## MT-51: Mehrere Einträge löschen – alle auf einmal, Markierung rückt nach
 
-**Steps:**
-1. Click a node to select it. Click its name **again** (not a double-click).
-2. Type a new name; press **Enter** (or **Esc** to cancel).
-3. Also try right-click → **Umbenennen**.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Expected:**
-- A second click on the already-selected name turns it into an **editable field**.
-  Enter saves, Esc cancels, clicking away saves. Dragging is disabled while editing.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet, alle Ordner sind aufgeklappt.
 
----
+**Schritte:**
+1. Mit **Strg+Klick** drei voneinander unabhängige Dokumente in verschiedenen Ordnern markieren.
+2. **Entf** drücken – oder Rechtsklick auf einen davon → **Löschen (3)**.
+3. Auf die Markierung nach dem Löschen achten und einmal **↶ Rückgängig** klicken.
 
-## MT-54: Language switcher (Deutsch / English)
-
-**Steps:**
-1. In the toolbar, use the **🌐** dropdown → **English**.
-2. Open a context menu, the compression dropdown, and the status bar.
-3. Switch back to **Deutsch**. Restart the app.
-
-**Expected:**
-- All UI text switches language **immediately** (toolbar, menus, status bar, prompts,
-  status labels). The choice **persists** across restarts. *Not obvious:* the document
-  content and node names are **not** translated — only the app's own labels.
+**Erwartet:**
+- **Alle** markierten Einträge werden in **einem** Rückgängig-Schritt gelöscht. Der Menüpunkt nennt die Anzahl, z. B. **Löschen (3)**.
+- Die Markierung **rückt von selbst** auf einen verbleibenden Eintrag – ein weiteres Löschen braucht keinen zusätzlichen Klick.
+- **↶** holt alle drei auf einmal zurück.
 
 ---
 
-## MT-55: Layout — resizable tree, chevrons, one-line names, page indicator
+## MT-52: Löschen, wenn ein Ordner in der Markierung ist (Rückfragen)
 
-**Steps:**
-1. Drag the **splitter** between the tree and the preview; restart the app.
-2. Look at folder **chevrons** and long node names.
-3. Select a multi-page node and scroll; watch the zoom bar.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Expected:**
-- The tree pane resizes by dragging and the width is **remembered** next launch.
-- Chevrons are large and clickable; long names stay on **one line** (the tree scrolls
-  horizontally rather than wrapping).
-- The zoom bar shows **"Seite n / m"** for the page you're viewing (falls back to the
-  total page count).
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet, alle Ordner sind aufgeklappt.
+
+**Schritte:**
+1. **Nur** den Ordner **03 Vorjahr 2024** markieren (er hat Inhalt) → **Entf**. Die Rückfrage mit **Abbrechen** beantworten, dann wiederholen und mit **OK** bestätigen. Danach **↶ Rückgängig**.
+2. Den Ordner **01 Eingangsrechnungen** **und** ein Dokument daraus (mit Strg+Klick) markieren → **Entf**. Die erste Rückfrage mit **OK** beantworten. Danach **↶ Rückgängig**.
+3. Schritt 2 wiederholen, die erste Rückfrage mit **Abbrechen** und die zweite mit **OK** beantworten.
+4. Einen Ordner und **alle** seine Inhalte markieren → **Entf**.
+
+**Erwartet:**
+- Schritt 1: Es erscheint die Warnung „Der Ordner „03 Vorjahr 2024“ enthält nicht ausgewählte Elemente, die mit einbezogen werden. Fortfahren?“. **OK** löscht den Ordner samt Inhalt, **Abbrechen** behält alles.
+- Schritt 2: Die Frage lautet „„01 Eingangsrechnungen“: den ganzen Ordner einbeziehen? (Abbrechen = nur die ausgewählten Elemente, Ordner ausschließen)“. **OK** löscht den **ganzen Ordner**.
+- Schritt 3: Nach **Abbrechen** folgt die zweite Frage „Nur die ausgewählten Elemente verwenden und „01 Eingangsrechnungen“ ausschließen? (Abbrechen = Vorgang abbrechen)“. **OK** löscht **nur das markierte Dokument**; der Ordner bleibt. **Abbrechen** an dieser Stelle löscht nichts.
+- Schritt 4: *Nicht offensichtlich:* Sind **alle** Inhalte eines Ordners mitmarkiert, kommt **keine** Rückfrage – der Ordner deckt sie ohnehin ab.
+
+---
+
+## MT-53: Umbenennen direkt in der Zeile (wie im Explorer)
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
+
+**Schritte:**
+1. Einen Eintrag anklicken. Nach kurzer Pause **noch einmal auf seinen Namen** klicken (kein Doppelklick).
+2. Einen neuen Namen tippen und **Enter** drücken. Bei einem zweiten Versuch mit **Esc** abbrechen, bei einem dritten daneben klicken.
+3. Zusätzlich Rechtsklick → **Umbenennen** ausprobieren.
+
+**Erwartet:**
+- Der zweite Klick auf den bereits markierten Namen macht ihn zum **Eingabefeld**.
+- **Enter** speichert, **Esc** bricht ab, ein Klick daneben speichert ebenfalls.
+- Solange das Eingabefeld offen ist, lässt sich die Zeile nicht ziehen.
+
+---
+
+## MT-54: Sprache umschalten (Deutsch / English)
+
+**Voraussetzungen:** BelegTool ist gestartet.
+
+**Schritte:**
+1. In der Symbolleiste in der Auswahlliste **🌐** den Eintrag **English (US)** wählen.
+2. Ein Kontextmenü öffnen, die Auswahlliste der Komprimierungsverfahren ansehen und einen Blick auf die Statusleiste werfen.
+3. Zurück auf **Deutsch** stellen, zwischendurch eine weitere Sprache ausprobieren, dann BelegTool neu starten.
+
+**Erwartet:**
+- Alle Beschriftungen wechseln **sofort** die Sprache: Hinweistexte der Symbolleiste, Menüs, Statusleiste, Rückfragen und Statusbezeichnungen.
+- Die gewählte Sprache **bleibt** nach dem Neustart erhalten.
+- *Nicht offensichtlich:* Übersetzt werden nur die Beschriftungen des Programms – **nicht** der Inhalt Ihrer Dokumente und nicht die Namen der Einträge.
+
+---
+
+## MT-55: Darstellung – Breite des Baums, Pfeile, einzeilige Namen, Seitenanzeige
+
+**Beispieldateien:** `Beispielmappe.belegtool`, `Kontoauszug_8_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet und `Kontoauszug_8_Seiten.pdf` importiert.
+
+**Schritte:**
+1. Die **Trennlinie** zwischen Baum und Vorschau mit der Maus ziehen. BelegTool neu starten.
+2. Die **Pfeile** vor den Ordnern und lange Namen ansehen; den Baum dafür schmal ziehen.
+3. Den Kontoauszug anklicken und scrollen; die Zoom-Leiste beobachten.
+
+**Erwartet:**
+- Die Breite des Baums lässt sich durch Ziehen ändern und ist beim nächsten Start **gemerkt**.
+- Die Pfeile sind groß genug, um sie gut zu treffen. Lange Namen bleiben **einzeilig** – der Baum scrollt waagerecht, statt umzubrechen.
+- Die Zoom-Leiste zeigt **„Seite n / m“** für die gerade sichtbare Seite.

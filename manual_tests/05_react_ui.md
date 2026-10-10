@@ -1,336 +1,296 @@
-# 05 — React desktop UI (pywebview)
+# 05 — Bedienoberfläche
 
-Covers the React/pywebview front end (`python host.py`) — the only UI since
-v3.6.0. Launch with `cd webui && npm run build` then `python host.py`.
-
----
-
-## MT-30: Launch, open, save
-
-**Preconditions:** A built `webui/dist` (run `npm run build` once).
-
-**Steps:**
-1. Run `python host.py`. Wait for the window.
-2. Click **📂 Öffnen**, pick a `.belegtool` file.
-3. Make any change (e.g. right-click a node → **Umbenennen**).
-4. Click **💾 Speichern** (or press **Strg+S**).
-
-**Expected:**
-- The window appears quickly; the first **Öffnen** is near-instant (libraries are
-  pre-warmed in the background — *not obvious:* the very first action right after
-  launch may pause ~1 s if you beat the warm-up).
-- After an edit, **💾 Speichern** shows a **"•"** marker; saving clears it and shows
-  a green **"✓ Gespeichert"** notice.
+Start, Öffnen und Speichern, Importieren per Ziehen, Bearbeiten des Baums, mehrere Fenster, Sicherheitsabfragen, Tastenkürzel, große Dokumente und Tags.
 
 ---
 
-## MT-31: Import — button, drag-drop, and drop position
+## MT-30: Starten, öffnen, speichern
 
-**Preconditions:** App open. Have a few files ready: a PDF, an image, and (optional)
-a Word/Excel/`.md` file.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Steps:**
-1. Click **📥 Importieren**, select several files at once.
-2. Drag a file from Explorer **onto the window** (not on a row) → drop.
-3. Drag a file **onto a folder row** → drop. Watch the indicator.
-4. Drag a file **between two rows**, and at the very bottom **slide left/right**.
+**Voraussetzungen:** BelegTool ist installiert, aber noch nicht gestartet.
 
-**Expected:**
-- Imported files appear as nodes; multiple keep their order; each import is **one
-  undo step** (↶ removes it).
-- *Not obvious:* the first Office/`.md` import may pause a couple seconds the first
-  time (the Office/COM libraries load on first use only).
-- Drop **shows the same indicators as moving**: a folder highlights for "into", a
-  line for before/after, and at the bottom a **ghost "📥 importieren"** with a
-  destination pill that follows the cursor as you slide levels.
-- Drop **on the window background** imports into the selected folder (or top level);
-  the dashed border + badge is just a hint.
+**Schritte:**
+1. BelegTool starten (Startmenü → **BelegTool**) und auf das Fenster warten.
+2. Auf **📂 Öffnen** klicken und `Beispielmappe.belegtool` wählen.
+3. Eine Änderung vornehmen, z. B. Rechtsklick auf einen Eintrag → **Umbenennen**.
+4. Auf **💾 Speichern** klicken (oder **Strg+S**).
+
+**Erwartet:**
+- Das Fenster erscheint zügig; das Öffnen geht nahezu sofort.
+- *Nicht offensichtlich:* Die allererste Aktion direkt nach dem Start kann etwa eine Sekunde zögern – im Hintergrund werden die PDF-Bibliotheken vorgewärmt.
+- Nach der Änderung steht ein **„•“** am **💾** und hinter dem Titel. Speichern entfernt es und zeigt die grüne Meldung **„✓ Gespeichert“**.
 
 ---
 
-## MT-32: Tree editing — move, slide-to-level, merge, group, split
+## MT-31: Importieren – Schaltfläche, Ziehen und Zielposition
 
-**Preconditions:** A document with folders and several leaves at different depths.
+**Beispieldateien:** `Beispielmappe.belegtool`, `Rechnung_5_Seiten.pdf`, `Foto_Kassenbon.jpg`, `Notiz.txt`
 
-**Steps:**
-1. **Drag** a node onto a folder (into), between rows (before/after), and at the
-   bottom **slide left** to drop it at a shallower level (watch the ghost).
-2. **Ctrl-click** two sibling leaves → right-click → **Zusammenführen → 1 PDF**.
-3. **Ctrl-click** two nodes in *different* folders → right-click → **In neuen Ordner**.
-4. Right-click a multi-page leaf → **Splitten**.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-**Expected:**
-- Move re-renders from the returned tree (no flicker/duplication); the slide ghost
-  names the destination ("in <folder>" / "oberste Ebene").
-- **Zusammenführen** only appears for 2+ **sibling** leaves and makes one PDF node.
-  It is offered only when you right-click **one of the selected nodes** — right-
-  clicking a node outside the selection hides it (like Export/Status/Löschen).
-- **In neuen Ordner** works across depths (folder lands in the common parent, else
-  the root) and keeps the items separate.
-- **Splitten** replaces the leaf with one node per page.
+**Schritte:**
+1. Auf **📥 Importieren** klicken und mehrere Dateien auf einmal auswählen.
+2. Eine Datei aus dem Explorer **auf das Fenster** ziehen (nicht auf eine Zeile) und loslassen.
+3. Eine Datei **auf eine Ordnerzeile** ziehen und loslassen. Die Anzeige beobachten.
+4. Eine Datei **zwischen zwei Zeilen** ziehen; ganz unten in einem Ordner die Maus zusätzlich **nach links und rechts schieben**.
+
+**Erwartet:**
+- Importierte Dateien erscheinen als Einträge; mehrere behalten ihre Reihenfolge. Jeder Import ist **ein** Rückgängig-Schritt.
+- Das Ablegen zeigt **dieselben Anzeigen wie das Verschieben**: Ein Ordner wird hervorgehoben („hinein“), eine Linie zeigt „davor/dahinter“, und am unteren Ende erscheint ein Geist **„📥 importieren“** mit Zielangabe, die beim seitlichen Schieben die Ebene wechselt.
+- Ablegen **auf dem Fensterhintergrund** importiert in den markierten Ordner, sonst auf die oberste Ebene. Der gestrichelte Rahmen mit Hinweistext ist nur eine Orientierung.
 
 ---
 
-## MT-33: Compression working-preview
+## MT-32: Baum bearbeiten – verschieben, Ebene wählen, zusammenführen, gruppieren, splitten
 
-**Preconditions:** Select a leaf with a detailed page.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Steps:**
-1. Open the **method dropdown** in the preview panel.
-2. Pick a method; drag the **DPI** slider; pick **unkomprimierte Fassung**.
-3. Click **❓ Lesbarkeit geprüft**. Re-select the node.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet, alle Ordner sind aufgeklappt.
 
-**Expected:**
-- *Not obvious:* selecting a leaf runs **no** compression — the undo arrow stays
-  disabled. Opening the dropdown shows **"Kompression läuft …"** then the methods.
-- Browsing methods/DPI only previews; the document changes (one undo step) **only**
-  on **Lesbarkeit geprüft** (button then reads **✓ übernommen**). Re-selecting shows
-  the saved method.
+**Schritte:**
+1. Einen Eintrag auf einen Ordner ziehen (hinein), zwischen zwei Zeilen ziehen (davor/dahinter) und am unteren Ende eines Ordners **nach links schieben**, um ihn eine Ebene höher abzulegen.
+2. Mit **Strg+Klick** `Telefon_2025-01.pdf` und `Strom_Abschlag_2025-01.pdf` markieren (gleicher Ordner) → Rechtsklick auf einen davon → **Zusammenführen → 1 PDF (2)**.
+3. Mit **Strg+Klick** zwei Einträge aus **verschiedenen** Ordnern markieren → Rechtsklick auf einen davon → **In neuen Ordner (2)**. Im Dialog „Name des neuen Ordners“ die Vorgabe **Neue Gruppe** bestätigen.
+4. Rechtsklick auf `Sammelrechnung_Wartung.pdf` (4 Seiten) → **Splitten ▸** → **pro Seite**.
 
----
-
-## MT-34: Multi-window
-
-**Steps:**
-1. Click **🗗 Neues Fenster** (or **Strg+N**).
-2. In the new window, **📂 Öffnen** a different file and edit it.
-3. Use **📥 Importieren** / **💾 Speichern** in each window.
-
-**Expected:**
-- A second independent window opens; the two documents are unrelated.
-- *Not obvious:* file dialogs and the save target belong to the window you clicked
-  in (not always the first window).
+**Erwartet:**
+- Schritt 1: Der Baum wird ohne Flackern oder Doppelungen neu gezeichnet; der Geist nennt das Ziel („in <Ordner>“ / „oberste Ebene“).
+- Schritt 2: **Zusammenführen** erscheint nur für mindestens zwei Dokumente **desselben Ordners** und ergibt ein PDF. Der Menüpunkt wird nur angeboten, wenn Sie auf **einen markierten** Eintrag rechtsklicken.
+- Schritt 3: **In neuen Ordner** funktioniert über Ebenen hinweg. Der neue Ordner entsteht im gemeinsamen übergeordneten Ordner (sonst auf der obersten Ebene); die Einträge bleiben getrennte Dokumente.
+- Schritt 4: **Splitten** ersetzt das Dokument durch einen Eintrag je Seite.
 
 ---
 
-## MT-34b: Window remembers its size / position / monitor
+## MT-33: Komprimierungs-Vorschau
 
-**Steps:**
-1. Launch the app. **Resize** the window and **drag it** to a clear spot — if you have
-   more than one monitor, move it to the **second** monitor.
-2. **Close** the window (the app exits).
-3. **Launch** the app again.
+**Beispieldateien:** `Farbscan_Rechnung_6_Seiten.pdf`
 
-**Expected:**
-- The window reopens at the **same size and position** as you left it — including on the
-  **same monitor** (multi-monitor).
-- *Not obvious:* only the **first/main** window restores; extra **Neues Fenster** windows
-  open at the default size. If the monitor you last used is **disconnected**, the app falls
-  back to the **default centred** 1280×820 instead of opening off-screen. (Geometry is
-  stored in `%APPDATA%\DigitalerUnterlagenOrdner\window.json`.)
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert und angeklickt.
 
----
+**Schritte:**
+1. Die Auswahlliste der Verfahren über der Vorschau öffnen.
+2. Ein Verfahren wählen; den **DPI**-Regler verschieben; **unkomprimierte Fassung** wählen.
+3. Wieder ein Verfahren wählen und auf **❓ Lesbarkeit geprüft** klicken. Einen anderen Eintrag anklicken und zurückkehren.
 
-## MT-35: Unsaved-changes guards
-
-**Steps:**
-1. Make an edit (see the **"•"** on Speichern).
-2. Click **📂 Öffnen** → cancel the confirm.
-3. Try to **close the window** → cancel the confirm. Then save, and close again.
-
-**Expected:**
-- Opening another file with unsaved changes asks first; cancelling keeps the doc.
-- Closing the window with unsaved changes asks first; after saving, it closes
-  without asking. Each window warns about **its own** changes.
+**Erwartet:**
+- *Nicht offensichtlich:* Das Anklicken des Eintrags startet **keine** Komprimierung. Erst das Öffnen der Liste zeigt **„Kompression läuft …“** und danach die Verfahren.
+- Verfahren und DPI zu wechseln zeigt nur eine Vorschau. Das Dokument ändert sich **erst** mit **Lesbarkeit geprüft** (ein Rückgängig-Schritt); die Schaltfläche zeigt dann **✓ übernommen**.
+- Nach der Rückkehr zum Eintrag ist das übernommene Verfahren eingestellt.
 
 ---
 
-## MT-36: Export to TOC PDF
+## MT-34: Mehrere Fenster
 
-**Steps:**
-1. With a document open, click **⬇ Export PDF** → choose a path.
-2. Optionally Ctrl-select some nodes first → the button reads **(Auswahl)**.
-3. Open the exported PDF.
+**Beispieldateien:** `Beispielmappe.belegtool`, `Zweite_Mappe.belegtool`
 
-**Expected:**
-- A single PDF with a **table-of-contents page**, clickable links and sidebar
-  **bookmarks**; selection export includes only the chosen subtrees.
-- A green **"✓ PDF exportiert (N …)"** notice on success.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
----
+**Schritte:**
+1. Auf **🗗 Neues Fenster** klicken (oder **Strg+N**).
+2. Im neuen Fenster mit **📂 Öffnen** `Zweite_Mappe.belegtool` laden und etwas ändern.
+3. In beiden Fenstern **📥 Importieren** und **💾 Speichern** benutzen.
 
-## MT-37: Keyboard shortcuts & zoom
-
-**Steps:**
-1. **Strg+Z / Strg+Y** (undo/redo), **Strg+S** (save), **Strg+O** (open),
-   **Strg+E** (export), **Strg+N** (new window), **Entf** (delete selected node).
-2. In the preview, **Strg + Mausrad** to zoom; the zoom bar −/＋/100%.
-
-**Expected:**
-- Shortcuts work, but are **ignored while typing** in a text field/dialog.
-- **Entf** deletes the selected node (undoable). Ctrl+wheel zooms the preview only.
+**Erwartet:**
+- Es öffnet sich ein zweites, unabhängiges Fenster; die beiden Dokumente haben nichts miteinander zu tun.
+- *Nicht offensichtlich:* Dateidialoge und das Speicherziel gehören zu dem Fenster, in dem Sie geklickt haben – nicht immer zum ersten Fenster.
 
 ---
 
-## MT-39: Windowed preview — big PDF scrolls without the long load
+## MT-34b: Fenster merkt sich Größe, Position und Bildschirm
 
-Validates the virtualized preview (v3.6.0+). A large PDF should open its preview
-**immediately** (first pages only) and render more as you scroll, instead of
-freezing while every page renders.
+**Ab Version:** 3.10.0
 
-**Preconditions:** the app is running (`python host.py`); import a **large**
-PDF (ideally 100+ pages; a colour scan is a good stress test).
+**Voraussetzungen:** BelegTool ist gestartet.
 
-**Steps:**
-1. Select the large PDF node in the tree.
-2. Watch the preview pane appear.
-3. Scroll down slowly through the document.
-4. Scroll quickly (flick) far down, then back up.
-5. Select a different node, then select the large PDF again.
+**Schritte:**
+1. Die Fenstergröße **ändern** und das Fenster an eine andere Stelle **ziehen** – bei mehreren Bildschirmen auf den **zweiten**.
+2. Das Fenster **schließen** (BelegTool beendet sich).
+3. BelegTool erneut **starten**.
 
-**Expected:**
-- The preview appears **right away**: the first page(s) show within ~1–2 s, not
-  after a long freeze. Pages not yet rendered show a light **striped placeholder**
-  box of the correct size (the layout does not jump when the real page arrives).
-- *Not obvious:* scrolling at a normal/reading pace stays smooth — pages fill in
-  just ahead of the viewport (a few pages are prefetched in each direction).
-- A fast flick may briefly show placeholders that fill in within a moment; the
-  scrollbar position stays stable (no jumping).
-- *Not obvious:* returning to the large PDF restores **the same scroll position**
-  you left it at, and already-seen pages reappear instantly (cached).
-- *Not obvious:* the compression working-preview (method dropdown / DPI) is now
-  **also windowed** — browsing methods on a big document no longer freezes; only the
-  visible pages render, and switching back to a method (or to the original) you
-  already viewed is instant. (The first browse at a new DPI still pauses while the
-  compressed variant is computed — that's compression, not rendering.)
-
+**Erwartet:**
+- Das Fenster öffnet sich in **derselben Größe an derselben Stelle** – auch auf **demselben Bildschirm**.
+- *Nicht offensichtlich:* Nur das **erste** Fenster merkt sich seine Lage; weitere Fenster aus **Neues Fenster** öffnen in Standardgröße.
+- *Nicht offensichtlich:* Ist der zuletzt benutzte Bildschirm **abgesteckt**, öffnet BelegTool mittig in Standardgröße (1280 × 820) statt außerhalb des sichtbaren Bereichs.
 
 ---
 
-## MT-40: Keyboard tree-structuring + folder collapse
+## MT-35: Schutz vor Verlust ungespeicherter Änderungen
 
-Covers the keyboard restructuring + folder collapse (persisted) added for large
-trees.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Preconditions:** dev app running (`python host.py`); a document with a few
-folders and nested nodes.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-**A — Folder collapse (persisted):**
-1. Click the **▾ chevron** on a folder → it collapses to **▸** and its children hide.
-2. Right-click a folder → **Zuklappen/Aufklappen**; right-click anywhere → **Alle
-   zuklappen** / **Alle aufklappen**.
-3. **Speichern**, close, **reopen** the file.
+**Schritte:**
+1. Eine Änderung vornehmen (das **„•“** am **💾** erscheint).
+2. Auf **📂 Öffnen** klicken und die Rückfrage mit **Abbrechen** beantworten.
+3. Versuchen, das **Fenster zu schließen**, und die Rückfrage mit **Abbrechen** beantworten.
+4. Speichern und das Fenster erneut schließen.
 
-**Expected (A):**
-- Collapsing hides children and cuts scrolling; the chevron reflects the state.
-- *Not obvious:* collapsing marks the document **dirty (•)** — it's a saved model
-  change, so it **survives reload**: the folders you left collapsed come back
-  collapsed. (Undo/Ctrl+Z reverses a collapse, like a status change.)
-
-**B — Keyboard navigation + collapse:**
-4. Click a node, then use **↑/↓** to move the selection (collapsed folders' children
-   are skipped). On a folder, **→** expands / steps in, **←** collapses / steps out.
-
-**Expected (B):** selection follows the visible rows; ←/→ fold/unfold folders.
-
-**C — Carry-move (Insert grab → arrows → Insert drop):**
-5. Select a node, press **Insert** — it gets a **dashed outline** (grabbed).
-6. Press **↑/↓** (reorder among siblings), **→** (nest into the folder directly
-   above), **←** (move out one level). The node moves **visually only**.
-7. Press **Insert** again to **drop**.
-8. Repeat, but press **Esc** instead of the final Insert.
-
-**Expected (C):**
-- While grabbed, the tree shows fully expanded and the node slides as you arrow,
-  but **nothing is committed yet**. **Insert** drops it — a single **undoable** move
-  (Ctrl+Z reverts it in one step). **Esc** cancels and the node snaps back with **no
-  change** to the document.
+**Erwartet:**
+- Schritt 2: BelegTool fragt „Eine andere Datei öffnen und die ungespeicherten Änderungen verwerfen?“. Abbrechen behält das Dokument.
+- Schritt 3: BelegTool fragt „Das Fenster schließen und die ungespeicherten Änderungen verwerfen?“ (Titel „Ungespeicherte Änderungen“). Abbrechen lässt das Fenster offen.
+- Schritt 4: Nach dem Speichern schließt das Fenster ohne Rückfrage.
+- Bei mehreren Fenstern warnt jedes Fenster nur vor **seinen eigenen** Änderungen.
 
 ---
 
-## MT-41: Tags — on/off, editing, and the filtered view
+## MT-36: Export als PDF mit Inhaltsverzeichnis
 
-Covers the tag toggle (default off, auto-on for tagged files), tag editing, and the
-view-only tag/name filter with its structural-edit lock.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Preconditions:** dev app running; a document with several leaves in a couple of
-folders.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-**A — Toggle + auto-on:**
-1. Note the toolbar **🏷️ Tags** button is **off** on a fresh/empty document — no tag
-   chips and no tag editor are shown.
-2. Click **🏷️ Tags** → it highlights (on); the tag editor appears above the preview
-   and a **search bar** appears above the tree.
-3. Add a tag (e.g. `Spende`) to one leaf, **Speichern**, close, **reopen** the file.
+**Schritte:**
+1. Auf **⬇ Export PDF** klicken, im Dialog **Exportieren** wählen und einen Speicherort angeben.
+2. Einige Einträge mit Strg+Klick markieren und erneut exportieren.
+3. Die exportierten PDFs öffnen.
 
-**Expected (A):**
-- *Not obvious:* a file that **already has tags** opens with tagging **on
-  automatically** — you don't have to flip the switch to see existing tags. Turning
-  tagging **off** hides all chips and every tag function, but the tags **stay stored**
-  (reopen / toggle on shows them again).
+**Erwartet:**
+- Es entsteht ein einzelnes PDF mit einer **Inhaltsverzeichnis-Seite**, anklickbaren Einträgen und **Lesezeichen** in der Seitenleiste.
+- Schritt 2: Solange Einträge markiert sind, zeigt **⬇** deren Anzahl am Symbol; der Export enthält nur die markierten Einträge samt Inhalt.
+- Bei Erfolg erscheint die grüne Meldung **„✓ PDF exportiert (N Einträge)“**.
 
-**B — Filter view + inheritance:**
-4. Tag a **folder** with `Steuer`; tag one leaf inside another folder with `Spende`.
-5. In the search bar type `steuer`.
-6. Clear it, then type `spende`.
-7. Clear it again, then type a **node name** (e.g. part of a document's filename).
+---
 
-**Expected (B):**
-- `steuer` → the tagged folder shows with its **whole subtree** (a folder tag applies
-  downward to everything inside).
-- `spende` → only the **path** to the matching leaf shows: its parent folder appears
-  as a container but its **non-matching siblings are hidden** (not the whole folder).
-- Search matches **tags only** (case-insensitive) — typing a **node/file name** finds
-  **nothing** (names are deliberately *not* searched).
+## MT-37: Tastenkürzel und Zoom
 
-**B2 — Group by tag:**
-8. Tick **Nach Tag gruppieren** (no search).
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Expected (B2):**
-- The tree is replaced by one folder **per tag** (sorted). Inside each tag's folder is
-  the **path** to every node that carries it: a tagged **folder** is kept **whole**
-  (all its children come with it); a tagged **leaf** keeps its **parent folders** as
-  context. A node with several tags appears under **each**, and an item tagged
-  differently from its tagged parent shows **both** inside the parent and under its own
-  tag (nodes may appear more than once — that's intended). Fully-untagged paths fall
-  into a final **„Ohne Tags"** group.
-- *Not obvious:* the per-tag group **headers** are a view only (synthetic) — clicking/
-  right-clicking a header does nothing; but the **real** folders/leaves inside are still
-  selectable and previewable. Structure stays locked (same as filtering). Untick the box
-  (or **Ansicht zurücksetzen**) to return.
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
 
-**B3 — Open the view in a new window:**
-9. With a **tag search** active, click **In neuem Fenster öffnen** in the view bar.
+**Schritte:**
+1. Nacheinander ausprobieren: **Strg+Z** / **Strg+Y** (Rückgängig / Wiederholen), **Strg+S** (Speichern), **Strg+O** (Öffnen), **Strg+E** (Export), **Strg+N** (Neues Fenster), **Entf** (markierten Eintrag löschen).
+2. Einen Eintrag mit **F2** umbenennen und **während der Eingabe** `Strg+S` und `Entf` drücken.
+3. In der Vorschau mit **Strg + Mausrad** zoomen; die Zoom-Leiste **− / ＋ / 100%** benutzen.
 
-**Expected (B3):**
-- A **new window** opens containing a **real, editable copy** of just the **displayed**
-  nodes — in the **normal tree order/structure** (any grouping is *not* carried over;
-  hidden nodes are absent). The original window is unchanged.
-- The new document is **named after the searched tag**, prefixed onto the old name
-  (e.g. `Spende - <old name>`); that title is also the suggested filename on **Speichern**.
-- *Not obvious:* the button appears **only when a tag search is active** — turning
-  **Nach Tag gruppieren** on/off does **not** show or hide it (grouping alone reshapes
-  the whole tree, so there's no subset to extract). Editing the copy does **not** touch
-  the source document.
+**Erwartet:**
+- Schritt 1: Alle Kürzel lösen die genannte Aktion aus. **Entf** löscht den markierten Eintrag (rückgängig machbar).
+- Schritt 2: Solange in einem Textfeld oder Dialog getippt wird, werden die Kürzel **ignoriert** – `Entf` löscht dann ein Zeichen und nicht den Eintrag.
+- Schritt 3: Strg + Mausrad zoomt nur die Vorschau, nicht das ganze Fenster.
 
-**C — Structural edit-lock while filtered:**
-7. With a search active, note the **⚠ "Ansicht gefiltert — Umsortieren aus"** hint and
-   try: drag a row, press **Insert**, press **Delete**, click **📥 Importieren** / **＋
-   Ordner**, drag a file from Explorer onto the tree, right-click a node.
+---
 
-**Expected (C):**
-- While filtered, the view is **read-only for structure**: rows **don't drag**, Insert/
-  Delete do nothing, **Importieren** and **＋ Ordner** are **disabled** (greyed), an OS
-  file-drop is ignored, and the right-click menu hides **Löschen / Zusammenführen / In
-  neuen Ordner / Splitten / Ordner anlegen**.
-- *Why (call out):* a filtered folder can hide non-matching children, so deleting or
-  moving it would silently affect rows you can't see — so structure is locked until you
-  **Ansicht zurücksetzen** (clear the search). **Content edits stay available**: rename,
-  status, and compression still work on the rows you can see.
+## MT-39: Großes PDF – Vorschau ohne lange Wartezeit
 
-**D — Multi-select tagging (#7):**
-10. With tagging **on**, give two leaves a shared tag (e.g. `Steuer` on both) and one of
-    them a second tag (e.g. `2024` on leaf A only).
-11. **Ctrl+click** (or Shift-range) to select **both** leaves at once.
-12. In the tag editor above the preview, **add** a tag (e.g. `Wichtig`), then **remove**
-    the shared `Steuer` chip.
+Ein großes PDF soll seine Vorschau **sofort** zeigen (nur die ersten Seiten) und beim Scrollen nachladen, statt einzufrieren, bis alle Seiten gezeichnet sind.
 
-**Expected (D):**
-- The editor shows a small **„2 markiert"** badge and the **union** of the two leaves'
-  tags. *Not obvious:* a tag on **only one** of them (`2024`) is drawn as a **hollow /
-  dashed** „partial" chip, while a tag on **both** (`Steuer`) is a solid chip.
-- Adding `Wichtig` puts it on **both** leaves; removing `Steuer` takes it off **both** —
-  each is **one undo step** (a single ↶ reverts the whole bulk change).
-- *Not obvious:* re-adding the partial `2024` from the input **completes** it onto the
-  other leaf too. A node that already has the tag is left unchanged (no duplicates), and
-  **Backspace** does **not** bulk-remove in multi-select (only single-select).
+**Beispieldateien:** `Grosses_Dokument_120_Seiten.pdf`, `Rechnung_5_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; beide Dateien sind importiert.
+
+**Schritte:**
+1. Den Eintrag `Grosses_Dokument_120_Seiten` anklicken und die Vorschau beobachten.
+2. Langsam durch das Dokument nach unten scrollen.
+3. Schnell weit nach unten und wieder nach oben scrollen.
+4. Den anderen Eintrag anklicken und danach wieder das große Dokument.
+
+**Erwartet:**
+- Die Vorschau erscheint **sofort**: Die ersten Seiten sind nach etwa 1–2 Sekunden da. Noch nicht gezeichnete Seiten zeigen einen hell **gestreiften Platzhalter** in der richtigen Größe – das Layout springt nicht, wenn die echte Seite eintrifft.
+- Scrollen im Lesetempo bleibt flüssig; die Seiten füllen sich knapp vor dem sichtbaren Bereich.
+- Schnelles Scrollen zeigt kurz Platzhalter, die sich gleich füllen; die Position der Bildlaufleiste bleibt stabil.
+- *Nicht offensichtlich:* Bei der Rückkehr zum großen Dokument steht die Vorschau an **derselben Stelle** wie zuvor; bereits gesehene Seiten sind sofort wieder da.
+- *Nicht offensichtlich:* Auch die Komprimierungs-Vorschau lädt nur die sichtbaren Seiten. Das erste Ansehen bei einem neuen DPI-Wert dauert dennoch, weil die komprimierte Fassung erst berechnet wird.
+
+---
+
+## MT-40: Baum mit der Tastatur umbauen und Ordner zuklappen
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
+
+**Schritte (A – Ordner zuklappen):**
+1. Auf den Pfeil **▾** vor einem Ordner klicken.
+2. Rechtsklick auf einen Ordner → **Zuklappen** bzw. **Aufklappen**; Rechtsklick auf einen beliebigen Eintrag → **Alle zuklappen** / **Alle aufklappen**.
+3. **💾 Speichern**, das Fenster schließen und die Datei erneut öffnen.
+
+**Erwartet (A):**
+- Der Pfeil wechselt auf **▸** und die Inhalte des Ordners werden ausgeblendet.
+- *Nicht offensichtlich:* Zuklappen markiert das Dokument als **geändert („•“)**. Es wird mitgespeichert – nach dem Öffnen sind dieselben Ordner wieder zugeklappt. **Strg+Z** macht ein Zuklappen rückgängig.
+
+**Schritte (B – mit den Pfeiltasten bewegen):**
+4. Einen Eintrag anklicken und mit **↑ / ↓** die Markierung bewegen.
+5. Auf einem Ordner **→** drücken (aufklappen bzw. hineingehen) und **←** (zuklappen bzw. herausgehen).
+
+**Erwartet (B):**
+- Die Markierung folgt den **sichtbaren** Zeilen; Inhalte zugeklappter Ordner werden übersprungen. **← / →** klappen Ordner zu und auf.
+
+**Schritte (C – Eintrag „tragen“: Einfg → Pfeiltasten → Einfg):**
+6. Einen Eintrag markieren und **Einfg** drücken.
+7. Mit **↑ / ↓** die Reihenfolge ändern, mit **→** in den Ordner direkt darüber hineinschieben, mit **←** eine Ebene herausholen.
+8. **Einfg** erneut drücken, um abzulegen.
+9. Den Vorgang wiederholen, am Ende aber **Esc** statt Einfg drücken.
+
+**Erwartet (C):**
+- Nach dem ersten **Einfg** bekommt die Zeile einen **gestrichelten Rahmen** („gegriffen“).
+- Während des Tragens ist der Baum vollständig aufgeklappt und der Eintrag wandert **nur optisch** – es ist noch nichts verändert.
+- **Einfg** legt ab: **eine** rückgängig machbare Verschiebung (Strg+Z holt sie in einem Schritt zurück).
+- **Esc** bricht ab; der Eintrag springt zurück und das Dokument bleibt unverändert.
+- *Nicht offensichtlich:* Die Taste zum Verschieben ist **Einfg** und nicht Strg+Pfeil, weil Strg bereits für die Mehrfachauswahl belegt ist.
+
+---
+
+## MT-41: Tags – ein/aus, bearbeiten, gefilterte Ansicht
+
+**Beispieldateien:** `Beispielmappe.belegtool`, `Beispielmappe_mit_Tags.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet.
+
+**Schritte (A – Schalter und automatisches Einschalten):**
+1. `Beispielmappe.belegtool` öffnen. Die Schaltfläche **🏷️ Tags** ist **aus** – es sind keine Tags und kein Tag-Editor zu sehen.
+2. Auf **🏷️ Tags** klicken.
+3. Ein Dokument anklicken, im Tag-Editor in das Feld **+ Tag** `Spende` eingeben und **Enter** drücken.
+4. Über **▾ → Speichern unter…** an einem neuen Ort speichern, das Fenster schließen und die Datei erneut öffnen.
+
+**Erwartet (A):**
+- Schritt 2: Die Schaltfläche ist hervorgehoben; über der Vorschau erscheint der **Tag-Editor**, über dem Baum eine **Suchleiste** („Tags suchen…“).
+- Schritt 3: Das Tag steht als Marke am Dokument und in dessen Zeile im Baum.
+- *Nicht offensichtlich:* Eine Datei, die **bereits Tags enthält**, öffnet mit **eingeschalteten** Tags (Schritt 4) – der Schalter muss nicht erst betätigt werden.
+- Ausschalten blendet alle Marken und Tag-Funktionen aus; die Tags **bleiben gespeichert** und erscheinen nach dem Einschalten wieder.
+
+**Schritte (B – Suche und Vererbung):**
+5. `Beispielmappe_mit_Tags.belegtool` öffnen (der Ordner **02 Bank** trägt das Tag `Bank`, einzelne Dokumente tragen eigene Tags).
+6. In die Suchleiste `bank` eingeben.
+7. Die Suche leeren und `miete` eingeben.
+8. Die Suche leeren und einen **Dateinamen** eingeben, z. B. `Deckblatt`.
+
+**Erwartet (B):**
+- `bank` → Der Ordner **02 Bank** erscheint mit seinem **gesamten Inhalt** (ein Ordner-Tag gilt für alles darin).
+- `miete` → Es erscheint nur der **Pfad** zum Treffer: der Ordner **03 Vorjahr 2024** als Rahmen und darin `Miete_2024-12.pdf`. Das Nachbardokument ohne dieses Tag ist **ausgeblendet**.
+- Die Suche findet **nur Tags** (Groß-/Kleinschreibung egal). Ein Datei- oder Eintragsname findet **nichts** – Namen werden absichtlich nicht durchsucht.
+
+**Schritte (B2 – nach Tag gruppieren):**
+9. Die Suche leeren und **Nach Tag gruppieren** anhaken.
+
+**Erwartet (B2):**
+- Der Baum wird durch **einen Ordner je Tag** ersetzt (alphabetisch). Darin steht der Pfad zu jedem Eintrag mit diesem Tag: Ein getaggter **Ordner** bleibt **vollständig**, ein getaggtes **Dokument** behält seine übergeordneten Ordner als Zusammenhang.
+- Ein Eintrag mit mehreren Tags erscheint unter **jedem** davon – Mehrfachnennungen sind gewollt. Alles ohne Tag landet in der Gruppe **„Ohne Tags“**.
+- *Nicht offensichtlich:* Die Tag-Überschriften sind nur Anzeige – Klick und Rechtsklick darauf bewirken nichts. Die echten Ordner und Dokumente darin lassen sich weiterhin anklicken und ansehen. Haken entfernen oder **Ansicht zurücksetzen** führt zurück.
+
+**Schritte (B3 – Ansicht in neuem Fenster öffnen):**
+10. **Nach Tag gruppieren** abschalten, `miete` suchen und in der Leiste auf **In neuem Fenster öffnen** klicken.
+
+**Erwartet (B3):**
+- Ein **neues Fenster** enthält eine **echte, bearbeitbare Kopie** nur der **angezeigten** Einträge – in normaler Baumreihenfolge. Das ursprüngliche Fenster bleibt unverändert.
+- Das neue Dokument trägt das gesuchte Tag vor dem bisherigen Namen (in der Art `Miete - Beispielmappe_mit_Tags`); so lautet auch der Vorschlag beim Speichern.
+- *Nicht offensichtlich:* Die Schaltfläche erscheint **nur bei aktiver Tag-Suche**. **Nach Tag gruppieren** allein blendet sie weder ein noch aus. Änderungen an der Kopie berühren das Ausgangsdokument nicht.
+
+**Schritte (C – Struktur ist gesperrt, solange gefiltert wird):**
+11. Bei aktiver Suche den Hinweis **⚠ Ansicht gefiltert — Umsortieren aus** beachten und ausprobieren: eine Zeile ziehen, **Einfg** drücken, **Entf** drücken, auf **📥 Importieren** und **＋ Ordner** klicken, eine Datei aus dem Explorer auf den Baum ziehen, einen Eintrag rechtsklicken.
+
+**Erwartet (C):**
+- Die gefilterte Ansicht ist für die **Struktur schreibgeschützt**: Zeilen lassen sich nicht ziehen, Einfg und Entf bewirken nichts, **Importieren** und **＋ Ordner** sind ausgegraut, eine abgelegte Datei wird ignoriert, und im Kontextmenü fehlen **Löschen**, **Zusammenführen**, **In neuen Ordner**, **Splitten** und **Ordner anlegen**.
+- *Warum:* Ein gefilterter Ordner kann nicht passende Inhalte verbergen. Löschen oder Verschieben würde unbemerkt Zeilen treffen, die gerade nicht zu sehen sind.
+- **Inhaltliche Änderungen bleiben möglich**: Umbenennen, Status und Komprimierung funktionieren an den sichtbaren Zeilen.
+
+**Schritte (D – mehrere Dokumente gleichzeitig taggen, ab Version 3.10.0):**
+12. Die Ansicht zurücksetzen. `Telefon_2025-01.pdf` und `Strom_Abschlag_2025-01.pdf` tragen beide `Betriebsausgabe`, dazu je ein eigenes Tag. Beide mit **Strg+Klick** markieren.
+13. Im Tag-Editor das Tag `Wichtig` **hinzufügen**, dann die gemeinsame Marke `Betriebsausgabe` über ihr **×** **entfernen**.
+14. Das nur einseitig vorhandene Tag `Telefon` in das Feld **+ Tag** eingeben und bestätigen.
+
+**Erwartet (D):**
+- Der Editor zeigt **„2 markiert“** und die **Vereinigung** der Tags beider Dokumente. Ein Tag, das nur **eines** trägt (`Telefon`, `Energie`), ist als **hohle, gestrichelte** Marke gezeichnet; ein gemeinsames Tag als gefüllte Marke.
+- `Wichtig` landet auf **beiden** Dokumenten, `Betriebsausgabe` verschwindet von **beiden** – jeweils **ein** Rückgängig-Schritt.
+- Schritt 14 ergänzt `Telefon` auch beim zweiten Dokument (die Marke wird gefüllt). Ein Dokument, das das Tag schon hat, bleibt unverändert – keine Doppelungen.
+- *Nicht offensichtlich:* Die **Rücktaste** im leeren Eingabefeld entfernt bei Mehrfachauswahl **nichts** (nur bei einem einzelnen Dokument das letzte Tag).

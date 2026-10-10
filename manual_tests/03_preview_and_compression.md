@@ -1,93 +1,107 @@
-# 03 — Preview & compression, status
+# 03 — Vorschau, Komprimierung, Drehen, Status
 
-Covers the preview panel (right side), the DPI/compression controls
-(`PreviewControls.jsx`), and the status-dot system, in the **React/pywebview UI**.
-The status **dots** have a dedicated deep test in `08_status_dots_help.md`; this file
-covers the basics.
+Die Vorschau (rechts) mit Zoom, die Regler für DPI und Komprimierung darüber, das Drehen und die Status-Punkte. Die Status-Punkte werden im Bereich 08 ausführlich geprüft; hier stehen die Grundlagen.
 
 ---
 
-## MT-10: Preview & zoom
+## MT-10: Vorschau und Zoom
 
-**Preconditions:** A leaf node with a real PDF/image. Select it.
+**Ab Version:** 3.10.0
 
-**Steps:**
-1. Look at the preview panel on the right; scroll through the pages.
-2. Zoom with **Strg + Mausrad** (Ctrl + wheel) over the preview, and use the zoom bar
-   **− / ＋ / 100 %** at the bottom of the preview.
-3. Scroll **down** to (say) page 5, note a line of text at the very top of the viewport,
-   then zoom **in** and **out** a couple of steps.
+**Beispieldateien:** `Kontoauszug_8_Seiten.pdf`
 
-**Expected:**
-- Pages render in the preview (windowed — only visible pages render, placeholders fill
-  in as you scroll; see MT-39). Ctrl+wheel and the zoom bar change the page size.
-- *Not obvious (v3.10.0):* zooming while scrolled down **keeps the document position** —
-  the line that was at the top of the viewport stays at the top after the zoom (the page
-  you were reading does not drift up or down). Before this fix the pixel scroll stayed
-  fixed, so the content slid away when you zoomed deep in a long document.
-- The zoom bar also shows the viewport position as **"Seite n / m"**.
-- *Not obvious:* there is **no separate "Original anzeigen" toggle** — the preview shows
-  the node's effective bytes; the compression **working-preview** (MT-11) is where you
-  compare a method against the original.
+**Voraussetzungen:** BelegTool ist gestartet; `Kontoauszug_8_Seiten.pdf` ist importiert und angeklickt.
+
+**Schritte:**
+1. In der Vorschau durch die Seiten scrollen.
+2. Mit **Strg + Mausrad** über der Vorschau zoomen; außerdem die Zoom-Leiste der Vorschau benutzen (**−**, **＋**, **100%**).
+3. Bis etwa Seite 5 scrollen und sich die Zeilennummer merken, die **ganz oben** im sichtbaren Bereich steht (z. B. „Zeile 141“). Dann einige Stufen **hinein-** und wieder **herauszoomen**.
+
+**Erwartet:**
+- Die Seiten erscheinen in der Vorschau; nur die sichtbaren werden gezeichnet, Platzhalter füllen sich beim Scrollen.
+- Strg + Mausrad und die Zoom-Leiste ändern die Seitengröße.
+- *Nicht offensichtlich:* Beim Zoomen bleibt die **Stelle im Dokument** stehen – die gemerkte Zeile ist nach dem Zoomen immer noch oben im sichtbaren Bereich. Die Seite rutscht nicht nach oben oder unten weg.
+- Die Zoom-Leiste zeigt die aktuelle Position als **„Seite n / m“**.
+- *Nicht offensichtlich:* Es gibt keinen eigenen Schalter „Original anzeigen“. Die Vorschau zeigt immer den aktuellen Stand des Dokuments; verglichen wird in der Komprimierungs-Vorschau (MT-11).
 
 ---
 
-## MT-11: Compress with the DPI slider and pick a method
+## MT-11: Komprimierung mit DPI-Regler und Verfahren ausprobieren
 
-**Preconditions:** A leaf node with a reasonably detailed page (e.g. a scanned receipt or
-`compress_sample.pdf`). Select it.
+**Beispieldateien:** `Farbscan_Rechnung_6_Seiten.pdf`, `Farbscan_Rechnung_3_Seiten.pdf`
 
-**Steps:**
-1. In the preview panel, open the **Kompression** method dropdown.
-2. Pick a method; drag the **DPI** slider (range 50–300); also try **unkomprimierte Fassung**.
+**Voraussetzungen:** BelegTool ist gestartet; beide Dateien sind importiert.
 
-**Expected:**
-- *Not obvious:* selecting a leaf runs **no** compression (the undo arrow stays disabled).
-  Opening the dropdown shows **"Kompression läuft …"**, then the methods.
-- The dropdown only lists methods that produced a file **smaller than the original** —
-  methods that made it larger are hidden. Methods include **JPG (Graustufen)**,
-  **JPG (Farbe)** (keeps colour), **PNG**, and **pikepdf** (structural). The original size
-  is shown for comparison.
-- Browsing methods/DPI only **previews** — the document is not changed yet (windowed, so a
-  big document doesn't freeze; switching back to an already-viewed method is instant).
+**Schritte:**
+1. Den Eintrag `Farbscan_Rechnung_6_Seiten` anklicken. Auf **↶ Rückgängig** und auf die Auswahlliste neben dem DPI-Regler achten.
+2. Die Auswahlliste (Verfahren) öffnen.
+3. Ein Verfahren wählen; den **DPI**-Regler verschieben (Bereich 50–300); danach wieder **unkomprimierte Fassung** wählen.
+4. Den Eintrag `Farbscan_Rechnung_3_Seiten` anklicken und einen Moment warten.
 
----
-
-## MT-12: Commit ("Lesbarkeit geprüft") and reset
-
-**Preconditions:** A leaf node you have just been previewing a method on (MT-11).
-
-**Steps:**
-1. Click **✓ Lesbarkeit geprüft** (commit) in the preview panel.
-2. Re-select the node and confirm the chosen method stuck (the button now reads **✓ übernommen**).
-3. On an **uncommitted** node, use the **reset** button in the preview controls.
-
-**Expected:**
-- **Commit** applies the compressed version as the node's current data (one undo step); the
-  front red "undecided" dot clears.
-- **Reset** (on an uncommitted node) returns to the original bytes.
-- *Not obvious / important:* once a committed node has been **saved**, its source is dropped
-  — on reload the compression dropdown shows **"bereits komprimiert (keine Quelle)"** and is
-  **disabled** (re-compress and reset are blocked). This is by design and irreversible — see
-  `04_export_persistence.md` MT-17. (Compression controls live only in the preview panel, not
-  on the right-click menu.)
+**Erwartet:**
+- Schritt 1: Das Anklicken verändert das Dokument nicht. Weil der Eintrag **mehr als 5 Seiten** hat, wird auch noch nichts berechnet; die Liste steht auf „unkomprimierte Fassung“.
+- Schritt 2: Die Liste zeigt zunächst **„Kompression läuft …“**, dann die Verfahren mit ihrer Größe.
+- Es erscheinen **nur** Verfahren, deren Ergebnis **kleiner als das Original** ist. Möglich sind **JPEG (Graustufen)**, **JPEG (Farbe)**, **PNG (Graustufen)** und **Struktur (Farbe erhalten)**; bei der Beispieldatei sind es die beiden JPEG-Verfahren. Das kleinste trägt den Zusatz **„· beste“**.
+- Die Größe des Originals steht am Eintrag **„unkomprimierte Fassung — … KB“**.
+- Schritt 3: Verfahren und DPI zu wechseln zeigt nur eine **Vorschau** – das Dokument ist noch nicht verändert (**↶** kommt dadurch nicht hinzu). Ein bereits angesehenes Verfahren erscheint beim Zurückwechseln sofort.
+- Schritt 4: Bei Dokumenten mit **höchstens 5 Seiten** wird automatisch berechnet und die kleinste Fassung vorausgewählt (Einzelheiten: Bereich 06, MT-43).
 
 ---
 
-## MT-13: Status dots
+## MT-12: Übernehmen („Lesbarkeit geprüft“) und zurücksetzen
 
-**Preconditions:** A document with a folder containing several leaves.
+**Beispieldateien:** `Farbscan_Rechnung_3_Seiten.pdf`
 
-**Steps:**
-1. Right-click a leaf → **Status →** and pick, in turn, **Zu erfassen**, **Erfasst**,
-   **Vorjahr**, then **Kein Status**.
-2. Right-click the **folder** → **Status (gesamter Inhalt) →** pick a value.
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert und angeklickt; in der Auswahlliste ist ein Verfahren gewählt (z. B. **JPEG (Graustufen)**).
 
-**Expected:**
-- A leaf shows a single **trailing dot**: **zu erfassen → yellow**, **erfasst → green**,
-  **vorjahreswert → red**, **Kein Status → no dot**.
-- A **folder** shows one dot per distinct descendant status (red → yellow → green) **plus a
-  black dot** when descendants are mixed with/without status; an all-no-status or empty
-  folder shows no dots. Setting a status on a folder **cascades to every descendant document**.
-- *Not obvious:* this replaced the old row-colour scheme — status is shown as dots, not by
-  tinting the row. The full aggregation rules are tested in `08_status_dots_help.md`.
+**Schritte:**
+1. Die Vorschau auf Lesbarkeit prüfen und auf **❓ Lesbarkeit geprüft** klicken.
+2. Einen anderen Eintrag anklicken und wieder zurückkehren.
+3. Zurücksetzen: in der Auswahlliste **unkomprimierte Fassung** wählen und erneut auf **❓ Lesbarkeit geprüft** klicken.
+
+**Erwartet:**
+- Schritt 1: Die komprimierte Fassung wird zum aktuellen Stand des Dokuments (ein Rückgängig-Schritt). Die Schaltfläche zeigt **✓ übernommen**; der rote Punkt **vorn** in der Zeile („Komprimierung noch nicht entschieden“) verschwindet.
+- Schritt 2: Das gewählte Verfahren ist weiterhin eingestellt.
+- Schritt 3: Das Dokument steht wieder auf der unkomprimierten Fassung.
+- *Nicht offensichtlich:* Es gibt **keine eigene Zurücksetzen-Schaltfläche** – zurückgesetzt wird, indem man die unkomprimierte Fassung wählt und sie übernimmt.
+- *Wichtig:* Sobald ein übernommenes Dokument **gespeichert** wurde, ist seine Quelle verworfen. Nach dem erneuten Öffnen zeigt die Liste **„bereits komprimiert (keine Quelle)“** und ist gesperrt. Das ist gewollt und nicht umkehrbar (siehe Bereich 04, MT-17).
+
+---
+
+## MT-12b: Seiten drehen (↺ / ↻)
+
+**Beispieldateien:** `Rechnung_5_Seiten.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; die Datei ist importiert und angeklickt.
+
+**Schritte:**
+1. Über der Vorschau auf **↻** klicken (Hinweistext „rechts drehen“).
+2. Auf **↺** klicken (Hinweistext „links drehen“).
+3. Viermal hintereinander **↻** klicken.
+4. Einmal **↶ Rückgängig** klicken.
+
+**Erwartet:**
+- Schritt 1: **Alle Seiten** des Dokuments sind um 90° im Uhrzeigersinn gedreht (Querformat).
+- Schritt 2: Die Seiten stehen wieder aufrecht.
+- Schritt 3: Nach vier Drehungen ist die Ausgangslage wieder erreicht.
+- Schritt 4: Jede Drehung ist ein eigener Rückgängig-Schritt; **↶** nimmt nur die letzte zurück.
+- *Nicht offensichtlich:* Gedreht wird immer das **ganze Dokument**, nicht eine einzelne Seite. Um nur eine Seite zu drehen, das Dokument erst splitten (Bereich 02, MT-06), die Seite drehen und wieder zusammenführen.
+- *Nicht offensichtlich:* Nach dem Drehen wird die Komprimierung neu bewertet; der rote Punkt vorn in der Zeile kann deshalb kurz wieder erscheinen.
+
+---
+
+## MT-13: Status-Punkte
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Beispielmappe.belegtool` ist geöffnet.
+
+**Schritte:**
+1. Rechtsklick auf ein Dokument → unter **Status** nacheinander **Zu erfassen**, **Erfasst**, **Vorjahr** und **Kein Status** wählen (jeweils erneut rechtsklicken).
+2. Rechtsklick auf einen **Ordner** → unter **Status (gesamter Inhalt)** einen Wert wählen.
+
+**Erwartet:**
+- Ein Dokument zeigt **einen Punkt am Zeilenende**: **Zu erfassen → gelb**, **Erfasst → grün**, **Vorjahr → rot**, **Kein Status → kein Punkt**.
+- Ein **Ordner** zeigt je enthaltenem Status einen Punkt (Reihenfolge rot → gelb → grün) und zusätzlich einen **schwarzen Punkt**, wenn manche Inhalte einen Status haben und andere nicht. Ein leerer Ordner oder einer ganz ohne Status zeigt keine Punkte.
+- Ein Status am Ordner wird auf **alle Dokumente darin** übertragen (auch in Unterordnern).
+- *Nicht offensichtlich:* Der Status wird als Punkt gezeigt, nicht durch Einfärben der Zeile. Die genauen Regeln prüft Bereich 08.

@@ -1,243 +1,215 @@
-# 10 — DATEV mode (v3.11.0)
+# 10 — DATEV-Modus
 
-The in-app DATEV integration files / writes documents back into the local **DATEV
-Dokumentenablage** via DATEVconnect. It is **off by default** and **lazy-loaded** — when
-DATEV mode is off, none of this runs and BelegTool behaves exactly as before.
+Der DATEV-Modus legt Dokumente in der lokalen **DATEV Dokumentenablage** ab und schreibt sie dorthin zurück. Er ist **standardmäßig aus**; ausgeschaltet verhält sich BelegTool genau wie ohne diese Funktion.
 
-> ⚠️ **Environment:** these cases need a machine with **DATEVconnect** running (the local
-> gateway on port `58452`) and Windows SSO as a DATEV user — typically the Kanzlei box. On
-> any machine **without** a reachable DATEVconnect, only **MT-DATEV-01** (the toggle) and the
-> "no crash when offline" checks apply; mark the rest **N/A — no DATEV box**.
->
-> ⚠️ **Productive data:** the write-back **overwrites** the DATEV document (DokAb keeps no
-> revision). Use a **test client / test document** ("ZZZ TEST"), never real client data, when
-> exercising write-back and delete. A local backup of the previous bytes is written to
-> `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` before every overwrite.
+> ⚠️ **Umgebung:** Diese Tests brauchen einen PC mit laufendem **DATEVconnect** und eine Windows-Anmeldung als DATEV-Benutzer – in der Regel den Kanzlei-Arbeitsplatz. Ohne erreichbares DATEVconnect sind nur **MT-DATEV-01** und **MT-DATEV-07** durchführbar; alle anderen im Testprotokoll als „Nicht durchführbar“ ankreuzen.
+
+> ⚠️ **Echte Daten:** Das Zurückschreiben **überschreibt** das Dokument in DATEV (die Dokumentenablage führt keine Versionen). Verwenden Sie ausschließlich einen **Testmandanten** und **Testdokumente** („ZZZ TEST“), niemals echte Mandantenunterlagen. Vor jedem Überschreiben legt BelegTool eine Sicherung des bisherigen Stands unter `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` ab.
 
 ---
 
-## MT-DATEV-01: Toggle DATEV mode on and off (no DATEV box needed)
+## MT-DATEV-01: DATEV-Modus ein- und ausschalten (ohne DATEV-Anbindung möglich)
 
-**Preconditions:** App open (any document).
+**Ab Version:** 3.10.0
 
-**Steps:**
-1. Find the **„DATEV"** button in the header (to the right of the toolbar).
-2. Click it.
-3. Close and reopen the app.
-4. Click **„DATEV"** again to turn it off.
+**Voraussetzungen:** BelegTool ist gestartet (beliebiges Dokument).
 
-**Expected:**
-- The button shows a filled green state with a **●** dot when on.
-- The setting is **persisted per user**: after reopening, DATEV mode is **still on** (it is
-  stored in `%APPDATA%\DigitalerUnterlagenOrdner\settings.json`, your own profile — on a
-  terminal server every user has their own).
-- With **no DATEV box reachable**, toggling on must **not** freeze or crash the app; no
-  document badge or actions appear (there is nothing connected). Turning it off returns the
-  header to the plain state.
+**Schritte:**
+1. Die Schaltfläche **DATEV** ganz rechts in der Kopfzeile suchen.
+2. Darauf klicken.
+3. BelegTool schließen und neu starten.
+4. Erneut auf **DATEV** klicken, um den Modus auszuschalten.
 
----
-
-## MT-DATEV-02: „from DATEV" badge on a checked-out document
-
-**Preconditions:** DATEV mode **on**; a DATEVconnect box reachable. In DATEV, **check out** a
-test document — DATEV materialises its file at `…\<doc-guid>\<file-id>.pdf`.
-
-**Steps:**
-1. In BelegTool, **open** that checked-out PDF (drag it in / „Öffnen", or `BelegTool.exe <path>`).
-2. Look at the header bar.
-
-**Expected:**
-- A **🔗 „Mit DATEV verknüpft"** badge appears, showing the source file name.
-- If the document was **already checked out by someone else** at the moment you opened it, a
-  **„· in DATEV ausgecheckt"** hint is shown **immediately** (you learn the constraint up
-  front, not only when you try to save).
-- A **„Nach DATEV zurückschreiben"** button is offered next to the badge.
+**Erwartet:**
+- Eingeschaltet ist die Schaltfläche grün gefüllt und zeigt **DATEV ●**.
+- Die Einstellung wird **je Benutzer gemerkt**: Nach dem Neustart ist der DATEV-Modus **weiterhin ein**. Auf einem Terminalserver hat jeder Benutzer seine eigene Einstellung.
+- **Ohne erreichbares DATEVconnect** darf das Einschalten das Programm **weder einfrieren noch abstürzen** lassen. Neben der Schaltfläche steht dann zunächst **⏳ verbinde…** und danach **⚠️ keine Verbindung**; die DATEV-Aktionen sind ausgegraut.
+- Ausschalten stellt die schlichte Kopfzeile wieder her.
 
 ---
 
-## MT-DATEV-03: Guarded write-back (happy path)
+## MT-DATEV-02: Kennzeichen „Mit DATEV verknüpft“ bei einem ausgecheckten Dokument
 
-**Preconditions:** MT-DATEV-02 done (a connected test document open, not checked out by anyone
-else). Make a small edit (e.g. add a FreeText note via the PDF-Tool, or any change).
+**Ab Version:** 3.10.0
 
-**Steps:**
-1. Click **„Nach DATEV zurückschreiben"**.
-2. Confirm the **„Nach DATEV zurückschreiben?"** dialog with **Ja**.
+**Voraussetzungen:** DATEV-Modus **ein**; DATEVconnect erreichbar. In DATEV ist ein **Testdokument ausgecheckt** – DATEV legt dessen Datei dabei in einem Ordner mit der Dokumentkennung ab.
 
-**Expected:**
-- A success notice **„Nach DATEV zurückgeschrieben"** appears.
-- In DATEV, the document's file now reflects your edit; its **change date advances**.
-- **The bound `.belegtool` is also saved on disk in the same step** — there is always a local
-  path, so write-back and the local copy stay in sync **without any „Speichern unter…" prompt**.
-  The unsaved-changes **„•"** clears (the title no longer shows pending changes).
-- A backup of the **previous** server file was written to
-  `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` **before** the overwrite.
-- Choosing **Nein** (cancel the dialog) writes **nothing** to DATEV — you can then use the
-  normal **💾 Speichern** for a local file instead.
+**Schritte:**
+1. Die ausgecheckte Datei in BelegTool **öffnen** (mit **📂 Öffnen** oder per Doppelklick).
+2. Die Kopfzeile ansehen.
 
-**Edge — DATEV succeeds but the local save fails** (e.g. the `.belegtool` sits on a removed
-USB / read-only network share): provoke it by making the local file unwritable, then write back.
-*Expected:* the **„Nach DATEV zurückgeschrieben"** notice still appears (DATEV **did** get the
-edit), **and** a separate error names the failed local save — your edit is not silently lost,
-and you can re-save locally to a writable location.
+**Erwartet:**
+- Es erscheint das Kennzeichen **🔗 Mit DATEV verknüpft** mit dem Namen der Quelldatei.
+- War das Dokument beim Öffnen bereits **von jemand anderem ausgecheckt**, steht der Zusatz **· in DATEV ausgecheckt** **sofort** dabei – Sie erfahren die Einschränkung gleich und nicht erst beim Speichern.
+- Neben dem Kennzeichen steht die Schaltfläche **Nach DATEV zurückschreiben**.
 
 ---
 
-## MT-DATEV-04: Write-back conflict guards (fallbacks)
+## MT-DATEV-03: Geschütztes Zurückschreiben (Normalfall)
 
-**Preconditions:** A connected test document open (as MT-DATEV-03).
+**Ab Version:** 3.10.0
 
-**Try each and confirm the write is REFUSED with a clear message (never a silent overwrite):**
+**Voraussetzungen:** MT-DATEV-02 ist durchgeführt: Ein verknüpftes Testdokument ist geöffnet und von niemand anderem ausgecheckt. Eine kleine Änderung ist vorgenommen (z. B. eine Textnotiz über das PDF-Tool).
 
-| Provoke | Expected message (then: save locally) |
+**Schritte:**
+1. Auf **Nach DATEV zurückschreiben** klicken.
+2. Die Rückfrage „Nach DATEV zurückschreiben?“ mit **Ja** bestätigen.
+3. Den Test wiederholen und die Rückfrage mit **Nein** beantworten.
+
+**Erwartet:**
+- Schritt 2: Es erscheint die Meldung **„✓ Nach DATEV zurückgeschrieben“**.
+- In DATEV zeigt die Datei des Dokuments die Änderung; das **Änderungsdatum ist neuer**.
+- Die zugehörige lokale Datei wird **im selben Schritt mitgespeichert** – es gibt keine Nachfrage „Speichern unter…“, und das **„•“** verschwindet.
+- Unter `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` liegt eine Sicherung des **vorherigen** DATEV-Stands, angelegt **vor** dem Überschreiben.
+- Schritt 3: **Nein** schreibt **nichts** nach DATEV. Sie können stattdessen normal mit **💾** lokal speichern.
+
+**Hinweis:** Sonderfall „DATEV gelingt, lokales Speichern scheitert“ (z. B. die lokale Datei liegt auf einem schreibgeschützten Laufwerk): Die Meldung „Nach DATEV zurückgeschrieben“ erscheint trotzdem, **zusätzlich** nennt eine Fehlermeldung das gescheiterte lokale Speichern. Die Änderung geht nicht stillschweigend verloren.
+
+---
+
+## MT-DATEV-04: Zurückschreiben wird bei Konflikten verweigert
+
+**Ab Version:** 3.10.0
+
+**Voraussetzungen:** Ein verknüpftes Testdokument ist geöffnet (wie in MT-DATEV-03).
+
+**Schritte:**
+1. Jeden der drei Fälle aus der Tabelle herbeiführen und danach auf **Nach DATEV zurückschreiben** klicken.
+
+| Fall herbeiführen | Erwartete Meldung |
 |---|---|
-| In DATEV, **check out** the document by another user, then write back | „DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich." |
-| In DATEV, **change** the document (new file) after you opened it, then write back | „DATEV: Das Dokument wurde zwischenzeitlich geändert …" |
-| Open a **saved `.belegtool`** that remembers a DATEV origin but whose content no longer matches the server file, then write back | „DATEV: Der Serverstand weicht vom geöffneten Stand ab …" |
+| In DATEV das Dokument durch einen **anderen Benutzer auschecken** lassen | „DATEV: Das Dokument ist ausgecheckt — nur lokal speichern möglich.“ |
+| In DATEV das Dokument **ändern** (neue Datei), nachdem es in BelegTool geöffnet wurde | „DATEV: Das Dokument wurde zwischenzeitlich geändert — bitte lokal speichern.“ |
+| Eine **gespeicherte `.belegtool`** öffnen, die ihre DATEV-Herkunft kennt, deren Inhalt aber nicht mehr zur Datei in DATEV passt | „DATEV: Der Serverstand weicht vom geöffneten Stand ab — bitte lokal speichern.“ |
 
-**Expected:** In every case the DATEV document is **left untouched**, the message explains why,
-and you can fall back to a normal local **Speichern**.
-
----
-
-## MT-DATEV-05: File a not-connected document into DATEV
-
-**Preconditions:** DATEV mode **on**; open a **normal** document (NOT from a checkout path) —
-so it is **not** connected.
-
-**Steps:**
-1. In the header, click **„Nach DATEV ablegen"**. A **filing dialog** opens (no longer a bare
-   number prompt) and loads the client list.
-2. In the dialog: type in the **Mandant** search box (filters by number OR name) and pick the
-   client from the list. Check the **Bezeichnung** field — it is **prefilled with the document
-   name** and becomes the document's **name in DATEV**; edit it if you like. Optionally choose a
-   **Ordner** + **Register**, a **Belegdatum**, and a **Veranlagungsjahr**/**-monat**. Click **„Ablegen"**.
-
-**Expected:**
-- **„Ablegen" is disabled until BOTH a Mandant is chosen AND a Bezeichnung is present** — clearing
-  the Bezeichnung disables it, so a filed document is **never nameless**. (No client → no safe
-  target.) Choosing a month without a year shows a hint and keeps it disabled.
-- A success notice **„In DATEV abgelegt"** appears.
-- In DATEV (Dokumentenablage of that Mandant), a **new** document holds the exported file, **its
-  name = the Bezeichnung you entered**, in the chosen folder/register, with the Belegdatum as
-  `receipt_date` and the Veranlagungszeitraum as the document's **Jahr/Monat** (verify these fields
-  in DATEV — they are mapped per the DMS spec but should be confirmed on first real use).
-- The header badge flips to **„Mit DATEV verknüpft"** (the document is now connected, so a
-  later edit offers write-back).
-- **If the client list cannot be loaded** (master-data unreachable), the dialog shows the reason
-  and **„Ablegen" stays disabled** — filing is refused rather than guessed.
+**Erwartet:**
+- In **jedem** Fall bleibt das Dokument in DATEV **unverändert** – es wird nie stillschweigend überschrieben.
+- Die Meldung nennt den Grund.
+- Ein normales lokales **💾 Speichern** bleibt möglich.
 
 ---
 
-## MT-DATEV-06: Export → DATEV (same client), including split
+## MT-DATEV-05: Ein nicht verknüpftes Dokument nach DATEV ablegen
 
-**Preconditions:** A **connected** test document open (so the same-client Mandant is known);
-DATEV mode on.
+**Ab Version:** 3.11.0
 
-**Steps:**
-1. Click **⬇ Export PDF**.
-2. In the export dialog, tick **„Nach DATEV ablegen (gleicher Mandant)"**.
-3. (Optional) also tick **„In mehrere Dateien aufteilen"** with a small page threshold.
-4. Click **Exportieren**.
+**Beispieldateien:** `ZZZ_TEST_Dokument.pdf`
 
-**Expected:**
-- **No file save dialog** appears — the export goes to DATEV instead of disk.
-- A notice reports **„In DATEV abgelegt (N Dokumente)"**.
-- In DATEV, **N new documents** appear under the **same client** as the source — when split is
-  on, **each part PDF is its own document** (N = the number of parts); when off, exactly one.
+**Voraussetzungen:** DATEV-Modus **ein**; DATEVconnect erreichbar. In BelegTool ist ein **neues** Dokument offen, in das `ZZZ_TEST_Dokument.pdf` importiert wurde – es stammt nicht aus DATEV und ist daher **nicht verknüpft**.
 
----
+**Schritte:**
+1. In der Kopfzeile auf **Nach DATEV ablegen** klicken. Es öffnet sich ein Ablagedialog, der die Mandantenliste lädt.
+2. Im Suchfeld **Mandant** eine Nummer **oder** einen Namen eintippen und den **Testmandanten** in der Liste wählen.
+3. Das Feld **Bezeichnung** prüfen und auf einen erkennbaren Testnamen ändern (z. B. „ZZZ TEST BelegTool“). Probeweise leeren und wieder füllen.
+4. Nach Wunsch **Ordner** und **Register**, ein **Belegdatum** sowie **Veranlagungsjahr** und **-monat** wählen. Probeweise einen Monat **ohne** Jahr wählen.
+5. Auf **Ablegen** klicken.
 
-## MT-DATEV-07: Mode-off is truly inert (regression)
-
-**Preconditions:** DATEV mode **off**.
-
-**Steps:**
-1. Open, edit, save, and export documents as usual.
-
-**Expected:**
-- No DATEV badge, no DATEV actions, no DATEV option in the export dialog.
-- Behaviour is identical to a build without the DATEV feature (the `datev` package is not even
-  imported). Nothing about DATEV should appear anywhere.
+**Erwartet:**
+- Das Feld **Bezeichnung** ist mit dem Dokumentnamen **vorbelegt**; es wird der **Name des Dokuments in DATEV**.
+- **Ablegen ist ausgegraut, bis ein Mandant gewählt UND eine Bezeichnung vorhanden ist.** Wird die Bezeichnung geleert, wird die Schaltfläche wieder ausgegraut – ein abgelegtes Dokument ist nie namenlos.
+- Ein Monat ohne Jahr zeigt den Hinweis „Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.“ und hält **Ablegen** ausgegraut.
+- Nach Schritt 5 erscheint die Meldung **„✓ In DATEV abgelegt“**.
+- In der Dokumentenablage des Testmandanten liegt ein **neues** Dokument mit der Datei, dem eingegebenen Namen, im gewählten Ordner und Register, mit Belegdatum und Veranlagungszeitraum. **Bitte diese Felder in DATEV ausdrücklich nachsehen** und im Protokoll bestätigen.
+- Das Kennzeichen in der Kopfzeile wechselt auf **🔗 Mit DATEV verknüpft** – eine spätere Änderung bietet das Zurückschreiben an.
+- **Lässt sich die Mandantenliste nicht laden**, nennt der Dialog den Grund und **Ablegen bleibt ausgegraut** – es wird nichts auf Verdacht abgelegt.
 
 ---
 
-## MT-DATEV-08: Write back a checkout opened in the PDF-Tool (PDF opening)
+## MT-DATEV-06: Export nach DATEV (gleicher Mandant), auch aufgeteilt
 
-**Preconditions:** DATEV mode **on**; a DATEVconnect box reachable. In DATEV, **check out** a
-test document. DATEV materialises it in one of two shapes — both must be recognised:
-- **DMS:** `…\<doc-guid>\<file-id>.pdf` (the file is named `<file-id>`);
-- **DokOrg Pro:** `…\<doc-guid>\<file-id>\<name>.pdf` (`<file-id>` is a **folder**, the real name follows).
+**Ab Version:** 3.10.0
 
-⚠️ **Key behaviour (confirmed live 2026-06-30): DATEV refuses an API write-back to a *checked-out*
-document** ("The document can't be changed because it is checked out"). So a checked-out doc is
-saved the **native** way — edit the working copy, **check it in via DATEV** — and the PDF-Tool does
-**not** offer „🔗 Nach DATEV zurückschreiben" for it. In-place API write-back applies only to a
-connected doc that is **not** checked out.
+**Voraussetzungen:** DATEV-Modus **ein**; ein **verknüpftes** Testdokument mit mehreren Seiten ist geöffnet (damit ist der Mandant bekannt).
 
-**Steps (checked-out document — the normal DokOrg flow):**
-1. Open the checked-out **`.pdf`** directly (double-click / file association / `BelegTool.exe <path>`).
-   It opens in the **PDF-Tool** surface (single-PDF editor), **not** the organizer.
-   ⚠️ **The window must appear and render the PDF immediately** — it must **not** hang for 10-20 s
-   waiting for the DATEV connection (the connect runs in the background).
-   ⚠️ **The page content must be VISIBLE, not a blank white page.** DATEV documents are scans
-   (JBIG2 / JPEG2000); the PDF-Tool bundles the PDF.js wasm decoders (`/pdfjs/wasm/`) so these
-   render. A blank page with a correct page count = the decoder assets aren't being served (regression).
-2. Confirm the toolbar shows the badge **„🔗 Mit DATEV verknüpft · <file> · ausgecheckt
-   (💾 Speichern → in DATEV einchecken)"** and that there is **NO „🔗 Nach DATEV zurückschreiben"**
-   button (it is hidden for a checked-out doc).
-3. Add a small note (✎ Text), then click **💾 Speichern**.
-4. In DATEV, **check the document back in**.
+**Schritte:**
+1. Auf **⬇ Export PDF** klicken.
+2. Im Dialog **Nach DATEV ablegen (gleicher Mandant)** anhaken.
+3. Bei einem zweiten Durchlauf zusätzlich **In mehrere Dateien aufteilen** mit einer kleinen Seitenzahl anhaken.
+4. Auf **Exportieren** klicken.
 
-**Expected:**
-- After **💾 Speichern**: status **„Gespeichert ✓"**; the edit is written to the local **working
-  copy** (the checked-out `.pdf` in your profile's DokOrg checkout folder).
-  - If the working copy is **locked / read-only**, Speichern reports the error (`[Errno 13]…`) —
-    nothing was saved; close whatever holds the file and retry.
-- After the **DATEV check-in**: the document's new version in DATEV reflects your edit (DokOrg uploads
-  the working copy as the new version).
-- **Diagnostics** (`belegtool_diag.log`, next to the exe) for this doc show
-  `checked_out=True`, `resolved: file_id=… structure_item_id=…` (the **server** ids, not the path
-  number), and — *only if you somehow trigger a write-back* — `verdict=checked_out_self` followed by a
-  local-working-copy save (the safety net), **never** a raw "can't be changed because it is checked out".
-
-**Steps (connected doc that is NOT checked out — in-place write-back still works):**
-1. Open a connected `.pdf` that is **not** checked out.
-2. Confirm the **„🔗 Nach DATEV zurückschreiben"** button **is** shown; add a note; click it; confirm **Ja**.
-
-**Expected:** status **„Nach DATEV zurückgeschrieben ✓ · <file>.pdf"**; the DATEV file reflects the
-edit; a backup of the previous server bytes is in `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\`.
-The local copy is also overwritten when writable; a locked local copy after a *successful* server
-write-back is **silently** tolerated (no `[Errno 13]` on a ✓).
-
-**Other surfaces:**
-- A **not-connected** PDF shows **„📤 Nach DATEV ablegen"** → the filing dialog (searchable Mandant +
-  folder/register + Belegdatum + Veranlagungsjahr/-monat) files it as a new DATEV document.
-- The DATEV write-back button is **disabled with a hint** while the connection is still establishing.
-- With DATEV mode **off**, the PDF-Tool shows **no** DATEV button at all.
+**Erwartet:**
+- Es erscheint **kein Dialog zum Speichern** – der Export geht nach DATEV statt auf die Festplatte.
+- Die Meldung lautet **„✓ In DATEV abgelegt (N Dokumente)“**.
+- In DATEV entstehen **N neue Dokumente** beim **selben Mandanten** wie die Quelle. Mit Aufteilung ist **jede Teildatei ein eigenes Dokument** (N = Zahl der Teile), ohne Aufteilung genau eines.
 
 ---
 
-## MT-DATEV-09: File a node opened „in PDF-Tool" into DATEV
+## MT-DATEV-07: Ausgeschalteter Modus ist wirklich unsichtbar
 
-**Preconditions:** DATEV mode **on**; a DATEVconnect box reachable. Open a **normal `.belegtool`**
-in the organizer (not from a checkout), with at least one document (leaf) node.
+**Ab Version:** 3.10.0
 
-**Steps:**
-1. Right-click a document node → **„Im PDF-Tool öffnen"**. It opens in the **PDF-Tool** surface,
-   **bound to that node** (a node binding, not a file).
-2. Confirm a **„📤 Nach DATEV ablegen"** button is shown (NOT a blank toolbar — this used to be
-   missing entirely for a node opened in the PDF-Tool).
-3. Add a small note (✎ Text). Click **„📤 Nach DATEV ablegen"** → the **same filing dialog**
-   opens (searchable Mandant + **Bezeichnung** + folder/register + Belegdatum + Veranlagung).
-   Pick a test Mandant, keep/edit the Bezeichnung, click **„Ablegen"**.
+**Beispieldateien:** `Beispielmappe.belegtool`
 
-**Expected:**
-- A success notice **„In DATEV abgelegt ✓"** appears.
-- In DATEV, a **new** document holds the (edited) PDF under the chosen Mandant, named after the
-  Bezeichnung.
-- Back in the **organizer**, the node now reflects your edit (the baked bytes were pushed back to
-  the owner node) — there is **no** „lokal nicht gespeichert" error, because the node binding's
-  local target is the organizer node itself (no separate file path).
-- A node binding only ever offers **file-anew** (📤), never write-back (🔗) — the organizer owns
-  any DATEV link, so write-back of a connected `.belegtool` is done there (MT-DATEV-03).
+**Voraussetzungen:** DATEV-Modus **aus**.
+
+**Schritte:**
+1. `Beispielmappe.belegtool` öffnen, etwas ändern, speichern und den Exportdialog (**⬇ Export PDF**) öffnen.
+2. Ein Dokument per Rechtsklick → **Im PDF-Tool öffnen** öffnen und die Schaltflächen dort ansehen.
+
+**Erwartet:**
+- Kein DATEV-Kennzeichen, keine DATEV-Aktionen, keine DATEV-Option im Exportdialog, keine DATEV-Schaltfläche im PDF-Tool.
+- In der Kopfzeile steht nur die unauffällige Schaltfläche **DATEV** zum Einschalten.
+- Öffnen, Bearbeiten, Speichern und Exportieren verhalten sich wie gewohnt.
+
+---
+
+## MT-DATEV-08: Ausgechecktes PDF im PDF-Tool bearbeiten und einchecken
+
+**Ab Version:** 3.11.1
+
+**Beispieldateien:** `ZZZ_TEST_Dokument.pdf`
+
+**Voraussetzungen:** DATEV-Modus **ein**; DATEVconnect erreichbar. In DATEV ist ein **Testdokument (PDF) ausgecheckt**. Wichtig zu wissen: DATEV lehnt das direkte Zurückschreiben in ein **ausgechecktes** Dokument ab. Ein ausgechecktes Dokument wird deshalb auf dem üblichen Weg gesichert – Arbeitskopie bearbeiten, speichern, **in DATEV einchecken**.
+
+**Schritte (A – ausgechecktes Dokument, der Normalfall):**
+1. Die ausgecheckte **`.pdf`** direkt öffnen (Doppelklick bzw. „Öffnen mit → BelegTool“).
+2. Die Leiste oben im Fenster ansehen.
+3. Über **✎ Text** eine kleine Notiz einfügen und auf **💾 Speichern** klicken.
+4. Das Dokument in DATEV wieder **einchecken**.
+
+**Erwartet (A):**
+- Schritt 1: Die Datei öffnet im **PDF-Tool** (Einzel-PDF-Ansicht), **nicht** im Hauptfenster mit dem Baum.
+- ⚠️ Das Fenster erscheint **sofort** und zeigt das PDF – es hängt **nicht** 10–20 Sekunden, bis die DATEV-Verbindung steht.
+- ⚠️ Der **Seiteninhalt ist sichtbar** – keine leere weiße Seite. DATEV-Dokumente sind meist Scans; eine leere Seite bei richtiger Seitenzahl wäre ein Fehler.
+- Schritt 2: Es steht dort **🔗 Mit DATEV verknüpft · <Datei> · ausgecheckt (💾 Speichern → in DATEV einchecken)**. Eine Schaltfläche **🔗 Nach DATEV zurückschreiben** gibt es **nicht** (sie ist bei ausgecheckten Dokumenten ausgeblendet).
+- Schritt 3: Der Statustext zeigt **„Gespeichert ✓“**; die Änderung steht in der lokalen **Arbeitskopie**. Ist die Arbeitskopie gesperrt oder schreibgeschützt, meldet Speichern den Fehler und nichts wurde gespeichert.
+- Schritt 4: Nach dem Einchecken zeigt der neue Stand in DATEV die Notiz.
+
+**Schritte (B – verknüpftes, aber nicht ausgechecktes Dokument):**
+5. Ein verknüpftes `.pdf` öffnen, das **nicht** ausgecheckt ist.
+6. Eine Notiz einfügen, auf **🔗 Nach DATEV zurückschreiben** klicken und mit **Ja** bestätigen.
+
+**Erwartet (B):**
+- Die Schaltfläche **🔗 Nach DATEV zurückschreiben** **ist** vorhanden.
+- Der Statustext zeigt **„Nach DATEV zurückgeschrieben ✓ · <Datei>.pdf“**; die Datei in DATEV enthält die Notiz; unter `%APPDATA%\DigitalerUnterlagenOrdner\datev_backups\` liegt eine Sicherung des vorherigen Stands.
+
+**Schritte (C – weitere Zustände):**
+7. `ZZZ_TEST_Dokument.pdf` (nicht aus DATEV) per Doppelklick bzw. „Öffnen mit → BelegTool“ öffnen.
+8. Den DATEV-Modus ausschalten und die Datei erneut öffnen.
+
+**Erwartet (C):**
+- Schritt 7: Ein **nicht verknüpftes** PDF zeigt **📤 Nach DATEV ablegen**; ein Klick öffnet den Ablagedialog aus MT-DATEV-05.
+- Solange die Verbindung noch aufgebaut wird, ist die DATEV-Schaltfläche **ausgegraut** und trägt einen Hinweis.
+- Schritt 8: Bei **ausgeschaltetem** DATEV-Modus zeigt das PDF-Tool **gar keine** DATEV-Schaltfläche.
+
+---
+
+## MT-DATEV-09: Ein im PDF-Tool geöffnetes Dokument nach DATEV ablegen
+
+**Ab Version:** 3.11.0
+
+**Beispieldateien:** `Beispielmappe.belegtool`
+
+**Voraussetzungen:** DATEV-Modus **ein**; DATEVconnect erreichbar; `Beispielmappe.belegtool` ist im Hauptfenster geöffnet (nicht aus DATEV ausgecheckt).
+
+**Schritte:**
+1. Rechtsklick auf ein Dokument → **Im PDF-Tool öffnen**.
+2. Die Schaltflächen im PDF-Tool ansehen.
+3. Über **✎ Text** eine kleine Notiz einfügen. Auf **📤 Nach DATEV ablegen** klicken, im Ablagedialog den **Testmandanten** wählen, die **Bezeichnung** auf einen Testnamen setzen und auf **Ablegen** klicken.
+
+**Erwartet:**
+- Schritt 2: Es gibt die Schaltfläche **📤 Nach DATEV ablegen**.
+- Schritt 3: Es öffnet sich **derselbe Ablagedialog** wie in MT-DATEV-05. Danach erscheint **„In DATEV abgelegt ✓“**.
+- In DATEV liegt beim gewählten Mandanten ein **neues** Dokument mit dem bearbeiteten PDF, benannt nach der Bezeichnung.
+- Im **Hauptfenster** enthält der Eintrag jetzt Ihre Notiz. Es erscheint **kein** Fehler „lokal nicht gespeichert“.
+- *Nicht offensichtlich:* Ein aus dem Baum geöffnetes Dokument bietet immer nur **Ablegen** (📤) an, nie **Zurückschreiben** (🔗). Das Zurückschreiben einer verknüpften Mappe geschieht im Hauptfenster (MT-DATEV-03).

@@ -912,6 +912,36 @@ when it ships, update the named `manual_tests` cases and rebuild the kit in the 
    intent; the copy is a deep copy with **new node ids** (variants are keyed by id). The
    README's "deep-copy" feature claim is currently not backed by the UI. Related, still
    deferred: cross-window copy (item 5 of the 2026-06-08 list below). Tests: 02 MT-09/MT-09b.
+8. **The "external template/source" refusal must be bypassable** *(requested 2026-10-11 after a
+   real document was refused: „…docx: Dokument verweist auf eine externe Vorlage/Quelle und wird
+   aus Sicherheitsgründen nicht importiert")*. Today `office_via_com` refuses **every** OOXML
+   file for which `converters.scan_ooxml_external_targets` finds a non-hyperlink
+   `TargetMode="External"` relationship to an http(s)/ftp/`file:`/UNC target — with no override.
+   That also hits ordinary documents: Word stores the **attached template** of a document
+   created from a template on a local or network path exactly this way
+   (`word/_rels/settings.xml.rels` → `attachedTemplate` → `file:///…` or `\\server\…`), so a
+   harmless report cannot be imported at all. The guard itself stays justified (Word resolves a
+   UNC/HTTP template on open → NTLM-hash leak / SSRF before the COM guards apply). Options, in
+   order of preference:
+   - a. **Neutralise instead of refuse:** convert a temp copy with the offending relationship
+     removed (for `attachedTemplate` also the `<w:attachedTemplate>` element in `settings.xml`;
+     Word falls back to Normal.dotm, the document keeps its own styles). No network access, no
+     prompt. For linked *content* (linked images/OLE) the linked part is then missing → say so
+     in a notice.
+   - b. **Explicit override:** offer „Trotzdem importieren" per file, showing the target; keep
+     the hard refusal (or a much stronger warning) for http/UNC targets, where the risk is real.
+   - c. In either case **name the target in the message** (today it is only written to the log),
+     so the user can see what the document points at.
+   Workaround until then: open the file in Word and save it as PDF, then import the PDF.
+   Tests when built: 01 MT-05 (its note says such files are refused), 01 MT-03c; add a sample
+   `.docx` with an attached-template relationship to `scripts/testkit/samples.py`.
+   **Also the chosen way to duplicate a folder with its sub-structure** (decided 2026-10-10 for
+   the ESt filing structure: a second rental property = a copy of the „Objekt" folder, empty
+   sub-folders included) — so copying a folder that holds no pages must work.
+8. **„Neu aus Vorlage" (document templates) — deferred 2026-10-10.** A folder-only `.belegtool`
+   already saves and opens (probed through `PDFStorage` and `CoreApi.open`, not in the UI), so
+   a template file is possible today; what is missing is opening it as a NEW unsaved document,
+   so that „Speichern" cannot overwrite the template. Not planned yet.
 
 ### Next version — planned features (2026-06-08)
 Captured from a planning pass; **not yet built.** Items 2–6 are real UI features (→ a MINOR

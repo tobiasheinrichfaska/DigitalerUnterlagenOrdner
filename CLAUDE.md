@@ -173,7 +173,7 @@ render/compress path at startup.
 | `pypdf` | PDF read/write (base) |
 | `reportlab` | Render TOC pages (Canvas) |
 | `xhtml2pdf` | HTML-to-PDF |
-| `extract-msg` | Parse Outlook MSG files |
+| `extract-msg` | Parse Outlook MSG files — ⚠ GPLv3, see Known Limitations (2026-10-18) |
 | `pywin32` | Word/Excel/PPT conversion via COM |
 | `pyinstaller` | Build tool |
 
@@ -809,6 +809,40 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11 was built. Test cases that
     need newer features carry `**Ab Version:**`.
   - Compression/DPI defects: see *Planned changes — requested 2026-10-10* item 3.
+
+- **Open findings from 2026-10-18 — Outlook `.msg` import** (found while adding `.msg` support to the
+  sibling box tool; checked read-only against this repo's own code in `.build_venv`, nothing fixed yet):
+  - **A forwarded `.msg` loses all its attachments, silently.** `archives.extract_email_to_structure`
+    chooses the parser by searching the RAW bytes for `b"Content-Type:"` or `b"From:"` (→ EML). A `.msg`
+    stores its attachments' bytes unencoded inside the OLE container, so a `.msg` with an attached mail
+    („als Anlage weitergeleitet") or a text attachment that contains such a header line goes to the EML
+    parser → the import yields only an empty `E-Mail.txt`, the PDF attachments are gone, no message.
+    Reproduced with a synthetic file (`Rechnung.pdf` + `Original.eml` attached → result `["E-Mail.txt"]`;
+    the same mail without the `.eml` imports correctly). Not a trigger: an HTML attachment (its
+    `http-equiv="Content-Type"` has no colon). **Fix:** route by the OLE/CFB signature —
+    `data[:8] == bytes.fromhex("D0CF11E0A1B11AE1")` → `.msg`, else `.eml`. Guard:
+    [`tests/test_msg_import.py`](tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
+    (**strict xfail** — goes red when fixed, then drop the marker).
+  - **Synthetic `.msg` files for tests:** [`tests/msg_fixture.py`](tests/msg_fixture.py) writes real
+    CFB/MSG files (stdlib only: subject, body, attachments, optional content id) that `extract_msg`
+    reads — so `.msg` paths can now be tested without real mail (Outlook is never touched).
+  - **Licence: `extract-msg` is GPLv3** (checked in the 0.56.1 wheel's `LICENSE.txt`; `License: GPL`). It is
+    pinned here (`extract-msg==0.55.0`) and therefore bundled into the exe/Store package. Combining it with
+    this AGPLv3 code is allowed, but the **commercial licence** (`LICENSE_COMMERCIAL.md`) cannot cover a
+    build that contains GPLv3 code — the CLA only covers our own code, not third-party GPL code. To confirm
+    with a licence specialist; options: drop `.msg` from commercially licensed builds, or replace the
+    library (below).
+  - **Weight of `extract-msg`:** `pip install extract-msg==0.55.0` pulls 16 packages (olefile,
+    beautifulsoup4, compressed-rtf, ebcdic, red-black-tree-mod, RTFDE → lark 1.3.1, oletools, pyparsing,
+    pcodedmp, colorclass, easygui, msoffcrypto-tool, …). Irrelevant for the frozen exe, but it collided
+    with vLLM's pinned `lark` on the box, which is why the box does not use it.
+  - **Alternatives (researched 2026-10-18):** `olefile` (BSD, maintained, the base of extract-msg) + an own
+    small reader for the attachment streams (`__attach_version1.0_#…` → `__substg1.0_3707001F` long name,
+    `__substg1.0_37010102` data, `3701000D` embedded message) — recommended, licence-clean; `msg-parser`
+    (BSD, only olefile, MSG→EML + attachments, but last release 1.2.0 in **2019**); `convert-outlook-msg-file`
+    (MIT script, MSG→EML, deps compoundfiles (2014) / compressed-rtf / rtfparse / beautifulsoup4);
+    `msgconvert` (Perl, Artistic/GPL, Linux package — no option for Windows). The mail body (HTML/RTF) is
+    the part that needs the RTF tooling; attachments alone need only olefile.
 
 > *Fixed 2026-06-29 (PDF-Tool renders scanned PDFs — was BLANK):* PDF.js **v6** keeps its image
 > decoders + font/cmap data out of the main bundle — JBIG2 / JPEG2000 (the encodings DATEV scans use)

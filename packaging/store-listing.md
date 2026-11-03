@@ -34,11 +34,13 @@ Copy these into Partner Center. Two listing languages: **de-DE** (primary) and *
 > Open Source (AGPLv3). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
 > ablegen wollen.
 
-**Was ist neu (v3.9.5):**
-> Fehlerbehebung: Bei Dokumenten ohne sinnvolle Komprimierung kam der rote
-> „noch nicht geprüft"-Punkt nach dem Verschieben von Knoten oder erneutem Öffnen
-> wieder zum Vorschein. Die Entscheidung „nichts Kleineres gefunden" wird jetzt
-> dauerhaft im Dokument gespeichert und bleibt erhalten.
+**Was ist neu (v3.11.3):**
+> Sicherheitsupdate: aktualisierte Bild- und PDF-Bibliotheken (Pillow, pypdf, PDF.js) –
+> schließt unter anderem eine Lücke, über die ein präpariertes PDF Code ausführen konnte.
+> Außerdem neu: kompakte Symbolleiste, Speichern-Knopf mit „Speichern unter…",
+> PDF-Werkzeug zum Ergänzen von Text und Ausfüllen von Formularen, Schlagworte für mehrere
+> Einträge auf einmal, verschachtelte Archive und E-Mails werden bis zu 10 Ebenen tief
+> ausgepackt, einstellbares Aufteilen beim Export, und das Fenster merkt sich Größe und Position.
 
 **Suchbegriffe:** Belege, PDF zusammenfügen, Dokumente, Scannen, Steuer, Buchhaltung,
 Inhaltsverzeichnis
@@ -73,10 +75,12 @@ Inhaltsverzeichnis
 >
 > Open source (AGPLv3). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
 
-**What's new (v3.9.5):**
-> Bug fix: for documents with no worthwhile compression, the red "not yet checked"
-> dot reappeared after moving nodes or reopening the file. The "nothing smaller
-> found" decision is now stored durably in the document and stays resolved.
+**What's new (v3.11.3):**
+> Security update: updated image and PDF libraries (Pillow, pypdf, PDF.js) — among other
+> things this closes a hole through which a crafted PDF could run code.
+> Also new: a compact toolbar, a Save button with "Save as…", a PDF tool to add text and
+> fill in forms, tagging several entries at once, nested archives and e-mails unpacked up to
+> 10 levels deep, configurable splitting on export, and the window remembers its size and position.
 
 **Search terms:** receipts, merge PDF, documents, scan, tax, bookkeeping, table of contents
 

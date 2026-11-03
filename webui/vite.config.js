@@ -27,10 +27,12 @@ function pdfjsAssets() {
       })
     },
     // build: copy the dirs into dist/pdfjs/ so the packaged app serves them
+    // A missing dir fails the build: silently skipping it would ship blank scan pages.
     closeBundle() {
       for (const d of PDFJS_ASSET_DIRS) {
         const s = resolve(srcRoot, d)
-        if (existsSync(s)) cpSync(s, fileURLToPath(new URL(`./dist/pdfjs/${d}`, import.meta.url)), { recursive: true })
+        if (!existsSync(s)) throw new Error(`pdfjs-dist has no ${d}/ folder - check PDFJS_ASSET_DIRS after the update`)
+        cpSync(s, fileURLToPath(new URL(`./dist/pdfjs/${d}`, import.meta.url)), { recursive: true })
       }
     },
   }

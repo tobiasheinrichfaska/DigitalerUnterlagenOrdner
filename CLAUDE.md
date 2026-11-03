@@ -142,7 +142,8 @@ method-name mapping and the `pywebviewready` wait/fail-fast). **Manual tests:**
   `src/**` so it never picks up the e2e specs.
   - ⚠️ **No `vi.mock()` in this project's tests.** The `forks`/`threads` pools crash on this
     toolchain (vitest 4.1.8 + Node 24 + Vite 8 → *"failed to find the current suite"*), so
-    `vite.config.js` forces `pool: 'vmThreads'` — and **`vi.mock()` does not take effect under
+    `vite.config.js` forces `pool: 'vmThreads'` (kept after the 2026-11-03 bump to vitest 4.1.12,
+    which reportedly fixes the pools — dropping it is untested) — and **`vi.mock()` does not take effect under
     `vmThreads`** (the real module loads instead, silently). Mock the **`window.pywebview.api`
     bridge** (the Proxy pattern in `test-setup.js`) and pass real child components / props
     instead. History: `StatusBar.test.jsx` + `PreviewPane.test.jsx` were added on 2026-06-15
@@ -743,7 +744,8 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   [`docs/pdf-tool.md`](docs/pdf-tool.md) for the roadmap.
 - **Nested containers are recursed, but bounded** *(since 2026-06-26, Open items #12)* — a
   `.zip`/`.tar`/`.tgz`/`.eml`/`.msg` inside another container is extracted into a sub-folder.
-  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 3`** (a deeper container shows
+  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 10`** (raised from 3 in v3.11.3;
+  the shared budget bounds the total work either way) (a deeper container shows
   „… zu tief verschachtelt"); the bomb budget is **shared across levels**, so when it is exhausted
   mid-way a still-unread inner container degrades to „nicht importierbar" and **its already-decoded
   children are not kept** (the whole inner container is dropped, never the import).
@@ -1106,7 +1108,7 @@ as **v3.10.0**.
     extracted members instead of degrading to „nicht importierbar". `archives._member_result` /
     `_extract_nested` route an inner container back through the matching `extract_*` (cross-kind:
     a `.msg` in a `.zip`, a `.zip` attached to an `.eml`, …), preserving the tree
-    (archive → mail → attachment). Recursion is bounded by **`_ARCHIVE_MAX_DEPTH = 3`** (anti
+    (archive → mail → attachment). Recursion is bounded by **`_ARCHIVE_MAX_DEPTH = 10`** (3 until v3.11.2; anti
     zip-quine → „zu tief verschachtelt"), and the bomb caps are now a **shared `_Budget`** (decoded
     bytes + member count) threaded through every level, so nesting can't compound past
     `infra.limits.BOMB_CAP_BYTES`/`BOMB_CAP_ENTRIES`. A corrupt/oversized inner container degrades to

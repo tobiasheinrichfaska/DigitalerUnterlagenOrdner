@@ -13,12 +13,13 @@
     "test:all": "vitest run && playwright test"
   },
   "dependencies": {
-    "pdfjs-dist": "^6.0.227",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "overrides": {
-    "undici": "^7.28.0"
+    "undici": "^7.30.1",
+    "minimatch": "^11.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -34,7 +35,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
-    "vite": "^8.0.12",
-    "vitest": "^4.1.8"
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
   }
 }

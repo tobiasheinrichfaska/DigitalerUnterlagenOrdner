@@ -45,8 +45,9 @@ _ARCHIVE_MAX_MEMBERS = BOMB_CAP_ENTRIES
 # How deep we follow a container nested inside another container (#12). The
 # imported top-level container is depth 0; each level down adds 1. A container
 # found at this depth is NOT opened (it lands as "zu tief verschachtelt"),
-# bounding zip-quine / mail-loop recursion.
-_ARCHIVE_MAX_DEPTH = 3
+# bounding zip-quine / mail-loop recursion. The shared _Budget already bounds the
+# total bytes and members, so a generous depth costs nothing extra.
+_ARCHIVE_MAX_DEPTH = 10
 
 # Member extensions that are themselves containers — recursed into, not converted.
 _NESTABLE_EXTS = {".zip", ".tar", ".tgz", ".eml", ".msg"}

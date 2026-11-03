@@ -211,7 +211,7 @@ Ein Archiv oder eine E-Mail **innerhalb** eines anderen Containers wird geöffne
 **Erwartet:**
 - Schritt 1: Das innere Archiv erscheint als **eigener Ordner** `ebene_2.zip`; darin liegt `beleg_ganz_innen.pdf`. Daneben liegt `beleg_ebene_1.pdf`.
 - Schritt 2: Im Mail-Ordner liegen der Mailtext und ein Ordner `unterlagen.zip` mit `beleg_im_zip.pdf`.
-- Schritt 3: Der Baum folgt der Verschachtelung `ebene_2.zip` › `ebene_3.zip` › `ebene_4.zip`. In jeder Ebene liegt ein Beleg.
-- *Nicht offensichtlich:* Die Verschachtelung ist auf **3 Ebenen** begrenzt. Das noch tiefer liegende Archiv wird nicht geöffnet, sondern erscheint als `ebene_5.zip – nicht importierbar (zu tief verschachtelt)`. Das ist ein Schutz vor Endlos-Archiven und kein Fehler.
+- Schritt 3: Der Baum folgt der Verschachtelung `ebene_2.zip` › `ebene_3.zip` › … › `ebene_11.zip`. In jeder Ebene liegt ein Beleg.
+- *Nicht offensichtlich:* Die Verschachtelung ist auf **10 Ebenen** begrenzt (bis Version 3.11.2: 3 Ebenen). Das noch tiefer liegende Archiv wird nicht geöffnet, sondern erscheint als `ebene_12.zip – nicht importierbar (zu tief verschachtelt)`. Das ist ein Schutz vor Endlos-Archiven und kein Fehler.
 
 **Hinweis:** Die Größen- und Mengenbegrenzung gilt **gemeinsam für alle Ebenen**. Ist sie mitten im Import ausgeschöpft, erscheint der nächste innere Container als „… – nicht importierbar“; der Rest des Imports bleibt unberührt.

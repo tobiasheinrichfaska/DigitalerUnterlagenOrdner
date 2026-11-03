@@ -187,8 +187,27 @@ def _max_depth() -> int:
 
 
 def test_depth_limit_constant_exists_and_is_sane():
+    # The shared byte/member budget bounds the total work; the depth only stops
+    # zip-quines, so a deep limit stays safe. 10 = real-world mail/archive chains.
     d = _max_depth()
-    assert isinstance(d, int) and 1 <= d <= 8
+    assert isinstance(d, int) and 1 <= d <= 10
+
+
+def _zip_chain(nested: int) -> bytes:
+    """A top-level zip holding lvl1.zip › … › lvl<nested>.zip; the innermost holds doc.pdf."""
+    blob = _zip_bytes({"doc.pdf": create_valid_pdf(pages=1)})
+    for i in range(nested, 0, -1):
+        blob = _zip_bytes({f"lvl{i}.zip": blob})
+    return blob
+
+
+def test_ten_nested_levels_are_opened_the_eleventh_is_not():
+    names = [n["name"] for n in _walk(archives.extract_zip_to_structure(_zip_chain(10)))]
+    assert "doc.pdf" in names and not any("zu tief" in n for n in names)
+
+    names = [n["name"] for n in _walk(archives.extract_zip_to_structure(_zip_chain(11)))]
+    assert "doc.pdf" not in names
+    assert "lvl11.zip – nicht importierbar (zu tief verschachtelt)" in names
 
 
 # --------------------------------------------- shared budget (no compounding)

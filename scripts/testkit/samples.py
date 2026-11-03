@@ -26,6 +26,8 @@ import fitz
 import pikepdf
 from PIL import Image, ImageDraw, ImageFont
 
+from universal_importer.archives import _ARCHIVE_MAX_DEPTH
+
 ROOT = Path(__file__).resolve().parents[2]
 OFFICE_FIXTURES = ROOT / "tests" / "data" / "input"
 
@@ -315,6 +317,10 @@ def _eml(subject: str, body: str, attachments: Dict[str, Tuple[str, bytes]]) -> 
 FAKE_EXE = b"MZ" + bytes(62) + "Harmlose Testdatei für BelegTool (MT-05) – kein ausführbares Programm.\n".encode()
 
 
+# Top archive + every level the importer opens + one level it refuses.
+TOO_DEEP_LEVELS = _ARCHIVE_MAX_DEPTH + 2
+
+
 def _nested_zip(levels: int) -> bytes:
     """A zip chain ``levels`` deep with one PDF at the bottom."""
     data = _zip({"beleg_ganz_innen.pdf": _receipt_pdf("Beleg ganz innen", 1)})
@@ -491,8 +497,9 @@ _CATALOG = (
            lambda: _eml("Unterlagen als ZIP", "Guten Tag,\n\ndie Unterlagen liegen als ZIP bei.\n", {
                "unterlagen.zip": ("application/zip", _zip({"beleg_im_zip.pdf": _receipt_pdf("Beleg im ZIP", 1)})),
            })),
-    Sample("Zu_tief_verschachtelt.zip", "Fünf ineinander verpackte ZIPs – die innerste Ebene ist zu tief.",
-           lambda: _nested_zip(5)),
+    Sample("Zu_tief_verschachtelt.zip",
+           f"{TOO_DEEP_LEVELS} ineinander verpackte ZIPs – die innerste Ebene ist zu tief.",
+           lambda: _nested_zip(TOO_DEEP_LEVELS)),
     Sample("Notiz.txt", "Reine Textdatei.",
            lambda: "Notiz zum Beleg\n\nBitte bis zum 31.01.2025 erfassen.\nFrei erfundene Beispieldaten.\n".encode()),
     Sample("Liesmich.md", "Markdown-Textdatei.",

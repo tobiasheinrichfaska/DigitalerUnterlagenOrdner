@@ -14,8 +14,9 @@ from formats.compress_pdf_bytes import compress_all_methods
 from scripts import build_testkit
 from scripts.testkit import cases, page
 from scripts.testkit.markdown import inline, to_html
-from scripts.testkit.samples import SAMPLES
+from scripts.testkit.samples import SAMPLES, TOO_DEEP_LEVELS
 from universal_importer import extract_email_to_structure, extract_zip_to_structure
+from universal_importer.archives import _ARCHIVE_MAX_DEPTH
 
 CASE = """## MT-07: Zwei Dokumente zusammenführen
 
@@ -236,11 +237,19 @@ def test_archive_subfolders_and_same_named_files(built):
     assert vertraege["name"] == "vertraege"
 
 
-def test_nesting_stops_exactly_at_the_fifth_level(built):
+def test_nesting_stops_exactly_one_level_past_the_limit(built):
+    deepest = TOO_DEEP_LEVELS
     names = list(_names(extract_zip_to_structure(built["Zu_tief_verschachtelt.zip"])))
-    assert "ebene_4.zip" in names and "beleg_ebene_4.pdf" in names
-    assert "ebene_5.zip – nicht importierbar (zu tief verschachtelt)" in names
+    assert f"ebene_{deepest - 1}.zip" in names and f"beleg_ebene_{deepest - 1}.pdf" in names
+    assert f"ebene_{deepest}.zip – nicht importierbar (zu tief verschachtelt)" in names
     assert "beleg_ganz_innen.pdf" not in names
+
+
+def test_manual_nesting_case_names_the_real_limit():
+    # MT-06 tells the tester the limit and the refused level; it must follow the constant.
+    text = (build_testkit.MANUAL / "01_import.md").read_text(encoding="utf-8")
+    assert f"auf **{_ARCHIVE_MAX_DEPTH} Ebenen** begrenzt" in text
+    assert f"`ebene_{TOO_DEEP_LEVELS}.zip – nicht importierbar (zu tief verschachtelt)`" in text
 
 
 def test_belegtool_samples_carry_their_status_and_tags(built, tmp_path):

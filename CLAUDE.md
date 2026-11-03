@@ -782,7 +782,8 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   live box** (do this before relying on Veranlagung filing). Live behaviour is verified only by the
   human `manual_tests/10_datev.md` (no DATEVconnect in CI). A failed connect does **not auto-retry**
   (no SSO storm) — toggle DATEV off/on or trigger a write to retry. The DATEVconnect OpenAPI specs in
-  `import/` are **vendor IP — gitignored, never committed**.
+  `vendor/` are **vendor IP — gitignored, never committed**. `import/` is an inbox: empty after
+  processing, processed files go to the gitignored `import-archiv/<timestamp>/`.
 
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**

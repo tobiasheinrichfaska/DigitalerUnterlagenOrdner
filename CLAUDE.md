@@ -644,7 +644,17 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current version: **v3.11.2** (changelog below). Built on **v3.11.1** — terminal-server / DATEV-checkout hardening on top of v3.11.0:
+Current version: **v3.11.3** — security + nesting release on top of v3.11.2 (2026-11-03):
+(1) *Dependency security updates* closing every open Dependabot alert — shipped: **Pillow 13.0.0**
+(was 12.2.0, incl. 5 critical), **pypdf 6.21.4**, **pdfjs-dist 6.5.438** (a malicious PDF could run
+JavaScript in the PDF-Tool); dev toolchain: vite 8.3.5, vitest 4.1.12, undici 7.30.1, minimatch 11
+(override) and refreshed transitive deps (`npm audit`: 0). (2) *Nested containers open up to
+**10** levels* (was 3) — the shared byte/member budget still bounds the total work. (3) *The
+webui build fails loudly* when a PDF.js asset folder (`cmaps`/`standard_fonts`/`wasm`/`iccs`) is
+missing instead of silently shipping blank scan pages. (4) Tester kit + German manual tests, the
+synthetic `.msg` fixture, `import/` emptied into `import-archiv/`, DATEV specs moved to `vendor/`.
+
+v3.11.2 built on **v3.11.1** — terminal-server / DATEV-checkout hardening on top of v3.11.0:
 **scanned PDFs render** in the PDF-Tool (bundled PDF.js JBIG2/JPEG2000 wasm + cmaps), the DATEV
 checkout write-back is **fixed end-to-end** (server returns `structure_item_id` as a numeric string;
 the checkout-path number can be a DokOrg working-copy id, so the real `document_file_id` +
@@ -809,8 +819,9 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     BelegTool-structured PDF **over the original file** without asking. Possibly intended
     (PDF-editor semantics) — confirm; `manual_tests` MT-15c warns the tester.
   - **Store version lags the repo.** The listing is live (Store ID `9PL4D25N00XD`, last
-    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11 was built. Test cases that
-    need newer features carry `**Ab Version:**`.
+    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11.2 was built. The 3.11.3 MSIX
+    was built 2026-11-03 for submission (Tobias submits in Partner Center; update this entry once
+    certified). Test cases that need newer features carry `**Ab Version:**`.
   - Compression/DPI defects: see *Planned changes — requested 2026-10-10* item 3.
 
 - **Open findings from 2026-10-18 — Outlook `.msg` import** (found while adding `.msg` support to the
@@ -1353,7 +1364,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.11.2`** (bug form default + BETA_TESTING heading) → keep in sync with `version_info.py`.
+- **Version `3.11.3`** (bug form default + BETA_TESTING heading) → keep in sync with `version_info.py`.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **One known gap that must NOT be reported as a bug** (the bug form's required
   checkbox enforces this): compression irreversible after save ("bereits komprimiert

@@ -30,7 +30,7 @@ Alle Beispieldateien sind frei erfunden und enthalten keine echten Personen- ode
 
 ## So gehen Sie vor
 
-1. **Version notieren.** Sie steht in der Titelleiste des BelegTool-Fensters, z. B. „DigitalerUnterlagenOrdner 3.11.2“.
+1. **Version notieren.** Sie steht in der Titelleiste des BelegTool-Fensters, z. B. „DigitalerUnterlagenOrdner 3.11.3“.
 2. **Einen Test auswählen.** Die Reihenfolge der Bereiche ist eine Empfehlung; jeder Test lässt sich für sich durchführen.
 3. **Den Ordner „Beispieldateien“ des Tests an einen Arbeitsort kopieren**, etwa auf den Desktop. Viele Tests verändern und speichern Dateien – so bleibt das Original im Testpaket unberührt und der Test lässt sich wiederholen.
 4. **Die Schritte der Reihe nach ausführen** und das Ergebnis mit dem Abschnitt „Erwartetes Ergebnis“ vergleichen. Achten Sie auf die Vermerke *Nicht offensichtlich* – sie beschreiben Verhalten, das überraschen kann, aber gewollt ist.
@@ -70,7 +70,7 @@ In der Fußzeile jeder Anleitung steht die Version, für die sie geschrieben wur
 ## Bitte nicht als Fehler melden
 
 - **Komprimierung ist nach dem Speichern nicht umkehrbar.** Ein übernommenes Dokument („Lesbarkeit geprüft“) verliert beim Speichern seine Quelle und zeigt danach „bereits komprimiert (keine Quelle)“. Das ist gewollt.
-- **Getarnte Datei direkt importiert** (Bereich 01, MT-05, Schritt 1): In Version 3.11.2 entsteht ein leerer Eintrag statt einer Ablehnung. Die Abweichung ist bekannt.
+- **Getarnte Datei direkt importiert** (Bereich 01, MT-05, Schritt 1): In Version 3.11.3 entsteht ein leerer Eintrag statt einer Ablehnung. Die Abweichung ist bekannt.
 - **Mehrseitige TIFF-Bilder:** Es wird nur die erste Seite übernommen. Bekannte Einschränkung.
 
 ## Abweichungen melden

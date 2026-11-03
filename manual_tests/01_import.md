@@ -172,7 +172,7 @@ Geprüft wird der **Inhalt** einer Datei, nicht nur ihre Endung.
 - Schritt 2: Im Mail-Ordner steht der Anhang als `rechnung.pdf – nicht importierbar ('rechnung.pdf' sieht aus wie Windows-Programm (EXE/DLL), nicht wie .pdf – abgelehnt.)`. Der zweite Anhang `echte_Rechnung.pdf` wird normal importiert.
 - *Nicht offensichtlich:* Das ist das gewollte Sicherheitsverhalten. Eine umbenannte EXE oder ein Skript wird sichtbar abgelehnt und nicht stillschweigend „irgendwie“ übernommen. Dieselbe Prüfung lehnt Word-/Excel-/PowerPoint-Dateien ab, die auf eine externe Vorlage im Netz verweisen.
 
-**Hinweis:** **Bekannte Abweichung in Version 3.11.2 – bitte nicht erneut melden.** Schritt 1 schlägt derzeit fehl: Statt der Ablehnung entsteht ein leerer Eintrag `getarnte_EXE_rechnung` mit 0 Seiten und ohne Meldung. Schritt 2 (Anhang in der E-Mail) verhält sich wie beschrieben. Ausgeführt wird die Datei in keinem Fall.
+**Hinweis:** **Bekannte Abweichung in Version 3.11.3 – bitte nicht erneut melden.** Schritt 1 schlägt derzeit fehl: Statt der Ablehnung entsteht ein leerer Eintrag `getarnte_EXE_rechnung` mit 0 Seiten und ohne Meldung. Schritt 2 (Anhang in der E-Mail) verhält sich wie beschrieben. Ausgeführt wird die Datei in keinem Fall.
 
 ---
 

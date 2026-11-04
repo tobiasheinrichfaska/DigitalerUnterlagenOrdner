@@ -332,3 +332,34 @@ def test_scan_fails_closed_on_unparseable_rels_xml(tmp_path):
     from universal_importer.converters import SCAN_UNREADABLE
     p = _docx_with_rels(tmp_path, "<Relationship unclosed")
     assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE
+
+
+# --- M-1 (QS-Gegenprüfung 2026-11-04): folding attribute names to their LOCAL name let
+# a namespaced/case-variant duplicate (x:TargetMode, targetMode) override the real OPC
+# attribute in the scan while Word only reads the exact unqualified spelling. Any such
+# look-alike must fail CLOSED.
+
+def test_scan_not_fooled_by_namespaced_targetmode_duplicate(tmp_path):
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path,
+        '<Relationship xmlns:x="urn:x" Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External" x:TargetMode="Internal"/>')
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE
+
+
+def test_scan_not_fooled_by_namespaced_type_duplicate(tmp_path):
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path,
+        '<Relationship xmlns:x="urn:x" Id="rId1" Type=".../attachedTemplate" '
+        'x:Type=".../hyperlink" Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE
+
+
+def test_scan_fails_closed_on_case_variant_targetmode(tmp_path):
+    # Only `targetMode` (wrong case, no exact TargetMode): the scan must not guess
+    # what Word does with it — refuse the document.
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" targetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE

@@ -654,7 +654,9 @@ multi-stream) inflated bounded by the remaining budget and charged, double-compr
 of aborting, total folder depth capped at 120 (< loader limit 200), per-member failures show
 their reason. (4) *Forwarded `.msg` keeps its attachments* (CFB-signature routing; the strict
 xfail turned red as designed). (5) OOXML `.rels` scan now a real XML parse (single quotes /
-char-refs / prefixed elements no longer bypass it); `curl.exe`/`whoami` called by absolute
+char-refs / prefixed elements no longer bypass it; attributes read by their EXACT unqualified
+OPC name, a namespaced/case-variant duplicate like `x:TargetMode` fails closed — QS counter-
+review 2026-11-04); `curl.exe`/`whoami` called by absolute
 System32 path; malformed wire commands return `{ok:false}`; close-guard keeps a dirty window
 open when the confirm dialog breaks; engine variant layer freed on close; prefetch/close race
 on `_pcount` fixed. (6) Docs: DATA_CONTRACT `uid` corrected, data-model Werkseinstellungen,
@@ -788,6 +790,17 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   combined; overflow folds into names) so a crafted archive can never produce a tree the
   `.belegtool` loader (`_MAX_TREE_DEPTH = 200`) refuses to REOPEN — all guarded by
   `tests/test_zip_member_guard.py` + `tests/test_archive_total_depth.py`.
+- **Depth cap is per IMPORT, not per TREE** *(QS-Gegenprüfung 2026-11-04, N-1 — accepted)*: there is
+  no depth check at the insertion target or on save, so importing a ~120-deep archive INTO the
+  deepest folder of a previously imported ~120-deep archive can build >200 levels — save succeeds,
+  reopen is refused by the loader. Needs stacked crafted archives plus a deliberate user action;
+  follow-up idea: save-side depth warning or insert clamping.
+- **Two narrow close-time races, no data loss** *(QS-Gegenprüfung 2026-11-04, N-2/N-3 — accepted)*:
+  (1) `_count_for` without a `session` arg (`_seed_single`, `page_count`) can re-insert a
+  `(node_id, version)→int` page count into `_pcount` after a parallel `close_session` (tiny, no
+  byte payload; the long prefetch path IS guarded). (2) `open()` seeds variants before the session
+  is registered, so a close of the SAME source in another window during that window can prune the
+  fresh seeds (`prune_persisted` sees them as orphaned) — cost is a recompute, never corruption.
 - **No direct Outlook drag-and-drop** — Outlook hands items over as OLE virtual files; import a
   `.msg`/`.eml` instead. No automatic DATEV check-in on document close (manual re-import in DATEV).
 - **Multicore rasterization is GIL-limited (~1.2× on 4 threads)** — thread parallelism buys

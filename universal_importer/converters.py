@@ -223,8 +223,8 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                 # Echter XML-Parser statt Regex (Audit 2026-11-03, M5): der Regex ließ
                 # sich mit einfachen Anführungszeichen, Zeichenreferenzen (&#92;) und
                 # Präfix-Elementen (<r:Relationship>) umgehen — Word parst all das.
-                # Namensraum-unabhängig über den LOKALEN Namen; nicht parsebares XML
-                # → fail CLOSED (Words toleranter Parser könnte es trotzdem auflösen).
+                # Elemente namensraum-unabhängig über den LOKALEN Namen; nicht parsebares
+                # XML → fail CLOSED (Words toleranter Parser könnte es trotzdem auflösen).
                 try:
                     from xml.etree import ElementTree as ET
                     root_el = ET.fromstring(xml)
@@ -233,12 +233,19 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                 for el in root_el.iter():
                     if el.tag.rsplit("}", 1)[-1] != "Relationship":
                         continue
-                    attrs = {k.rsplit("}", 1)[-1].lower(): (v or "") for k, v in el.attrib.items()}
-                    if attrs.get("targetmode", "").lower() != "external":
+                    # OPC-Attributnamen sind unqualifiziert und case-sensitiv — EXAKT so
+                    # lesen wie Word. Ein qualifiziertes/case-variantes Duplikat
+                    # (x:TargetMode, targetMode) ließe Scan und Word unterschiedliche
+                    # Werte sehen (QS-Gegenprüfung 2026-11-04, M-1) → fail CLOSED.
+                    for k in el.attrib:
+                        if (k.rsplit("}", 1)[-1].lower() in ("targetmode", "type", "target")
+                                and k not in ("TargetMode", "Type", "Target")):
+                            return SCAN_UNREADABLE
+                    if el.attrib.get("TargetMode", "").lower() != "external":
                         continue
-                    if attrs.get("type", "").lower().endswith("/hyperlink"):
+                    if el.attrib.get("Type", "").lower().endswith("/hyperlink"):
                         continue  # nicht beim Öffnen aufgelöst → erlaubt
-                    target = attrs.get("target", "").strip()
+                    target = el.attrib.get("Target", "").strip()
                     if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
                         return target
     except Exception:

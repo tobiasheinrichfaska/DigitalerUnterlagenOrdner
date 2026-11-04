@@ -293,7 +293,7 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.3" (from version_info)
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.4" (from version_info)
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close

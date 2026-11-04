@@ -5,14 +5,13 @@ into a clean ``ValueError`` with a German message — callers (import_paths,
 pdf_storage) rely on that contract to surface a friendly error instead of leaking a
 ``BadZipFile``/``TarError``. These tests lock that translation.
 
-Note on the *actual-read* decompressed-byte cap (`_ArchiveTooLarge`): it is
-unreachable through CPython's zipfile/tarfile by construction. The cheap declared-size
-pre-check (``sum(file_size)`` / ``sum(size)`` vs the cap) rejects any archive whose
-*declared* total exceeds the cap, and an entry that *reads* larger than declared is a
-liar entry that zipfile rejects with a CRC error (and tarfile clamps to the header
-size) before our running-total check can fire. The pre-check + the stdlib's own
-integrity validation dominate; the running-total cap is belt-and-suspenders. The
-reachable pre-check is covered in ``test_archive_bomb_guard.py``.
+Note on the *actual-read* decompressed-byte cap (`_ArchiveTooLarge`): for a single
+flat archive the cheap declared-size pre-check (``sum(file_size)`` / ``sum(size)`` vs
+the cap) usually fires first, and a liar entry is rejected by zipfile's CRC check /
+clamped by tarfile. Since the shared nested-archive budget (v3.11.4) the running-total
+cap IS reachable — nested containers each pass their own pre-check while draining one
+common budget — and is exercised in ``test_zip_member_guard.py``. The flat pre-check
+is covered in ``test_archive_bomb_guard.py``.
 """
 import io
 import tarfile

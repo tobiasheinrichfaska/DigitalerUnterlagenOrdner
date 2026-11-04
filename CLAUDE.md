@@ -937,9 +937,10 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     BelegTool-structured PDF **over the original file** without asking. Possibly intended
     (PDF-editor semantics) — confirm; `manual_tests` MT-15c warns the tester.
   - **Store version lags the repo.** The listing is live (Store ID `9PL4D25N00XD`, last
-    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11.2 was built. A 3.11.3 MSIX
-    was built 2026-11-03 for submission (Tobias submits in Partner Center; update this entry once
-    certified). Test cases that need newer features carry `**Ab Version:**`.
+    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10–3.11.3 was submitted. A **3.11.4
+    MSIX** was built 2026-11-04 (`packaging/out/BelegTool-3.11.4.0-x64.msix`, package-hygiene
+    scan clean) and supersedes the unsubmitted 3.11.3 one (Tobias submits in Partner Center;
+    update this entry once certified). Test cases that need newer features carry `**Ab Version:**`.
   - Compression/DPI defects: see *Planned changes — requested 2026-10-10* item 3.
 
 - **Findings from 2026-10-18 — Outlook `.msg` import** (found while adding `.msg` support to the

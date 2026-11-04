@@ -53,8 +53,19 @@ def parse_header_dump(text):
     return out
 
 
+def system32_exe(name: str) -> str:
+    """Absolute System32 path for a Windows in-box tool (curl.exe, whoami.exe).
+
+    A bare name goes through the CreateProcess search path, which checks the
+    CURRENT DIRECTORY before System32 — a planted curl.exe would run with the
+    user's SSO (audit 2026-11-03, L9). curl ships in-box since Windows 10 1803;
+    the app's MSIX MinVersion is 10.0.17763."""
+    root = os.environ.get("SystemRoot") or r"C:\Windows"
+    return os.path.join(root, "System32", name)
+
+
 def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path=None,
-                    header_path=None, curl="curl.exe"):
+                    header_path=None, curl=None):
     """Pure: the curl command line for one SSO request — mirrors OPOS's hardened ``curl_args``.
     ``--negotiate -u :`` authenticates as the current Windows user; ``--http1.1`` avoids the
     HTTP/2 framing errors that show up as ``http_code 000`` on large bodies (the big documents
@@ -64,6 +75,8 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path
     Negotiate sends an unauthenticated probe first and must **replay** the body on the
     authenticated retry — a streamed stdin body can't be rewound, so a POST/PUT would stall.
     We never forward an Authorization header — SSO does the auth."""
+    if curl is None:
+        curl = system32_exe("curl.exe")  # absolute path, never the CWD search (L9)
     args = [curl, "-sS", "--http1.1", "--negotiate", "-u", ":",
             "--connect-timeout", "15", "--max-time", "30",
             "--retry", "1", "--retry-connrefused", "--retry-delay", "2",
@@ -84,7 +97,7 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path
     return args
 
 
-def make_curl_sso_transport(allow_self_signed=False, timeout=40, curl="curl.exe"):
+def make_curl_sso_transport(allow_self_signed=False, timeout=40, curl=None):
     # Every curl stream goes to a FILE (status via -w, body via -o, headers via -D, stderr too),
     # so we never read through OS pipes. That matters on timeout: subprocess.run(capture_output)
     # re-drains its pipes after killing curl and can block forever if a handle survives; with

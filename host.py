@@ -210,7 +210,11 @@ def _bind_close(win, api):
                     "Das Fenster schließen und die ungespeicherten Änderungen verwerfen?"):
                 return False  # user cancelled → keep the window open AND keep the lock
         except Exception:
-            pass
+            # Fail SAFE: if the dialog itself breaks while the document is dirty, the
+            # close must not proceed unasked — that would discard unsaved work.
+            logger.exception("Close-Bestätigung fehlgeschlagen — Fenster bleibt offen")
+            if api._dirty:
+                return False
         try:
             if api._pdftool_session:
                 # node-bound PDF-Tool window: release the node lock + free the bound
@@ -289,7 +293,7 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: "… 3.11.1"
+        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.3" (from version_info)
     api._uid = win.uid  # bind after creation (storing the window object recurses)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close

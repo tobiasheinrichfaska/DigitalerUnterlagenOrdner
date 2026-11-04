@@ -103,6 +103,17 @@ def _receipt_pdf(label: str, pages: int) -> bytes:
     return _text_pdf(label, tuple(tuple(_receipt_lines(label, p)) for p in range(1, pages + 1)))
 
 
+def _link_pdf(label: str, url: str) -> bytes:
+    """One receipt page carrying a visible, clickable EXTERNAL link (MT-54: the
+    PDF-Tool must open it in the system browser, never in the app window)."""
+    doc = fitz.open(stream=_receipt_pdf(label, 1), filetype="pdf")
+    page = doc[0]
+    rect = fitz.Rect(72, 700, 400, 724)
+    page.insert_text((72, 718), f"Mehr dazu: {url}", fontsize=12, color=(0, 0, 0.8))
+    page.insert_link({"kind": fitz.LINK_URI, "from": rect, "uri": url})
+    return _pdf_bytes(doc)  # deterministic save (no fresh /ID) — samples must be reproducible
+
+
 def _numbered_pdf(title: str, pages: int, per_page: int = 34) -> bytes:
     """Numbered lines — a tester can remember "Zeile 141" and check it stays put."""
     return _text_pdf(title, tuple(
@@ -446,6 +457,8 @@ _CATALOG = (
     Sample("Teil_B_2_Seiten.pdf", "Text-PDF mit 2 Seiten – zweiter Teil zum Zusammenführen.",
            lambda: _receipt_pdf("Teil B", 2)),
     Sample("Formular_Antrag.pdf", "Ausfüllbares PDF-Formular (5 Textfelder, 1 Kontrollkästchen).", _form_pdf),
+    Sample("Rechnung_mit_Link.pdf", "Rechnung mit einem anklickbaren Internet-Link (für den Browser-Test im PDF-Tool).",
+           lambda: _link_pdf("Rechnung mit Link", "https://example.com/")),
     Sample("ZZZ_TEST_Dokument.pdf", "Deutlich als Test markiertes PDF (1 Seite) für die DATEV-Ablage.",
            lambda: _receipt_pdf("ZZZ TEST - nicht produktiv", 1)),
     Sample("Farbscan_Rechnung_3_Seiten.pdf", "Farbiger „Scan“ mit 3 Seiten – lässt sich deutlich komprimieren.",

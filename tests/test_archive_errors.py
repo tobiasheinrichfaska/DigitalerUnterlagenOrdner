@@ -74,3 +74,46 @@ def test_email_oversized_attachment_refused_not_converted(monkeypatch):
     big = [r for r in result if "big.bin" in r["name"]]
     assert big and "zu groß" in big[0]["name"]
     assert "content" not in big[0]  # refused → placeholder folder, not a converted PDF
+
+
+# --- Audit 2026-11-03: L3 (body bypasses the member cap), L19 (a .msg whose raw
+# bytes contain b"From:" was routed to the EML parser), L12 (hidden .msg cause).
+
+def test_mail_body_respects_the_member_cap(monkeypatch):
+    monkeypatch.setattr(archives, "_ARCHIVE_MAX_MEMBERS", 0)
+    eml = (b"From: a@example.org\r\nSubject: Voll\r\nContent-Type: text/plain\r\n"
+           b"\r\nHallo")
+    names = [n["name"] for n in archives.extract_email_to_structure(eml)]
+    assert any("Limit überschritten" in n for n in names), names
+
+
+def test_cfb_msg_with_from_marker_routes_to_the_msg_parser(monkeypatch):
+    called = {}
+
+    class _Msg:
+        subject = "Betreff"
+        date = "2024-01-01"
+        htmlBody = None
+        body = "Text"
+        rtfBody = None
+        attachments = []
+
+    def fake_message(*a, **k):
+        called["msg"] = True
+        return _Msg()
+
+    monkeypatch.setattr(archives.extract_msg, "Message", fake_message)
+    # CFB container signature + an eml-looking marker in the raw body bytes
+    # (<b>From:</b> in an English Outlook reply) — must go to extract_msg.
+    data = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 16 + b"<b>From:</b> someone"
+    names = [n["name"] for n in archives.extract_email_to_structure(data)]
+    assert called.get("msg"), "CFB-Datei wurde nicht an den MSG-Parser geleitet"
+    assert any(n.startswith("Betreff") for n in names)
+
+
+def test_invalid_msg_error_carries_its_cause():
+    try:
+        archives.extract_email_to_structure(b"\x00\x01\x02 weder eml noch msg")
+        raise AssertionError("ungültige MSG wurde nicht abgelehnt")
+    except ValueError as e:
+        assert e.__cause__ is not None, "Ursache (from e) fehlt"

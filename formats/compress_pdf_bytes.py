@@ -93,6 +93,14 @@ def compress_all_methods(
     methods and per page; if it returns True, ``CompressionCancelled`` is raised.
     """
     candidates = {}
+    # Source page count, for the truncation guard below. If even counting fails,
+    # the input is too broken to compress safely — offer nothing.
+    try:
+        with fitz.open(stream=input_bytes, filetype="pdf") as src:
+            n_pages = src.page_count
+    except Exception as e:
+        logger.warning("Kompression übersprungen (Quelle nicht lesbar): %s", e)
+        return {}
 
     for method in config.methods:
         if cancel is not None and cancel():
@@ -104,6 +112,15 @@ def compress_all_methods(
                 result = _render_pdf_as_images(input_bytes, dpi=dpi, method=method,
                                                config=config, cancel=cancel)
                 result = reencode_pdf_structure(result)
+            # Never offer a truncated candidate: _render_pdf_as_images SKIPS a page
+            # that fails to rasterize, so a "smaller" result can be smaller because
+            # pages are MISSING. Applying it would silently lose the page — and on
+            # reload the stored pdf_length would shift every following node's pages.
+            with fitz.open(stream=result, filetype="pdf") as out:
+                if out.page_count != n_pages:
+                    logger.warning("Kompression '%s' verworfen: %d statt %d Seiten",
+                                   method, out.page_count, n_pages)
+                    continue
             if len(result) < len(input_bytes):
                 candidates[method] = result
         except CompressionCancelled:

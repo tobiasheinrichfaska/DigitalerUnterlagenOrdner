@@ -19,7 +19,7 @@ The interface is available in **German** and **English**.
 - An import safety screen rejects executables and files masquerading as PDFs or images.
 
 **Organize**
-- Arrange documents in a foldered tree: create folders, rename, delete, deep-copy.
+- Arrange documents in a foldered tree: create folders, rename, delete.
 - Drag-and-drop to move, nest, and reorder — or drop OS files straight in to import them.
 - Keyboard-driven restructuring (grab, move, commit) with full undo/redo.
 - Split a multi-page document into one node per page; merge siblings back together.

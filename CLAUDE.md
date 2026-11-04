@@ -6,7 +6,7 @@
 
 ## Project overview
 
-Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.11.1**.
+Desktop application for hierarchical management, preview, and export of PDF documents and receipts. Platform: Windows. UI: **React + Vite SPA inside a pywebview host** (Edge WebView2). Version: **3.11.4**.
 
 Entry point: **`host.py`** — the single pywebview host. `python host.py` launches
 the GUI; `python host.py <file.belegtool>` opens that file on startup.
@@ -59,7 +59,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `infra/tools.py` | `sanitize_pdf`: repair broken PDFs (xref/object streams) via pikepdf — a no-op on readable files. Wired into `PDFStorage._load_pdf`'s plain-PDF branch (never the `.belegtool` path). |
-| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.11.1) |
+| `version_info.py` | `APP_NAME`, `VERSION` (currently 3.11.4) |
 | `infra/log_config.py` | Logging setup |
 
 ### Headless core layer & ports (GUI-decoupled)
@@ -74,11 +74,6 @@ migration that this decoupling enabled is effectively complete.
 | `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
 | `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler that warms **up to `max_workers` pages at once** on a below-normal-priority thread pool. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
 | `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ Thread parallelism is **GIL-limited** for PyMuPDF rasterization (~1.2× on 4 workers); its real value is fairness + foreground preemption, not raw throughput (true multicore would need processes — see Open items). |
-| `infra/tasks.py` | Execution **port**: `submit(fn)` (swappable executor — daemon thread by default, pool/sync later) and `run_on_ui_thread(fn)` (UI-thread dispatch; inline when headless). Used by `universal_importer`. |
-
-Ports default to a no-op reporter and a daemon-thread executor; the host can
-install its own implementations (`progress.set_reporter`, `tasks.set_ui_dispatcher`)
-if it needs to surface progress or marshal onto a UI thread.
 
 ### Data-driven core (`core/`)
 
@@ -123,8 +118,11 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/hooks/` | UI hooks: `useKeyboard`, `useSelection`, `useOsFileDrop`, `useDialogs`, `useTagView`, `useResizablePane`, `useModal`, `useMenu` (shared roving-focus/dismiss menu). |
 | `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
 | `webui/src/lib/datev.js` | **Pure** DATEV-mode helpers: `isDatevConnected`, `datevVerdictKey` (verdict→localized message), `datevSavedNotice`, `localBaseName`. Shared by `App.jsx` (organizer) + `pdftool/main.js`. |
+| `webui/src/lib/datevFiling.js` | **Pure** DATEV filing-dialog logic shared by organizer + PDF-Tool: `filterClients`, `registersFor`, `yearChoices`, `validateFiling`, `buildFileOpts`, `soleClientGuid`. Tested in `datevFiling.test.js`. |
+| `webui/src/pdftool/fileDialog.js` | Vanilla-DOM DATEV **filing dialog** of the PDF-Tool surface (the organizer uses the React `DatevFileDialog`); `openFileDialog(…)` resolves to the `datev_file` opts or null on cancel. Tested in `fileDialog.test.js`. |
 | `webui/src/HelpModal.jsx`, `help/content.js` | How-to Help modal (separate from the main UI language switcher): 🇩🇪/🇬🇧 flags toggle the two authoritative versions; help text authored best-effort for all UI languages, unknown → EN fallback; GitHub/mailto correction links. |
-| `webui/pdf-tool.html`, `webui/src/pdftool/` (`main.js`, `source.js`) | **PDF-Tool surface** (2nd Vite entry, PDF.js): the host routes a `.pdf`/node binding here (`host._entry_for_kind` / `startup_kind`), it fetches the bound bytes over the bridge (`CoreApi.get_pdf_bytes` / `open_node_in_pdftool` / `close_pdftool`) and renders a **selectable text layer + interactive AcroForm**, plus an **„✎ Text" tool** (PDF.js FreeText editor) and **„💾 Speichern"** → `saveDocument()` → `save_node_back(session, b64)` → `SetNodeBytes` (new source on the node, undoable in the organizer). Added text round-trips as editable FreeText on reopen. `source.js` (`chooseSource` / `base64ToUint8` / `uint8ToBase64`) is the pure, unit-tested logic. Design + roadmap: [`docs/pdf-tool.md`](docs/pdf-tool.md). |
+| `webui/pdf-tool.html`, `webui/src/pdftool/` (`main.js`, `source.js`) | **PDF-Tool surface** (2nd Vite entry, PDF.js): the host routes a `.pdf`/node binding here (`host._entry_for_kind` / `startup_kind`), it fetches the bound bytes over the bridge (`CoreApi.get_pdf_bytes` / `open_node_in_pdftool` / `close_pdftool`) and renders a **selectable text layer + interactive AcroForm**, plus an **„✎ Text" tool** (PDF.js FreeText editor) and **„💾 Speichern"** → `saveDocument()` → `save_node_back(session, b64)` → `SetNodeBytes` (new source on the node, undoable in the organizer). Added text round-trips as editable FreeText on reopen. External link annotations open `target="_blank"` → pywebview routes them to the **system browser**, never the bridged window (H2 fix 2026-11-04; e2e-guarded, fixture `webui/public/spike-link.pdf` from `scripts/make_pdftool_fixtures.py`). `source.js` (`chooseSource` / `base64ToUint8` / `uint8ToBase64`) is the pure, unit-tested logic. Design + roadmap: [`docs/pdf-tool.md`](docs/pdf-tool.md). |
+| `requirements-dev.txt` | Test/dev deps on top of `requirements.txt` (pytest) — `build.ps1` recreates `.build_venv` WITHOUT it; reinstall after a release build. |
 
 **Run:** dev — `cd webui && npm run dev` then `set BELEG_DEV=1 && python host.py`;
 prod — `cd webui && npm run build` then `python host.py`. **Unit tests:** `cd webui
@@ -223,7 +221,7 @@ MediaBox allocation bombs — on the preview paths **and** the compression raste
 path (`compress_pdf_bytes._render_one_page`, which alone only clamped width).
 
 ### Tree operations
-Split, merge (with DPI conflict check), create folder, delete, rename, deep copy, drag-and-drop.
+Split, merge (with DPI conflict check), create folder, delete, rename, drag-and-drop. (A copy command does not exist yet — see Planned changes.)
 
 **Keyboard structuring** (`webui/src/lib/treeNav.js` pure helpers + `App.jsx` `onKey`):
 ↑/↓ navigate the visible rows; ←/→ collapse/expand a folder (or step out/in).
@@ -644,7 +642,29 @@ Push to GitHub regularly — at the end of every meaningful session, not just on
 Fall back to a previous version: `git checkout v3.05`
 List all versions: `git tag`
 
-Current version: **v3.11.3** — security + nesting release on top of v3.11.2 (2026-11-03):
+Current version: **v3.11.4** — audit-fix release on top of v3.11.3 (2026-11-04, 31-finding
+audit + adversarial agent review): (1) *Compression can no longer silently lose pages* — a
+candidate whose page count differs from the source is dropped (the old guard lived in dead
+code; a truncated variant shifted every FOLLOWING node's pages on reload). (2) *A link in an
+untrusted PDF opens the system browser*, never the bridged app window (pywebview re-injects
+the JS API into whatever loads there; e2e-guarded, new MT-54). (3) *Archive-import hardening*:
+bzip2/LZMA zip members refused (CPython inflates them unbounded), tar streams (gz/bz2/xz,
+multi-stream) inflated bounded by the remaining budget and charged, double-compression blocked
+(plain-tar parse), oversized reads charged, exhausted budget degrades members visibly instead
+of aborting, total folder depth capped at 120 (< loader limit 200), per-member failures show
+their reason. (4) *Forwarded `.msg` keeps its attachments* (CFB-signature routing; the strict
+xfail turned red as designed). (5) OOXML `.rels` scan now a real XML parse (single quotes /
+char-refs / prefixed elements no longer bypass it); `curl.exe`/`whoami` called by absolute
+System32 path; malformed wire commands return `{ok:false}`; close-guard keeps a dirty window
+open when the confirm dialog breaks; engine variant layer freed on close; prefetch/close race
+on `_pcount` fixed. (6) Docs: DATA_CONTRACT `uid` corrected, data-model Werkseinstellungen,
+deep-copy claims removed, `requirements-dev.txt` (pytest), `testpaths = tests`, vitest
+`testTimeout`. Deferred: shared rasterization (L2), Split→fitz (L5), FreeText/JBIG2 e2e,
+import-router + CoreApi split (architecture). Open (needs verification): a host-side origin
+guard / drop-handler for the PDF-Tool window (an OS drop of an URL/HTML file might still
+navigate it — the link path is fixed).
+
+v3.11.3 — security + nesting release on top of v3.11.2 (2026-11-03):
 (1) *Dependency security updates* closing every open Dependabot alert — shipped: **Pillow 13.0.0**
 (was 12.2.0, incl. 5 critical), **pypdf 6.21.4**, **pdfjs-dist 6.5.438** (a malicious PDF could run
 JavaScript in the PDF-Tool); dev toolchain: vite 8.3.5, vitest 4.1.12, undici 7.30.1, minimatch 11
@@ -754,11 +774,20 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   [`docs/pdf-tool.md`](docs/pdf-tool.md) for the roadmap.
 - **Nested containers are recursed, but bounded** *(since 2026-06-26, Open items #12)* — a
   `.zip`/`.tar`/`.tgz`/`.eml`/`.msg` inside another container is extracted into a sub-folder.
-  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 10`** (raised from 3 in v3.11.3;
-  the shared budget bounds the total work either way) (a deeper container shows
-  „… zu tief verschachtelt"); the bomb budget is **shared across levels**, so when it is exhausted
-  mid-way a still-unread inner container degrades to „nicht importierbar" and **its already-decoded
-  children are not kept** (the whole inner container is dropped, never the import).
+  Accepted bounds: recursion stops at **`_ARCHIVE_MAX_DEPTH = 10`** (raised from 3 in v3.11.3; a
+  deeper container shows „… zu tief verschachtelt"); the bomb budget is **shared across levels**.
+  Hardened 2026-11-04 (v3.11.4): an oversized read is **charged** to the budget before it fails
+  (nested retries can't redo budget-sized work for free) and once the budget is spent every
+  following member degrades visibly as „… – nicht importierbar (Limit überschritten)" — one bad
+  inner container never aborts the import. Zip members are limited to **stored/deflate**
+  (bzip2/LZMA inflate unbounded inside CPython's zipfile → refused with their reason); a
+  gz/bz2/xz tar STREAM is inflated bounded by the REMAINING budget and charged, multi-stream
+  (pigz/pbzip2) included, and the result is parsed as PLAIN tar only (no auto-detect →
+  double-compression can't reopen the unbounded path). The TOTAL folder depth one import can
+  build is capped at **`_MAX_TOTAL_FOLDER_DEPTH = 120`** (nesting × member-path folders
+  combined; overflow folds into names) so a crafted archive can never produce a tree the
+  `.belegtool` loader (`_MAX_TREE_DEPTH = 200`) refuses to REOPEN — all guarded by
+  `tests/test_zip_member_guard.py` + `tests/test_archive_total_depth.py`.
 - **No direct Outlook drag-and-drop** — Outlook hands items over as OLE virtual files; import a
   `.msg`/`.eml` instead. No automatic DATEV check-in on document close (manual re-import in DATEV).
 - **Multicore rasterization is GIL-limited (~1.2× on 4 threads)** — thread parallelism buys
@@ -819,24 +848,19 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     BelegTool-structured PDF **over the original file** without asking. Possibly intended
     (PDF-editor semantics) — confirm; `manual_tests` MT-15c warns the tester.
   - **Store version lags the repo.** The listing is live (Store ID `9PL4D25N00XD`, last
-    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11.2 was built. The 3.11.3 MSIX
+    updated 2026-06-25 ⇒ the 3.9.5 package); no MSIX of 3.10/3.11.2 was built. A 3.11.3 MSIX
     was built 2026-11-03 for submission (Tobias submits in Partner Center; update this entry once
     certified). Test cases that need newer features carry `**Ab Version:**`.
   - Compression/DPI defects: see *Planned changes — requested 2026-10-10* item 3.
 
-- **Open findings from 2026-10-18 — Outlook `.msg` import** (found while adding `.msg` support to the
-  sibling box tool; checked read-only against this repo's own code in `.build_venv`, nothing fixed yet):
-  - **A forwarded `.msg` loses all its attachments, silently.** `archives.extract_email_to_structure`
-    chooses the parser by searching the RAW bytes for `b"Content-Type:"` or `b"From:"` (→ EML). A `.msg`
-    stores its attachments' bytes unencoded inside the OLE container, so a `.msg` with an attached mail
-    („als Anlage weitergeleitet") or a text attachment that contains such a header line goes to the EML
-    parser → the import yields only an empty `E-Mail.txt`, the PDF attachments are gone, no message.
-    Reproduced with a synthetic file (`Rechnung.pdf` + `Original.eml` attached → result `["E-Mail.txt"]`;
-    the same mail without the `.eml` imports correctly). Not a trigger: an HTML attachment (its
-    `http-equiv="Content-Type"` has no colon). **Fix:** route by the OLE/CFB signature —
-    `data[:8] == bytes.fromhex("D0CF11E0A1B11AE1")` → `.msg`, else `.eml`. Guard:
+- **Findings from 2026-10-18 — Outlook `.msg` import** (found while adding `.msg` support to the
+  sibling box tool):
+  - **A forwarded `.msg` loses all its attachments, silently. — FIXED 2026-11-04** (audit fix
+    round): routing now checks the OLE/CFB signature (`D0 CF 11 E0 A1 B1 1A E1`) FIRST, so a
+    `.msg` whose raw bytes contain `b"From:"`/`b"Content-Type:"` (attached mail, HTML body of an
+    English reply) no longer lands in the EML parser. The former strict-xfail guard
     [`tests/test_msg_import.py`](tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
-    (**strict xfail** — goes red when fixed, then drop the marker).
+    went red on the fix and is now a normal passing test (marker dropped).
   - **Synthetic `.msg` files for tests:** [`tests/msg_fixture.py`](tests/msg_fixture.py) writes real
     CFB/MSG files (stdlib only: subject, body, attachments, optional content id) that `extract_msg`
     reads — so `.msg` paths can now be tested without real mail (Outlook is never touched).
@@ -958,7 +982,7 @@ when it ships, update the named `manual_tests` cases and rebuild the kit in the 
    Today a drag always moves ([`Tree.jsx`](webui/src/Tree.jsx) sets `effectAllowed = 'move'`;
    there is no copy command). Strg+click stays multi-select; the drag ghost must show the copy
    intent; the copy is a deep copy with **new node ids** (variants are keyed by id). The
-   README's "deep-copy" feature claim is currently not backed by the UI. Related, still
+   stale "deep copy" claims in README/FEATURES_REQUIRED/CLAUDE.md were removed 2026-11-04. Related, still
    deferred: cross-window copy (item 5 of the 2026-06-08 list below). Tests: 02 MT-09/MT-09b.
 8. **The "external template/source" refusal must be bypassable** *(requested 2026-10-11 after a
    real document was refused: „…docx: Dokument verweist auf eine externe Vorlage/Quelle und wird
@@ -1364,7 +1388,7 @@ report known gaps, give the wrong version, etc.).
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build/run from source, fixtures, manual-test pointer, how to file each feedback type |
 
 **Facts baked into these files — keep them in sync with the source of truth:**
-- **Version `3.11.3`** (bug form default + BETA_TESTING heading) → keep in sync with `version_info.py`.
+- **Version `3.11.4`** (bug form default + BETA_TESTING heading) → keep in sync with `version_info.py`.
 - **Windows 10/11 only**; **Office-via-COM** caveat for Word/Excel/PPT import.
 - **One known gap that must NOT be reported as a bug** (the bug form's required
   checkbox enforces this): compression irreversible after save ("bereits komprimiert

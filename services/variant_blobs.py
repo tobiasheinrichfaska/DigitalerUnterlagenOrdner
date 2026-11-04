@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import zipfile
 
-from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES
+from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES, unsupported_zip_member
 
 # Bomb guards (shared infra.limits caps): the blob comes from an untrusted
 # .belegtool and is decompressed automatically on open() — a deflate bomb must
@@ -51,6 +51,10 @@ def unpack(blob: bytes, max_total_bytes: int = MAX_TOTAL_BYTES,
                     dpi = int(dpi_s)
                 except ValueError:
                     continue
+                # bzip2/LZMA entries inflate unbounded before the read cap applies
+                # (CPython zipfile) — a blob carrying one is discarded whole.
+                if unsupported_zip_member(z.getinfo(name)):
+                    return {}
                 # actual-read cap: read at most the remaining budget + 1 byte —
                 # an entry whose real size exceeds it reveals itself without
                 # ever allocating the full bomb.

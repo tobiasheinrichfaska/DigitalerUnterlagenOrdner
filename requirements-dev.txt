@@ -1,0 +1,5 @@
+# Test/dev dependencies — on top of requirements.txt (the app + build deps).
+# build.ps1 recreates .build_venv from requirements.txt ONLY, so after a release
+# build the test runner must be restored with:
+#   .build_venv\Scripts\pip.exe install -r requirements-dev.txt
+pytest==9.2.0

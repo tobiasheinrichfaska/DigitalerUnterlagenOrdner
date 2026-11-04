@@ -145,7 +145,7 @@ class CoreApi:
                     self._render_service = RenderService(render_page, budget_bytes=budget)
         return self._render_service
 
-    def _count_for(self, node_id, version, data):
+    def _count_for(self, node_id, version, data, session=None):
         # _pcount is iterated by close_session under self._lock (js threads), so the
         # read/insert here must hold it too — an unlocked insert mid-iteration raises
         # inside close_session and silently leaks the whole session.
@@ -156,7 +156,12 @@ class CoreApi:
             from services.render import page_count
             c = page_count(data)
             with self._lock:
-                self._pcount[key] = c
+                # The background prefetch (_seed_around.build) races close_session:
+                # without this guard it re-inserted counts for an already-closed
+                # document, leaking them for the process lifetime (found 2026-11-04
+                # when the close path got slower). Insert only for live sessions.
+                if session is None or session in self._sessions:
+                    self._pcount[key] = c
         return c
 
     def _cancel_token(self, node_id):
@@ -283,7 +288,7 @@ class CoreApi:
                 n = leaves[idx]
                 data = n.current_data or n.original_data
                 ver = self._version_of(data)
-                cnt = self._count_for(n.id, ver, data)
+                cnt = self._count_for(n.id, ver, data, session=session)
                 if cnt > 0:
                     specs.append((n.id, ver, cnt))
                     data_map[n.id] = data
@@ -439,7 +444,13 @@ class CoreApi:
     # Mutations: dispatch / undo / redo (+ the shared post-mutate hook)
     # ----------------------------------------------------------------------
     def dispatch(self, session: str, command: dict) -> dict:
-        cmd = command_from_dict(command)
+        # A malformed wire dict (unknown type / wrong keys / no 'type') must come
+        # back as {ok: False}: raised here, it crossed pywebview as a raw rejected
+        # promise the UI could not present (audit 2026-11-03, L7).
+        try:
+            cmd = command_from_dict(command)
+        except Exception as e:
+            return {"ok": False, "error": f"Ungültiger Befehl: {e}"}
         locked = self._locked_conflict(session, cmd)
         if locked is not None:
             return {"ok": False, "code": "node_locked", "node_id": locked,
@@ -803,6 +814,15 @@ class CoreApi:
             shutil.rmtree(view_dir, ignore_errors=True)
         if self._render_service is not None:
             self._render_service.prune(self._all_live_node_ids())
+        if s is not None and hasattr(self._engine, "prune_persisted"):
+            # Free the engine's persisted variant bytes of THIS closed document,
+            # unless another open session still shares them (same live-elsewhere
+            # idea as the id pruning above; closed−live, never "all not live").
+            closed = [n.original_data for n in s.document.root.iter() if n.original_data]
+            with self._lock:
+                live = [n.original_data for other in self._sessions.values()
+                        for n in other.document.root.iter() if n.original_data]
+            self._engine.prune_persisted(closed, live)
         return {"ok": True}
 
     # ----------------------------------------------------------------------

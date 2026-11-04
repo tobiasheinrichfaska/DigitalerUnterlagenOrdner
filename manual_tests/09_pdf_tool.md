@@ -82,3 +82,22 @@ Das PDF-Tool ist die zweite Arbeitsfläche: Es öffnet **ein einzelnes PDF** in 
 **Erwartet:**
 - Die Felder nehmen Eingaben an.
 - Nach Speichern und erneutem Öffnen stehen die Werte **weiterhin in den Feldern** und lassen sich weiter ändern. Der Statustext zeigte **„Gespeichert ✓“**.
+
+## MT-54: Link in einem PDF öffnet den Browser – nie das Programmfenster
+
+Ein Klick auf einen Link im PDF-Tool darf das BelegTool-Fenster nicht verlassen; die Seite öffnet im normalen Browser.
+
+**Ab Version:** 3.11.4
+
+**Beispieldateien:** `Rechnung_mit_Link.pdf`
+
+**Voraussetzungen:** BelegTool ist gestartet; `Rechnung_mit_Link.pdf` ist importiert.
+
+**Schritte:**
+1. Rechtsklick auf den Eintrag → **Im PDF-Tool öffnen**.
+2. Auf den blauen Link **„Mehr dazu: https://example.com/“** klicken.
+
+**Erwartet:**
+- Die Seite öffnet im **Standard-Browser** (neues Browserfenster oder neuer Tab).
+- Das PDF-Tool-Fenster zeigt **weiterhin das PDF** – es navigiert nicht zur Internetseite und verliert keine ungespeicherten Eingaben.
+- *Nicht offensichtlich:* Das ist eine Sicherheitsmaßnahme. Würde die Internetseite im Programmfenster laden, bekäme sie Zugriff auf die interne Programmschnittstelle. Vor Version 3.11.4 navigierte der Klick das Fenster – bitte als Fehler melden, falls das wieder passiert.

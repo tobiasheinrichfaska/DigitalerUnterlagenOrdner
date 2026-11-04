@@ -121,12 +121,28 @@ class RealEngine:
 
     def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
         """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
-        node is instant — no recompute. Goes into the unbounded persisted layer."""
+        node is instant — no recompute. The layer is unbounded while its documents
+        are open; ``prune_persisted`` frees it when they close."""
         digest = self._digest(pdf_bytes)
         for dpi, methods in (variants or {}).items():
             if methods:
                 with self._mcache_lock:
                     self._persisted[(digest, int(dpi))] = dict(methods)
+
+    def prune_persisted(self, closed_sources, live_sources) -> None:
+        """Drop the persisted variants of the CLOSED document's sources, keeping
+        any that another open document still shares. Without this, every opened
+        .belegtool's variant bytes stayed pinned for the whole app run (audit
+        2026-11-03, L6). Scoped to closed−live (not "everything not live"): open()
+        seeds variants BEFORE registering the session, so a concurrent close must
+        not sweep those fresh seeds away. Hashing is id-memoised → cheap."""
+        drop = {self._digest(b) for b in closed_sources if b}
+        drop -= {self._digest(b) for b in live_sources if b}
+        if not drop:
+            return
+        with self._mcache_lock:
+            for key in [k for k in self._persisted if k[0] in drop]:
+                del self._persisted[key]
 
     def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
         key = (self._digest(pdf_bytes), dpi)

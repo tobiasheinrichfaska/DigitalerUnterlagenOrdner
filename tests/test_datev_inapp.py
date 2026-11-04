@@ -340,11 +340,11 @@ def test_writeback_foreign_checkout_is_locked_and_names_who(monkeypatch):
     monkeypatch.setenv("USERNAME", "tobias")
     client, prov, baseline = _connected()
     client.document["checked_out"] = True
-    client.document["checkout_computer"] = "OTHERBOX (andrea)"
-    client.document["checkout_user"] = {"id": "u2", "name": "Andrea Müller"}
+    client.document["checkout_computer"] = "OTHERBOX (maxima)"
+    client.document["checkout_user"] = {"id": "u2", "name": "Maxima Muster"}
     res = DatevService(client).writeback(prov, baseline, b"x")
     assert not res["ok"] and res["verdict"] == "locked" and client.puts == []
-    assert "Andrea Müller" in res["checkout_by"] and "OTHERBOX" in res["checkout_by"]
+    assert "Maxima Muster" in res["checkout_by"] and "OTHERBOX" in res["checkout_by"]
 
 
 def test_writeback_server_bytes_changed_is_conflict_content():
@@ -377,15 +377,15 @@ def test_is_my_checkout_and_label_pure():
     assert is_my_checkout({"checked_out": True, "checkout_computer": "WTS (User1)"},
                           my_machine="TSHOST", my_user="USER1")
     # another USER (a different "(windows-user)") → NOT mine, even on the same box / foreign DMS id
-    assert not is_my_checkout({"checked_out": True, "checkout_computer": "WTS (ANDREA)",
+    assert not is_my_checkout({"checked_out": True, "checkout_computer": "WTS (MAXIMA)",
                                "checkout_user": {"id": "u2"}}, **me)
-    assert not is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (andrea)",
+    assert not is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (maxima)",
                                "checkout_user": {"id": "u2"}}, **me)
     # not checked out / no checkout info → NOT mine (conservative → blocks)
     assert not is_my_checkout({"checked_out": False, "checkout_computer": "MYBOX (tobias)"}, **me)
     assert not is_my_checkout({"checked_out": True}, **me)
-    assert checkout_label({"checked_out": True, "checkout_user": {"name": "Andrea"},
-                           "checkout_computer": "WTS"}) == "Andrea (WTS)"
+    assert checkout_label({"checked_out": True, "checkout_user": {"name": "Maxima"},
+                           "checkout_computer": "WTS"}) == "Maxima (WTS)"
     assert checkout_label({"checked_out": False}) is None
 
 

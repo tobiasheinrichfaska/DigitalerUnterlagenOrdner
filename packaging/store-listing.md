@@ -34,7 +34,7 @@ Copy these into Partner Center. Two listing languages: **de-DE** (primary) and *
 > Open Source (AGPLv3). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
 > ablegen wollen.
 
-**Was ist neu (v3.11.3):**
+**Was ist neu (v3.11.4):**
 > Sicherheitsupdate: aktualisierte Bild- und PDF-Bibliotheken (Pillow, pypdf, PDF.js) –
 > schließt unter anderem eine Lücke, über die ein präpariertes PDF Code ausführen konnte.
 > Außerdem neu: kompakte Symbolleiste, Speichern-Knopf mit „Speichern unter…",
@@ -75,7 +75,7 @@ Inhaltsverzeichnis
 >
 > Open source (AGPLv3). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
 
-**What's new (v3.11.3):**
+**What's new (v3.11.4):**
 > Security update: updated image and PDF libraries (Pillow, pypdf, PDF.js) — among other
 > things this closes a hole through which a crafted PDF could run code.
 > Also new: a compact toolbar, a Save button with "Save as…", a PDF tool to add text and
@@ -102,8 +102,8 @@ Use real-looking but **non-personal** sample documents (the `tests/data/input/*.
 ## Submission checklist (Partner Center)
 
 - [ ] New submission for app **BelegTool** (Store ID `9PL4D25N00XD`).
-- [ ] **Packages:** upload `packaging/out/BelegTool-3.9.5.0-x64.msix` (unsigned; MS re-signs) —
-      replaces the earlier 3.9.4.0 package.
+- [ ] **Packages:** upload the current `packaging/out/BelegTool-<version>-x64.msix` (unsigned; MS re-signs) —
+      replaces the earlier package (live in the Store: 3.9.5.0; current build: 3.11.4.0 — submit THIS one, not the superseded 3.11.3.0).
 - [ ] **Properties:** category **Productivity**; paste the **broadFileSystemAccess
       justification** (see `packaging/README.md`) into restricted-capability / "Notes for
       certification".

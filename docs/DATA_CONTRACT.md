@@ -14,9 +14,10 @@ Each node serialises to this object (see `pdf_node.py::to_dict`):
 
 | Field | Type | Meaning |
 |---|---|---|
+| `uid` | string | **persisted node id** (uuid4 hex) — written to `/JSONStructure` and restored on load, so ids survive save/reopen (tag views, variant keys, DATEV bindings rely on it) |
 | `name` | string | display name |
 | `is_folder` | bool | folder vs. leaf (document) |
-| `status` | string | one of `"erfasst"`, `"zu erfassen"`, `"vorjahreswert"` |
+| `status` | string | `""` (no status) or one of `"erfasst"`, `"zu erfassen"`, `"vorjahreswert"` |
 | `position` | int \| null | sibling order within the parent |
 | `vz_start` | int \| null | accounting period start (Verzeichniszeitraum) |
 | `vz_end` | int \| null | accounting period end |
@@ -26,7 +27,10 @@ Each node serialises to this object (see `pdf_node.py::to_dict`):
 | `dpi_current` | int \| null | DPI of the current (compressed) data; null if uncompressed / conflict |
 | `no_compression` | bool | node must not be (re-)compressed (e.g. split parts) |
 | `compression_method` | string \| null | method that produced `current_data` (`"jpg"`, `"png"`, `"pikepdf"`); null if uncompressed / merge conflict |
+| `compression_no_gain` | bool | evaluated, nothing smaller found → the "undecided" dot stays resolved across moves/reopen (set silently, no undo/dirty) |
+| `collapsed` | bool | folder collapsed in the tree view (persisted) |
 | `tags` | array of string | free-form labels (folders & leaves); set via `SetTags`. Stored per-node (own tags only). For search/group, *effective* tags = own ∪ ancestor-folder tags (computed in the view, never duplicated into children). |
+| `datev` | object \| null | DATEV provenance on the ROOT node only (`doc_guid`, `file_id`, `structure_item_id`, …); null everywhere else |
 | `children` | array of node | nested nodes (folders and leaves) |
 
 Invariants worth preserving (already enforced / tested):
@@ -35,8 +39,10 @@ Invariants worth preserving (already enforced / tested):
   no page bytes of their own.
 - DPI-conflict on merge ⇒ `no_compression = true`, `dpi_current = null`,
   `is_compressed = false` (no contradictory "compressed + no_compression").
-- `uid` is **not** serialised — it is a fresh per-instance runtime id
-  (`uuid4`), unique per displayed node; it must not be relied on across saves.
+- `uid` **is serialised and restored** (corrected 2026-11-04 — the old claim
+  here contradicted the code): `pdf_node.to_dict` writes it, `pdf_storage`
+  restores it, so the same file open twice shares node ids and tag views /
+  variant keys / DATEV bindings survive a reopen.
 
 **Page bytes are not in this JSON.** The JSON is the *structure*; the bytes live
 alongside it (in the `.belegtool` PDF today; as separate blobs over IPC later).
@@ -77,10 +83,11 @@ The IPC API the React UI calls — each maps to existing, UI-agnostic logic:
 | `export(nodes, path)` | `toc_export` / `PDFStorage.export_selection` |
 | `render_preview(node|pageRef, dpi)` → **PNG bytes** | `services/render.render_pdf_to_pngs` |
 | `render_compressed(node, dpi, method)` → **PNG bytes** | `engine.compress` + `render_pdf_to_pngs`, **read-only** |
-| progress / busy signals | `progress` port |
+| progress / busy signals | status-bar polling (`render_stats`, compressing count) |
 
-Long-running ops (compress/render/export) run on the executor (`tasks`) and the
-worker pool; results/progress are pushed back to the UI.
+Long-running ops (compress/render/export) run on background daemon threads and the
+CPU-fair worker pools (`services/cpu`); the UI polls their state. (A dedicated
+`tasks`/`progress` port never got a consumer and was removed 2026-11-04.)
 
 **Working preview (compression).** Selecting a leaf does **not** compress the
 document. The UI browses methods/DPI through `render_compressed` (read-only — it

@@ -20,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
-from infra.limits import BOMB_CAP_BYTES
+from infra.limits import BOMB_CAP_BYTES, unsupported_zip_member
 from infra.log_config import logger
 
 
@@ -176,12 +176,10 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
 # Restrisiko (dokumentiert): Legacy-OLE-Formate (.doc/.xls/.ppt) sind kein ZIP
 # und werden hier nicht erfasst; dort verbleibt der COM-seitige Schutz
 # (AutomationSecurity=3, ReadOnly, UpdateLinks aus).
-_RELS_EXTERNAL_PREFIXES = (b"http://", b"https://", b"ftp://", b"ftps://",
-                           b"file:", b"\\\\", b"//")
+_RELS_EXTERNAL_PREFIXES = ("http://", "https://", "ftp://", "ftps://",
+                           "file:", "\\\\", "//")
 _RELS_MAX_BYTES = 4 * 1024 * 1024  # ein .rels ist winzig; Cap gegen Zip-Bomben
 _RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-Bomben
-_REL_TAG_RE = re.compile(rb"<Relationship\b[^>]*>", re.IGNORECASE)
-_REL_ATTR_RE = re.compile(rb'(\w+)\s*=\s*"([^"]*)"')
 
 # Sentinel: die Datei IST ein ZIP, aber der Scan konnte sie nicht prüfen → der
 # Aufrufer muss ABLEHNEN (fail closed). Words toleranter OPC-Parser könnte ein
@@ -211,22 +209,38 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
             for name in names:
                 if not name.lower().endswith(".rels"):
                     continue
+                # bzip2/LZMA inflate unbounded before the read cap (CPython zipfile);
+                # no legitimate OOXML uses them → fail CLOSED like the other caps.
+                if unsupported_zip_member(z.getinfo(name)):
+                    return SCAN_UNREADABLE
                 with z.open(name) as f:
                     xml = f.read(_RELS_MAX_BYTES)
                 if len(xml) >= _RELS_MAX_BYTES:
                     # truncated read → ein externes Ziel könnte JENSEITS des Caps liegen
-                    # und der Regex sähe es nie. Ein legitimes .rels ist winzig, also ist
+                    # und der Parser sähe es nie. Ein legitimes .rels ist winzig, also ist
                     # ein übergroßes selbst verdächtig → fail CLOSED (wie der Entry-Cap).
                     return SCAN_UNREADABLE
-                for tag in _REL_TAG_RE.findall(xml):
-                    attrs = {k.lower(): v for k, v in _REL_ATTR_RE.findall(tag)}
-                    if attrs.get(b"targetmode", b"").lower() != b"external":
+                # Echter XML-Parser statt Regex (Audit 2026-11-03, M5): der Regex ließ
+                # sich mit einfachen Anführungszeichen, Zeichenreferenzen (&#92;) und
+                # Präfix-Elementen (<r:Relationship>) umgehen — Word parst all das.
+                # Namensraum-unabhängig über den LOKALEN Namen; nicht parsebares XML
+                # → fail CLOSED (Words toleranter Parser könnte es trotzdem auflösen).
+                try:
+                    from xml.etree import ElementTree as ET
+                    root_el = ET.fromstring(xml)
+                except Exception:
+                    return SCAN_UNREADABLE
+                for el in root_el.iter():
+                    if el.tag.rsplit("}", 1)[-1] != "Relationship":
                         continue
-                    if attrs.get(b"type", b"").lower().endswith(b"/hyperlink"):
+                    attrs = {k.rsplit("}", 1)[-1].lower(): (v or "") for k, v in el.attrib.items()}
+                    if attrs.get("targetmode", "").lower() != "external":
+                        continue
+                    if attrs.get("type", "").lower().endswith("/hyperlink"):
                         continue  # nicht beim Öffnen aufgelöst → erlaubt
-                    target = attrs.get(b"target", b"").strip()
+                    target = attrs.get("target", "").strip()
                     if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
-                        return target.decode("utf-8", errors="replace")
+                        return target
     except Exception:
         # ZIP, aber nicht prüfbar → fail CLOSED (sonst öffnet Word ungeprüft,
         # und sein toleranter Parser könnte die externe Vorlage doch auflösen).

@@ -18,7 +18,7 @@ Keep in sync with `CLAUDE.md` and the `manual_tests/` files.
 
 ## 2. Tree editing
 - **Split** (per page / N pages / into a folder), **Merge** (sibling leaves, DPI-conflict
-  handled), **Create folder**, **inline Rename** (click a selected name again), **deep copy**,
+  handled), **Create folder**, **inline Rename** (click a selected name again),
   **drag-and-drop** move.
 - **Keyboard structuring**: ↑/↓ navigate visible rows, ←/→ collapse/expand, **Insert**
   grabs a node and arrows move it *optically* until **Insert** drops it (one undo) or **Esc**

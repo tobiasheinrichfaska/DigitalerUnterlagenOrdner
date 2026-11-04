@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import extract_msg
 
-from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES
+from infra.limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES, unsupported_zip_member
 from infra.log_config import logger
 
 from .importer import UniversalImporter
@@ -48,6 +48,14 @@ _ARCHIVE_MAX_MEMBERS = BOMB_CAP_ENTRIES
 # bounding zip-quine / mail-loop recursion. The shared _Budget already bounds the
 # total bytes and members, so a generous depth costs nothing extra.
 _ARCHIVE_MAX_DEPTH = 10
+
+# TOTAL folder depth one import may build, across container nesting AND member
+# paths combined. Without this, 10 nesting levels × 23 path folders each could
+# exceed the .belegtool loader's _MAX_TREE_DEPTH (200): the save would succeed
+# and the REOPEN would refuse the whole document (audit 2026-11-03, M4). Overflow
+# folds into the leaf name / a "zu tief verschachtelt" stub, exactly like the
+# per-member _MAX_PATH_DEPTH cap. Guarded by tests/test_archive_total_depth.py.
+_MAX_TOTAL_FOLDER_DEPTH = 120
 
 # Member extensions that are themselves containers — recursed into, not converted.
 _NESTABLE_EXTS = {".zip", ".tar", ".tgz", ".eml", ".msg"}
@@ -102,41 +110,50 @@ def _is_nestable(name: str) -> bool:
     return os.path.splitext(name or "")[1].lower() in _NESTABLE_EXTS
 
 
-def _extract_nested(content: bytes, name: str, depth: int, budget: "_Budget") -> Dict[str, Any]:
+def _extract_nested(content: bytes, name: str, depth: int, budget: "_Budget",
+                    folder_depth: int = 0) -> Dict[str, Any]:
     """A member that is itself a container → recurse into it (#12).
 
-    Returns a folder dict ``{"name", "children"}``. Beyond the depth limit, or on
-    any failure (corrupt/oversized nested container), degrades to a
-    ``_not_importable`` folder so one bad inner container never aborts the import.
-    The shared ``budget`` is threaded in so nested decoding can't compound the caps.
+    Returns a folder dict ``{"name", "children"}``. Beyond the depth limit — the
+    nesting cap OR the TOTAL folder-depth cap — or on any failure (corrupt/
+    oversized nested container), degrades to a ``_not_importable`` folder so one
+    bad inner container never aborts the import. The shared ``budget`` is
+    threaded in so nested decoding can't compound the caps; ``folder_depth`` is
+    the folder depth already above this container's own folder node.
     """
-    if depth + 1 > budget.max_depth:
+    if depth + 1 > budget.max_depth or folder_depth + 1 >= _MAX_TOTAL_FOLDER_DEPTH:
         return _not_importable(name, reason="zu tief verschachtelt")
     ext = os.path.splitext(name)[1].lower()
     try:
         if ext == ".zip":
-            children = extract_zip_to_structure(content, _depth=depth + 1, _budget=budget)
+            children = extract_zip_to_structure(content, _depth=depth + 1, _budget=budget,
+                                                _folder_depth=folder_depth + 1)
         elif ext in (".tar", ".tgz"):
-            children = extract_tar_to_structure(content, _depth=depth + 1, _budget=budget)
+            children = extract_tar_to_structure(content, _depth=depth + 1, _budget=budget,
+                                                _folder_depth=folder_depth + 1)
         else:  # .eml / .msg
-            children = extract_email_to_structure(content, _depth=depth + 1, _budget=budget)
+            children = extract_email_to_structure(content, _depth=depth + 1, _budget=budget,
+                                                  _folder_depth=folder_depth + 1)
     except Exception as e:  # corrupt/oversized nested container — degrade, don't abort
         return _not_importable(name, reason=str(e) or "Container nicht lesbar")
     return {"name": name, "children": children}
 
 
-def _member_result(content: bytes, name: str, depth: int, budget: "_Budget") -> Dict[str, Any]:
+def _member_result(content: bytes, name: str, depth: int, budget: "_Budget",
+                   folder_depth: int = 0) -> Dict[str, Any]:
     """Convert a freshly-read member to a PDF leaf, OR recurse if it is a nested
     container (#12). Conversion failures degrade to a ``_not_importable`` folder."""
     if _is_nestable(name):
-        return _extract_nested(content, name, depth, budget)
+        return _extract_nested(content, name, depth, budget, folder_depth)
     try:
         converted = UniversalImporter.convert(content, name=name)
         if not converted.data.getvalue().strip().startswith(b"%PDF"):
             raise ValueError("PDF-Inhalt ungültig")
         return {"name": name, "content": converted.data}
-    except Exception:
-        return _not_importable(name)
+    except Exception as e:
+        # Show the WHY (workspace rule: errors reach the user with their reason) —
+        # the mail-attachment path already does; zip/tar members must too.
+        return _not_importable(name, reason=str(e) or "Konvertierung fehlgeschlagen")
 
 
 # Guard the folder depth built from a single member path. A crafted member name
@@ -150,11 +167,13 @@ _MAX_PATH_DEPTH = 24
 _DRIVE_SEG = re.compile(r"^[A-Za-z]:$")
 
 
-def _split_member_path(name: str):
+def _split_member_path(name: str, max_parts: int = _MAX_PATH_DEPTH):
     """Split an archive member path into (folder_parts, basename). Honors both
     POSIX and Windows separators. ``"rechnungen/2024/beleg.pdf"`` →
     ``(["rechnungen", "2024"], "beleg.pdf")``; a bare name → ``([], name)``.
-    Folder depth is capped at ``_MAX_PATH_DEPTH`` (overflow folded into the name).
+    Folder depth is capped at ``max_parts`` (≤ ``_MAX_PATH_DEPTH``; the caller
+    lowers it when the TOTAL import depth budget runs low — overflow folds into
+    the name).
     Traversal-style segments from a hostile member name (``.``, ``..``, a bare drive
     letter like ``C:``) are dropped so they can't become folder nodes named ``..``;
     the tree is in-memory only, so this is cosmetic hardening, not a path-write fix."""
@@ -165,8 +184,9 @@ def _split_member_path(name: str):
         # member still imports under some name instead of vanishing.
         raw = (name or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
         return [], (raw or (name or ""))
-    if len(parts) > _MAX_PATH_DEPTH:
-        return parts[:_MAX_PATH_DEPTH - 1], "/".join(parts[_MAX_PATH_DEPTH - 1:])
+    cap = max(1, min(_MAX_PATH_DEPTH, max_parts))
+    if len(parts) > cap:
+        return parts[:cap - 1], "/".join(parts[cap - 1:])
     return parts[:-1], parts[-1]
 
 
@@ -193,7 +213,8 @@ def _insert_by_path(root_children: List[Dict[str, Any]], folder_parts: List[str]
 
 
 def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
-                             _depth: int = 0, _budget: Optional["_Budget"] = None) -> List[Dict[str, Any]]:
+                             _depth: int = 0, _budget: Optional["_Budget"] = None,
+                             _folder_depth: int = 0) -> List[Dict[str, Any]]:
     result = []
     budget = _budget or _new_budget()
 
@@ -226,33 +247,140 @@ def extract_zip_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
             # kleine Größe angeben und beim Lesen trotzdem aufblähen.
             for info in members:
                 # A member path like "ordner/datei.pdf" becomes a folder node + leaf,
-                # not a leaf literally named "ordner/datei.pdf"; siblings merge.
-                folders, base = _split_member_path(info.filename)
+                # not a leaf literally named "ordner/datei.pdf"; siblings merge. The
+                # per-member path cap shrinks as the TOTAL depth budget runs out.
+                folders, base = _split_member_path(
+                    info.filename, _MAX_TOTAL_FOLDER_DEPTH - _folder_depth)
                 if not budget.can_take_member():
                     result.append(_not_importable("Weitere Einträge", reason="Limit überschritten"))
                     break
                 budget.take_member()
-                # Open by the ZipInfo, NOT the name string: duplicate member names are
-                # legal in a zip, and zf.open(name) resolves every read to the LAST such
-                # entry (earlier duplicates would import the wrong bytes).
-                with zf.open(info) as f:
-                    remaining = budget.bytes_remaining
-                    content = f.read(remaining + 1)
-                    if len(content) > remaining:
-                        raise _ArchiveTooLarge(
-                            f"ZIP-Archiv überschreitet beim Entpacken das Limit von "
-                            f"{budget.max_bytes // (1024 * 1024)} MB."
-                        )
-                    budget.take_bytes(len(content))
-                _insert_by_path(result, folders, _member_result(content, base, _depth, budget))
+                # Budget already spent (e.g. an earlier nested container overflowed and
+                # was charged): degrade THIS member visibly — reading on would raise
+                # _ArchiveTooLarge at the top level and abort the whole import.
+                if budget.bytes_remaining <= 0:
+                    _insert_by_path(result, folders, _not_importable(base, reason="Limit überschritten"))
+                    continue
+                # bzip2/LZMA members decompress UNBOUNDED before any read cap applies
+                # (CPython zipfile) — refuse them instead of trusting the declared size.
+                unsafe = unsupported_zip_member(info)
+                if unsafe:
+                    _insert_by_path(result, folders, _not_importable(base, reason=unsafe))
+                    continue
+                # One bad member (encrypted, corrupt stream) degrades WITH its reason
+                # instead of aborting the whole archive — mirrors the tar loop.
+                try:
+                    # Open by the ZipInfo, NOT the name string: duplicate member names are
+                    # legal in a zip, and zf.open(name) resolves every read to the LAST such
+                    # entry (earlier duplicates would import the wrong bytes).
+                    with zf.open(info) as f:
+                        remaining = budget.bytes_remaining
+                        content = f.read(remaining + 1)
+                        if len(content) > remaining:
+                            # Charge what was decoded BEFORE failing, so repeated nested
+                            # attempts cannot redo ~budget-sized work for free (the nested
+                            # caller degrades this error and carries on).
+                            budget.take_bytes(remaining)
+                            raise _ArchiveTooLarge(
+                                f"ZIP-Archiv überschreitet beim Entpacken das Limit von "
+                                f"{budget.max_bytes // (1024 * 1024)} MB."
+                            )
+                        budget.take_bytes(len(content))
+                except _ArchiveTooLarge:
+                    raise
+                except Exception as e:
+                    _insert_by_path(result, folders, _not_importable(base, reason=str(e)))
+                    continue
+                _insert_by_path(result, folders, _member_result(
+                    content, base, _depth, budget, _folder_depth + len(folders)))
     except zipfile.BadZipFile as e:
         raise ValueError("Ungültiges ZIP-Archiv") from e
 
     return result
 
 
+def _tar_decompressor_factory(head: bytes):
+    """Factory for the matching decompressor, or None for plain tar. The bz2 check
+    is STRICT (level digit + block magic "1AY&SY"): a plain tar whose first member
+    is named "BZh9_…" must not be mistaken for bzip2."""
+    if head.startswith(b"\x1f\x8b"):
+        import zlib
+        return lambda: zlib.decompressobj(wbits=47)  # gzip container
+    if (head.startswith(b"BZh") and head[3:4].isdigit() and head[3:4] != b"0"
+            and head[4:10] == b"1AY&SY"):
+        import bz2
+        return bz2.BZ2Decompressor
+    if head.startswith(b"\xfd7zXZ\x00"):
+        import lzma
+        return lzma.LZMADecompressor
+    return None
+
+
+def _inflate_one_stream(dec, buf: bytes, room: int):
+    """Inflate ONE compressed stream, never materialising more than ``room + 1``
+    bytes. Returns ``(bytes, truncated)`` — truncated means the input ended before
+    the stream did. Handles both input-styles: zlib re-feeds ``unconsumed_tail``,
+    bz2/lzma buffer internally and continue on ``decompress(b"", n)``."""
+    out = bytearray()
+    data = buf
+    while True:
+        space = room + 1 - len(out)
+        if space <= 0:
+            return bytes(out), False  # over the cap — the caller raises
+        chunk = dec.decompress(data, min(space, 1 << 20))
+        out += chunk
+        if dec.eof:
+            return bytes(out), False
+        data = getattr(dec, "unconsumed_tail", b"")
+        if not data and not chunk:
+            return bytes(out), True  # no progress, nothing pending → truncated
+        if not getattr(dec, "unconsumed_tail", b""):
+            data = b""
+
+
+def _inflate_tar_stream(data: bytes, budget: "_Budget") -> bytes:
+    """A gz/bz2/xz-compressed tar stream, inflated bounded and CHARGED to the
+    shared budget.
+
+    ``tarfile.open`` with auto-detection walks the WHOLE stream in ``getmembers``
+    BEFORE any declared-size pre-check can run — so the inflation itself must be
+    bounded (by the REMAINING budget, and charged, or nested retries redo the work
+    for free). Multi-stream archives (pigz/pbzip2 concatenate streams) are drained
+    stream by stream; plain tar passes through untouched (members are charged on
+    read as before). The result is parsed as PLAIN tar only (mode "r:"), so a
+    double-compressed gz(bz2(tar)) cannot re-open the unbounded tarfile path."""
+    make = _tar_decompressor_factory(data[:10])
+    if make is None:
+        return data
+    limit = budget.bytes_remaining
+    out = bytearray()
+    buf = data
+    while True:
+        dec = make()
+        try:
+            part, truncated = _inflate_one_stream(dec, buf, limit - len(out))
+        except _ArchiveTooLarge:
+            raise
+        except Exception as e:
+            raise ValueError("Ungültiges TAR-Archiv") from e
+        out += part
+        if len(out) > limit:
+            budget.take_bytes(limit)  # charge the inflation work before failing
+            raise _ArchiveTooLarge(
+                f"TAR-Archiv überschreitet beim Entpacken das Limit von "
+                f"{budget.max_bytes // (1024 * 1024)} MB.")
+        if truncated:
+            raise ValueError("Ungültiges TAR-Archiv (unvollständig komprimiert)")
+        buf = dec.unused_data
+        if not buf or _tar_decompressor_factory(buf[:10]) is None:
+            break  # drained (trailing bytes, if any, are the tar parser's problem)
+    budget.take_bytes(len(out))
+    return bytes(out)
+
+
 def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
-                             _depth: int = 0, _budget: Optional["_Budget"] = None) -> List[Dict[str, Any]]:
+                             _depth: int = 0, _budget: Optional["_Budget"] = None,
+                             _folder_depth: int = 0) -> List[Dict[str, Any]]:
     import tarfile
     result = []
     budget = _budget or _new_budget()
@@ -266,7 +394,14 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
         data = path_or_bytes
 
     try:
-        with tarfile.open(fileobj=io.BytesIO(data)) as tf:
+        data = _inflate_tar_stream(data, budget)
+    except _ArchiveTooLarge as e:
+        raise ValueError(str(e)) from e
+
+    try:
+        # PLAIN tar only: the stream above is already inflated; auto-detection
+        # ("r:*") would inflate a still-compressed inner layer UNBOUNDED again.
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as tf:
             file_members = [m for m in tf.getmembers() if m.isfile()]
 
             # Per-container cheap pre-checks against TAR-Bomben (declared sizes).
@@ -284,11 +419,15 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
             for member in file_members:
                 # Keep the tar's own subfolders as folder nodes (and distinct basenames
                 # across folders) instead of flattening every member to its basename.
-                folders, base = _split_member_path(member.name)
+                folders, base = _split_member_path(
+                    member.name, _MAX_TOTAL_FOLDER_DEPTH - _folder_depth)
                 if not budget.can_take_member():
                     result.append(_not_importable("Weitere Einträge", reason="Limit überschritten"))
                     break
                 budget.take_member()
+                if budget.bytes_remaining <= 0:  # spent budget degrades, never aborts
+                    _insert_by_path(result, folders, _not_importable(base, reason="Limit überschritten"))
+                    continue
                 try:
                     f = tf.extractfile(member)
                     if f is None:
@@ -297,16 +436,20 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                     remaining = budget.bytes_remaining
                     content = f.read(remaining + 1)
                     if len(content) > remaining:
+                        # Charge what was decoded BEFORE failing (parity with the zip
+                        # loop): nested retries must not redo budget-sized work free.
+                        budget.take_bytes(remaining)
                         raise _ArchiveTooLarge(
                             f"TAR-Archiv überschreitet beim Entpacken das Limit von "
                             f"{budget.max_bytes // (1024 * 1024)} MB."
                         )
                     budget.take_bytes(len(content))
-                    _insert_by_path(result, folders, _member_result(content, base, _depth, budget))
+                    _insert_by_path(result, folders, _member_result(
+                        content, base, _depth, budget, _folder_depth + len(folders)))
                 except _ArchiveTooLarge:
                     raise
-                except Exception:
-                    _insert_by_path(result, folders, _not_importable(base))
+                except Exception as e:
+                    _insert_by_path(result, folders, _not_importable(base, reason=str(e)))
     except tarfile.TarError as e:
         raise ValueError("Ungültiges TAR-Archiv") from e
 
@@ -314,7 +457,8 @@ def extract_tar_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
 
 
 def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
-                               _depth: int = 0, _budget: Optional["_Budget"] = None) -> List[Dict[str, Any]]:
+                               _depth: int = 0, _budget: Optional["_Budget"] = None,
+                               _folder_depth: int = 0) -> List[Dict[str, Any]]:
     budget = _budget or _new_budget()
 
     def _build_base_name(subject: Optional[str], date) -> str:
@@ -338,7 +482,7 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
     def _member_for_attachment(content: bytes, name: str) -> Dict[str, Any]:
         # #12: a nested container attachment is recursed; otherwise convert to PDF.
         if _is_nestable(name):
-            return _extract_nested(content, name, _depth, budget)
+            return _extract_nested(content, name, _depth, budget, _folder_depth)
         try:
             converted = UniversalImporter.convert(content, name=name)
             return {"name": name, "content": converted.data}
@@ -356,8 +500,14 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
     else:
         raise TypeError("Pfad, Bytes oder BytesIO erwartet")
 
+    # Routing: ein .msg ist ein CFB-Container — dessen Signatur entscheidet ZUERST.
+    # Der Marker-Schnüffler allein leitete ein .msg fehl, sobald irgendwo in den
+    # rohen Bytes b"From:" steht (z. B. "<b>From:</b>" im HTML-Rumpf einer
+    # englischen Outlook-Antwort) — BytesParser erzeugt dann Müll statt der Mail.
+    is_cfb = data.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+
     # .eml
-    if b"Content-Type:" in data or b"From:" in data:
+    if not is_cfb and (b"Content-Type:" in data or b"From:" in data):
         try:
             msg = BytesParser(policy=policy.default).parsebytes(data)
 
@@ -390,14 +540,18 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
             logger.debug("Aufruf _convert_mail_body mit Datei: %s", file_name)
 
             # Bomb budget (shared): the body counts as a member + against the byte cap
-            # (an oversized body alone can be a DoS).
+            # (an oversized body alone can be a DoS). Check the member cap FIRST —
+            # like zip/tar/attachments — so nested mails can't overshoot it.
             body_bytes = body_content.encode("utf-8") if isinstance(body_content, str) else (body_content or b"")
-            budget.take_member()
-            if not budget.would_exceed(len(body_bytes)):
-                budget.take_bytes(len(body_bytes))
-                result.append(_convert_mail_body(body_content, file_name))
+            if not budget.can_take_member():
+                result.append(_not_importable(file_name, reason="Limit überschritten"))
             else:
-                result.append(_not_importable(file_name, reason="zu groß"))
+                budget.take_member()
+                if not budget.would_exceed(len(body_bytes)):
+                    budget.take_bytes(len(body_bytes))
+                    result.append(_convert_mail_body(body_content, file_name))
+                else:
+                    result.append(_not_importable(file_name, reason="zu groß"))
 
             # Anhänge + eingebettete Bilder — walk() durchläuft auch verschachtelte MIME-Strukturen
             for part in msg.walk():
@@ -462,8 +616,11 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                 content = getattr(msg, attr, None)
                 if content:
                     body_bytes = content.encode("utf-8") if isinstance(content, str) else content
-                    budget.take_member()
                     file_name = f"{base_name}{ext}"
+                    if not budget.can_take_member():  # member cap first (parity with zip/tar)
+                        result.append(_not_importable(file_name, reason="Limit überschritten"))
+                        break
+                    budget.take_member()
                     if not budget.would_exceed(len(body_bytes)):
                         budget.take_bytes(len(body_bytes))
                         result.append(_convert_mail_body(content, file_name))
@@ -496,7 +653,10 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
                     logger.warning("MSG-Anhang konnte nicht gelesen werden: %s", e)
                     result.append(_not_importable(fname if fname else "Anhang"))
 
-        except Exception:
-            raise ValueError("Ungültige MSG-Datei")
+        except Exception as e:
+            # Ursache mitgeben (Log + __cause__) — "Ungültige MSG-Datei" allein ließ
+            # den eigentlichen Fehler (defekter CFB, extract_msg-Bug) unsichtbar.
+            logger.warning("MSG-Parsing fehlgeschlagen: %s", e)
+            raise ValueError("Ungültige MSG-Datei") from e
 
     return result

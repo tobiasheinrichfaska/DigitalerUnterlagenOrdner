@@ -44,7 +44,6 @@ a = Analysis(
         'version_info',
         'infra.log_config',
         'infra.tools',
-        'infra.tasks',
         # React/pywebview GUI
         'host',
         'clr',

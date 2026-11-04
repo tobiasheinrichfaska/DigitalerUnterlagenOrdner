@@ -370,3 +370,35 @@ def test_new_window_creates_a_window(monkeypatch):
     api = host.HostApi(CoreApi())
     assert api.new_window()["ok"] is True
     assert len(created) == 1
+
+
+def test_close_guard_keeps_the_window_open_when_the_dialog_fails(monkeypatch):
+    # L13 (audit 2026-11-03): if the confirmation dialog itself RAISES while the
+    # document is dirty, the old guard swallowed the error and closed the window —
+    # discarding unsaved work without ever asking. Failing safe means: stay open.
+    captured = []
+
+    class _Closing:
+        def __iadd__(self, fn):
+            captured.append(fn)
+            return self
+
+    class _W:
+        uid = "w"
+
+        def __init__(self):
+            self.events = type("E", (), {"closing": _Closing()})()
+
+        def create_confirmation_dialog(self, *a, **k):
+            raise RuntimeError("Dialog kaputt")
+
+    core = CoreApi()
+    api = host.HostApi(core)
+    api._session = api.open()["session"]
+    api._dirty = True
+    logged = []
+    monkeypatch.setattr(host.logger, "exception", lambda *a, **k: logged.append(a))
+    host._bind_close(_W(), api)
+    assert captured[0]() is False, "Fenster darf bei kaputtem Dialog nicht schließen"
+    assert api._session in core._sessions  # nothing was torn down
+    assert logged, "der Dialogfehler wurde nicht protokolliert"

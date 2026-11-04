@@ -51,7 +51,7 @@ Beim ersten Aufruf fragt `winget` nach der Zustimmung zu den Bedingungen des Sto
 ## Der erste Start
 
 - Starten Sie BelegTool über das **Startmenü**. Es erscheint ein leeres „Dokument 1“ mit der Symbolleiste oben, dem Baum links und der Vorschau rechts.
-- Ihre **Version** steht in der Titelleiste des Fensters, zum Beispiel „DigitalerUnterlagenOrdner 3.11.3“.
+- Ihre **Version** steht in der Titelleiste des Fensters, zum Beispiel „DigitalerUnterlagenOrdner 3.11.4“.
 - Dateien mit der Endung **.belegtool** sind jetzt mit BelegTool verknüpft: Ein Doppelklick im Explorer öffnet sie direkt.
 - Die Sprache der Oberfläche stellen Sie über **🌐** in der Symbolleiste um; **❓ Hilfe** öffnet eine Kurzanleitung.
 - Mit **📥 Importieren** holen Sie die ersten Dateien in das Dokument, mit **💾 Speichern** legen Sie es als `.belegtool` ab.

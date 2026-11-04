@@ -84,11 +84,26 @@ transforms return new nodes with structural sharing.</p>
 
 <h3>Persisted shape (the data contract)</h3>
 <p class="lead"><code>Document.to_dict()</code> serialises <b>structure only</b> (no bytes). Per node:
-<code>id, name, is_folder, status, position</code> (= sibling index), <code>vz_start, vz_end,
+<code>uid</code> (the persisted node id — the in-memory model calls it <code>id</code>; <code>core/bridge.py</code>
+maps between the two), <code>name, is_folder, status, position</code> (= sibling index), <code>vz_start, vz_end,
 pdf_length, is_compressed, dpi_original, dpi_current, no_compression, compression_no_gain, collapsed, compression_method, tags[], datev (root only), children[]</code>.
 On disk a <code>.belegtool</code> is a single PDF carrying the pages plus this JSON under the PDF
 metadata key <code>/JSONStructure</code> (see <span class="mono">docs/DATA_CONTRACT.md</span>;
 bridge in <span class="mono">core/bridge.py</span>).</p>
+
+<h3>Werkseinstellungen (factory defaults)</h3>
+<p class="lead">Fixed, compiled-in reference data — there is <b>no seeded/editable store</b>; a user
+cannot change these without a new app version, and nothing is re-seeded at runtime:
+the status vocabulary <code>STATUSES = "", "zu erfassen", "erfasst", "vorjahreswert"</code>
+(<span class="mono">core/model.py</span>, served to the UI via <code>config()</code>),
+the default compression DPI <code>DEFAULT_COMPRESSION_DPI = 150</code> and rotate angles
+(<span class="mono">core/commands.py</span>), the bomb-guard caps (500&nbsp;MB / 500 members,
+<span class="mono">infra/limits.py</span>) and the 22-language i18n catalog
+(<span class="mono">webui/src/i18n/</span>). A new document starts as one empty root folder
+(<code>Document.empty()</code>) — no other built-in records exist.</p>
+<p class="lead"><b>⚠ Regenerate this page whenever the model changes</b> (fields, commands,
+defaults): verify every count/enum against <span class="mono">core/model.py</span> /
+<span class="mono">core/commands.py</span> before editing, per the workspace conventions.</p>
 
 <!-- ============================ ER MAP ============================ -->
 <h2>2 · Entity-relationship map</h2>

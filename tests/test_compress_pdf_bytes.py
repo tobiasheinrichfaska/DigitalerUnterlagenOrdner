@@ -46,3 +46,35 @@ def test_compress_render_giant_page_is_bounded(monkeypatch):
         assert (w, h) == (595, 14400)  # placement dims in the output PDF unchanged
     finally:
         doc.close()
+
+
+def test_compress_all_methods_drops_candidates_that_lose_pages(monkeypatch):
+    """H1 (audit 2026-11-03): a page that fails to rasterize is skipped with only a
+    log line, so the 'compressed' variant silently loses that page — and on reload
+    the fixed per-node pdf_length shifts every FOLLOWING document's pages. The live
+    path (engine → compress_all_methods) must never offer a truncated candidate;
+    the old guard lived only in the unused compress_pdf_bytes()."""
+    from formats import compress_pdf_bytes as cpb
+
+    original = create_valid_pdf(pages=3)
+    # Precondition against a vacuous pass: the fixture must actually produce at
+    # least one render-based candidate (with a missing LFS sample the helper falls
+    # back to blank pages, nothing is offered, and this test would prove nothing).
+    baseline = cpb.compress_all_methods(original, dpi=100)
+    assert any(m in baseline for m in ("jpg", "jpg_color", "png")), \
+        "Fixture bietet keine Render-Variante an — LFS-Sample fehlt?"
+    real_render = cpb._render_one_page
+
+    def flaky(doc, page_index, *args, **kwargs):
+        if page_index == 1:
+            raise RuntimeError("Seite kaputt (Testfehler)")
+        return real_render(doc, page_index, *args, **kwargs)
+
+    monkeypatch.setattr(cpb, "_render_one_page", flaky)
+    results = cpb.compress_all_methods(original, dpi=100)
+
+    # pikepdf does not rasterize, so it may legitimately succeed; every
+    # render-based candidate must be dropped, never offered truncated.
+    for method, data in results.items():
+        assert len(PdfReader(io.BytesIO(data)).pages) == 3, (
+            f"Methode {method} liefert ein um Seiten gekürztes PDF")

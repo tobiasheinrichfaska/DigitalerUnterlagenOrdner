@@ -549,7 +549,8 @@ def _current_user_sid():
     Best-effort + Windows-only; the create flow falls back to the first active user."""
     try:
         import subprocess
-        out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+        from datev.transport import system32_exe  # absolute path — never the CWD search (L9)
+        out = subprocess.run([system32_exe("whoami.exe"), "/user", "/fo", "csv", "/nh"],
                              capture_output=True, text=True, timeout=10,
                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         # CSV: "DOMAIN\user","S-1-5-…"

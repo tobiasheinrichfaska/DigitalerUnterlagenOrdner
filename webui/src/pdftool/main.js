@@ -6,7 +6,7 @@
 // the editor as editable objects (PDF.js re-loads its own annotations).
 import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { EventBus, PDFViewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs'
+import { EventBus, PDFViewer, PDFLinkService, LinkTarget } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
 import { openFileDialog } from './fileDialog.js'
@@ -30,7 +30,12 @@ const PDFJS_ASSET_OPTS = {
 
 const container = document.getElementById('viewerContainer')
 const eventBus = new EventBus()
-const linkService = new PDFLinkService({ eventBus })
+// externalLinkTarget=BLANK: a link in an untrusted PDF must never navigate THIS
+// window — pywebview re-injects the full JS bridge into whatever loads here, so a
+// same-window navigation would hand window.pywebview.api to a remote page (and
+// even a benign link would discard unsaved edits). target=_blank is routed by
+// pywebview to the SYSTEM browser. Guarded by e2e "PDF-Tool external links".
+const linkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK })
 const pdfViewer = new PDFViewer({
   container,
   eventBus,

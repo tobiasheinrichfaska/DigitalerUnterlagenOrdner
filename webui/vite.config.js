@@ -34,6 +34,11 @@ function pdfjsAssets() {
         if (!existsSync(s)) throw new Error(`pdfjs-dist has no ${d}/ folder - check PDFJS_ASSET_DIRS after the update`)
         cpSync(s, fileURLToPath(new URL(`./dist/pdfjs/${d}`, import.meta.url)), { recursive: true })
       }
+      // The two scan decoders by NAME: DATEV scans are JBIG2/JPEG2000 — a renamed
+      // wasm file after a pdfjs update would ship blank pages with the folder present.
+      for (const f of ['wasm/jbig2.wasm', 'wasm/openjpeg.wasm']) {
+        if (!existsSync(resolve(srcRoot, f))) throw new Error(`pdfjs-dist is missing ${f} - scanned PDFs would render blank`)
+      }
     },
   }
 }
@@ -44,7 +49,7 @@ export default defineConfig({
   base: './',
   plugins: [react(), pdfjsAssets()],
   build: {
-    // Two front-end surfaces share one app (see docs/pdf-viewer-surface.md):
+    // Two front-end surfaces share one app (see docs/pdf-tool.md):
     // index.html = organizer, pdf-tool.html = PDF-Tool (PDF.js).
     rollupOptions: {
       input: {
@@ -69,5 +74,9 @@ export default defineConfig({
     // Revisit (drop both) once vitest ships a fix. See reports/2026-06-13_18-22-24.
     pool: 'vmThreads',
     globals: true,
+    // vmThreads is slow to spin up and the suite shares the box with other work
+    // (release builds, the Python suite): the 5 s default timed two App tests out
+    // under load while the same code passed solo (audit 2026-11-03, L1).
+    testTimeout: 20000,
   },
 })

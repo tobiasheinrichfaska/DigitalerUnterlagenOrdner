@@ -33,6 +33,9 @@ import-archiv/
 # Playwright artifacts if it is ever run from the repo root (normally lives in webui/)
 test-results/
 
+# Hand-rolled zip of the tester kit (the kit itself is tracked under manual_tests/testpakete/)
+manual_tests/testpakete.zip
+
 # Audit reports (local artifacts; keep them off the public repo)
 reports/
 

@@ -362,14 +362,27 @@ def _rename(doc: Document, cmd: Rename, engine=None) -> Document:
 
 def _apply_status(doc: Document, node_id: str, status: str) -> Document:
     """Set status on one node. A folder CASCADES to every descendant document
-    (children, grandchildren, …); folders carry no own status dot."""
+    (children, grandchildren, …); folders carry no own status dot.
+
+    The cascade rebuilds the tree ONCE: one update_node per descendant leaf was
+    O(leaves·tree) on big folders (audit 2026-11-03, L8)."""
     node = _require(doc, node_id)
-    if node.is_folder:
-        for n in node.iter():
-            if not n.is_folder:
-                doc = doc.update_node(n.id, status=status)
+    if not node.is_folder:
+        return doc.update_node(node_id, status=status)
+    targets = {n.id for n in node.iter() if not n.is_folder and n.status != status}
+    if not targets:
         return doc
-    return doc.update_node(node_id, status=status)
+
+    def rec(n: Node) -> Node:
+        kids = tuple(rec(c) for c in n.children)
+        same_kids = all(nc is oc for nc, oc in zip(kids, n.children))
+        if n.id in targets:
+            return dataclasses.replace(n, status=status, children=kids)
+        if same_kids:
+            return n
+        return dataclasses.replace(n, children=kids)
+
+    return Document(rec(doc.root))
 
 
 @_handler(SetStatus)
@@ -488,25 +501,22 @@ def _delete(doc: Document, cmd: Delete, engine=None) -> Document:
     return doc.remove_node(cmd.node_id)
 
 
-def _is_descendant(doc: Document, child_id: str, ancestor_id: str) -> bool:
-    cur = doc.parent_of(child_id)
-    while cur is not None:
-        if cur.id == ancestor_id:
-            return True
-        cur = doc.parent_of(cur.id)
-    return False
-
-
 @_handler(DeleteMany)
 def _delete_many(doc: Document, cmd: DeleteMany, engine=None) -> Document:
     ids = [i for i in dict.fromkeys(cmd.node_ids)
            if doc.find(i) is not None and doc.parent_of(i) is not None]
     # The UI must resolve parent/child overlaps to a clean set first; a "mixed"
     # selection (a folder AND an item inside it) is rejected, never guessed.
+    # One parent map instead of pairwise parent_of chains: the old check was
+    # O(k²·depth·n) and ran under the CoreApi lock (audit 2026-11-03, L4).
+    id_set = set(ids)
+    pmap = _parent_id_map(doc.root)
     for i in ids:
-        for j in ids:
-            if i != j and _is_descendant(doc, j, i):  # j is inside i
+        pid = pmap.get(i)
+        while pid is not None:
+            if pid in id_set:  # an ancestor of i is selected too
                 raise CommandError("Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.")
+            pid = pmap.get(pid)
     for i in ids:
         doc = doc.remove_node(i)
     return doc

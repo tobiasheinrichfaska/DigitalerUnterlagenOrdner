@@ -37,6 +37,7 @@ PowerPoint import — **Microsoft Office installed locally**.
 
 ```powershell
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # test runner (pytest)
 cd webui
 npm install
 npm run build      # build the React SPA once

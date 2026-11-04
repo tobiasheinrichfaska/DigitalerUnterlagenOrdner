@@ -36,7 +36,6 @@ PUBLIC_SURFACE = {
     "formats.compress_pdf_bytes": ["compress_all_methods", "compress_pdf_bytes"],
     "universal_importer": ["UniversalImporter", "extract_zip_to_structure",
                            "extract_email_to_structure"],
-    "infra.tasks": ["submit", "run_on_ui_thread"],
     "infra.tools": ["sanitize_pdf"],
     "infra.log_config": ["logger"],
 }

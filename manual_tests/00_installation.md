@@ -33,8 +33,8 @@ Die ausführliche Anleitung mit allen Wegen und Hilfen steht in `00_Installation
 3. Im Microsoft Store unter **Downloads** bzw. **Bibliothek** auf **Updates abrufen** klicken.
 
 **Erwartet:**
-- Schritt 1: In der Titelleiste steht „DigitalerUnterlagenOrdner“ mit der Versionsnummer, z. B. `3.11.3`. **Bitte diese Nummer in jedes Testprotokoll eintragen.**
-- Schritt 2: Die Einstellungen zeigen dieselbe Version mit einer zusätzlichen `.0` am Ende (z. B. `3.11.3.0`).
+- Schritt 1: In der Titelleiste steht „DigitalerUnterlagenOrdner“ mit der Versionsnummer, z. B. `3.11.4`. **Bitte diese Nummer in jedes Testprotokoll eintragen.**
+- Schritt 2: Die Einstellungen zeigen dieselbe Version mit einer zusätzlichen `.0` am Ende (z. B. `3.11.4.0`).
 - Schritt 3: Gibt es eine neuere Version, wird sie installiert; nach einem Neustart zeigt die Titelleiste die höhere Nummer. Eigene `.belegtool`-Dateien bleiben dabei unverändert.
 
 ---

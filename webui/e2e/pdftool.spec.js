@@ -29,3 +29,17 @@ test.describe('PDF-Tool surface (spike)', () => {
     expect(errors, `page errors: ${errors.join('; ')}`).toEqual([])
   })
 })
+
+// H2 (audit 2026-11-03): a link inside an untrusted PDF must NOT navigate the
+// bridged window (pywebview re-injects the full JS API into whatever loads there).
+// With externalLinkTarget=BLANK, pdf.js renders the annotation as target="_blank",
+// which pywebview routes to the SYSTEM browser instead of the app window.
+test.describe('PDF-Tool external links', () => {
+  test('an external link annotation targets _blank, never the app window', async ({ page }) => {
+    await page.goto('/pdf-tool.html?file=/spike-link.pdf')
+    const link = page.locator('.annotationLayer a[href="https://example.com/"]').first()
+    await expect(link).toBeVisible({ timeout: 20000 })
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', /noopener/)
+  })
+})

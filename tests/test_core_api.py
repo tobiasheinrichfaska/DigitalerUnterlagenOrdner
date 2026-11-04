@@ -782,3 +782,43 @@ def test_version_of_is_thread_safe_under_contention():
         t.join()
     assert not errors
     assert len(api._vcache) <= 64
+
+
+def test_dispatch_returns_ok_false_for_malformed_wire_commands():
+    """L7 (audit 2026-11-03): command_from_dict ran OUTSIDE the _mutate try/except,
+    so a malformed wire dict (unknown type, missing keys, missing 'type') crossed
+    the pywebview bridge as a RAW rejected promise instead of {ok: False, error}."""
+    api = CoreApi()
+    session = api.open()["session"]
+    for bad in ({"type": "GibtEsNicht"},          # unknown command type
+                {"type": "Rename"},               # missing required keys → TypeError
+                {"type": "Rename", "node_id": "x", "name": "y", "zu_viel": 1},
+                {"keintyp": 1}):                  # missing 'type' → KeyError
+        resp = api.dispatch(session, bad)
+        assert resp.get("ok") is False and resp.get("error"), f"roh durchgereicht: {bad}"
+
+
+def test_close_session_prunes_persisted_variants_of_gone_documents():
+    """L6 (audit 2026-11-03): the engine's persisted variant layer (seeded from the
+    .belegtool on open) was never freed — closing a document left its variant BYTES
+    pinned for the whole app run (terminal-server memory growth)."""
+    api = CoreApi()
+    src = b"%PDF-1.4 quelle " + b"q" * 64
+    other = b"%PDF-1.4 bleibt " + b"b" * 64
+    api._engine.seed_variants(src, {150: {"jpg": b"kleiner"}})
+    api._engine.seed_variants(other, {150: {"jpg": b"auch"}})
+
+    from core.model import Document, Node
+    session = api.open()["session"]
+    keep = api.open()["session"]
+    with api._lock:
+        api._sessions[session]._doc = Document(
+            Node(name="r", is_folder=True,
+                 children=(Node(name="a.pdf", original_data=src, pdf_length=1),)))
+        api._sessions[keep]._doc = Document(
+            Node(name="r", is_folder=True,
+                 children=(Node(name="b.pdf", original_data=other, pdf_length=1),)))
+
+    api.close_session(session)
+    assert api._engine.variants_for(src) == {}, "Varianten der geschlossenen Mappe nicht geräumt"
+    assert api._engine.variants_for(other), "Varianten einer NOCH OFFENEN Mappe wurden geräumt"

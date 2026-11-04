@@ -153,6 +153,8 @@ Ein `.belegtool` lässt sich nicht nur öffnen, sondern auch in ein anderes Doku
 
 **Hinweis:** Sehr große oder böswillig gepackte Archive (zu viele Einträge oder entpackt zu groß) werden abgelehnt, statt den Arbeitsspeicher zu füllen. Das lässt sich mit den Beispieldateien nicht auslösen.
 
+**Hinweis (ab 3.11.4):** ZIP-Einträge, die mit **BZip2 oder LZMA** gepackt sind (einstellbar z. B. in 7-Zip; Standard ist Deflate), werden aus Sicherheitsgründen nicht entpackt – sie erscheinen als `… – nicht importierbar (nicht unterstütztes Komprimierverfahren …)`. Die übrigen Einträge des Archivs importieren normal. Ebenso bricht ein einzelner defekter oder passwortgeschützter Eintrag das Archiv nicht mehr ab, sondern erscheint mit seinem Grund.
+
 ---
 
 ## MT-05: Import-Sicherheit – getarnte Programmdatei wird abgelehnt
@@ -172,7 +174,7 @@ Geprüft wird der **Inhalt** einer Datei, nicht nur ihre Endung.
 - Schritt 2: Im Mail-Ordner steht der Anhang als `rechnung.pdf – nicht importierbar ('rechnung.pdf' sieht aus wie Windows-Programm (EXE/DLL), nicht wie .pdf – abgelehnt.)`. Der zweite Anhang `echte_Rechnung.pdf` wird normal importiert.
 - *Nicht offensichtlich:* Das ist das gewollte Sicherheitsverhalten. Eine umbenannte EXE oder ein Skript wird sichtbar abgelehnt und nicht stillschweigend „irgendwie“ übernommen. Dieselbe Prüfung lehnt Word-/Excel-/PowerPoint-Dateien ab, die auf eine externe Vorlage im Netz verweisen.
 
-**Hinweis:** **Bekannte Abweichung in Version 3.11.3 – bitte nicht erneut melden.** Schritt 1 schlägt derzeit fehl: Statt der Ablehnung entsteht ein leerer Eintrag `getarnte_EXE_rechnung` mit 0 Seiten und ohne Meldung. Schritt 2 (Anhang in der E-Mail) verhält sich wie beschrieben. Ausgeführt wird die Datei in keinem Fall.
+**Hinweis:** **Bekannte Abweichung in Version 3.11.4 – bitte nicht erneut melden.** Schritt 1 schlägt derzeit fehl: Statt der Ablehnung entsteht ein leerer Eintrag `getarnte_EXE_rechnung` mit 0 Seiten und ohne Meldung. Schritt 2 (Anhang in der E-Mail) verhält sich wie beschrieben. Ausgeführt wird die Datei in keinem Fall.
 
 ---
 
@@ -214,4 +216,4 @@ Ein Archiv oder eine E-Mail **innerhalb** eines anderen Containers wird geöffne
 - Schritt 3: Der Baum folgt der Verschachtelung `ebene_2.zip` › `ebene_3.zip` › … › `ebene_11.zip`. In jeder Ebene liegt ein Beleg.
 - *Nicht offensichtlich:* Die Verschachtelung ist auf **10 Ebenen** begrenzt (bis Version 3.11.2: 3 Ebenen). Das noch tiefer liegende Archiv wird nicht geöffnet, sondern erscheint als `ebene_12.zip – nicht importierbar (zu tief verschachtelt)`. Das ist ein Schutz vor Endlos-Archiven und kein Fehler.
 
-**Hinweis:** Die Größen- und Mengenbegrenzung gilt **gemeinsam für alle Ebenen**. Ist sie mitten im Import ausgeschöpft, erscheint der nächste innere Container als „… – nicht importierbar“; der Rest des Imports bleibt unberührt.
+**Hinweis:** Die Größen- und Mengenbegrenzung gilt **gemeinsam für alle Ebenen**. Ist sie mitten im Import ausgeschöpft, erscheinen der betroffene innere Container **und alle weiteren Einträge** als „… – nicht importierbar (Limit überschritten)“ – der Import bricht nicht ab, und jeder übersprungene Eintrag ist mit Grund sichtbar.

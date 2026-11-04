@@ -345,3 +345,15 @@ def test_self_signed_allowed_loopback_default_and_override():
     assert self_signed_allowed({"verify_tls": False}, "https://lan-host/x")    # explicit wins
     assert not self_signed_allowed({"verify_tls": True}, "https://your-datev-server/x")  # explicit wins
     assert not self_signed_allowed({"verify_tls": True}, "https://localhost/x")
+
+
+def test_curl_and_whoami_resolve_to_system32(monkeypatch):
+    """L9 (audit 2026-11-03): bare "curl.exe"/"whoami" go through the CreateProcess
+    search path, which looks in the CURRENT DIRECTORY before System32 — a planted
+    curl.exe would run with the user's SSO. The defaults must be absolute."""
+    from datev.transport import system32_exe
+    curl = system32_exe("curl.exe")
+    assert curl.lower().endswith(r"\system32\curl.exe") and "\\windows\\" in curl.lower()
+    args = build_curl_args("GET", "https://h/v2/info", {}, allow_self_signed=False,
+                           out_path="/tmp/o", body_path=None)
+    assert args[0].lower().endswith(r"\system32\curl.exe"), args[0]

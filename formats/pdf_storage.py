@@ -226,6 +226,7 @@ class PDFStorage:
             # wrong tool here — it returns unchanged bytes whenever PdfReader CONSTRUCTS.
             # A full pikepdf rewrite regenerates the page tree (QS follow-up, H-1a).
             logger.warning("Seitenbaum nicht lesbar – versuche Reparatur: %s", repair_reason)
+            orig_reader = reader  # None when the ORIGINAL parse already failed (B-4)
             try:
                 with pike_open(io.BytesIO(data)) as pdf:
                     buf = io.BytesIO()
@@ -236,23 +237,29 @@ class PDFStorage:
                 if total_pages == 0:
                     raise ValueError("Reparatur ergab 0 Seiten")
             except Exception as e2:
-                if reader is None:
+                if orig_reader is None:
                     # H-1 (QS 2026-11-04): this used to be a silent `return` — the file
                     # opened as an EMPTY document (ok:true) and the next save destroyed
                     # the original. Degrade LOUDLY; CoreApi.open won't bind the path.
+                    # (Checked against the ORIGINAL reader — B-4: the repair attempt may
+                    # have reassigned `reader` before failing, which used to slip a
+                    # folder-only file through without any warning.)
                     logger.error("PDF konnte nicht gelesen werden: %s", e2)
                     self.load_warnings.append(
                         "Seitenbaum nicht lesbar – Dokumentinhalt konnte nicht geladen werden")
                     return
                 # the original reader works but sees 0 pages and the repair failed →
-                # continue; the per-node skip warnings below report every loss.
+                # continue on the ORIGINAL reader; the per-node skip warnings below
+                # report every loss.
                 logger.warning("Reparatur fehlgeschlagen: %s", e2)
+                reader = orig_reader
+                total_pages = 0
             else:
-                # repaired content is NOT the on-disk file — treat as degraded (warn,
-                # don't bind the path) so the user saves the rescue as a NEW file.
+                # the repaired content (NOT the on-disk file) is what `reader` now
+                # serves — treat as degraded (warn, don't bind the path) so the user
+                # saves the rescue as a NEW file. All slicing below reads from `reader`.
                 self.load_warnings.append(
                     "Seitenbaum repariert – bitte als neue Datei speichern")
-                data = repaired
 
         # Parse the source PDF ONCE and reuse the reader for every node — slicing
         # used to re-parse the whole file per node (O(nodes) full parses = slow load).
@@ -428,9 +435,13 @@ class PDFStorage:
     def _vz(value):
         """Veranlagungszeitraum field from persisted JSON: int or None. Hand-edited/
         foreign files may carry other types — a later Merge spans vz via min/max, so
-        mixed types would crash it (QS-Bewertung 2026-11-04). Coerce or drop."""
+        mixed types would crash it (QS-Bewertung 2026-11-04). Coerce or drop; a
+        non-integer number drops like the equivalent string does (B-1: 2024.5 must
+        never silently truncate to 2024)."""
         if value is None or isinstance(value, bool):
             return None
+        if isinstance(value, float):
+            return int(value) if value.is_integer() else None
         try:
             return int(value)
         except (TypeError, ValueError):

@@ -363,3 +363,54 @@ def test_scan_fails_closed_on_case_variant_targetmode(tmp_path):
         '<Relationship Id="rId1" Type=".../attachedTemplate" '
         'Target="https://evil.example/t.dotm" targetMode="External"/>')
     assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE
+
+
+# --- A-1/A-2/A-3 (QS-Delta-Review 2026-11-04): further fail-open gaps in the scan ----
+
+def test_scan_fails_closed_on_duplicate_zip_entry_names(tmp_path):
+    """Two ZIP entries with the SAME name: CPython's zipfile reads the LAST one, Word's
+    own OPC reader may read the first — the scan must never bet on which. Refuse."""
+    from universal_importer.converters import SCAN_UNREADABLE
+    evil = _RELS_TPL.format(rels=(
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External"/>'))
+    harmless = _RELS_TPL.format(rels='')
+    path = tmp_path / "dup.docx"
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", "<w:document/>")
+        z.writestr("word/_rels/settings.xml.rels", evil)      # first: evil
+        z.writestr("word/_rels/settings.xml.rels", harmless)  # last: what zipfile reads
+    assert scan_ooxml_external_targets(str(path)) == SCAN_UNREADABLE
+
+
+def test_scan_fails_closed_on_nonstandard_targetmode_value(tmp_path):
+    """' External' / 'External ' are not the exact OPC enum value — whether Word trims
+    them is unknowable here, so the scan must refuse instead of treating them as
+    internal (the old fail-OPEN)."""
+    from universal_importer.converters import SCAN_UNREADABLE
+    for value in (" External", "External ", "External\t"):
+        p = _docx_with_rels(tmp_path,
+            f'<Relationship Id="rId1" Type=".../attachedTemplate" '
+            f'Target="https://evil.example/t.dotm" TargetMode="{value}"/>')
+        assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE, value
+
+
+def test_scan_fails_closed_on_case_variant_relationship_element(tmp_path):
+    """<relationship> (wrong case) — same 'never guess what Word accepts' rule as for
+    attribute look-alikes: refuse rather than skip."""
+    from universal_importer.converters import SCAN_UNREADABLE
+    p = _docx_with_rels(tmp_path,
+        '<relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="https://evil.example/t.dotm" TargetMode="External"/>')
+    assert scan_ooxml_external_targets(p) == SCAN_UNREADABLE
+
+
+def test_scan_accepts_exact_internal_and_absent_targetmode(tmp_path):
+    """The exact enum values stay accepted: Internal (and absent = Internal default)
+    never flags, exact External still returns the target."""
+    p = _docx_with_rels(tmp_path,
+        '<Relationship Id="rId1" Type=".../attachedTemplate" '
+        'Target="styles.xml" TargetMode="Internal"/>'
+        '<Relationship Id="rId2" Type=".../styles" Target="styles.xml"/>')
+    assert scan_ooxml_external_targets(p) is None

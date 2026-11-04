@@ -712,6 +712,18 @@ the parts' TOC page counts really differ (the 45-doc variant was offset-blind); 
 prepared `Defekte_Mappe.belegtool` sample (hand-made random corruption triggered the warning in
 only 5 of 30 tries) with a kit test asserting it reliably degrades.
 
+**v3.11.4 — Delta-Review-Runde (2026-11-04, Fable-Review der beiden zuvor ungeprüften
+Fix-Deltas, alle Auflagen umgesetzt):** the `.rels` scan closes three further fail-open gaps —
+(A-1) duplicate ZIP entry names refuse (`zipfile` reads the LAST entry, Word's OPC reader may
+read another; no legitimate tool produces duplicates), (A-2) a `TargetMode` VALUE that is not
+exactly `Internal`/`External` refuses (whitespace variants were treated as internal), (A-3) a
+case-variant `<relationship>` element refuses like attribute look-alikes. Load integrity: (B-1)
+float vz values coerce consistently (2024.0 → 2024, 2024.5 drops like the string), (B-4) a
+folder-only `.belegtool` with an unreadable wrapper warns + stays unbound (the failed-repair
+branch had reassigned `reader`, slipping it through), (B-3) dead `data = repaired` assignment
+removed. B-2 (locked-save micro-window) + A-4 (absolute URL without TargetMode) documented as
+accepted residuals.
+
 v3.11.3 — security + nesting release on top of v3.11.2 (2026-11-03):
 (1) *Dependency security updates* closing every open Dependabot alert — shipped: **Pillow 13.0.0**
 (was 12.2.0, incl. 5 critical), **pypdf 6.21.4**, **pdfjs-dist 6.5.438** (a malicious PDF could run
@@ -853,7 +865,12 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   env-gated file lock ON, a SECOND user's `acquire_lock` runs `restore_from_bak` BEFORE its lock
   attempt — a concurrent restore during an in-flight save is mitigated (guarded removes), but
   reordering restore-after-lock is a deferred follow-up. (6) The open-warning banner shows the
-  full joined warning list (very many damaged nodes → long message).
+  full joined warning list (very many damaged nodes → long message). (7) Locked save: between a
+  completed `overwrite` and the `.bak`/`.wip` removal there is a micro-window in which a crash
+  rolls the (never acknowledged) save back to the previous state on next open — real loss only
+  if BOTH removes fail with the save already reported ok (exotic, e.g. AV holding both files).
+  (8) A Relationship with an absolute URL but NO TargetMode is accepted (OPC default Internal;
+  conformant parsers reject absolute internal URIs — relies on Word being conformant).
 - **Two narrow close-time races, no data loss** *(QS-Gegenprüfung 2026-11-04, N-2/N-3 — accepted)*:
   (1) `_count_for` without a `session` arg (`_seed_single`, `page_count`) can re-insert a
   `(node_id, version)→int` page count into `_pcount` after a parallel `close_session` (tiny, no

@@ -206,6 +206,12 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
             names = z.namelist()
             if len(names) > _RELS_MAX_ENTRIES:
                 return SCAN_UNREADABLE  # kein plausibles Office-Dokument
+            if len(names) != len(set(names)):
+                # A-1 (QS-Delta-Review 2026-11-04): bei Duplikatnamen liest CPythons
+                # zipfile den LETZTEN Eintrag, Words OPC-Leser womöglich einen anderen —
+                # der Scan darf nicht wetten, welchen. Kein legitimes Office-Werkzeug
+                # erzeugt Duplikate → fail CLOSED.
+                return SCAN_UNREADABLE
             for name in names:
                 if not name.lower().endswith(".rels"):
                     continue
@@ -231,7 +237,12 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                 except Exception:
                     return SCAN_UNREADABLE
                 for el in root_el.iter():
-                    if el.tag.rsplit("}", 1)[-1] != "Relationship":
+                    local = el.tag.rsplit("}", 1)[-1]
+                    if local != "Relationship":
+                        if local.lower() == "relationship":
+                            # A-3: ein case-variantes <relationship> — nicht raten, ob
+                            # Words Parser es auswertet → fail CLOSED (wie bei Attributen)
+                            return SCAN_UNREADABLE
                         continue
                     # OPC-Attributnamen sind unqualifiziert und case-sensitiv — EXAKT so
                     # lesen wie Word. Ein qualifiziertes/case-variantes Duplikat
@@ -241,7 +252,13 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                         if (k.rsplit("}", 1)[-1].lower() in ("targetmode", "type", "target")
                                 and k not in ("TargetMode", "Type", "Target")):
                             return SCAN_UNREADABLE
-                    if el.attrib.get("TargetMode", "").lower() != "external":
+                    # A-2: der WERT ist ein OPC-Enum (Internal/External, Default Internal).
+                    # " External"/"External\t" usw. als „intern" zu werten wäre fail-OPEN,
+                    # falls Words Parser trimmt — jeder nicht-exakte Wert → fail CLOSED.
+                    mode = el.attrib.get("TargetMode", "Internal")
+                    if mode not in ("Internal", "External"):
+                        return SCAN_UNREADABLE
+                    if mode != "External":
                         continue
                     if el.attrib.get("Type", "").lower().endswith("/hyperlink"):
                         continue  # nicht beim Öffnen aufgelöst → erlaubt

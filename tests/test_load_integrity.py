@@ -48,9 +48,10 @@ def _save(tmp_path, children, name="doc"):
 def _crafted(tmp_path, json_str, n_pages=2, name="crafted"):
     """A .belegtool whose /JSONStructure is exactly ``json_str`` (crafted corruption)."""
     writer = PdfWriter()
-    reader = PdfReader(io.BytesIO(_pdf(n_pages)))
-    for page in reader.pages:
-        writer.add_page(page)
+    if n_pages:
+        reader = PdfReader(io.BytesIO(_pdf(n_pages)))
+        for page in reader.pages:
+            writer.add_page(page)
     writer.add_metadata({"/JSONStructure": json_str})
     path = str(tmp_path / f"{name}.belegtool")
     with open(path, "wb") as f:
@@ -287,6 +288,38 @@ def test_vz_values_are_coerced_to_int_or_none(tmp_path):
     by_name = {c.name: c for c in PDFStorage(path).root.children}
     assert by_name["A"].vz_start == 2024 and by_name["A"].vz_end == 2024
     assert by_name["B"].vz_start is None and by_name["B"].vz_end is None
+
+
+def test_vz_floats_coerce_consistently(tmp_path):
+    """B-1 (QS-Delta-Review 2026-11-04): a float 2024.0 is an exact year → 2024, but
+    2024.5 must DROP like the string "2024.5" does — never silently truncate."""
+    structure = {"children": [
+        {"name": "A", "pdf_length": 1, "vz_start": 2024.0, "vz_end": 2024.5},
+        {"name": "B", "pdf_length": 1, "vz_start": "2024.5", "vz_end": None},
+    ]}
+    path = _crafted(tmp_path, json.dumps(structure), n_pages=2)
+    by_name = {c.name: c for c in PDFStorage(path).root.children}
+    assert by_name["A"].vz_start == 2024
+    assert by_name["A"].vz_end is None   # NOT 2024 (the old truncation)
+    assert by_name["B"].vz_start is None
+
+
+def test_folder_only_file_with_broken_wrapper_warns(tmp_path, monkeypatch):
+    """B-4 (QS-Delta-Review 2026-11-04): folder-only structure + unreadable PDF wrapper,
+    repair yields 0 pages — used to open with NO warning and a BOUND path (the repair-
+    failed branch only warned via leaves, which don't exist here)."""
+    structure = {"children": [{"name": "F", "is_folder": True, "children": []}]}
+    path = _crafted(tmp_path, json.dumps(structure), n_pages=0, name="folders")
+    _flaky_reader(monkeypatch, fail_calls={2})  # original page tree read fails
+    storage = PDFStorage(path)
+    warnings = list(getattr(storage, "load_warnings", []))
+    assert any("Seitenbaum" in w for w in warnings), warnings
+
+
+def test_folder_only_healthy_file_stays_warning_free(tmp_path):
+    structure = {"children": [{"name": "F", "is_folder": True, "children": []}]}
+    path = _crafted(tmp_path, json.dumps(structure), n_pages=0, name="folders_ok")
+    assert not PDFStorage(path).load_warnings
 
 
 # --- degraded sessions suggest a rescue name for Save-As -------------------------

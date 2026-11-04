@@ -56,6 +56,11 @@ class PDFStorage:
         self.filename: Optional[str] = None
         self.import_time = datetime.datetime.now()
         self.is_dirty: bool = False
+        # Degradations while LOADING a .belegtool (corrupt structure, nodes past the
+        # page end, hostile pdf_length …). Loading stays tolerant, but these must
+        # reach the user (CoreApi.open surfaces them and refuses to bind the path) —
+        # a silently degraded open followed by Ctrl+S would destroy the original.
+        self.load_warnings: List[str] = []
         self.root = PDFNode(name="root", is_folder=True)
         if source:
             self._load_pdf(source)
@@ -128,9 +133,15 @@ class PDFStorage:
             # cheap raw-bytes check avoids a full pypdf parse of every plain PDF on
             # import (that parse, not page-counting, dominated headless load time).
             # pypdf writes the marker uncompressed, so the substring is reliable
-            # (asserted by test_export_selection / test_pdf_storage_additional).
+            # (asserted by test_pdf_storage_additional) — for OUR writer. H-1b
+            # (QS 2026-11-04): a .belegtool rewritten by another tool (qpdf, Acrobat
+            # "optimize") can move the Info dict into a compressed object stream, so
+            # the raw marker vanishes while the structure is still there — for the
+            # app's OWN extension always do the full metadata read (rare + already
+            # paying a structure parse); only plain .pdf imports keep the fast path.
+            is_belegtool = bool(self.filename and self.filename.lower().endswith(".belegtool"))
             json_str = None
-            if b"/JSONStructure" in data:
+            if b"/JSONStructure" in data or is_belegtool:
                 reader = PdfReader(io.BytesIO(data))
                 metadata = reader.metadata or {}
                 json_data = metadata.get('/JSONStructure')
@@ -138,6 +149,12 @@ class PDFStorage:
                     json_str = json_data.decode("utf-8", errors="replace")
                 elif isinstance(json_data, str):
                     json_str = json_data
+            if not json_str and is_belegtool:
+                # a .belegtool ALWAYS carries a structure when our writer produced it —
+                # a missing one means the file was damaged/stripped: degrade LOUDLY
+                # (CoreApi.open won't bind the path) instead of silently flattening.
+                self.load_warnings.append(
+                    "Dokumentstruktur fehlt – Datei als einzelnes Dokument geladen")
 
             if json_str:
                 try:
@@ -148,6 +165,8 @@ class PDFStorage:
                     raise  # refuse a bomb cleanly; don't silently degrade to a single node
                 except Exception as e:
                     logger.warning("JSON-Struktur ungültig oder nicht lesbar: %s", e)
+                    self.load_warnings.append(
+                        "Dokumentstruktur nicht lesbar – Datei als einzelnes Dokument geladen")
 
             # Kein oder ungültiges JSON → einfacher Import als ein Knoten.
             # Bytes only — the headless core renders/compresses on demand, and
@@ -189,12 +208,51 @@ class PDFStorage:
             self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
         current_start = [0]  # mutable Seitenzähler
 
+        reader = None
+        total_pages = 0
+        repair_reason = None
         try:
             reader = PdfReader(io.BytesIO(data))
             total_pages = len(reader.pages)
         except Exception as e:
-            logger.error("PDF konnte nicht gelesen werden: %s", e)
-            return
+            repair_reason = str(e)
+        if repair_reason is None and total_pages == 0 and self._structure_has_leaves(structure):
+            # pypdf is TOLERANT of some page-tree damage (broken /Count, dangling Kids):
+            # it reports 0 pages without raising — but the structure says there are
+            # documents, so the tree is damaged, not empty (QS-Bewertung 2026-11-04).
+            repair_reason = "0 lesbare Seiten trotz Dokumentknoten"
+        if repair_reason is not None:
+            # Broken page tree: try a REAL repair before degrading. sanitize_pdf is the
+            # wrong tool here — it returns unchanged bytes whenever PdfReader CONSTRUCTS.
+            # A full pikepdf rewrite regenerates the page tree (QS follow-up, H-1a).
+            logger.warning("Seitenbaum nicht lesbar – versuche Reparatur: %s", repair_reason)
+            try:
+                with pike_open(io.BytesIO(data)) as pdf:
+                    buf = io.BytesIO()
+                    pdf.save(buf)
+                repaired = buf.getvalue()
+                reader = PdfReader(io.BytesIO(repaired))
+                total_pages = len(reader.pages)
+                if total_pages == 0:
+                    raise ValueError("Reparatur ergab 0 Seiten")
+            except Exception as e2:
+                if reader is None:
+                    # H-1 (QS 2026-11-04): this used to be a silent `return` — the file
+                    # opened as an EMPTY document (ok:true) and the next save destroyed
+                    # the original. Degrade LOUDLY; CoreApi.open won't bind the path.
+                    logger.error("PDF konnte nicht gelesen werden: %s", e2)
+                    self.load_warnings.append(
+                        "Seitenbaum nicht lesbar – Dokumentinhalt konnte nicht geladen werden")
+                    return
+                # the original reader works but sees 0 pages and the repair failed →
+                # continue; the per-node skip warnings below report every loss.
+                logger.warning("Reparatur fehlgeschlagen: %s", e2)
+            else:
+                # repaired content is NOT the on-disk file — treat as degraded (warn,
+                # don't bind the path) so the user saves the rescue as a NEW file.
+                self.load_warnings.append(
+                    "Seitenbaum repariert – bitte als neue Datei speichern")
+                data = repaired
 
         # Parse the source PDF ONCE and reuse the reader for every node — slicing
         # used to re-parse the whole file per node (O(nodes) full parses = slow load).
@@ -202,6 +260,13 @@ class PDFStorage:
             node = self._parse_node(child_data, reader, current_start, total_pages, depth=1)
             if node:
                 self.root.add_child(node)
+
+        # H-1c (QS follow-up 2026-11-04): pages BEYOND what the structure describes used
+        # to be dropped silently on the next save (externally appended/edited file).
+        if current_start[0] < total_pages:
+            extra = total_pages - current_start[0]
+            self.load_warnings.append(
+                f"{extra} Seiten mehr als die Struktur beschreibt – nicht zugeordnet")
 
     def _append_pages_with_outline(
         self,
@@ -291,13 +356,38 @@ class PDFStorage:
 
     def save(self, path: Optional[str] = None):
         """Speichert das PDF als Datei mit eingebetteter JSON-Struktur und vollständigem
-        Outline (verlustfreie Re-Komprimierung via pikepdf, wenn sinnvoll)."""
+        Outline (verlustfreie Re-Komprimierung via pikepdf, wenn sinnvoll).
+
+        M-1 (QS 2026-11-04): the write is ATOMIC — a sibling temp file is written and
+        ``os.replace``d over the target, so a crash/full disk mid-write can no longer
+        destroy the previous on-disk state. When the replace is impossible (the target
+        is held open by another process without FILE_SHARE_DELETE — Acrobat, a scanner)
+        it falls back to the legacy in-place write rather than failing the save.
+        The locked save path (BELEG_FILE_LOCK=1) is separate and keeps its .bak scheme."""
         final_pdf = self.to_bytes()
         target = path or self.filename
         if not target:
             raise ValueError("No path specified and no original filename stored.")
-        with open(target, 'wb') as f:
-            f.write(final_pdf)
+        tmp = f"{target}.tmp-{os.getpid()}"
+        try:
+            with open(tmp, 'wb') as f:
+                f.write(final_pdf)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                os.replace(tmp, target)  # atomic on the same NTFS volume
+            except OSError:
+                # target held open elsewhere → legacy in-place write (non-atomic, but
+                # the save must not start failing where it used to succeed)
+                logger.warning("[save] atomic replace refused for %s – in-place fallback", target)
+                with open(target, 'wb') as f:
+                    f.write(final_pdf)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    logger.warning("[save] temp file could not be removed: %s", tmp)
 
         self.clear_dirty()
         if path:
@@ -305,20 +395,9 @@ class PDFStorage:
 
 
 
-    def export_selection(self, nodes: List[PDFNode], path: str):
-        """Export only the selected nodes to a file.
-
-        If a parent and its child are both selected, the parent takes precedence
-        (the full subtree is exported). Saves as .belegtool (with embedded structure)
-        or .pdf (same content, no structure metadata); the format is chosen by path extension.
-        """
-        top_level = self.filter_keep_ancestors(nodes)
-        copies = [node.copy(keep_name=True) for node in top_level]
-
-        temp_storage = PDFStorage()
-        for c in copies:
-            temp_storage.root.add_child(c)
-        temp_storage.save(path)
+    # NOTE: export_selection() was removed (I-2, QS 2026-11-04): the app exports
+    # exclusively through formats.toc_export (CoreApi.export); the method was dead
+    # code whose PDFNode.copy() silently dropped tags/collapsed/datev.
 
     def get_all_nodes(self) -> List[PDFNode]:
         def collect_nodes(node: PDFNode) -> List[PDFNode]:
@@ -328,6 +407,34 @@ class PDFStorage:
             return result
         return collect_nodes(self.root)
 
+
+    @staticmethod
+    def _structure_has_leaves(structure) -> bool:
+        """Whether the persisted tree contains at least one DOCUMENT node — a 0-page
+        file is only plausible when it doesn't (folder-only .belegtool)."""
+        def walk(children):
+            for c in children:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("is_folder"):
+                    if walk(c.get("children", []) or []):
+                        return True
+                else:
+                    return True
+            return False
+        return walk(structure.get("children", []) or [])
+
+    @staticmethod
+    def _vz(value):
+        """Veranlagungszeitraum field from persisted JSON: int or None. Hand-edited/
+        foreign files may carry other types — a later Merge spans vz via min/max, so
+        mixed types would crash it (QS-Bewertung 2026-11-04). Coerce or drop."""
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _slice_pages(reader: PdfReader, start: int, end: int) -> bytes:
@@ -351,8 +458,8 @@ class PDFStorage:
             if node_data.get("uid"):
                 node.uid = node_data["uid"]  # restore persisted id
             node.status = node_data.get("status", "")  # default: no status
-            node.vz_start = node_data.get("vz_start")
-            node.vz_end = node_data.get("vz_end")
+            node.vz_start = self._vz(node_data.get("vz_start"))
+            node.vz_end = self._vz(node_data.get("vz_end"))
             node.collapsed = bool(node_data.get("collapsed", False))
             node.tags = list(node_data.get("tags") or [])
             for child_data in node_data.get("children", []):
@@ -362,14 +469,25 @@ class PDFStorage:
             return node
 
         length = node_data.get("pdf_length", 1)
+        # N-4 (QS 2026-11-04): a hostile/corrupt pdf_length must never rewind the page
+        # counter (negative → following nodes get DUPLICATE page slices) or crash the
+        # parse into the silent one-node fallback (non-int). 0 is a legitimate value
+        # (0-page leaves exist, see Known Limitations) and stays warning-free.
+        if isinstance(length, bool) or not isinstance(length, int) or length < 0:
+            self.load_warnings.append(f"{name}: ungültige Seitenanzahl ({length})")
+            length = 0
         start = current_start[0]
         end = start + length - 1
 
-        if start >= total_pages:
+        if length > 0 and start >= total_pages:
             logger.warning("Knoten '%s' beginnt bei Seite %d, PDF hat nur %d Seiten – übersprungen.", name, start, total_pages)
+            self.load_warnings.append(f"{name}: beginnt hinter dem Seitenende – übersprungen")
             return None
 
         if end >= total_pages:
+            # M-3a (QS 2026-11-04): this clamp used to be completely silent — the node
+            # lost pages and the next save persisted the loss without any hint.
+            self.load_warnings.append(f"{name}: ragt über das Seitenende hinaus – gekürzt")
             end = total_pages - 1
             length = end - start + 1
 
@@ -381,8 +499,8 @@ class PDFStorage:
         if node_data.get("uid"):
             node.uid = node_data["uid"]  # restore persisted id
         node.status = node_data.get("status", "")  # default: no status
-        node.vz_start = node_data.get("vz_start")  # Veranlagungszeitraum (was dropped on reload)
-        node.vz_end = node_data.get("vz_end")
+        node.vz_start = self._vz(node_data.get("vz_start"))  # Veranlagungszeitraum (was dropped on reload)
+        node.vz_end = self._vz(node_data.get("vz_end"))
         node.tags = list(node_data.get("tags") or [])
         node.compression_no_gain = bool(node_data.get("compression_no_gain", False))
         is_compressed = bool(node_data.get("is_compressed", False))

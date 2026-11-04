@@ -76,6 +76,10 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
         return f"{name}: Datei ist passwortgeschützt"
     if name.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
         return f"{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg[:80]})"
+    if "beschädigt – nicht importiert" in low:
+        # degraded .belegtool/PDF refused by _import_path — keep the detail tail
+        tail = msg.split("nicht importiert: ", 1)[-1]
+        return f"{name}: Datei beschädigt – nicht importiert: {tail}"
     if "kein gültiges pdf" in low or "not a pdf" in low or "eof marker" in low or "startxref" in low:
         return f"{name}: beschädigte oder ungültige Datei"
     return f"{name}: {msg}"
@@ -91,6 +95,7 @@ class CoreApi:
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
+        self._degraded = set()  # sids whose open was degraded (corrupt file, path unbound)
         self._vcache = OrderedDict()  # id(bytes) -> (bytes, crc32), memoised versions (LRU)
         self._compress_active = 0  # >0 while a compression runs → background prefetch yields the CPU
         self._last_seed = None  # (session, focus_id, focus_page, dpi) of the last prefetch, to resume
@@ -344,9 +349,10 @@ class CoreApi:
                 return {"ok": False, "code": "in_use",
                         "error": "Diese Datei wird bereits bearbeitet und kann nur von "
                                  "einer Person gleichzeitig geöffnet werden."}
+        load_warnings: list = []
         try:
             if path:
-                document = load_belegtool(path)
+                document = load_belegtool(path, collect_warnings=load_warnings)
                 name = os.path.splitext(os.path.basename(path))[0] or "Dokument"
                 document = Document(dataclasses.replace(document.root, name=name))
                 try:  # rehydrate persisted compression variants (instant, no recompute)
@@ -360,6 +366,10 @@ class CoreApi:
             if lock is not None:
                 lock.release()  # never leak the handle if the load fails
             raise
+        # H-1 (QS 2026-11-04): a DEGRADED load (corrupt structure/pages) must never bind
+        # the path — Ctrl+S would overwrite the still-rescuable original with the
+        # degraded tree. Unbound, Speichern becomes Speichern-unter (host.save_file).
+        degraded = bool(load_warnings)
         with self._lock:
             if session and session in self._sessions:
                 sid = session
@@ -367,7 +377,11 @@ class CoreApi:
             else:
                 sid = self._new_locked(document)
             prev_lock = self._locks.pop(sid, None)  # reopening in the same session → drop old lock
-            self._paths[sid] = path if path else None  # remember where it came from
+            self._paths[sid] = path if (path and not degraded) else None  # remember where it came from
+            if degraded:
+                self._degraded.add(sid)
+            else:
+                self._degraded.discard(sid)  # reopening a healthy file clears the flag
             if lock is not None:
                 self._locks[sid] = lock
             # a materialized tag view opened in its new window → bind the temp dir to
@@ -384,13 +398,24 @@ class CoreApi:
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
-        if self._datev_mode and path:
+        if degraded:
+            resp["warning"] = "; ".join(load_warnings)
+        if self._datev_mode and path and not degraded:
+            # degraded content must never feed a DATEV write-back baseline
             resp = self._datev_capture_on_open(sid, path, resp)
         return resp
 
     def document_path(self, session: str):
         """The on-disk path this session is bound to (None if never saved/opened)."""
         return self._paths.get(session)
+
+    def session_degraded(self, session: str) -> bool:
+        """Whether this session holds a DEGRADED load (corrupt file opened with
+        warnings, path unbound). The host's Save-As then suggests a DIFFERENT file
+        name — the default (the document name) is the corrupt original's name, and
+        confirming the overwrite prompt would destroy it after all (QS 2026-11-04)."""
+        with self._lock:
+            return session in self._degraded
 
     def sweep_stale_view_dirs(self, root=None, max_age_s=24 * 3600, now=None):
         """Instance wrapper: run the on-disk sweep, then drop any ``_pending_view_dirs``
@@ -738,6 +763,7 @@ class CoreApi:
             if s is not None:
                 s.mark_saved()
             self._paths[session] = path  # bind the session to this file for in-place saves
+            self._degraded.discard(session)  # the rescue is saved — a normal session again
             view_dir = self._view_dirs.get(session)
         if view_dir:
             self._touch_view_dir(view_dir)  # saving through a view keeps it sweep-safe
@@ -787,6 +813,7 @@ class CoreApi:
         with self._lock:
             s = self._sessions.pop(session, None)
             self._paths.pop(session, None)
+            self._degraded.discard(session)
             lock = self._locks.pop(session, None)
             self._datev_baseline.pop(session, None)  # free the DATEV write-back baseline
             view_dir = self._view_dirs.pop(session, None)
@@ -875,9 +902,11 @@ class CoreApi:
             existing = [p for p in planned if os.path.exists(p)]
             if existing:
                 return {"ok": False, "code": "exists", "existing": existing, "paths": planned}
+        problems: list = []  # export degradations (failed page slices, N-3) → warning
         try:
             if will_split:
-                paths = export_pdf_split_with_toc(nodes, path, int(split_pages), split_level)
+                paths = export_pdf_split_with_toc(nodes, path, int(split_pages), split_level,
+                                                  problems=problems)
             else:
                 export_pdf(nodes, path, options)
                 paths = [path]
@@ -886,8 +915,13 @@ class CoreApi:
             return {"ok": False, "error": str(e)}
         result = {"ok": True, "session": session, "path": paths[0],
                   "paths": paths, "count": len(nodes)}
+        warn_parts = []
         if skipped:
-            result["warning"] = "Ohne Seiten übersprungen: " + ", ".join(skipped)
+            warn_parts.append("Ohne Seiten übersprungen: " + ", ".join(skipped))
+        if problems:
+            warn_parts.extend(problems)
+        if warn_parts:
+            result["warning"] = "; ".join(warn_parts)
         return result
 
     _RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
@@ -1733,10 +1767,19 @@ class CoreApi:
         from core.bridge import node_from_pdfnode
         low = path.lower()
         if low.endswith(".belegtool"):
-            return list(load_belegtool(path).root.children)
+            warnings: list = []
+            children = list(load_belegtool(path, collect_warnings=warnings).root.children)
+            if warnings:
+                # Importing a degraded fragment would hide the corruption inside a
+                # healthy document — refuse with the reason (open the file solo instead).
+                raise ValueError("Datei beschädigt – nicht importiert: " + "; ".join(warnings))
+            return children
         if low.endswith((".pdf", ".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
             from formats.pdf_storage import PDFStorage, create_wrapper_node
             storage = PDFStorage(path)
+            if getattr(storage, "load_warnings", None):
+                raise ValueError("Datei beschädigt – nicht importiert: "
+                                 + "; ".join(storage.load_warnings))
             return [node_from_pdfnode(create_wrapper_node(storage, path))]
         from formats.pdf_node import PDFNode
         from universal_importer import UniversalImporter
@@ -1871,4 +1914,7 @@ class CoreApi:
             "tree": tree,
             "can_undo": s.can_undo(),
             "can_redo": s.can_redo(),
+            # I-6: the UI mirrors this instead of assuming "any mutation → dirty" —
+            # undoing back to the saved state clears the unsaved-changes prompt.
+            "dirty": s.dirty,
         }

@@ -7,13 +7,23 @@
 // translates while the dynamic values survive. Pure, UI-free, data-driven.
 //
 // Keep in sync with core/api.py (_friendly_import_error + the export/import
-// warnings) and App.jsx's "Teilweise importiert" composite — messages.test.js
-// locks the static fragments against both sources.
+// warnings), formats/pdf_storage.py + formats/toc_export.py (the load/export
+// integrity warnings) and App.jsx's composites ("Teilweise importiert",
+// "Datei beschädigt geladen") — messages.test.js locks the static fragments
+// against all four sources.
 
 export const MESSAGE_TEMPLATES = [
   // whole  = the dynamic tail may itself contain '; ' → match BEFORE the '; ' split.
   // nested = variables that are themselves backend messages → localize recursively.
   { tpl: 'Teilweise importiert — {warning}', nested: ['warning'], whole: true },
+  // degraded .belegtool load (H-1/M-3, 2026-11-04) — composed in App.jsx, parts from pdf_storage
+  { tpl: 'Datei beschädigt geladen: {warning} — Speichern legt eine neue Datei an.', nested: ['warning'], whole: true },
+  { tpl: '{name}: Datei beschädigt – nicht importiert: {warning}', nested: ['warning'], whole: true },
+  { tpl: '{name}: beginnt hinter dem Seitenende – übersprungen' },
+  { tpl: '{name}: ragt über das Seitenende hinaus – gekürzt' },
+  { tpl: '{name}: ungültige Seitenanzahl ({value})' },
+  { tpl: '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet' },
+  { tpl: '{name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)' },
   { tpl: 'ungültige Daten: {error}', whole: true },
   { tpl: 'Ohne Seiten übersprungen: {names}', whole: true },
   { tpl: '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)' },

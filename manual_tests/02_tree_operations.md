@@ -21,6 +21,7 @@ Splitten, Zusammenführen, Ordner, Umbenennen, Löschen und Verschieben mit der 
 - Die Varianten **→ neuer Ordner** legen die Teile in einen neuen Ordner.
 - *Nicht offensichtlich:* **Splitten** wird nur bei einem **Dokument mit mehr als einer Seite** angeboten. Bei Ordnern und einseitigen Dokumenten fehlt der Eintrag im Menü.
 - *Nicht offensichtlich:* Die Teile bleiben komprimierbar – sie tragen die unkomprimierten Quellseiten.
+- *Ab Version 3.11.4:* Trug das Dokument **Tags** oder einen **Veranlagungszeitraum**, erben die Teile sie (vorher gingen sie still verloren). Bei den Varianten **→ neuer Ordner** sitzen die Tags auf dem **neuen Ordner** (die Teile erben sie dort), damit das Stichwortverzeichnis nicht jeden Teil einzeln listet.
 
 ---
 
@@ -39,6 +40,7 @@ Splitten, Zusammenführen, Ordner, Umbenennen, Löschen und Verschieben mit der 
 - *Nicht offensichtlich:* **Zusammenführen** erscheint nur, wenn **mindestens zwei Dokumente desselben Ordners** markiert sind **und** Sie auf einen Eintrag **innerhalb der Markierung** rechtsklicken. Ein Rechtsklick auf einen Eintrag außerhalb der Markierung blendet den Eintrag aus (dieselbe Regel gilt für Export, Status und Löschen).
 - *Nicht offensichtlich:* Waren die Teile mit **unterschiedlichen DPI** komprimiert, verwirft das zusammengeführte Dokument die komprimierte Fassung und fällt auf die Originale zurück.
 - Status: Hatten alle Teile denselben Status, bleibt er erhalten; bei unterschiedlichen Status hat das Ergebnis keinen Status.
+- *Ab Version 3.11.4:* **Tags** werden **vereinigt** (jedes Tag der Teile erscheint einmal am Ergebnis) und der **Veranlagungszeitraum** wird **aufgespannt** (frühester Beginn bis spätestes Ende der Teile). Vorher gingen beide beim Zusammenführen still verloren.
 
 ---
 

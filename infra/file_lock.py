@@ -98,7 +98,10 @@ class FileLock:
         while written < len(mv):
             _hr, n = win32file.WriteFile(self._handle, bytes(mv[written:]))
             if n <= 0:
-                break
+                # N-2 (QS 2026-11-04): an incomplete write must be an ERROR — the old
+                # silent `break` continued into SetEndOfFile/Flush, the save counted as
+                # success and write_through_lock removed the .bak safety copy.
+                raise OSError(f"Unvollständig geschrieben: {written} von {len(mv)} Bytes")
             written += n
         win32file.SetEndOfFile(self._handle)
         win32file.FlushFileBuffers(self._handle)
@@ -115,17 +118,29 @@ def restore_from_bak(path: str) -> None:
     would wrongly accept (→ silent data loss), so require BOTH a %PDF header and a %%EOF
     trailer; otherwise restore from .bak. The .bak is removed either way."""
     bak = path + ".bak"
+    wip = path + ".wip"
+    pending = os.path.exists(wip)  # a locked save started but never finished
     if not os.path.exists(bak):
+        if pending:
+            try:
+                os.remove(wip)  # stale marker without a .bak — nothing to restore from
+            except OSError:
+                pass
         return
     try:
-        size = os.path.getsize(path)
+        # Nebenbefund 1 (QS 2026-11-04): the head/tail heuristic alone also accepts a
+        # file whose beginning is new and whose end is from the previous version (both
+        # markers present). The .wip marker is authoritative: it only exists while a
+        # locked save is in flight, so its presence means the write did not complete.
         ok = False
-        if size > 0:
-            with open(path, "rb") as f:
-                head = f.read(1024)
-                f.seek(max(0, size - 1024))
-                tail = f.read()
-            ok = b"%PDF" in head and b"%%EOF" in tail
+        if not pending:
+            size = os.path.getsize(path)
+            if size > 0:
+                with open(path, "rb") as f:
+                    head = f.read(1024)
+                    f.seek(max(0, size - 1024))
+                    tail = f.read()
+                ok = b"%PDF" in head and b"%%EOF" in tail
     except Exception:
         ok = False
     if not ok:
@@ -139,6 +154,11 @@ def restore_from_bak(path: str) -> None:
         os.remove(bak)
     except OSError:
         pass
+    if pending:
+        try:
+            os.remove(wip)
+        except OSError:
+            pass
 
 
 def acquire_lock(path: str):
@@ -162,25 +182,45 @@ def write_through_lock(lock: "FileLock", path: str, data: bytes) -> None:
     removed only after a successful flush. If the current bytes can't be read AND the on-disk
     file is non-empty, abort rather than risk an unrecoverable truncated write."""
     bak = path + ".bak"
-    read_ok = True
-    try:
-        prev = lock.read_all()
-    except Exception:
-        prev = b""
-        read_ok = False
-    if not read_ok:
+    wip = path + ".wip"
+    # A leftover marker means the PREVIOUS locked save failed mid-write: the existing
+    # .bak still holds the last good bytes — never refresh it from the current on-disk
+    # state (Nebenbefund 1, QS 2026-11-04).
+    retry_after_failure = os.path.exists(wip) and os.path.exists(bak)
+    if not retry_after_failure:
+        read_ok = True
         try:
-            on_disk = os.path.getsize(path)
-        except OSError:
-            on_disk = 0
-        if on_disk:
-            raise OSError(
-                f"Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}")
-    if prev:
-        with open(bak, "wb") as f:
-            f.write(prev)
+            prev = lock.read_all()
+        except Exception:
+            prev = b""
+            read_ok = False
+        if not read_ok:
+            try:
+                on_disk = os.path.getsize(path)
+            except OSError:
+                on_disk = 0
+            if on_disk:
+                raise OSError(
+                    f"Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}")
+        if prev:
+            with open(bak, "wb") as f:
+                f.write(prev)
+    with open(wip, "wb") as f:
+        f.write(b"wip")  # in-flight marker; restore_from_bak treats it as authoritative
     lock.overwrite(data)
+    # The write completed — clear the safety files. Order matters: remove the .bak
+    # FIRST, then the marker. If we crash between the two, a leftover marker WITHOUT
+    # a .bak is harmless (restore_from_bak just drops it); the reverse order could
+    # leave marker+bak behind a failed remove and the next open would restore the
+    # OLD bytes over this successful save (QS-Bewertung 2026-11-04). A vanished
+    # marker (another process's restore_from_bak raced us) is not an error either.
     try:
         os.remove(bak)
     except OSError:
         pass
+    try:
+        os.remove(wip)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning("[lock] .wip marker could not be removed: %s", wip)

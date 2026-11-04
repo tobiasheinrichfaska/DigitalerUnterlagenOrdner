@@ -158,3 +158,20 @@ def test_move_into_own_subtree_raises():
 def test_move_missing_raises():
     with pytest.raises(KeyError):
         move_node(sample_tree(), "missing", "root")
+
+
+# --- I-1 (QS 2026-11-04): a missing insert target must fail loudly, never make the
+# child silently vanish. (update_node's no-op on a missing id stays tolerated above.)
+
+def test_insert_child_missing_parent_raises():
+    doc = Document(Node(name="root", id="root", is_folder=True))
+    with pytest.raises(KeyError):
+        doc.insert_child("gibts-nicht", Node(name="x", id="x"))
+
+
+def test_move_node_missing_target_raises_and_loses_nothing():
+    a = Node(name="a", id="a")
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    with pytest.raises(KeyError):
+        doc.move_node("a", "gibts-nicht")
+    assert doc.find("a") is not None  # pure: the original document is untouched

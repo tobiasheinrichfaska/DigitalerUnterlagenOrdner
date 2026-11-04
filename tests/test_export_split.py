@@ -154,3 +154,84 @@ def test_export_split_on_empty_forest_writes_nothing(tmp_path):
     out = tmp_path / 'out.pdf'
     assert export_pdf_split_with_toc([], str(out), 3) == []        # no groups → no paths
     assert not out.exists()                                        # and no file written
+
+
+# --- N-1 + N-3 (QS 2026-11-04): split-TOC headers/offsets and failed page slices ----
+
+import os as _os
+
+from formats.toc_export import _slice_leaf, export_pdf_split_with_toc
+
+
+def _toc_text(path, pages=3):
+    """Text of the first TOC pages of an exported part, in draw order."""
+    d = fitz.open(path)
+    try:
+        return "\n".join(d[i].get_text() for i in range(min(pages, d.page_count)))
+    finally:
+        d.close()
+
+
+def test_slice_leaf_failure_reports_problem_and_real_count():
+    """pdf_length claims 4 pages, the bytes hold 2: slicing pages 3-4 must yield a
+    part with its REAL count (0) and report the problem — not a lying empty part."""
+    leaf = _leaf("big", pages=2)
+    leaf.pdf_length = 4
+    problems = []
+    part = _slice_leaf(leaf, [2, 3], problems)
+    assert part.pdf_length == 0            # real count, never len(indices)
+    assert problems and "big" in problems[0]
+
+
+def test_slice_leaf_ok_keeps_real_count_and_no_problem():
+    leaf = _leaf("fine", pages=3)
+    problems = []
+    part = _slice_leaf(leaf, [0, 1], problems)
+    assert part.pdf_length == 2 and problems == []
+
+
+def test_split_toc_cross_refs_use_target_parts_offset(tmp_path):
+    """43 one-page docs in parts of 15 → the parts' TOC PAGE COUNTS DIFFER (that is the
+    bug's trigger: the old code added the OWN part's offset to every cross-ref). A ref
+    printed in part 1 must name the page where the doc REALLY is in the target part."""
+    leaves = [_leaf(f"D{i:03d}") for i in range(43)]
+    base = str(tmp_path / "out.pdf")
+    paths = export_pdf_split_with_toc(leaves, base, 15, level='top')
+    assert len(paths) == 3
+
+    # TOC page count per part = index of the first content page ("p0" only on content)
+    def toc_pages(path):
+        d = fitz.open(path)
+        try:
+            return next(i for i in range(d.page_count) if "p0" in d[i].get_text())
+        finally:
+            d.close()
+
+    counts = [toc_pages(p) for p in paths]
+    assert len(set(counts)) > 1, counts  # precondition: unequal TOCs, else the test proves nothing
+
+    printed = _toc_text(paths[0])
+    import re
+    m = re.search(r"D030\s*\n?→ out_Teil_3\.pdf, S\. (\d+)", printed)
+    assert m, printed[:2000]
+    # D030 is part 3's first doc → its real 1-based page is part 3's TOC count + 1
+    assert int(m.group(1)) == counts[2] + 1
+
+
+def test_split_toc_leading_cross_refs_have_a_header(tmp_path):
+    """Part >= 2 starts with cross-refs to earlier parts — they must sit under an
+    'In anderen Dateien:' header, and the own section under 'In dieser Datei:'."""
+    leaves = [_leaf(f"D{i:03d}") for i in range(45)]
+    base = str(tmp_path / "out.pdf")
+    paths = export_pdf_split_with_toc(leaves, base, 15, level='top')
+
+    txt2 = _toc_text(paths[1])  # middle part: refs BEFORE and AFTER the own section
+    first_ref = txt2.find("→ ")
+    first_other_header = txt2.find("In anderen Dateien:")
+    assert first_other_header != -1 and first_other_header < first_ref
+    assert txt2.count("In anderen Dateien:") == 2  # re-shown after the own section
+
+    txt3 = _toc_text(paths[2])  # last part: all refs lead, own section follows
+    assert txt3.find("In anderen Dateien:") != -1
+    assert txt3.find("In anderen Dateien:") < txt3.find("→ ")
+    assert "In dieser Datei:" in txt3

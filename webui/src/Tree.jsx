@@ -6,10 +6,10 @@
 // slide the cursor left/right to choose the nesting LEVEL (child of the deepest
 // folder → … → root). The drop only dispatches a Move/MoveMany — the tree
 // re-renders from the core's returned state (no optimistic local mutation).
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { findNode } from './lib/tree'
-import { statusDots, hasUndecided, DOT_LABEL } from './lib/status'
+import { aggregateStatus, DOT_LABEL } from './lib/status'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
 
@@ -44,7 +44,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending, statusMap }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
   const rowRef = useRef(null)
   const { t } = useT()
@@ -120,8 +120,9 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   if (over && (over.zone === 'before' || over.zone === 'into')) cls.push(`drop-${over.zone}`)
   if (over?.zone === 'after' && !over.ghost) cls.push('drop-after')
 
-  const dots = statusDots(node)             // trailing status dots (leaf: own; folder: aggregate)
-  const undecided = hasUndecided(node)      // front red dot: compression not yet decided
+  // trailing status dots (leaf: own; folder: aggregate) + front "undecided" dot —
+  // from the ONE bottom-up pass in Tree (I-5), not a per-row descendant walk.
+  const { dots, undecided } = statusMap.get(node.id) || { dots: [], undecided: false }
 
   return (
     <li>
@@ -235,7 +236,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
               editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
+              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} />
           ))}
           {pending.filter((p) => p.parentId === node.id).map((p) => (
             <PendingRow key={p.key} name={p.name} depth={depth + 1} />
@@ -259,6 +260,9 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   primaryIdRef.current = primaryId
   const many = drag && selectedIds.includes(drag) && selectedIds.length > 1
   const dragNode = drag ? findNode(node, drag) : null
+  // I-5: status dots for ALL rows in one bottom-up pass, recomputed only when the
+  // (immutable) tree object changes — not per row, not per unrelated re-render.
+  const statusMap = useMemo(() => aggregateStatus(node), [node])
   const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
@@ -292,7 +296,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
           editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} />
+          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} />
       ))}
       {pending.filter((p) => p.parentId === node.id).map((p) => (
         <PendingRow key={p.key} name={p.name} depth={0} />

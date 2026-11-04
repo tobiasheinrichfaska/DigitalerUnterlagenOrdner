@@ -83,9 +83,16 @@ def document_to_storage(doc: Document):
     return storage
 
 
-def load_belegtool(path) -> Document:
+def load_belegtool(path, collect_warnings=None) -> Document:
+    """Load a .belegtool into a Document. ``collect_warnings`` (a list) receives the
+    loader's degradation warnings (corrupt structure, truncated/skipped nodes) — the
+    caller decides how to surface them (CoreApi.open shows them and refuses to bind
+    the path, so a degraded open can never silently overwrite the original)."""
     from formats.pdf_storage import PDFStorage
-    return document_from_storage(PDFStorage(str(path)))
+    storage = PDFStorage(str(path))
+    if collect_warnings is not None:
+        collect_warnings.extend(getattr(storage, "load_warnings", ()) or ())
+    return document_from_storage(storage)
 
 
 def save_belegtool(doc: Document, path) -> None:

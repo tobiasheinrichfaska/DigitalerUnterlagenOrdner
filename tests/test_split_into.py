@@ -132,3 +132,32 @@ def test_merge_committed_nodes_keeps_all_pages_differing_dpi():
     m = d.root.children[0]
     assert ENGINE.page_count(m.current_data) == 5
     assert m.original_data is None and m.is_compressed is True
+
+
+# --- M-2 (QS-Gegenprüfung 2026-11-04): Split/Merge must carry tags + VZ + dpi_original
+
+def test_split_into_folder_puts_tags_and_vz_on_the_folder():
+    leaf = Node(name="doc", is_folder=False, original_data=make_pdf(3), pdf_length=3,
+                tags=("Steuer", "2024"), vz_start=2024, vz_end=2025)
+    doc = Document(Node(name="root", is_folder=True, children=(leaf,)))
+    d = apply(doc, SplitInto(node_id=leaf.id, size=1, into_folder=True), engine=ENGINE)
+    folder = d.root.children[0]
+    assert folder.is_folder
+    # tags live on the FOLDER (tag views inherit them — per-part tags would list
+    # every part separately in the tag index), vz likewise
+    assert folder.tags == ("Steuer", "2024")
+    assert (folder.vz_start, folder.vz_end) == (2024, 2025)
+    for part in folder.children:
+        assert part.tags == ()
+        assert (part.vz_start, part.vz_end) == (2024, 2025)
+
+
+def test_split_into_in_place_puts_tags_on_the_parts():
+    leaf = Node(name="doc", is_folder=False, original_data=make_pdf(4), pdf_length=4,
+                tags=("Steuer",), vz_start=2024, vz_end=2024, dpi_original=300)
+    doc = Document(Node(name="root", is_folder=True, children=(leaf,)))
+    d = apply(doc, SplitInto(node_id=leaf.id, size=2, into_folder=False), engine=ENGINE)
+    for part in d.root.children:
+        assert part.tags == ("Steuer",)
+        assert (part.vz_start, part.vz_end) == (2024, 2024)
+        assert part.dpi_original == 300

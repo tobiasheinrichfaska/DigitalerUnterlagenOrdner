@@ -36,6 +36,10 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   const [count, setCount] = useState(0)
   const [dims, setDims] = useState([])
   const [pages, setPages] = useState({}) // pageIndex -> data-URL
+  // N-5 (QS 2026-11-04): a failed render/geometry call used to vanish in empty
+  // catch handlers — only the skeleton (or a misleading "Keine Vorschau") remained.
+  // One banner per node/variant state; cleared on switch, so a reselect retries.
+  const [loadError, setLoadError] = useState(false)
 
   const scrollRef = useRef(null)
   const pageEls = useRef([])
@@ -63,13 +67,14 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     Promise.all([core.pageCount(session, nodeId), core.pageDims(session, nodeId)])
       .then(([c, d]) => {
         if (!alive) return
+        if (c?.ok === false || d?.ok === false) setLoadError(true) // geometry failed → say so
         const cnt = c?.ok ? c.count : 0
         const dms = d?.ok ? d.dims : []
         setCount(cnt); setDims(dms)
         geomCache.set(nodeId, { count: cnt, dims: dms })
         if (geomCache.size > 64) geomCache.delete(geomCache.keys().next().value)
       })
-      .catch(() => {})
+      .catch(() => { if (alive) setLoadError(true) })
     return () => { alive = false }
   }, [session, nodeId])
 
@@ -87,6 +92,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     pagesRef.current = {}
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: drop rendered pages when the node/variant changes
     setPages({})
+    setLoadError(false) // new node/variant → fresh chance (natural retry)
   }, [node, reqKey])
 
   // fetch pages [first, last] (callers decide the span). Results go to component
@@ -103,14 +109,19 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
     req
       .then((r) => {
         inflight.current.delete(key)
-        if (!r?.ok || token.current !== t) return
+        if (token.current !== t) return // stale (node/variant switched) → never an error banner
+        if (!r?.ok || (r.pages || []).some((url) => !url)) setLoadError(true) // failed page(s) → say so
+        if (!r?.ok) return
         setPages((prev) => {
           const next = { ...prev }
           r.pages.forEach((url, i) => { if (url) next[first + i] = url })
           return next
         })
       })
-      .catch(() => inflight.current.delete(key))
+      .catch(() => {
+        inflight.current.delete(key)
+        if (token.current === t) setLoadError(true)
+      })
   }, [session, nodeId, reqKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // fetch only the pages in [first,last] we don't already have, as contiguous runs
@@ -219,11 +230,17 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
   }, [zoom]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!nodeId) return null
-  if (count === 0) return <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>
+  if (count === 0) {
+    // a failed geometry call is NOT "folder or empty" — name the real problem
+    return loadError
+      ? <p className="error" aria-live="polite">⚠ {t('Seite konnte nicht geladen werden')}</p>
+      : <p className="status">{t('Keine Vorschau (Ordner oder leer)')}</p>
+  }
 
   const width = Math.round(560 * zoom)
   return (
     <div className="win-preview" ref={scrollRef} onScroll={onScroll}>
+      {loadError && <p className="error" aria-live="polite">⚠ {t('Seite konnte nicht geladen werden')}</p>}
       {Array.from({ length: count }, (_, i) => {
         const [w, h] = dims[i] || [595, 842]
         const url = pages[i]

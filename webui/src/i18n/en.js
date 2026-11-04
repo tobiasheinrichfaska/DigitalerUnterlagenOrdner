@@ -215,6 +215,30 @@ export const en = {
   '{name}: beschädigte oder ungültige Datei': '{name}: damaged or invalid file',
   '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert': '{name}: document references an external template/source and was not imported for security reasons',
 
+  // load/export integrity warnings (QS 2026-11-04: H-1/M-3/N-3/N-4; formats/pdf_storage.py + toc_export.py)
+  'Datei beschädigt geladen: {warning} — Speichern legt eine neue Datei an.':
+    'File loaded damaged: {warning} — saving creates a new file.',
+  '{name}: Datei beschädigt – nicht importiert: {warning}':
+    '{name}: file damaged – not imported: {warning}',
+  '{name}: beginnt hinter dem Seitenende – übersprungen':
+    '{name}: starts past the end of the pages – skipped',
+  '{name}: ragt über das Seitenende hinaus – gekürzt':
+    '{name}: extends past the end of the pages – truncated',
+  '{name}: ungültige Seitenanzahl ({value})': '{name}: invalid page count ({value})',
+  '{name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)':
+    '{name}: pages missing from the export (source data damaged or page count wrong)',
+  'Dokumentstruktur nicht lesbar – Datei als einzelnes Dokument geladen':
+    'Document structure unreadable – file loaded as a single document',
+  'Seitenbaum nicht lesbar – Dokumentinhalt konnte nicht geladen werden':
+    'Page tree unreadable – document content could not be loaded',
+  'Dokumentstruktur fehlt – Datei als einzelnes Dokument geladen':
+    'Document structure missing – file loaded as a single document',
+  'Seitenbaum repariert – bitte als neue Datei speichern':
+    'Page tree repaired – please save as a new file',
+  '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet':
+    '{n} pages beyond what the structure describes – not assigned',
+  'Seite konnte nicht geladen werden': 'Page could not be loaded',
+
   // DATEV mode (v3.10.0; DATEV-mode only)
   'DATEV-Modus ein-/ausschalten': 'Toggle DATEV mode',
   'Mit DATEV verknüpft': 'Linked with DATEV',

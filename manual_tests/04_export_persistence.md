@@ -32,6 +32,7 @@ PDF-Export (**⬇ Export PDF**), Speichern und erneutes Öffnen im Format `.bele
 **Erwartet (Aufteilen):**
 - Neben dem gewählten Namen entstehen mehrere Dateien (`…_Teil_1.pdf`, `…_Teil_2.pdf`, …); die Meldung lautet **„… — N Dateien“**. Mit der Beispielmappe und 6 Seiten sind es 3 Dateien (**oberste Ordner**), 4 Dateien (**jeder Ordnergrenze**) bzw. 3 Dateien (**mitten im Dokument**).
 - Jede Teildatei ist ein gültiges PDF mit **eigenem Inhaltsverzeichnis**, das auf die anderen Teile **verweist** (graue Einträge).
+- *Ab Version 3.11.4:* Jeder graue Verweisblock steht unter der Überschrift **„In anderen Dateien:"** (auch wenn er VOR dem eigenen Abschnitt „In dieser Datei:" steht, z. B. in Teil 2), und die **Seitenzahl eines Verweises stimmt in der Zieldatei** — Stichprobe: einen grauen Eintrag aus Teil 1 in der genannten Zieldatei auf der genannten Seite nachschlagen. In älteren Versionen fehlte die Überschrift vor führenden Verweisen und die Seitenzahl konnte um 1 daneben liegen, wenn die Teile verschieden lange Verzeichnisse hatten.
 - *Nicht offensichtlich:* Bei **mitten im Dokument** trägt ein geteiltes Dokument den **Seitenbereich** im Namen – hier `Sammelrechnung_Wartung.pdf (S. 1–3)` in der ersten und `Sammelrechnung_Wartung.pdf (S. 4–4)` in der zweiten Datei.
 - *Nicht offensichtlich:* Beim Aufteilen sind Stichwortverzeichnis und Lesezeichen im Dialog ausgegraut – die Teildateien bekommen immer ihr eigenes Inhaltsverzeichnis.
 
@@ -57,6 +58,27 @@ PDF-Export (**⬇ Export PDF**), Speichern und erneutes Öffnen im Format `.bele
 - Die Vorschau zeigt die Seiten wieder (ein gestreifter Platzhalter kann kurz aufblitzen).
 - *Nicht offensichtlich:* **💾** speichert eine bereits gespeicherte Datei **an Ort und Stelle** ohne Rückfrage; das **„•“** verschwindet und es erscheint **„✓ Gespeichert“**. Ein Dokument ohne Speicherort fragt beim ersten Speichern nach dem Ziel.
 - *Ab Version 3.10.0:* Speichern ist eine **geteilte Schaltfläche** – der Hauptteil speichert, der Pfeil **▾** öffnet das Menü mit **Speichern unter…** (fragt immer nach einem neuen Ziel). Das Menü schließt mit **Esc**, bei einem Klick daneben oder nach der Auswahl. In älteren Versionen stehen dafür zwei getrennte Schaltflächen in der Symbolleiste.
+- *Ab Version 3.11.4:* Wird nach dem Speichern alles per **↶ Rückgängig** zurückgenommen, verschwindet das **„•"** wieder – das Schließen fragt dann nicht mehr nach ungespeicherten Änderungen.
+
+---
+
+## MT-15d: Beschädigte .belegtool-Datei öffnen (Original bleibt geschützt)
+
+**Beispieldateien:** `Defekte_Mappe.belegtool` (absichtlich beschädigt mitgeliefert: die eingebettete Struktur behauptet mehr Seiten, als die Datei enthält)
+
+**Voraussetzungen:** BelegTool ist gestartet.
+
+**Schritte:**
+1. `Defekte_Mappe.belegtool` mit **📂 Öffnen** laden.
+2. Die Warnmeldung lesen.
+3. **💾 Speichern** (oder **Strg+S**) drücken.
+
+**Erwartet:**
+- Die Datei öffnet (hier: ein Beleg gekürzt, der zweite übersprungen), aber **mit sichtbarer Warnung**: „Datei beschädigt geladen: … — Speichern legt eine neue Datei an."
+- *Besonders wichtig:* **💾 Speichern überschreibt die beschädigte Datei NICHT** — es öffnet den **Speichern-unter-Dialog** (die App hat den Pfad absichtlich nicht übernommen). Der vorgeschlagene Dateiname endet auf **„(wiederhergestellt)"**, damit nicht versehentlich per Enter + „Ersetzen" doch das Original überschrieben wird. Das Original bleibt unverändert auf der Platte.
+- In Versionen vor 3.11.4 öffnete eine beschädigte Datei **still** als leeres oder flaches Dokument und Strg+S überschrieb das Original kommentarlos — genau dieses Verhalten darf nicht mehr auftreten.
+- Der Import einer beschädigten `.belegtool` über **📥 Importieren** wird mit Begründung **abgelehnt** (statt ein beschädigtes Fragment einzubetten).
+- *Hinweis:* Auch extern veränderte Dateien werden erkannt — z. B. meldet eine von einem Fremdwerkzeug um Seiten ergänzte Datei „… Seiten mehr als die Struktur beschreibt", und ein von einem Fremdwerkzeug „optimiertes"/neu geschriebenes BelegTool-Dokument behält seine Ordnerstruktur.
 
 ---
 

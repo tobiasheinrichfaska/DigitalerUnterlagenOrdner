@@ -203,3 +203,80 @@ def test_split_merge_serialisation_roundtrip():
     m = Merge(("a", "b"))
     back = command_from_dict(command_to_dict(m))
     assert back == m and isinstance(back.node_ids, tuple)
+
+
+# --- M-2 (QS-Gegenprüfung 2026-11-04): Split/Merge silently dropped tags, VZ and
+# dpi_original — tag views / Stichwortverzeichnis lost entries without any hint.
+
+def test_split_carries_tags_vz_and_dpi_original():
+    a = Node(name="a", id="a", pdf_length=3, original_data=b"P1|P2|P3",
+             tags=("Steuer", "2024"), vz_start=2024, vz_end=2025, dpi_original=300)
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    d1 = apply(doc, Split("a"), ENGINE)
+    for part in d1.root.children:
+        assert part.tags == ("Steuer", "2024")
+        assert (part.vz_start, part.vz_end) == (2024, 2025)
+        assert part.dpi_original == 300
+        assert part.id != "a"  # parts are NEW nodes, never id clones
+
+
+def test_split_committed_carries_tags_and_vz():
+    a = Node(name="a", id="a", pdf_length=2, original_data=None,
+             current_data=b"C1|C2", is_compressed=True, compression_method="jpg",
+             tags=("Beleg",), vz_start=2023, vz_end=2023)
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    d1 = apply(doc, Split("a"), ENGINE)
+    for part in d1.root.children:
+        assert part.tags == ("Beleg",)
+        assert (part.vz_start, part.vz_end) == (2023, 2023)
+
+
+def test_merge_unions_tags_and_spans_vz():
+    a = Node(name="a", id="a", pdf_length=1, original_data=b"A",
+             tags=("x", "y"), vz_start=2023, vz_end=2023)
+    b = Node(name="b", id="b", pdf_length=1, original_data=b"B",
+             tags=("y", "z"), vz_start=2024, vz_end=2025)
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a, b)))
+    d1 = apply(doc, Merge(("a", "b")), ENGINE)
+    merged = d1.root.children[0]
+    assert merged.tags == ("x", "y", "z")  # ordered union, no duplicates
+    assert (merged.vz_start, merged.vz_end) == (2023, 2025)  # spanned
+
+
+def test_merge_keeps_identical_tags_and_vz():
+    a = Node(name="a", id="a", pdf_length=1, original_data=b"A",
+             tags=("Steuer",), vz_start=2024, vz_end=2024)
+    b = Node(name="b", id="b", pdf_length=1, original_data=b"B",
+             tags=("Steuer",), vz_start=2024, vz_end=2024)
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a, b)))
+    d1 = apply(doc, Merge(("a", "b")), ENGINE)
+    merged = d1.root.children[0]
+    assert merged.tags == ("Steuer",)
+    assert (merged.vz_start, merged.vz_end) == (2024, 2024)
+
+
+def test_merge_without_any_vz_stays_none():
+    a = Node(name="a", id="a", pdf_length=1, original_data=b"A")
+    b = Node(name="b", id="b", pdf_length=1, original_data=b"B")
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a, b)))
+    merged = apply(doc, Merge(("a", "b")), ENGINE).root.children[0]
+    assert merged.tags == () and merged.vz_start is None and merged.vz_end is None
+
+
+# --- I-3 (QS 2026-11-04): SetNodeBytes must recompute pdf_length from the new bytes —
+# a stale count makes the loader slice the NEXT node's pages into this one on reload.
+
+def test_set_node_bytes_recomputes_pdf_length():
+    from core.commands import SetNodeBytes
+    a = Node(name="a", id="a", pdf_length=1, original_data=b"P1")
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    d1 = apply(doc, SetNodeBytes("a", b"N1|N2"), ENGINE)  # FakeEngine: 2 pages
+    assert d1.find("a").pdf_length == 2
+
+
+def test_set_node_bytes_without_engine_keeps_old_count():
+    from core.commands import SetNodeBytes
+    a = Node(name="a", id="a", pdf_length=1, original_data=b"P1")
+    doc = Document(Node(name="root", id="root", is_folder=True, children=(a,)))
+    d1 = apply(doc, SetNodeBytes("a", b"N1|N2"), None)  # no engine → keep, don't guess
+    assert d1.find("a").pdf_length == 1

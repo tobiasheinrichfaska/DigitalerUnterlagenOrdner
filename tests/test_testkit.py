@@ -271,3 +271,14 @@ def test_belegtool_samples_carry_their_status_and_tags(built, tmp_path):
     # after the round trip the text receipts must still be "nothing smaller", the scans not
     assert compress_all_methods(many["Beleg_01.pdf"].original_data) == {}
     assert compress_all_methods(many["Scan_Kassenbon_A.pdf"].original_data)
+
+
+def test_corrupt_sample_reliably_degrades(built, tmp_path):
+    """MT-15d's shipped sample must TRIGGER the degraded-load path on every build —
+    hand-made random corruption only sometimes hits a vital byte (QS 2026-11-04)."""
+    from formats.pdf_storage import PDFStorage
+    path = tmp_path / "Defekte_Mappe.belegtool"
+    path.write_bytes(built["Defekte_Mappe.belegtool"])
+    storage = PDFStorage(str(path))
+    warnings = list(storage.load_warnings)
+    assert any("gekürzt" in w or "übersprungen" in w for w in warnings), warnings

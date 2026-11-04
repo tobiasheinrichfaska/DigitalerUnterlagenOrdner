@@ -58,9 +58,12 @@ describe('translate (source-string keys)', () => {
     // v3.11.0 Bezeichnung/name strings (the field label + placeholder + "enter a name" validation,
     // the "pdf lacks Name" fix) = 204, PLUS the 1 v3.11.0 checked-out-self notice ("saved to the
     // checked-out file — check in via DATEV", for the doc you have checked out) = 205, PLUS the 1
-    // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206.
+    // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206,
+    // PLUS the 12 load/export integrity warnings (QS 2026-11-04: degraded .belegtool open/import,
+    // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
+    // failed export slices, preview render error) = 218.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(206)
+    expect(Object.keys(en).length).toBe(218)
   })
 })
 
@@ -103,6 +106,19 @@ describe('full-coverage languages', () => {
     'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.',
     // DATEV filing dialog — Bezeichnung/name (v3.11.0 "pdf lacks Name" fix) — de + en only for now
     'Bezeichnung', 'Name des Dokuments in DATEV', 'Bitte eine Bezeichnung eingeben.',
+    // load/export integrity warnings (QS 2026-11-04) — de + en only for now
+    'Datei beschädigt geladen: {warning} — Speichern legt eine neue Datei an.',
+    '{name}: Datei beschädigt – nicht importiert: {warning}',
+    '{name}: beginnt hinter dem Seitenende – übersprungen',
+    '{name}: ragt über das Seitenende hinaus – gekürzt',
+    '{name}: ungültige Seitenanzahl ({value})',
+    '{name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)',
+    'Dokumentstruktur nicht lesbar – Datei als einzelnes Dokument geladen',
+    'Seitenbaum nicht lesbar – Dokumentinhalt konnte nicht geladen werden',
+    'Dokumentstruktur fehlt – Datei als einzelnes Dokument geladen',
+    'Seitenbaum repariert – bitte als neue Datei speichern',
+    '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet',
+    'Seite konnte nicht geladen werden',
   ])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {

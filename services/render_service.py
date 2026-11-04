@@ -348,9 +348,11 @@ class RenderService:
         """Like ``seed``, but ``build()`` (run on the background worker, so its
         possibly-heavy enumeration/hashing never blocks the foreground) returns
         ``(node_specs, data_for, focus_node, focus_page)``, and we then warm the
-        cache **until it is full** (not a fixed step count) — current node from the
-        focus outward, then neighbouring nodes — yielding to the CPU, pausing while
-        ``pause_if()`` is true (e.g. a compression is running), and abandoning as
+        cache **until it is full, the CPU is busy, or ``pause_if()`` is true** —
+        current node from the focus outward, then neighbouring nodes. A busy CPU
+        ENDS this prefetch run (I-4, QS 2026-11-04: no wait/retry — waiting would
+        block the single seed worker); warming resumes with the next foreground
+        request or mutation (_seed_around/_kick_prewarm), and a run is abandoned as
         soon as a newer foreground request bumps the generation."""
         gen = self.generation
 

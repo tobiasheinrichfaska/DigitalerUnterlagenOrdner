@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 from core.model import Document, Node, STATUSES, STATUS_NONE
+from infra.log_config import logger
 
 # Fixed core defaults (the model/logic layer owns these — not the UI).
 DEFAULT_COMPRESSION_DPI = 150
@@ -467,11 +468,25 @@ def _tag_many(doc: Document, cmd: TagMany, engine=None) -> Document:
 @_handler(SetNodeBytes)
 def _set_node_bytes(doc: Document, cmd: SetNodeBytes, engine=None) -> Document:
     """PDF-Tool save-back: the edited bytes become the leaf's new source; compression
-    state is reset (the bytes changed, so any variant/no-gain verdict is stale)."""
-    _require_leaf(doc, cmd.node_id)
+    state is reset (the bytes changed, so any variant/no-gain verdict is stale).
+
+    I-3 (QS 2026-11-04): ``pdf_length`` is recomputed from the NEW bytes. Today's
+    PDF-Tool edits keep the page count, but a stale count silently corrupts the
+    .belegtool on reload (the loader slices pages by it — the next leaf would start
+    inside this one) once page operations exist. No engine / unreadable bytes →
+    keep the old count rather than guess."""
+    node = _require_leaf(doc, cmd.node_id)
     if not cmd.data:
         raise CommandError("Keine Daten zum Speichern.")
+    pdf_length = node.pdf_length
+    if engine is not None:
+        try:
+            pdf_length = engine.page_count(cmd.data)
+        except Exception:
+            logger.warning("SetNodeBytes: Seitenzahl der neuen Bytes nicht lesbar – behalte %s",
+                           pdf_length)
     return doc.update_node(cmd.node_id, original_data=cmd.data, current_data=None,
+                           pdf_length=pdf_length,
                            is_compressed=False, dpi_current=None,
                            compression_method=None, compression_no_gain=False)
 
@@ -701,23 +716,37 @@ def _carries_compression(node) -> bool:
                 and node.compression_method != "pikepdf")
 
 
-def _split_part(node, name, pdf_length, src_part, comp_part):
+def _split_meta(node, with_tags=True):
+    """Metadata every split part inherits (M-2, QS 2026-11-04 — tags/VZ/dpi used to be
+    silently dropped). ``with_tags=False`` for parts inside a new folder: the folder
+    carries the tags (tag views inherit them; per-part tags would list every part
+    separately in the tag index). Never the id or the compression flags — parts are
+    new nodes and tests fix no_compression=False."""
+    meta = dict(vz_start=node.vz_start, vz_end=node.vz_end, dpi_original=node.dpi_original)
+    if with_tags:
+        meta["tags"] = node.tags
+    return meta
+
+
+def _split_part(node, name, pdf_length, src_part, comp_part, with_tags=True):
     """Build one split-part node, inheriting the compressed slice when carried."""
-    kw = dict(name=name, pdf_length=pdf_length, original_data=src_part, status=node.status)
+    kw = dict(name=name, pdf_length=pdf_length, original_data=src_part, status=node.status,
+              **_split_meta(node, with_tags))
     if comp_part is not None:
         kw.update(current_data=comp_part, is_compressed=True,
                   compression_method=node.compression_method, dpi_current=node.dpi_current)
     return Node(**kw)
 
 
-def _split_part_committed(node, name, pdf_length, data):
+def _split_part_committed(node, name, pdf_length, data, with_tags=True):
     """Split-part of a committed node (compressed, source already dropped on save): the
     compressed bytes are the only data, so the part stays committed — current_data set,
     no source — matching the parent's irreversible state."""
     return Node(name=name, pdf_length=pdf_length, original_data=None,
                 current_data=data, is_compressed=True,
                 compression_method=node.compression_method,
-                dpi_current=node.dpi_current, status=node.status)
+                dpi_current=node.dpi_current, status=node.status,
+                **_split_meta(node, with_tags))
 
 
 @_handler(Split)
@@ -771,21 +800,26 @@ def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
     chunks = engine.split_chunks(source, size)  # direct range copy (fast)
     if not cmd.into_folder and len(chunks) < 2:
         return doc  # nothing to split in place (single chunk)
+    # into_folder: the new folder carries the tags (inherited by tag views), the
+    # parts only the per-node metadata — see _split_meta.
+    part_tags = not cmd.into_folder
     if committed:
         new_leaves = [
-            _split_part_committed(node, f"{node.name}_{i + 1}", cnt, data)
+            _split_part_committed(node, f"{node.name}_{i + 1}", cnt, data, with_tags=part_tags)
             for i, (data, cnt) in enumerate(chunks)
         ]
     else:
         comp = engine.split_chunks(node.current_data, size) if _carries_compression(node) else None
         new_leaves = [
-            _split_part(node, f"{node.name}_{i + 1}", cnt, data, comp[i][0] if comp else None)
+            _split_part(node, f"{node.name}_{i + 1}", cnt, data, comp[i][0] if comp else None,
+                        with_tags=part_tags)
             for i, (data, cnt) in enumerate(chunks)
         ]
     index = [c.id for c in parent.children].index(cmd.node_id)
     doc = doc.remove_node(cmd.node_id)
     if cmd.into_folder:
-        folder = Node(name=node.name, is_folder=True, children=tuple(new_leaves))
+        folder = Node(name=node.name, is_folder=True, children=tuple(new_leaves),
+                      tags=node.tags, vz_start=node.vz_start, vz_end=node.vz_end)
         return doc.insert_child(parent.id, folder, index)
     for offset, leaf in enumerate(new_leaves):
         doc = doc.insert_child(parent.id, leaf, index + offset)
@@ -841,9 +875,19 @@ def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
     status_set = {n.status for n in nodes}
     merged_status = next(iter(status_set)) if len(status_set) == 1 else STATUS_NONE
 
+    # M-2 (QS 2026-11-04): tags/VZ used to be silently dropped on merge. Tags: ordered
+    # union (the merged document covers every input's topics). VZ: the spanned period
+    # over all inputs that carry one.
+    merged_tags = tuple(dict.fromkeys(t for n in nodes for t in n.tags))
+    vz_starts = [n.vz_start for n in nodes if n.vz_start is not None]
+    vz_ends = [n.vz_end for n in nodes if n.vz_end is not None]
+
     merged = Node(
         name=nodes[0].name,
         status=merged_status,
+        tags=merged_tags,
+        vz_start=min(vz_starts) if vz_starts else None,
+        vz_end=max(vz_ends) if vz_ends else None,
         pdf_length=sum(n.pdf_length for n in nodes),
         original_data=merged_original,
         current_data=current_data,

@@ -98,3 +98,36 @@ describe('sweepCandidates', () => {
     expect(sweepCandidates(tree, 3)).toEqual(['p2'])
   })
 })
+
+// --- I-5 (QS 2026-11-04): the one-pass aggregation must match the per-row helpers --
+import { aggregateStatus } from './status'
+
+describe('aggregateStatus', () => {
+  const idLeaf = (id, status, undec = false) =>
+    ({ id, is_folder: false, status, compression_undecided: undec, children: [] })
+  const idFolder = (id, children) => ({ id, is_folder: true, status: '', children })
+
+  const tree = idFolder('root', [
+    idLeaf('a', 'erfasst'),
+    idFolder('f1', [
+      idLeaf('b', 'vorjahreswert', true),
+      idLeaf('c', ''),
+      idFolder('f2', [idLeaf('d', 'zu erfassen')]),
+    ]),
+    idFolder('empty', []),
+  ])
+
+  const walkAll = (n, out = []) => { out.push(n); n.children.forEach((c) => walkAll(c, out)); return out }
+
+  it('matches statusDots/hasUndecided for every node of the tree', () => {
+    const map = aggregateStatus(tree)
+    for (const n of walkAll(tree)) {
+      expect(map.get(n.id).dots, n.id).toEqual(statusDots(n))
+      expect(map.get(n.id).undecided, n.id).toBe(hasUndecided(n))
+    }
+  })
+
+  it('handles a null tree', () => {
+    expect(aggregateStatus(null).size).toBe(0)
+  })
+})

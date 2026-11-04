@@ -216,6 +216,9 @@ export default function App() {
         apply(resp)
         setDatevOpen(resp?.datev || null) // DATEV provenance/checked-out hint captured at open
         if (resp?.ok && allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
+        // degraded load (corrupt file): the backend refused to bind the path — tell
+        // the user what was lost and that saving creates a NEW file (H-1/M-3 fix)
+        if (resp?.ok && resp.warning) setError(`Datei beschädigt geladen: ${resp.warning} — Speichern legt eine neue Datei an.`)
       }))
       .catch((e) => setError(String(e.message || e)))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -226,7 +229,9 @@ export default function App() {
     (resp) => {
       apply(resp)
       if (resp?.ok) {
-        setDirty(true) // an edit/undo/redo/import changed the document
+        // the backend knows whether we are back at the saved state (undo to the last
+        // save → clean, I-6); older responses without the field keep the safe default
+        setDirty(resp.dirty ?? true)
         setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
         if (selected) setSelected(findNode(resp.tree, selected.id))
       }
@@ -470,6 +475,8 @@ export default function App() {
         setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
         setDatevOpen(resp.datev || null) // refresh the DATEV badge/checked-out hint for the new file
         if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
+        // degraded load (corrupt file): path unbound by the backend — saving creates a new file
+        if (resp.warning) setError(`Datei beschädigt geladen: ${resp.warning} — Speichern legt eine neue Datei an.`)
       }
     })
   }

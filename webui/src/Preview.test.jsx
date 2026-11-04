@@ -97,3 +97,60 @@ describe('Preview — onPage callback', () => {
     expect(true).toBe(true) // smoke: no crash
   })
 })
+
+describe('Preview — render failures are visible (N-5, QS 2026-11-04)', () => {
+  function installFailingApi({ geomFails = false, renderFails = false, nullPage = false } = {}) {
+    window.pywebview = {
+      api: new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'then') return undefined
+          return () => {
+            if (prop === 'page_count') {
+              return geomFails ? Promise.resolve({ ok: false, error: 'kaputt' })
+                : Promise.resolve({ ok: true, count: 2 })
+            }
+            if (prop === 'page_dims') {
+              return geomFails ? Promise.resolve({ ok: false, error: 'kaputt' })
+                : Promise.resolve({ ok: true, dims: [[595, 842], [595, 842]] })
+            }
+            if (prop === 'render_window') {
+              if (renderFails) return Promise.resolve({ ok: false, error: 'kaputt' })
+              if (nullPage) return Promise.resolve({ ok: true, pages: [null, null] })
+              return Promise.resolve({ ok: true, pages: ['data:img/png;base64,AA=='] })
+            }
+            return Promise.resolve({ ok: true })
+          }
+        },
+      }),
+    }
+  }
+
+  it('shows the error instead of "Keine Vorschau" when geometry fails', async () => {
+    installFailingApi({ geomFails: true })
+    render(<Preview session="s1" node={node} zoom={1} previewReq={null} onPage={null} />)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.textContent).toContain('Seite konnte nicht geladen werden')
+    expect(document.body.textContent).not.toContain('Keine Vorschau')
+  })
+
+  it('shows an error banner when the render call reports ok:false', async () => {
+    installFailingApi({ renderFails: true })
+    render(<Preview session="s1" node={node} zoom={1} previewReq={null} onPage={null} />)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.textContent).toContain('Seite konnte nicht geladen werden')
+  })
+
+  it('shows an error banner when pages come back null (per-page render failure)', async () => {
+    installFailingApi({ nullPage: true })
+    render(<Preview session="s1" node={node} zoom={1} previewReq={null} onPage={null} />)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.textContent).toContain('Seite konnte nicht geladen werden')
+  })
+
+  it('shows no banner on a healthy render', async () => {
+    installApi()
+    render(<Preview session="s1" node={node} zoom={1} previewReq={null} onPage={null} />)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.textContent).not.toContain('Seite konnte nicht geladen werden')
+  })
+})

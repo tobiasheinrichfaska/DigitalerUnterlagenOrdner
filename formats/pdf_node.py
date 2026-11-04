@@ -104,29 +104,8 @@ class PDFNode:
             current = current.parent
         return False
 
-    def copy(self, keep_name: bool = False) -> 'PDFNode':
-        """Tiefe Kopie mit eigenen Byte-Puffern — von PDFStorage.export_selection genutzt."""
-        copied = PDFNode(
-            name=self.name if keep_name else f"{self.name}_copy",
-            is_folder=self.is_folder, pdf_data=None)
-
-        copied.status = self.status
-        copied.vz_start = self.vz_start
-        copied.vz_end = self.vz_end
-        copied.current_pdf_data = self.current_pdf_data[:] if self.current_pdf_data else None
-        copied.original_pdf_data = self.original_pdf_data[:] if self.original_pdf_data else None
-        copied.pdf_length = self.pdf_length
-        copied.is_compressed = self.is_compressed
-        copied.no_compression = self.no_compression
-        copied.compression_no_gain = self.compression_no_gain
-        copied.dpi_original = self.dpi_original
-        copied.dpi_current = self.dpi_current
-        copied.compression_method = self.compression_method
-
-        for child in self.children:
-            copied.add_child(child.copy(keep_name=keep_name))
-
-        return copied
+    # NOTE: copy() was removed with its only caller PDFStorage.export_selection
+    # (I-2, QS 2026-11-04) — it silently dropped tags/collapsed/datev.
 
     def _concat_children_data(self, attr: str) -> Optional[bytes]:
         """Hängt die effektiven PDF-Daten aller Child-Knoten zusammen.

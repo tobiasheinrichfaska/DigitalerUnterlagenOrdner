@@ -249,7 +249,15 @@ def remove_node(root: Node, node_id: str) -> Node:
 
 
 def insert_child(root: Node, parent_id: str, child: Node, index: Optional[int] = None) -> Node:
-    """Insert ``child`` under ``parent_id`` at ``index`` (append if None)."""
+    """Insert ``child`` under ``parent_id`` at ``index`` (append if None).
+
+    Raises ``KeyError`` when ``parent_id`` does not exist (I-1, QS 2026-11-04): the old
+    silent no-op made the child VANISH — callers validate the parent today, but a future
+    caller that forgets must fail loudly, not lose a node. (``update_node``'s no-op on a
+    missing id is unchanged — fixed by tests as tolerated behaviour.)"""
+    if find(root, parent_id) is None:
+        raise KeyError(parent_id)
+
     def rec(n: Node) -> Node:
         if n.id == parent_id:
             kids = list(n.children)

@@ -504,6 +504,11 @@ class HostApi:
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
         name = self._core.document_name(session) or "unbenannt"
+        # Degraded session (corrupt file opened with warnings): the document name IS
+        # the corrupt original's name — suggesting it invites "Enter, Ersetzen? Ja"
+        # and destroys the original after all. Suggest a rescue name instead.
+        if self._core.session_degraded(session):
+            name += " (wiederhergestellt)"
         path = win.create_file_dialog(
             webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
             file_types=("BelegTool (*.belegtool)",))

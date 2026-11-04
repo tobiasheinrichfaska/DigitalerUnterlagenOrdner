@@ -141,11 +141,15 @@ def _export_nodes_to_bytes(nodes: List[PDFNode]) -> bytes:
 def _render_toc_pdf(items: List[_TocItem],
                     toc_offset: int = 0,
                     title: str = "Inhaltsverzeichnis",
-                    subtitle: str = "") -> Tuple[bytes, List[_LinkRecord]]:
+                    subtitle: str = "",
+                    other_offsets: dict = None) -> Tuple[bytes, List[_LinkRecord]]:
     """
     Erzeugt die TOC-Seiten.
     Gibt (PDF-Bytes, Liste von LinkRecords) zurück.
     toc_offset: Anzahl der TOC-Seiten selbst (wird zu Seitennummern addiert).
+    other_offsets: Dateiname → TOC-Seitenzahl des ZIELTEILS für Querverweise (N-1,
+    QS 2026-11-04 — die Teile haben NICHT alle gleich viele TOC-Seiten, der Verweis
+    muss mit dem Offset der Zieldatei rechnen, nicht mit dem eigenen).
     """
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=A4)
@@ -168,8 +172,20 @@ def _render_toc_pdf(items: List[_TocItem],
     c.line(_ML, y, _A4_W - _MR, y)
     y -= 14
 
-    in_this_shown = False
-    in_other_shown = False
+    # Section headers: a row belongs either to THIS file or to a cross-reference block.
+    # N-1 (QS 2026-11-04): the old `in_other_shown and in_this_shown` condition left the
+    # LEADING cross-refs of part ≥ 2 without any header. Track the current section and
+    # print its header on every transition instead.
+    section = None  # None | 'this' | 'other'
+
+    def _section_header(text):
+        nonlocal y
+        y -= 4
+        c.setFont("Helvetica-BoldOblique", 8)
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.drawString(_ML, y, text)
+        c.setFillColorRGB(0, 0, 0)
+        y -= _ROW
 
     for item in items:
         if y < _MB + 15:
@@ -182,44 +198,32 @@ def _render_toc_pdf(items: List[_TocItem],
 
         if item.other_file:
             # ── Querverweis auf andere Datei ─────────────────────────────────
-            if not in_other_shown and in_this_shown:
-                y -= 4
-                c.setFont("Helvetica-BoldOblique", 8)
-                c.setFillColorRGB(0.45, 0.45, 0.45)
-                c.drawString(_ML, y, "In anderen Dateien:")
-                c.setFillColorRGB(0, 0, 0)
-                y -= _ROW
-                in_other_shown = True
+            if section != 'other':
+                _section_header("In anderen Dateien:")
+                section = 'other'
             c.setFont("Helvetica-Oblique", 9)
             c.setFillColorRGB(0.55, 0.55, 0.55)
             c.drawString(x, y, name)
-            # every part's TOC lists the SAME full item set, so all parts share one
-            # TOC page count → the entry's page in the other file is page_start+toc_offset.
-            ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + toc_offset}"
+            # the entry's printed page lives in the OTHER file → add THAT part's
+            # TOC offset (parts do not share one TOC page count)
+            off = (other_offsets or {}).get(item.other_file, toc_offset)
+            ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + off}"
             c.drawRightString(_A4_W - _MR, y, f"→ {ref}")
 
         elif item.is_folder:
             # ── Ordner-Überschrift ────────────────────────────────────────────
-            if not in_this_shown and subtitle:
-                c.setFont("Helvetica-BoldOblique", 8)
-                c.setFillColorRGB(0.45, 0.45, 0.45)
-                c.drawString(_ML, y, "In dieser Datei:")
-                c.setFillColorRGB(0, 0, 0)
-                y -= _ROW
-                in_this_shown = True
+            if section != 'this' and subtitle:
+                _section_header("In dieser Datei:")
+                section = 'this'
             c.setFont("Helvetica-Bold", 10)
             c.setFillColorRGB(0, 0, 0)
             c.drawString(x, y, name)
 
         else:
             # ── Dokumenteintrag mit Seitennummer und Link ─────────────────────
-            if not in_this_shown and subtitle:
-                c.setFont("Helvetica-BoldOblique", 8)
-                c.setFillColorRGB(0.45, 0.45, 0.45)
-                c.drawString(_ML, y, "In dieser Datei:")
-                c.setFillColorRGB(0, 0, 0)
-                y -= _ROW
-                in_this_shown = True
+            if section != 'this' and subtitle:
+                _section_header("In dieser Datei:")
+                section = 'this'
             c.setFont("Helvetica", 10)
             c.setFillColorRGB(0, 0, 0)
             page_text = f"S. {item.page_start + toc_offset}"
@@ -606,27 +610,36 @@ def _subtree_from_leaves(items):
     return roots
 
 
-def _slice_leaf(leaf, indices):
+def _slice_leaf(leaf, indices, problems=None):
     """A new leaf holding only ``indices`` (0-based) of ``leaf``'s pages — for the
     page-level split, where a document is cut across files. The name carries the
-    original page range so each part stays identifiable."""
+    original page range so each part stays identifiable.
+
+    N-3 (QS 2026-11-04): a failed slice (pdf_length claims more pages than the bytes
+    hold, or broken bytes) used to produce an EMPTY part that still claimed
+    ``len(indices)`` pages — the TOC entries after it pointed one page off, and the
+    only trace was the (default-silent) log. The part now carries its REAL page count
+    and the failure is reported upward via ``problems`` (→ export ``warning``)."""
     writer = PdfWriter()
     try:
         reader = PdfReader(io.BytesIO(leaf.current_pdf_data or b""))
         for i in indices:
             writer.add_page(reader.pages[i])
-    except Exception as e:  # keep the export going; a broken slice becomes empty
+    except Exception as e:  # keep the export going; the missing pages are reported
         logger.warning("Seiten-Split von '%s' fehlgeschlagen: %s", leaf.name, e)
+        if problems is not None:
+            problems.append(
+                f"{leaf.name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)")
     buf = io.BytesIO()
     writer.write(buf)
     part = PDFNode(name=f"{leaf.name} (S. {indices[0] + 1}–{indices[-1] + 1})",
                    pdf_data=buf.getvalue())
-    part.pdf_length = len(indices)
+    part.pdf_length = len(writer.pages)  # the REAL count, never the claim
     part.tags = list(getattr(leaf, "tags", []) or [])
     return part
 
 
-def _subtree_from_pages(group):
+def _subtree_from_pages(group, problems=None):
     """Rebuild a part's forest from page units, coalescing consecutive same-leaf
     pages into one (possibly partial) leaf and keeping folder paths. A run that
     covers all of a leaf's pages reuses the leaf untouched; a partial run is sliced."""
@@ -638,12 +651,12 @@ def _subtree_from_pages(group):
             runs.append([leaf, path, [pi]])
     items = []
     for leaf, path, indices in runs:
-        part = leaf if len(indices) == count_node_pages(leaf) else _slice_leaf(leaf, indices)
+        part = leaf if len(indices) == count_node_pages(leaf) else _slice_leaf(leaf, indices, problems)
         items.append((part, path))
     return _subtree_from_leaves(items)
 
 
-def _plan_groups(nodes, max_pages, level):
+def _plan_groups(nodes, max_pages, level, problems=None):
     """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
 
     ``level``:
@@ -665,7 +678,7 @@ def _plan_groups(nodes, max_pages, level):
         for leaf, path in _leaves_with_path(nodes):
             for pi in range(count_node_pages(leaf)):
                 units.append(((leaf, path, pi), 1))
-        return [_subtree_from_pages(grp) for grp in _pack_units(units, max_pages)]
+        return [_subtree_from_pages(grp, problems) for grp in _pack_units(units, max_pages)]
     raise ValueError(f"unknown split level: {level!r}")
 
 
@@ -688,14 +701,17 @@ def plan_split_paths(nodes: List[PDFNode], base_path: str, max_pages: int,
 
 
 def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
-                               max_pages: int, level: str = 'top') -> List[str]:
+                               max_pages: int, level: str = 'top',
+                               problems: list = None) -> List[str]:
     """
     Aufteilen in mehrere Dateien. Jede Datei hat einen TOC mit Querverweisen
     auf die anderen Dateien. Gibt Liste der erstellten Pfade zurück.
     ``level`` ('top'/'folder'/'page') wählt die Bruchgrenze — siehe ``_plan_groups``.
+    ``problems`` (Liste) sammelt Export-Degradationen (z. B. fehlgeschlagene
+    Seiten-Slices, N-3) für die Warnanzeige des Aufrufers.
     """
     top = PDFStorage.filter_keep_ancestors(nodes)
-    groups = _plan_groups(top, max_pages, level)
+    groups = _plan_groups(top, max_pages, level, problems)
 
     if not groups:
         return []  # nothing to export (empty forest) — write no file, report no paths
@@ -709,10 +725,9 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
 
     group_items = [_build_toc_items(g) for g in groups]
 
-    for idx, (group, items, path) in enumerate(zip(groups, group_items, paths)):
-        subtitle = f"Teil {idx + 1} von {len(groups)}"
-
-        # Einträge für diese Datei + graue Querverweise auf andere
+    # Einträge je Datei: eigene + graue Querverweise auf die anderen Teile
+    full_lists: List[List[_TocItem]] = []
+    for idx in range(len(groups)):
         full_items: List[_TocItem] = []
         for other_idx, (other_items, other_name) in enumerate(zip(group_items, file_names)):
             if other_idx == idx:
@@ -724,14 +739,26 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
                         page_start=it.page_start, page_end=it.page_end,  # keep the page for the cross-ref
                         is_folder=it.is_folder, other_file=other_name,
                     ))
+        full_lists.append(full_items)
 
-        draft, _ = _render_toc_pdf(full_items, toc_offset=0, subtitle=subtitle)
-        toc_page_count = _get_pdf_page_count(draft)
+    # N-1 (QS 2026-11-04): the parts do NOT all have the same TOC page count (the last
+    # part has fewer header rows, row counts differ) — a cross-reference must add the
+    # TARGET part's offset. Pass 1 renders a draft per part to get every count (row
+    # layout is offset-independent), pass 2 renders final TOCs with the offset map.
+    toc_counts = []
+    for idx, full_items in enumerate(full_lists):
+        draft, _ = _render_toc_pdf(full_items, toc_offset=0,
+                                   subtitle=f"Teil {idx + 1} von {len(groups)}")
+        toc_counts.append(_get_pdf_page_count(draft))
+    offsets = {file_names[i]: toc_counts[i] for i in range(len(groups))}
+
+    for idx, (group, full_items, path) in enumerate(zip(groups, full_lists, paths)):
+        subtitle = f"Teil {idx + 1} von {len(groups)}"
         final_toc, link_records = _render_toc_pdf(
-            full_items, toc_offset=toc_page_count, subtitle=subtitle)
+            full_items, toc_offset=toc_counts[idx], subtitle=subtitle, other_offsets=offsets)
         content = _export_nodes_to_bytes(group)
 
-        result = _assemble_pdf(final_toc, content, link_records, full_items, toc_page_count)
+        result = _assemble_pdf(final_toc, content, link_records, full_items, toc_counts[idx])
         with open(path, "wb") as f:
             f.write(result)
 

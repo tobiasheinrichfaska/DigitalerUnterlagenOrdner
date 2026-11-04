@@ -439,6 +439,19 @@ def _belegtool(sample: str, tree, statuses=None, tags=None) -> bytes:
     return _stable_id(document_to_storage(Document(root)).to_bytes())
 
 
+def _corrupt_belegtool() -> bytes:
+    """Deterministically damaged .belegtool for MT-15d: a same-length byte patch makes
+    the embedded structure claim far more pages than the file holds, so the load
+    degrades reliably ('gekürzt'/'übersprungen' warnings, path not bound) — unlike
+    hand-made random corruption, which only sometimes hits a vital byte."""
+    data = _belegtool("Defekt", _folder("Defekte_Mappe",
+                                        _leaf("Beleg_A.pdf"), _leaf("Beleg_B.pdf")))
+    patched = data.replace(b'"pdf_length": 1', b'"pdf_length": 7', 1)
+    if patched == data:
+        raise AssertionError("pdf_length marker not found — the sample would be healthy")
+    return patched
+
+
 # --- the catalog ----------------------------------------------------------------------
 
 def _office(name: str) -> Callable[[], bytes]:
@@ -538,6 +551,8 @@ _CATALOG = (
            lambda: _belegtool("Viele", VIELE_KLEINE_BELEGE)),
     Sample("Zweite_Mappe.belegtool", "Ein zweites, anderes BelegTool-Dokument (für das zweite Fenster).",
            lambda: _belegtool("Zweite", ZWEITE_MAPPE)),
+    Sample("Defekte_Mappe.belegtool", "ABSICHTLICH beschädigtes BelegTool-Dokument (Struktur behauptet mehr Seiten als vorhanden) — für MT-15d; öffnet mit Warnung, Speichern wird zu Speichern-unter.",
+           _corrupt_belegtool),
 )
 
 SAMPLES: Dict[str, Sample] = {sample.name: sample for sample in _CATALOG}

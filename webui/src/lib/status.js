@@ -38,6 +38,36 @@ export function hasUndecided(node) {
   return leaves(node).some((l) => l.compression_undecided)
 }
 
+// One bottom-up pass over the whole tree: id -> { dots, undecided }. Same semantics
+// as statusDots/hasUndecided per row, but O(n) for ALL rows instead of a leaves()
+// walk per folder row (I-5, QS 2026-11-04 — O(n·Tiefe) per render on big trees).
+export function aggregateStatus(tree) {
+  const map = new Map()
+  const walk = (n) => {
+    if (!n.is_folder) {
+      const c = statusColor(n.status)
+      map.set(n.id, { dots: c ? [c] : [], undecided: !!n.compression_undecided })
+      return { present: c ? [n.status] : [], hasStatus: !!c, hasNone: !c,
+               undecided: !!n.compression_undecided }
+    }
+    const present = new Set()
+    let hasStatus = false, hasNone = false, undecided = false
+    for (const child of n.children || []) {
+      const a = walk(child)
+      a.present.forEach((s) => present.add(s))
+      hasStatus = hasStatus || a.hasStatus
+      hasNone = hasNone || a.hasNone
+      undecided = undecided || a.undecided
+    }
+    const dots = ORDER.filter((s) => present.has(s)).map((s) => STATUS_COLOR[s])
+    if (hasStatus && hasNone) dots.push('black')
+    map.set(n.id, { dots, undecided })
+    return { present: [...present], hasStatus, hasNone, undecided }
+  }
+  if (tree) walk(tree)
+  return map
+}
+
 // Tooltip label key per dot colour (German source → t() translates). Black is the
 // folder "mixed with/without status" marker.
 export const DOT_LABEL = {

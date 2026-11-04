@@ -133,3 +133,35 @@ def test_replay_invariant_relaxed_only_for_no_gain():
     # re-applying the silent verdict on top of the replay reproduces the live document
     reconstructed = apply_all(replayed, [_set_no_gain("a")])
     assert reconstructed.to_dict() == s.document.to_dict()
+
+
+# --- I-6 (QS 2026-11-04): undo back to the saved/opened state clears dirty ----------
+
+def test_undo_back_to_opened_state_is_clean():
+    s = DocumentSession(doc())
+    s.dispatch(Rename("a", "A!"))
+    assert s.dirty
+    s.undo()
+    assert s.dirty is False  # exactly the opened document again — nothing unsaved
+
+
+def test_undo_redo_around_a_save_tracks_dirty():
+    s = DocumentSession(doc())
+    s.dispatch(Rename("a", "A!"))
+    s.mark_saved()
+    assert s.dirty is False
+    s.undo()
+    assert s.dirty is True   # older than the saved state → unsaved difference
+    s.redo()
+    assert s.dirty is False  # forward to the saved state again → clean
+
+
+def test_silent_verdict_on_clean_doc_keeps_undo_dirty_tracking():
+    s = DocumentSession(doc())
+    s.dispatch(Rename("a", "A!"))
+    s.mark_saved()
+    s.apply_silent(_set_no_gain("a"))  # derived fact, stays "clean" by design
+    assert s.dirty is False
+    s.dispatch(Rename("a", "A!!"))
+    s.undo()
+    assert s.dirty is False  # back at the (silently annotated) saved state

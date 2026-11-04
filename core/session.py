@@ -33,6 +33,11 @@ class DocumentSession:
         self._undo: List[tuple] = []  # (previous_doc, command)
         self._redo: List[tuple] = []  # (next_doc, command)
         self._dirty = False  # unsaved changes since open/save
+        # Identity marker of the document AS SAVED/OPENED: undo/redo compare against
+        # it (snapshots restore the SAME object), so undoing back to the saved state
+        # clears dirty instead of asking about "unsaved changes" that no longer exist
+        # (I-6, QS 2026-11-04).
+        self._saved_doc = document
 
     @property
     def dirty(self) -> bool:
@@ -40,6 +45,7 @@ class DocumentSession:
 
     def mark_saved(self) -> None:
         self._dirty = False
+        self._saved_doc = self._doc
 
     # --- state -------------------------------------------------------------
     @property
@@ -79,6 +85,10 @@ class DocumentSession:
         for facts recomputable from the bytes — it intentionally relaxes the replay
         invariant for those fields (see module docstring)."""
         self._doc = apply(self._doc, cmd, self._engine)
+        if not self._dirty:
+            # a silent fact on a clean document keeps it clean — move the marker along
+            # so a later undo/redo identity check still recognises the saved state
+            self._saved_doc = self._doc
         return self._doc
 
     def undo(self) -> Document:
@@ -87,7 +97,7 @@ class DocumentSession:
         prev, cmd = self._undo.pop()
         self._redo.append((self._doc, cmd))
         self._doc = prev
-        self._dirty = True
+        self._dirty = self._doc is not self._saved_doc  # back at the saved state → clean
         return self._doc
 
     def redo(self) -> Document:
@@ -96,5 +106,5 @@ class DocumentSession:
         nxt, cmd = self._redo.pop()
         self._undo.append((self._doc, cmd))
         self._doc = nxt
-        self._dirty = True
+        self._dirty = self._doc is not self._saved_doc  # forward to the saved state → clean
         return self._doc

@@ -65,11 +65,14 @@ describe('localizeMessage (host-level backend messages)', () => {
 
   it('templates match what the backend actually formats (drift lock)', () => {
     // The static fragments of each template must appear verbatim in the source
-    // that produces the message (core/api.py, or App.jsx for the composite).
-    // Resolve from THIS file's location (src/lib/), not process.cwd(), so the test
-    // is invocation-independent (F-6).
+    // that produces the message (core/api.py, formats/pdf_storage.py and
+    // formats/toc_export.py for the load/export degradations, or App.jsx for the
+    // composites). Resolve from THIS file's location (src/lib/), not process.cwd(),
+    // so the test is invocation-independent (F-6).
     const here = dirname(fileURLToPath(import.meta.url))
     const src = readFileSync(resolve(here, '..', '..', '..', 'core', 'api.py'), 'utf8')
+      + readFileSync(resolve(here, '..', '..', '..', 'formats', 'pdf_storage.py'), 'utf8')
+      + readFileSync(resolve(here, '..', '..', '..', 'formats', 'toc_export.py'), 'utf8')
       + readFileSync(resolve(here, '..', 'App.jsx'), 'utf8')
     for (const { tpl } of MESSAGE_TEMPLATES) {
       for (const frag of tpl.split(/\{\w+\}/).filter((f) => f.trim().length > 3)) {

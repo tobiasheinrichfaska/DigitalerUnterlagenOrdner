@@ -43,7 +43,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
 | File | Role |
 |---|---|
-| `formats/pdf_node.py` | `PDFNode`: serialization carrier for the `.belegtool` I/O path only (bytes + metadata, `to_dict`/`from_recursive_array`/`copy`). **No rendering, no operations** — split/merge/rotate/compress live in `core/engine` |
+| `formats/pdf_node.py` | `PDFNode`: serialization carrier for the `.belegtool` I/O path only (bytes + metadata, `to_dict`/`from_recursive_array`; `copy` removed 2026-11-04, I-2). **No rendering, no operations** — split/merge/rotate/compress live in `core/engine` |
 | `formats/pdf_storage.py` | `PDFStorage`: JSON serialization, export with TOC, .belegtool format |
 
 ### Import & Export
@@ -116,7 +116,7 @@ build-time only (the prod build is static assets under `webui/dist/`).
 | `webui/src/ExportDialog.jsx`, `SaveDialog.jsx` | Export-options dialog (TOC / tag index / bookmarks / split + „Nach DATEV ablegen"); save/embed-variants prompt. |
 | `webui/src/TagEditor.jsx`, `TagViewBar.jsx` | Tag editor (favourites, multi-select union via `TagMany`) + the search/group view bar. |
 | `webui/src/hooks/` | UI hooks: `useKeyboard`, `useSelection`, `useOsFileDrop`, `useDialogs`, `useTagView`, `useResizablePane`, `useModal`, `useMenu` (shared roving-focus/dismiss menu). |
-| `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot. Tested in `status.test.js`. |
+| `webui/src/lib/status.js` | **Pure** status-dot aggregation (leaf/folder, red→yellow→green + black) + `hasUndecided` for the front compression dot; `aggregateStatus` computes ALL rows in one bottom-up pass (Tree `useMemo`, I-5). Tested in `status.test.js`. |
 | `webui/src/lib/datev.js` | **Pure** DATEV-mode helpers: `isDatevConnected`, `datevVerdictKey` (verdict→localized message), `datevSavedNotice`, `localBaseName`. Shared by `App.jsx` (organizer) + `pdftool/main.js`. |
 | `webui/src/lib/datevFiling.js` | **Pure** DATEV filing-dialog logic shared by organizer + PDF-Tool: `filterClients`, `registersFor`, `yearChoices`, `validateFiling`, `buildFileOpts`, `soleClientGuid`. Tested in `datevFiling.test.js`. |
 | `webui/src/pdftool/fileDialog.js` | Vanilla-DOM DATEV **filing dialog** of the PDF-Tool surface (the organizer uses the React `DatevFileDialog`); `openFileDialog(…)` resolves to the `datev_file` opts or null on cancel. Tested in `fileDialog.test.js`. |
@@ -359,8 +359,13 @@ delete, allow read) — bit-for-bit Acrobat's; the OS frees it on process death 
   **through the handle** in a single write — `PDFStorage.to_bytes()` + `embed_variants_bytes()`
   built in memory, then `FileLock.overwrite`. In-place overwrite isn't atomic, so a sibling
   **`.bak`** of the previous bytes is written first and removed only after a successful flush;
-  `open` **restores from `.bak`** if it finds the file truncated (interrupted save). Lock-off
-  saving is unchanged (the original two-write path).
+  `open` **restores from `.bak`** if it finds the file truncated (interrupted save). Hardened
+  2026-11-04 (QS N-2/Neben-1): an incomplete `WriteFile` raises (no silent short write), a
+  sibling **`.wip` marker** brackets the in-place write — `restore_from_bak` treats a leftover
+  marker as authoritative (the old head+tail heuristic alone accepted a half-new/half-old file),
+  and a retry after a failed save keeps the GOOD `.bak` instead of refreshing it from the
+  broken on-disk state. Lock-off saving is **atomic** since 2026-11-04 (temp file +
+  `os.replace`; legacy in-place fallback only when the target is held open elsewhere).
 - **Tests:** [`tests/test_file_lock.py`](tests/test_file_lock.py) (14, primitive incl. OS
   auto-release + thread race), [`test_save_bytes_pipeline.py`](tests/test_save_bytes_pipeline.py)
   (bytes-pipeline parity with the path-based save/embed),
@@ -583,7 +588,7 @@ references are in `tests/data/expected/`.
 Step-by-step manual test instructions for a non-developer live in
 [`manual_tests/`](manual_tests/README.md) — **German since 2026-10-10** (workspace rule:
 product text incl. `manual_tests` is German). 11 areas (`00_installation` … `10_datev`),
-83 test cases. Keep them current when user-facing flows change (workspace convention).
+85 test cases. Keep them current when user-facing flows change (workspace convention).
 
 **Tester kit (generated).** The Markdown files are the single source; from them
 `scripts/build_testkit.py` builds [`manual_tests/testpakete/`](manual_tests/testpakete/):
@@ -665,6 +670,47 @@ deep-copy claims removed, `requirements-dev.txt` (pytest), `testpaths = tests`, 
 import-router + CoreApi split (architecture). Open (needs verification): a host-side origin
 guard / drop-handler for the PDF-Tool window (an OS drop of an URL/HTML file might still
 navigate it — the link path is fixed).
+
+**v3.11.4 — second QS round (2026-11-04, Fable review of the UNCHANGED core + Opus
+verification of every finding, all fixed test-first):** (H-1) *a corrupt `.belegtool` can no
+longer destroy itself* — load degradations (unreadable page tree after a `sanitize_pdf` repair
+attempt, structure fallback, skipped/truncated nodes, hostile `pdf_length`) are collected in
+`PDFStorage.load_warnings`, surfaced by `CoreApi.open` as `warning`, and a degraded open does
+NOT bind the path (Ctrl+S → Save-As; import of a degraded file is refused with the reason);
+(M-1) *unlocked save is atomic* (temp + `os.replace`, in-place fallback when the target is held
+open); (M-2) *Split/Merge carry tags + Veranlagungszeitraum + dpi_original* (folder variant:
+tags on the folder; merge: union/span); (N-1) *split-export TOC* — "In anderen Dateien:" header
+also before leading cross-refs, cross-ref page numbers use the TARGET part's TOC offset (two-pass
+render); (N-2/Neben-1) *file lock* — a short `WriteFile` is an error, a `.wip` in-flight marker
+makes `restore_from_bak` reliable (head+tail heuristic alone accepted hybrid files) and a retry
+never overwrites the good `.bak`; (N-3) *failed export page-slices* carry their REAL page count
+and reach the user via `warning`; (N-5) *preview render/geometry failures show an error banner*
+instead of vanishing in empty catches; (I-1) `insert_child`/`move_node` raise `KeyError` on a
+missing target (never silently lose a node); (I-2) dead `export_selection`/`PDFNode.copy`
+removed; (I-3) `SetNodeBytes` recomputes `pdf_length`; (I-4) prefetch docstring corrected;
+(I-5) tree status dots via ONE bottom-up `aggregateStatus` pass (`useMemo` on the tree) instead
+of a `leaves()` walk per folder row; (I-6) undo back to the saved state clears dirty (identity
+marker in `DocumentSession`, `dirty` in `_doc_response_locked`, UI mirrors it). 12 new i18n keys
+(de+en, PENDING batch), new manual tests MT-15d (corrupt file) + notes in MT-06/07/14/15.
+
+**v3.11.4 — Auflagen aus der Opus-Bewertung der Fixes (2026-11-04, alle umgesetzt):**
+(H-1a) the repair attempt is REAL now — a full pikepdf rewrite (sanitize_pdf returned unchanged
+bytes whenever PdfReader constructed), also triggered when pypdf tolerantly reports 0 pages
+although the structure has leaves; a successful repair stays degraded ("Seitenbaum repariert –
+bitte als neue Datei speichern"); (H-1b) a `.belegtool` whose `/JSONStructure` marker moved into
+a compressed object stream (qpdf/Acrobat rewrite) now loads its structure — the app's own
+extension always does the full metadata read, and a `.belegtool` WITHOUT a structure degrades
+loudly ("Dokumentstruktur fehlt"); (H-1c) pages beyond what the structure describes warn
+("… Seiten mehr als die Struktur beschreibt") instead of being dropped on the next save;
+(H-1d) Save-As of a degraded session suggests `<name> (wiederhergestellt)`
+(`CoreApi.session_degraded`, cleared on save/healthy reopen/close) so Enter+Ersetzen cannot hit
+the corrupt original; (N-2) `write_through_lock` removes `.bak` BEFORE `.wip` and both guarded
+(a raced `restore_from_bak` no longer fails a COMPLETED save), plus a test exercising the REAL
+`FileLock.overwrite` short-write path; (M-2-Rest) `vz_start`/`vz_end` coerce to int-or-None on
+load (mixed types crashed Merge's min/max span); the N-1 test now uses 43 docs/15 per part so
+the parts' TOC page counts really differ (the 45-doc variant was offset-blind); MT-15d ships a
+prepared `Defekte_Mappe.belegtool` sample (hand-made random corruption triggered the warning in
+only 5 of 30 tries) with a kit test asserting it reliably degrades.
 
 v3.11.3 — security + nesting release on top of v3.11.2 (2026-11-03):
 (1) *Dependency security updates* closing every open Dependabot alert — shipped: **Pillow 13.0.0**
@@ -795,6 +841,19 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   deepest folder of a previously imported ~120-deep archive can build >200 levels — save succeeds,
   reopen is refused by the loader. Needs stacked crafted archives plus a deliberate user action;
   follow-up idea: save-side depth warning or insert clamping.
+- **Accepted residuals from the 2026-11-04 QS assessment round** (documented, not fixed):
+  (1) whole (unsliced) leaves whose bytes fail in `_export_nodes_to_bytes` still only log —
+  TOC offsets then shift within that export; made unlikely by the H-1/N-4/I-3 load guards.
+  (2) Preview: after a geometry failure a same-id tree change clears the error banner and shows
+  „Keine Vorschau" until the node is re-selected (the failed `{count: 0}` sits in `geomCache`).
+  (3) `mark_saved` races a concurrent same-session edit between serialize and flag (pre-existing;
+  unreachable via the modal single-window UI). (4) M-1 hints: an `fsync` error on exotic SMB/NAS
+  shares now fails a save that silently "succeeded" before (intended — the bytes were not durable);
+  a crash can leave a `.tmp-<pid>` sibling (harmless, overwritten/removed next save). (5) With the
+  env-gated file lock ON, a SECOND user's `acquire_lock` runs `restore_from_bak` BEFORE its lock
+  attempt — a concurrent restore during an in-flight save is mitigated (guarded removes), but
+  reordering restore-after-lock is a deferred follow-up. (6) The open-warning banner shows the
+  full joined warning list (very many damaged nodes → long message).
 - **Two narrow close-time races, no data loss** *(QS-Gegenprüfung 2026-11-04, N-2/N-3 — accepted)*:
   (1) `_count_for` without a `session` arg (`_seed_single`, `page_count`) can re-insert a
   `(node_id, version)→int` page count into `_pcount` after a parallel `close_session` (tiny, no
@@ -1253,7 +1312,8 @@ embedded version). Low effort; do it on the next build bump.
   `_*_preview_pages` + background-compress threads; `preview_page.py` is deleted and the
   `generate_previews` flag is gone from `PDFStorage` (load is always bytes-only). What
   remains is the carrier surface (constructor, `set_original_and_current_data`, `to_dict`,
-  `from_recursive_array`, `copy`, the data properties, `_concat_children_data`, `is_valid`).
+  `from_recursive_array`, the data properties, `_concat_children_data`, `is_valid`;
+  `copy` removed 2026-11-04 with its only caller `export_selection`, I-2).
   The redundant PDFNode-op unit tests were dropped (the operations live in and are tested
   through `core/engine`/`core/commands` — `test_split_merge`, `test_engine_commands`, …);
   [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) guards the carrier.
@@ -1326,10 +1386,10 @@ embedded version). Low effort; do it on the next build bump.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**206 keys** —
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**218 keys** —
 the v3.9 base of 163 strings plus the DATEV v3.10/v3.11 additions: mode toggle, no-connection guard,
 filing dialog, Bezeichnung, checked-out-self notice; the exact count is asserted by `i18n.test.js`
-(`Object.keys(en).length === 206`), which also asserts every full-coverage language's
+(`Object.keys(en).length === 218`), which also asserts every full-coverage language's
 key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker
@@ -1370,7 +1430,7 @@ renders `LANGUAGE_NAMES`.
   maps a legacy/generic `en` (stored or `navigator.language`) → `en-US`, and matches an exact
   browser locale (`en-GB`) before the 2-letter fallback. **`en.js` stays as the base/coverage
   reference — don't register it as a selectable language.**
-- **Completeness (2026-06-08):** **19 languages are 100% (all 206 keys, incl. error messages)** — de (source),
+- **Completeness (2026-06-08):** **19 languages are 100% (all pre-2026-11-04 keys, incl. error messages; the 9 QS load/export-integrity keys are de+en pending batch)** — de (source),
   en-US, en-GB, fr, es, ca, ru, uk, hr, ko (professional), la (scholarly Latin), mnn (Minionese
   joke), the German dialects bar/nds/vie, and the Celtic + Yiddish best-effort cy/ga/gd/yi
   (**native review still welcome** — see each file's header). Intentional **partials** (only

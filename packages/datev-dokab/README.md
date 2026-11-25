@@ -43,6 +43,12 @@ The built-in default host `your-datev-server:58452` is a placeholder; set the re
   write-back is a permanent overwrite (callers should back up first, as `DatevService` does).
 - Vendor OpenAPI specs are vendor IP and are deliberately not part of this repository.
 
+## Trademark notice
+
+DATEV and DATEVconnect are trademarks of DATEV eG. This project is an independent, unofficial client and is
+**not affiliated with, endorsed or sponsored by DATEV eG**. The name is used only to describe the system this
+library talks to. No DATEV specification or other vendor material is included.
+
 ## License
 
 AGPL-3.0-or-later, see [LICENSE](LICENSE) - the same as the main project. As in the main project

@@ -86,8 +86,8 @@ Translations are welcome too: the UI strings are externalized (German source + E
 
 ## License
 
-Licensed under the **GNU Affero General Public License v3.0** (AGPLv3) — free to use, modify, and distribute, and free for personal use. If you use it to provide a network service, you must make your modified source code available to that service's users.
+Licensed under the **GNU Affero General Public License v3.0** (AGPLv3 or any later version, `AGPL-3.0-or-later`) — free to use, modify, and distribute, and free for personal use. If you use it to provide a network service, you must make your modified source code available to that service's users.
 
 A **commercial license** is available for closed-source or proprietary use. Contact: tobias.a.w.heinrich@gmail.com
 
-See [LICENSE](LICENSE) for the full AGPLv3 text and [LICENSE_COMMERCIAL.md](LICENSE_COMMERCIAL.md) for commercial terms.
+See [LICENSE](LICENSE) for the licence notice, [COPYING](COPYING) for the full AGPLv3 text and [LICENSE_COMMERCIAL.md](LICENSE_COMMERCIAL.md) for commercial terms.

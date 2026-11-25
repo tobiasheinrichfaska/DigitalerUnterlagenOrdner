@@ -1,7 +1,7 @@
 # Contributing to DigitalerUnterlagenOrdner (BelegTool)
 
 Thank you for your interest! This covers both **code contributions** and
-**beta-tester feedback**. The project is dual-licensed under AGPLv3 (open source)
+**beta-tester feedback**. The project is dual-licensed under AGPLv3-or-later (open source)
 and a commercial license.
 
 > 🇩🇪 Beiträge und Rückmeldungen auf **Deutsch** sind ebenfalls willkommen.

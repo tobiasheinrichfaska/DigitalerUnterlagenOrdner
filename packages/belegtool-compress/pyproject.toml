@@ -9,7 +9,7 @@ description = "Render-based and structural PDF compression (JPG/PNG/pikepdf vari
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "COPYING"]
 # PyMuPDF is AGPL-3.0 / Artifex-commercial: see README "Licensing note".
 dependencies = ["PyMuPDF", "Pillow", "pikepdf", "pypdf"]
 

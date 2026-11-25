@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-DigitalerUnterlagenOrdner (BelegTool) is licensed under AGPL-3.0-or-later (see `LICENSE`) and incorporates the
+DigitalerUnterlagenOrdner (BelegTool) is licensed under AGPL-3.0-or-later (see `LICENSE`, full text in `COPYING`) and incorporates the
 third-party components below. Data compiled 2026-11-25 from PyPI metadata (versions pinned in `requirements.txt`),
 wheel licence files (win_amd64, CPython 3.13), the npm lockfile (`webui/package-lock.json`) and upstream licence texts.
 Assessment and open questions: [`docs/licence-audit.md`](docs/licence-audit.md). This is not legal advice.
@@ -53,7 +53,7 @@ Licence files of the bundled PDF.js assets are shipped in `webui/dist/pdfjs/*/LI
 
 ## Own packages (same licence as this project)
 
-`packages/datev-dokab` and `packages/belegtool-archives`: AGPL-3.0-or-later.
+`packages/datev-dokab`, `packages/belegtool-archives` and `packages/belegtool-compress`: AGPL-3.0-or-later.
 
 ## Trademarks
 

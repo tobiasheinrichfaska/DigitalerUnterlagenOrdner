@@ -9,7 +9,7 @@ description = "Bomb-guarded extraction of ZIP/TAR/TGZ/EML/MSG containers into a 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "COPYING"]
 dependencies = []
 
 [project.optional-dependencies]

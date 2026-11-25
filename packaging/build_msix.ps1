@@ -43,6 +43,12 @@ if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $layout, $out | Out-Null
 Copy-Item (Join-Path $pkg "Assets") (Join-Path $layout "Assets") -Recurse
 Copy-Item $dist (Join-Path $layout "BelegTool") -Recurse
+# Licence texts next to BelegTool.exe (AGPL full text + owner notice + third-party notices)
+foreach ($f in @('COPYING','LICENSE','THIRD_PARTY_NOTICES.md')) {
+  $src = Join-Path $root $f
+  if (-not (Test-Path $src)) { throw "Licence file missing: $src" }
+  Copy-Item $src (Join-Path $layout "BelegTool\$f") -Force
+}
 $manifest = Get-Content (Join-Path $pkg "AppxManifest.xml") -Raw
 # Patch ONLY the <Identity> Version. The negative lookbehind prevents matching inside
 # MinVersion="..."/MaxVersionTested="..." (which contain the substring 'Version="..."').

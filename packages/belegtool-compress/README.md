@@ -38,7 +38,7 @@ Artifex license for PyMuPDF. The commercial license of the main project cannot g
 
 ## License
 
-AGPL-3.0-or-later, see [LICENSE](LICENSE) - the same as the main project. As in the main project
+AGPL-3.0-or-later, see [LICENSE](LICENSE) and [COPYING](COPYING) (full AGPL text) - the same as the main project. As in the main project
 ([DigitalerUnterlagenOrdner](https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner)), a
 **commercial license** is available for closed-source or proprietary use (contact:
 tobias.a.w.heinrich@gmail.com; terms in that repository's `LICENSE_COMMERCIAL.md`). Contributions

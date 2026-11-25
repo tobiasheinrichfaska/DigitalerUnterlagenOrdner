@@ -28,6 +28,13 @@ a = Analysis(
     datas=[
         # React production assets the pywebview host loads (PROD_INDEX).
         (os.path.join(PROJECT_DIR, 'webui', 'dist'), os.path.join('webui', 'dist')),
+        # Licence / notice texts (AGPL full text, owner notice, third-party notices).
+        # NOT LICENSE_COMMERCIAL.md: commercial terms are not part of the AGPL distribution.
+        # Note: with PyInstaller >= 6 onedir, dest '.' lands in _internal/; build_msix.ps1
+        # additionally copies them next to BelegTool.exe.
+        (os.path.join(PROJECT_DIR, 'COPYING'), '.'),
+        (os.path.join(PROJECT_DIR, 'LICENSE'), '.'),
+        (os.path.join(PROJECT_DIR, 'THIRD_PARTY_NOTICES.md'), '.'),
     ] + webview_datas + pynet_datas + clrloader_datas,
     hiddenimports=[
         'PIL',

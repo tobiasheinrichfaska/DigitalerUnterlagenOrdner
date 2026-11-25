@@ -31,7 +31,7 @@ Copy these into Partner Center. Two listing languages: **de-DE** (primary) and *
 > • Mehrsprachige Oberfläche
 > • Alles läuft **lokal** – keine Cloud, keine Konten, keine Telemetrie
 >
-> Open Source (AGPLv3). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
+> Open Source (AGPLv3 oder neuer). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
 > ablegen wollen.
 
 **Was ist neu (v3.11.4):**
@@ -73,7 +73,7 @@ Inhaltsverzeichnis
 > • Multilingual UI
 > • Everything runs **locally** — no cloud, no accounts, no telemetry
 >
-> Open source (AGPLv3). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
+> Open source (AGPLv3 or later). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
 
 **What's new (v3.11.4):**
 > Security update: updated image and PDF libraries (Pillow, pypdf, PDF.js) — among other

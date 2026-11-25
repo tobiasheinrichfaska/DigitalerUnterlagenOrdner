@@ -9,7 +9,7 @@ description = "Headless DATEVconnect Dokumentenablage (DMS v2) client with guard
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "COPYING"]
 dependencies = []
 
 [project.optional-dependencies]

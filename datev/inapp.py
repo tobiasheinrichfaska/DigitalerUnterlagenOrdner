@@ -22,7 +22,7 @@ import os
 import re
 from datetime import datetime
 
-from infra.log_config import diag, logger
+from ._log import diag, logger
 from .provenance import parse_checkout_path
 from .types import program_keeps_revisions
 from .writeback import CHECKED_OUT_SELF, LOCKED, OK, decide_save_back

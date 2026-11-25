@@ -13,7 +13,7 @@ import zipfile
 
 import pytest
 
-from universal_importer import archives
+from belegtool_archives import archives
 from helpers import create_valid_pdf
 
 

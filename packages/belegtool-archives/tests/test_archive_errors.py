@@ -19,7 +19,7 @@ import zipfile
 
 import pytest
 
-from universal_importer import archives
+from belegtool_archives import archives
 
 
 def test_zip_invalid_bytes_raises_value_error():

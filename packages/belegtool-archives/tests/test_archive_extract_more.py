@@ -1,6 +1,6 @@
 """Happy-path container extraction coverage (audit C-1, 2026-06-16).
 
-`universal_importer.archives` sat at ~58 % line coverage — the bomb guards and
+`belegtool_archives.archives` sat at ~58 % line coverage — the bomb guards and
 the plain eml body/attachment were tested, but the TAR extraction loop, the eml
 attachment **filename inference** + **inline-image** branches, and the entire
 `.msg` path were not. These tests drive those branches with content that converts
@@ -13,16 +13,13 @@ import zipfile
 from email.message import EmailMessage
 
 import pytest
-from PIL import Image
 
-from universal_importer import archives
+from belegtool_archives import archives
 from helpers import create_valid_pdf
 
 
 def _png_bytes(color=(30, 120, 200)):
-    buf = io.BytesIO()
-    Image.new("RGB", (48, 32), color).save(buf, format="PNG")
-    return buf.getvalue()
+    return b"\x89PNG\r\n\x1a\n" + bytes(color)  # opaque to the library; the converter is a fake
 
 
 # ---------------------------------------------------------------- TAR happy path

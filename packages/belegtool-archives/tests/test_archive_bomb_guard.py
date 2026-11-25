@@ -1,6 +1,6 @@
 """Audit follow-up: archive bomb guards (member count + decompressed-size limits).
 
-Locks the ZIP/TAR protections in `universal_importer.archives` so they can't
+Locks the ZIP/TAR protections in `belegtool_archives.archives` so they can't
 silently regress. The constants are monkeypatched low so the tests stay fast and
 don't actually materialize hundreds of MB.
 """
@@ -10,7 +10,7 @@ import zipfile
 
 import pytest
 
-from universal_importer import archives
+from belegtool_archives import archives
 
 
 def test_zip_rejects_too_many_members(monkeypatch):

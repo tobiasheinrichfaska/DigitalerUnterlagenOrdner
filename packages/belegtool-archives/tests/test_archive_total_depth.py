@@ -8,9 +8,10 @@ path depth and container nesting separately.
 import io
 import zipfile
 
-from universal_importer import archives
-from formats.pdf_storage import _MAX_TREE_DEPTH
+from belegtool_archives import archives
 from helpers import create_valid_pdf
+
+_MAX_TREE_DEPTH = 200  # the host .belegtool loader limit (mirrored; guarded host-side in tests/test_limits.py)
 
 
 def _deep_zip(levels: int, folders_per_level: int) -> bytes:

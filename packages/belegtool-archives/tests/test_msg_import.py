@@ -8,7 +8,7 @@ lost, silently. Fixed 2026-11-04: the OLE/CFB signature (D0 CF 11 E0 A1 B1 1A E1
 """
 import email.message
 
-from universal_importer import archives
+from belegtool_archives import archives
 from helpers import create_valid_pdf
 from msg_fixture import msg
 

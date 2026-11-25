@@ -34,9 +34,9 @@ Das Skript bricht bei einer fehlgeschlagenen Phase nicht ab, sondern protokollie
 - `build.ps1` löscht und baut `build\`, `dist\` und `.build_venv\` neu (bekanntes Verhalten, vgl. CLAUDE.md); danach fehlt pytest in `.build_venv` - der Testlauf nutzt dafür sein eigenes venv `testlauf-out\venv`.
 - Ergebnisdatei: `testlauf-out\testlauf-ergebnis.md` (mit lokalen Pfaden geschwärzt: `<repo>`, `%USERPROFILE%`).
 
-> **Erwartete Rotbefunde auf diesem Stand:** `requirements.txt` enthält noch `pillow-heif==1.3.0` (mit `libx265`) und `extract-msg==0.55.0`; das Bundle kann daher
-> `pi_heif` nicht enthalten, aber `pillow_heif` und eine `*x265*`-Datei. Phase 2b meldet das als FEHLER - das ist der **dokumentierte Ist-Stand laut Lizenz-Audit**,
-> kein Defekt des Laufs. Nach der HEIC-Umstellung auf `pi-heif` müssen die Prüfungen grün sein. Ebenso: `datev`, `belegtool_archives`, `belegtool_compress` müssen im Bundle sein.
+> **Erwartung auf diesem Stand:** HEIC läuft über `pi-heif` (kein `libx265`), daher müssen die Prüfungen `pi_heif` vorhanden, kein `pillow_heif`
+> und keine `*x265*`-Datei **grün** sein; `datev`, `belegtool_archives`, `belegtool_compress` müssen im Bundle sein. Weiterhin erwartbar nur als **Info**:
+> `extract_msg` und `fitz` stecken noch im Bundle (siehe Lizenz-Audit; werden erst mit dem späteren Ersatz verschwinden). Rot bei den Punkten oben ist ein echter Befund - melden.
 
 ## Phase 0 - Voraussetzungen (Skript)
 
@@ -110,9 +110,9 @@ Erwartung: endet mit „Fertig"; `dist\BelegTool\BelegTool.exe` existiert. Fehle
 |---|---|---|
 | `COPYING`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | jeweils in `_internal\` und/oder neben der Exe; das Skript meldet **wo** (laut `belegtool.spec` landen sie in `_internal`; neben der Exe kopiert sie nur `packaging\build_msix.ps1`) | „nur `_internal`" ist für den normalen Build zu erwarten; **fehlt** eine Datei → melden |
 | Module `datev`, `belegtool_archives`, `belegtool_compress` | im PYZ der Exe (Lesen über PyInstaller `CArchiveReader`, Fallback `build\belegtool\PYZ-00.toc`) | fehlt → melden (hidden import im `spec` greift nicht) |
-| `pi_heif` | im Bundle (nach HEIC-Umstellung) | derzeit erwartbar rot, s. Kasten oben |
-| **kein** `pillow_heif` | nicht im Bundle | derzeit erwartbar rot |
-| **keine** Datei `*x265*` | keine | derzeit erwartbar rot (`libx265-*.dll` aus pillow-heif); Dateiname melden |
+| `pi_heif` | im Bundle | fehlt → melden (hidden import im `spec` greift nicht) |
+| **kein** `pillow_heif` | nicht im Bundle | vorhanden → melden |
+| **keine** Datei `*x265*` | keine | vorhanden → melden (Dateiname angeben; Lizenz-Audit rot) |
 | `webui\dist\index.html` und `pdf-tool.html` | enthalten `Content-Security-Policy`; `pdfjs\wasm` vorhanden | fehlt → melden (leere/ungeschützte Oberfläche bzw. leere Scan-Seiten) |
 | Info `extract_msg` | nur Information (soll nach MSG-Ersatz „nein" sein) | - |
 

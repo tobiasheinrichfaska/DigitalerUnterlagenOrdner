@@ -467,7 +467,7 @@ Invoke-Phase '2b Bundle-Pruefung' {
     }
 
     if ($fails.Count -gt 0) {
-        return (New-Res 'FEHLER' (($fails -join '; ') + ' | Hinweis: pi_heif/pillow_heif/x265-Befunde sind VOR der HEIC-Umstellung auf pi-heif (siehe docs/pymupdf-extract-msg-ersatz.md) erwartbar'))
+        return (New-Res 'FEHLER' (($fails -join '; ') + ' | Hinweis: pi_heif muss im Bundle sein, pillow_heif und x265 duerfen es nicht (siehe docs/licence-audit.md)'))
     }
     return (New-Res 'OK' ('Lizenztexte: ' + ($infos -join ', ')))
 }

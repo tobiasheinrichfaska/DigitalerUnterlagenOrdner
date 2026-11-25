@@ -352,8 +352,10 @@ def test_curl_and_whoami_resolve_to_system32(monkeypatch):
     search path, which looks in the CURRENT DIRECTORY before System32 — a planted
     curl.exe would run with the user's SSO. The defaults must be absolute."""
     from datev.transport import system32_exe
+    # separator-agnostic: os.path.join yields "/" on a Linux CI runner, "\\" on Windows
+    norm = lambda p: p.replace("/", "\\").lower()
     curl = system32_exe("curl.exe")
-    assert curl.lower().endswith(r"\system32\curl.exe") and "\\windows\\" in curl.lower()
+    assert norm(curl).endswith(r"\system32\curl.exe") and "\\windows\\" in norm(curl)
     args = build_curl_args("GET", "https://h/v2/info", {}, allow_self_signed=False,
                            out_path="/tmp/o", body_path=None)
-    assert args[0].lower().endswith(r"\system32\curl.exe"), args[0]
+    assert norm(args[0]).endswith(r"\system32\curl.exe"), args[0]

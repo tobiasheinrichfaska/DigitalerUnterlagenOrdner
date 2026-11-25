@@ -925,7 +925,8 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   blocks navigation by drop/link in organizer and PDF-Tool; `?file=` only in the dev build.
   (H-4) `UniversalImporter._EXPECTED_MAGIC` pins .docx/.xlsx/.pptx/.odt/.ods/.odp to ZIP magic and
   .doc/.xls/.ppt to OLE magic (RTF/MHT named „.docx" bypassed the `.rels` scan); `tests/test_import_security.py`.
-  Offen aus dem Review (Medium/Low, nicht behoben): CSP fehlt, PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
+  CSP: erledigt (`vite.config.js` Plugin `csp-meta`, nur Production-Build, `<meta http-equiv>` in `index.html` + `pdf-tool.html`: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; object-src/base-uri/form-action none). Guard: `webui/e2e/csp.spec.js` via `npm run test:csp` (vite preview, Port 5179; in `test:all`). Nicht verifiziert: WebView2 unter Windows.
+  Offen aus dem Review (Medium/Low, nicht behoben): PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
 
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**

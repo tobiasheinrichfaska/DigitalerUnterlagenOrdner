@@ -43,11 +43,43 @@ function pdfjsAssets() {
   }
 }
 
+// Content-Security-Policy for the PRODUCTION build only. The pywebview bridge
+// (window.pywebview.api.*) makes any script injection critical, so the built pages carry a
+// strict policy as <meta http-equiv>. Not applied in dev (HMR/React-Refresh use inline scripts).
+// 'wasm-unsafe-eval' = PDF.js JBIG2/JPEG2000 wasm; worker blob: = PDF.js fake/real worker;
+// style 'unsafe-inline' = React style attributes + the inline <style> of pdf-tool.html.
+export const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "worker-src 'self' blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' blob: data:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join('; ')
+
+function cspMeta() {
+  return {
+    name: 'csp-meta',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        const tag = `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`
+        return html.replace(/(<meta charset="[^"]*"\s*\/?>)/i, `$1\n    ${tag}`)
+      },
+    },
+  }
+}
+
 // base: './' makes built asset paths relative, so the bundle loads from
 // file:// inside the pywebview window (prod). Dev uses the Vite server.
 export default defineConfig({
   base: './',
-  plugins: [react(), pdfjsAssets()],
+  plugins: [react(), pdfjsAssets(), cspMeta()],
   build: {
     // Two front-end surfaces share one app (see docs/pdf-tool.md):
     // index.html = organizer, pdf-tool.html = PDF-Tool (PDF.js).

@@ -10,6 +10,7 @@ const PORT = 5178 // workspace-standard web dev port
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'csp.spec.js', // needs the production build: see playwright.csp.config.js
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

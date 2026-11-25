@@ -25,7 +25,7 @@ export default defineConfig([
   },
   {
     // Playwright config + e2e specs run under Node (process.env, etc.).
-    files: ['playwright.config.js', 'e2e/**/*.{js,jsx}'],
+    files: ['playwright.config.js', 'playwright.csp.config.js', 'e2e/**/*.{js,jsx}'],
     languageOptions: { globals: { ...globals.node } },
   },
 ])

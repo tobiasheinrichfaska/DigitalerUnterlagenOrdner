@@ -17,6 +17,8 @@ from typing import List, Optional, Union
 import fitz
 from PIL import Image
 
+from belegtool_compress import pdfinfo as _pdfinfo
+
 from infra.log_config import logger
 
 DEFAULT_PREVIEW_DPI = 100
@@ -153,25 +155,12 @@ def render_page(
 
 
 def page_count(data: Optional[Union[bytes, io.BytesIO]]) -> int:
-    """Cheap page count (no rasterizing)."""
-    raw = _raw(data)
-    if not raw:
-        return 0
-    try:
-        with fitz.open(stream=raw, filetype="pdf") as doc:
-            return doc.page_count
-    except Exception:
-        return 0
+    """Cheap page count (no rasterizing; pikepdf, see ``belegtool_compress.pdfinfo``)."""
+    return _pdfinfo.page_count(data)
 
 
 def page_dims(data: Optional[Union[bytes, io.BytesIO]]) -> List[tuple]:
     """``(width, height)`` in points for every page — for stable placeholder
-    boxes in the virtualized scroller (no rasterizing)."""
-    raw = _raw(data)
-    if not raw:
-        return []
-    try:
-        with fitz.open(stream=raw, filetype="pdf") as doc:
-            return [(p.rect.width, p.rect.height) for p in doc]
-    except Exception:
-        return []
+    boxes in the virtualized scroller (no rasterizing; pikepdf, rotation/CropBox/
+    UserUnit-aware, see ``belegtool_compress.pdfinfo``)."""
+    return _pdfinfo.page_dims(data)

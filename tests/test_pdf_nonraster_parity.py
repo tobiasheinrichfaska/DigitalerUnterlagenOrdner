@@ -215,17 +215,22 @@ def test_split_keeps_uri_links():
 
 
 def test_split_internal_links_do_not_drag_in_other_pages():
-    """DELIBERATE DEVIATION from fitz-less behaviour: internal GoTo links are dropped on
-    split (their target pages are not in the chunk). What must hold with ANY engine:
-    a 1-page chunk of a doc with internal links has exactly 1 page and stays small —
-    it must not carry the source page tree along (qpdf would copy it via /Dest and /P)."""
-    n = 60
-    data = make_pdf(pages=n, link_uri=True, link_goto=True)
+    """DELIBERATE DEVIATION: internal GoTo links are dropped on split (their target pages are
+    not in the chunk; kept they would be dead links). What must hold with ANY engine: a
+    1-page chunk of a doc with internal links has exactly 1 page, stays small (no linked
+    page dragged along) and carries no dead /Dest."""
+    n = 40
+    data = make_pdf(pages=n, link_uri=True, link_goto=True, payload=20000)
     chunks = ENGINE.split_chunks(data, 1)
     assert len(chunks) == n
     biggest = max(len(b) for b, _ in chunks)
-    assert biggest < len(data) / 4, (biggest, len(data))
+    # one page = ~20 KB of image; a part that dragged a link target along would be >= 40 KB
+    assert biggest < 30000, (biggest, len(data))
     for blob, cnt in chunks[:5]:
         assert page_count(blob) == 1
         with pikepdf.open(io.BytesIO(blob)) as p:
             assert len(p.pages) == 1
+    for blob, cnt in chunks[:5]:
+        with pikepdf.open(io.BytesIO(blob)) as p:
+            for a in p.pages[0].obj.get("/Annots", []):
+                assert "/Dest" not in a

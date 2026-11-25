@@ -2,6 +2,12 @@
 
 Keine Rechtsberatung. Grundlage: `docs/licence-audit.md` (beide rot für die Kommerzlizenz). Grep-Inventar im Repo (ohne `.claude/worktrees`), PyPI-JSON (pypi.org/pypi/pypdfium2/json, /olefile/json) und pypdfium2-Doku (pypdfium2.readthedocs.io, Abschnitt Thread safety).
 
+## 0. Status Schritt 1 (C) – erledigt 2026-11-25
+
+Ersetzt durch pikepdf (kein `fitz` mehr dafuer): `split_chunks` (`core/engine.py`), `page_count`/`page_dims` (`belegtool_compress/pdfinfo.py`, `services/render.py` delegiert), `PDFNode._get_pdf_length`, die Seitenzahl-Guards und der Bild→PDF-Aufbau in `belegtool_compress/compress.py` (`_assemble_pdf`). **Verbleibend auf `fitz`: nur Rastern** (`services/render.py` render_page/render_pdf_to_*, `compress.py` `_render_chunk`/`_render_one_page`/`n_pages` fuer das Raster) – plus Test-/Skript-Generatoren.
+Paritaet: `tests/test_pdf_nonraster_parity.py` (94 Faelle, fitz als Orakel: /Rotate 90/270/450/-90/45, MediaBox-Offset/invertiert/leer, CropBox, UserUnit, vererbte Attribute, verschluesselt (leeres Passwort), Objekt-/xref-Streams, kaputte xref, 0 Seiten, 300 Seiten) und `packages/belegtool-compress/tests/test_assemble_images.py`/`test_assemble_odd_images.py`. Bewusste Abweichungen: interne GoTo-Links fehlen in Split-Teilen (URI bleibt); PNG-Seiten im Kompressor sind jetzt deflated statt Rohsamples (Variante „png" wird dadurch real klein), 16-bit-Grau-PNG rendert nicht mehr schwarz; 0-Seiten-Dokument wird nie als „kleinere Variante" angeboten.
+Messwerte (300 Seiten, 18 MB, alt fitz → neu pikepdf): `page_count` 0,4 → 12 ms (50 Seiten/1 MB: 0,11 → 0,97 ms; 1 Seite: 0,10 → 0,05 ms); `page_dims` 17 → 19 ms; `split_chunks(100)` 103 → 57 ms; `split_chunks(1)` (300 Teile) 2400 → 70 ms; Bildaufbau 300 Seiten JPEG 598 → 176 ms, PNG 1417 → 452 ms.
+
 ## 1. Inventar `fitz` (PyMuPDF)
 
 **Produktivcode** (nur 5 Dateien):

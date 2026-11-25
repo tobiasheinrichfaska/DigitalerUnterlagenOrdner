@@ -1,5 +1,6 @@
 import fitz
 from PIL import Image
+import hashlib
 import io
 import logging
 import threading
@@ -64,16 +65,20 @@ def compress_pdf_bytes(input_bytes: bytes, dpi: int = 150, method: str = "jpg") 
     # render, so a smaller result could have *fewer* pages than the source. Never return a
     # truncated document — fall back to the original if the page count dropped.
     try:
-        with fitz.open(stream=input_bytes, filetype="pdf") as src:
-            n_in = src.page_count
-        with fitz.open(stream=reencoded, filetype="pdf") as out:
-            n_out = out.page_count
-        if n_out < n_in:
+        n_in = _strict_page_count(input_bytes)
+        n_out = _strict_page_count(reencoded)
+        if n_in == 0 or n_out < n_in:
             return input_bytes
     except Exception:
         return input_bytes
     # Otherwise return whichever is smaller: the re-encoded result or the original.
     return reencoded if len(reencoded) < len(input_bytes) else input_bytes
+
+
+def _strict_page_count(data: bytes) -> int:
+    """Page count that RAISES on unreadable input (callers treat that as 'do not compress')."""
+    with pikepdf.open(io.BytesIO(data), suppress_warnings=True) as pdf:
+        return len(pdf.pages)
 
 
 class CompressionCancelled(Exception):
@@ -100,11 +105,12 @@ def compress_all_methods(
     # Source page count, for the truncation guard below. If even counting fails,
     # the input is too broken to compress safely — offer nothing.
     try:
-        with fitz.open(stream=input_bytes, filetype="pdf") as src:
-            n_pages = src.page_count
+        n_pages = _strict_page_count(input_bytes)
     except Exception as e:
         logger.warning("Kompression übersprungen (Quelle nicht lesbar): %s", e)
         return {}
+    if n_pages == 0:
+        return {}  # nothing to compress (a page-less document is never "smaller")
 
     for method in config.methods:
         if cancel is not None and cancel():
@@ -120,11 +126,11 @@ def compress_all_methods(
             # that fails to rasterize, so a "smaller" result can be smaller because
             # pages are MISSING. Applying it would silently lose the page — and on
             # reload the stored pdf_length would shift every following node's pages.
-            with fitz.open(stream=result, filetype="pdf") as out:
-                if out.page_count != n_pages:
-                    logger.warning("Kompression '%s' verworfen: %d statt %d Seiten",
-                                   method, out.page_count, n_pages)
-                    continue
+            n_out = _strict_page_count(result)
+            if n_out != n_pages:
+                logger.warning("Kompression '%s' verworfen: %d statt %d Seiten",
+                               method, n_out, n_pages)
+                continue
             if len(result) < len(input_bytes):
                 candidates[method] = result
         except CompressionCancelled:
@@ -272,16 +278,100 @@ def _render_pdf_as_images(
 
 def _assemble_pdf(rendered) -> bytes:
     """One page per ``(index, image_bytes, width_pt, height_pt)``, the image fitted
-    (aspect kept, centred) into the page."""
-    output_pdf = fitz.open()
+    (aspect kept, centred) into the page. Built with pikepdf: JPEG data is embedded as is
+    (DCTDecode); 8-bit non-interlaced grey/RGB PNG data is embedded as its deflated IDAT
+    stream with a PNG predictor (no decode/re-encode); anything else is decoded by Pillow
+    and stored deflated."""
+    pdf = pikepdf.Pdf.new()
+    shared = {}  # identical page images (repeated blank/stamp pages) are stored once, as fitz did
     for _idx, img_bytes, target_width, target_height in rendered:
-        rect = fitz.Rect(0, 0, target_width, target_height)
-        img_page = output_pdf.new_page(width=target_width, height=target_height)
-        img_page.insert_image(rect, stream=img_bytes, keep_proportion=True)
-
+        key = hashlib.sha1(img_bytes).digest()
+        if key not in shared:
+            shared[key] = _image_xobject(pdf, img_bytes)
+        xobj, px_w, px_h = shared[key]
+        scale = min(target_width / px_w, target_height / px_h)
+        dw, dh = px_w * scale, px_h * scale
+        x, y = (target_width - dw) / 2.0, (target_height - dh) / 2.0
+        content = "q %.6f 0 0 %.6f %.6f %.6f cm /Im0 Do Q" % (dw, dh, x, y)
+        page = pikepdf.Dictionary(
+            Type=pikepdf.Name.Page,
+            MediaBox=pikepdf.Array([0, 0, float(target_width), float(target_height)]),
+            Contents=pdf.make_stream(content.encode("ascii")),
+            Resources=pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=xobj)),
+        )
+        pdf.pages.append(pikepdf.Page(page))
     out_buf = io.BytesIO()
-    output_pdf.save(out_buf)
+    pdf.save(out_buf)
     return out_buf.getvalue()
+
+
+def _png_idat(data: bytes):
+    """``(width, height, colour_type, idat_bytes)`` of a PNG that can be embedded as is
+    (8-bit grey/RGB, non-interlaced, no ancillary transparency), else ``None``."""
+    import struct
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    pos, idat, hdr = 8, [], None
+    while pos + 8 <= len(data):
+        length, ctype = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        if ctype == b"IHDR":
+            hdr = struct.unpack(">IIBBBBB", body)
+        elif ctype == b"IDAT":
+            idat.append(body)
+        elif ctype in (b"PLTE", b"tRNS"):
+            return None
+        elif ctype == b"IEND":
+            break
+    if hdr is None or not idat:
+        return None
+    w, h, depth, ctype_, _comp, _filt, interlace = hdr
+    if depth != 8 or ctype_ not in (0, 2) or interlace != 0:
+        return None
+    return w, h, ctype_, b"".join(idat)
+
+
+def _image_xobject(pdf, img_bytes: bytes):
+    """PDF image XObject for encoded JPEG/PNG bytes -> ``(stream, px_width, px_height)``."""
+    Name = pikepdf.Name
+    with Image.open(io.BytesIO(img_bytes)) as im:
+        fmt, mode, (px_w, px_h) = im.format, im.mode, im.size
+        if fmt == "JPEG" and mode in ("L", "RGB"):
+            stream = pikepdf.Stream(pdf, img_bytes)
+            stream.Filter = Name.DCTDecode
+            stream.ColorSpace = Name.DeviceGray if mode == "L" else Name.DeviceRGB
+            stream.BitsPerComponent = 8
+        else:
+            png = _png_idat(img_bytes) if fmt == "PNG" else None
+            if png is not None:
+                _w, _h, ctype, idat = png
+                colors = 1 if ctype == 0 else 3
+                stream = pikepdf.Stream(pdf, idat)
+                stream.Filter = Name.FlateDecode
+                stream.DecodeParms = pikepdf.Dictionary(
+                    Predictor=15, Colors=colors, BitsPerComponent=8, Columns=px_w)
+                stream.ColorSpace = Name.DeviceGray if colors == 1 else Name.DeviceRGB
+                stream.BitsPerComponent = 8
+            else:
+                # generic path: decode, flatten alpha onto white, store deflated raw samples
+                import zlib
+                if mode in ("LA", "RGBA", "P", "PA") or "transparency" in im.info:
+                    rgba = im.convert("RGBA")
+                    base = Image.new("RGB", rgba.size, (255, 255, 255))
+                    base.paste(rgba, mask=rgba.getchannel("A"))
+                    flat = base
+                else:
+                    flat = im.convert("L" if mode in ("L", "1", "I;16", "I", "F") else "RGB")
+                stream = pikepdf.Stream(pdf, zlib.compress(flat.tobytes(), 6))
+                stream.Filter = Name.FlateDecode
+                stream.ColorSpace = Name.DeviceGray if flat.mode == "L" else Name.DeviceRGB
+                stream.BitsPerComponent = 8
+    stream.Type = Name.XObject
+    stream.Subtype = Name.Image
+    stream.Width = px_w
+    stream.Height = px_h
+    return stream, px_w, px_h
 
 
 def reencode_pdf_structure(pdf_bytes: bytes) -> bytes:

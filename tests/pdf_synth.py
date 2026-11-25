@@ -6,6 +6,7 @@ content of split parts via text extraction (done with fitz *in the test only*).
 """
 
 import io
+import os
 from typing import Dict, List, Optional
 
 import pikepdf
@@ -19,7 +20,8 @@ def label(i: int) -> str:
 def make_pdf(specs: Optional[List[Dict]] = None, *, pages: int = 0,
              inherit: Optional[Dict] = None, encrypt: bool = False,
              objstm: bool = False, link_uri: bool = False,
-             link_goto: bool = False, size: tuple = (595, 842)) -> bytes:
+             link_goto: bool = False, size: tuple = (595, 842),
+             payload: int = 0) -> bytes:
     """Build a PDF.
 
     ``specs``: one dict per page with optional ``mediabox`` / ``cropbox`` (4 numbers),
@@ -51,7 +53,13 @@ def make_pdf(specs: Optional[List[Dict]] = None, *, pages: int = 0,
         text = "BT /F1 24 Tf %s %s Td (%s) Tj ET" % (x0 + 72, y0 + 100, label(i))
         page.obj.Contents = pdf.make_stream(text.encode())
         if not (inherit and "Resources" in inherit):
-            page.obj.Resources = resources
+            page.obj.Resources = Dictionary(Font=Dictionary(F1=font))
+            if payload:  # incompressible per-page image so a wrongly copied page shows up in the size
+                img = pdf.make_stream(os.urandom(payload))
+                img.Type, img.Subtype = Name.XObject, Name.Image
+                img.Width, img.Height = payload, 1
+                img.ColorSpace, img.BitsPerComponent = Name.DeviceGray, 8
+                page.obj.Resources.XObject = Dictionary(Im0=img)
         else:
             if "/Resources" in page.obj:
                 del page.obj["/Resources"]

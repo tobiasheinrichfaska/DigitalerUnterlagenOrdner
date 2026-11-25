@@ -14,3 +14,7 @@ pythonnet==3.1.0
 ./packages/datev-dokab
 # After extraction (see packages/datev-dokab/EXTRACTION.md) replace the line above with:
 # datev-dokab @ git+https://github.com/<owner>/datev-dokab.git@v0.1.0
+# Archive/mail container extraction + bomb guards (import name "belegtool_archives"), developed in-repo; NOT editable.
+./packages/belegtool-archives
+# After extraction (see packages/belegtool-archives/EXTRACTION.md) replace the line above with:
+# belegtool-archives @ git+https://github.com/<owner>/belegtool-archives.git@v0.1.0

@@ -29,7 +29,7 @@ compress_pdf_bytes); `universal_importer/` = multi-format import package;
 `datev/` = the lazy DATEVconnect integration (now the separable package `packages/datev-dokab/`, see below; DATEV-mode only; never imported when
 off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`,
 `endpoints` (URL builder), `synthetic_pdf` (probe/test PDF); the research tool `probe_gui` lives in `tools/datev_probe/`);
-`infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
+`infra/` = ports + per-user state (tasks, log_config, tools, `limits.py` re-export, `settings.py`,
 `file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
@@ -51,6 +51,22 @@ pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](packages/datev-d
 must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
 after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
 
+### `packages/belegtool-archives/` — separable container-extraction library
+
+The container readers (ZIP/TAR/TGZ/EML/MSG extraction, nesting limits, bomb guards) and the shared caps
+(`limits.py`) live in `packages/belegtool-archives/` (import name `belegtool_archives`; own `pyproject.toml`, AGPL-3.0-or-later,
+no hard dependencies, README, LICENSE, `EXTRACTION.md`, tests in `packages/belegtool-archives/tests/`). **Boundary:** the package
+never imports the host (`infra`/`core`/`formats`/`universal_importer`, guarded by `test_standalone.py`); logger
+`logging.getLogger("belegtool_archives")`; member conversion (image/Office/HTML → PDF) is **injected** as
+`convert_member(content: bytes, name: str) -> bytes | BytesIO` (default: only `.pdf` passes through).
+`universal_importer/archives.py` is a thin shim that injects `UniversalImporter.convert`; `infra/limits.py` is a re-export
+(`services/variant_blobs.py`/`infra/tools.py` unchanged). `extract_msg` is an OPTIONAL extra (`msg`, ⚠ GPLv3 — see
+*Findings from 2026-10-18*); without it `.msg` degrades to „nicht importierbar". Installed non-editable via
+`./packages/belegtool-archives` in `requirements.txt`; `belegtool.spec` collects it as a hidden import; CI has an isolated
+`belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it. Extraction:
+`git filter-repo --subdirectory-filter packages/belegtool-archives` (see its `EXTRACTION.md`). Host-side companions:
+`tests/test_zip_member_guard_host.py`, `tests/test_limits.py`.
+
 ### Data model
 
 | File | Role |
@@ -62,7 +78,7 @@ after every change to it; a non-frozen `datev.config.json` is read from `DATEV_C
 
 | File | Role |
 |---|---|
-| `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (ZIP/TAR/email extraction + bomb guards). `__init__` re-exports the public surface. |
+| `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (thin shim over the separable package `belegtool_archives`, see below: ZIP/TAR/email extraction + bomb guards, with `UniversalImporter` injected as the member converter). `__init__` re-exports the public surface. |
 | `formats/toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
 | `formats/compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
 
@@ -858,7 +874,7 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   build is capped at **`_MAX_TOTAL_FOLDER_DEPTH = 120`** (nesting × member-path folders
   combined; overflow folds into names) so a crafted archive can never produce a tree the
   `.belegtool` loader (`_MAX_TREE_DEPTH = 200`) refuses to REOPEN — all guarded by
-  `tests/test_zip_member_guard.py` + `tests/test_archive_total_depth.py`.
+  `packages/belegtool-archives/tests/test_zip_member_guard.py` + `packages/belegtool-archives/tests/test_archive_total_depth.py`.
 - **Depth cap is per IMPORT, not per TREE** *(QS-Gegenprüfung 2026-11-04, N-1 — accepted)*: there is
   no depth check at the insertion target or on save, so importing a ~120-deep archive INTO the
   deepest folder of a previously imported ~120-deep archive can build >200 levels — save succeeds,
@@ -974,9 +990,9 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     round): routing now checks the OLE/CFB signature (`D0 CF 11 E0 A1 B1 1A E1`) FIRST, so a
     `.msg` whose raw bytes contain `b"From:"`/`b"Content-Type:"` (attached mail, HTML body of an
     English reply) no longer lands in the EML parser. The former strict-xfail guard
-    [`tests/test_msg_import.py`](tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
+    [`packages/belegtool-archives/tests/test_msg_import.py`](packages/belegtool-archives/tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
     went red on the fix and is now a normal passing test (marker dropped).
-  - **Synthetic `.msg` files for tests:** [`tests/msg_fixture.py`](tests/msg_fixture.py) writes real
+  - **Synthetic `.msg` files for tests:** [`packages/belegtool-archives/tests/msg_fixture.py`](packages/belegtool-archives/tests/msg_fixture.py) writes real
     CFB/MSG files (stdlib only: subject, body, attachments, optional content id) that `extract_msg`
     reads — so `.msg` paths can now be tested without real mail (Outlook is never touched).
   - **Licence: `extract-msg` is GPLv3** (checked in the 0.56.1 wheel's `LICENSE.txt`; `License: GPL`). It is
@@ -1262,7 +1278,7 @@ as **v3.10.0**.
     zip-quine → „zu tief verschachtelt"), and the bomb caps are now a **shared `_Budget`** (decoded
     bytes + member count) threaded through every level, so nesting can't compound past
     `infra.limits.BOMB_CAP_BYTES`/`BOMB_CAP_ENTRIES`. A corrupt/oversized inner container degrades to
-    „nicht importierbar" without aborting the import. Tests: `tests/test_archive_nested.py` (9 cases:
+    „nicht importierbar" without aborting the import. Tests: `packages/belegtool-archives/tests/test_archive_nested.py` (9 cases:
     cross-kind recursion, depth bound, shared byte+member budget, corrupt-nested degrade); existing
     `test_archive_*` unchanged. (Logged from the 2026-06-16 audit, finding #6; extended to nested
     mail 2026-06-26.)
@@ -1272,7 +1288,7 @@ as **v3.10.0**.
     merging siblings under shared folders — fixing the old zip **path-in-the-leaf-name** and the tar
     **basename-flatten** (which also dropped same-named files in different folders). Composes with
     the nesting above (a container at `sub/inner.zip` → `Ordner sub › Ordner inner.zip › …`). Tests:
-    `tests/test_archive_subfolders.py` (6).
+    `packages/belegtool-archives/tests/test_archive_subfolders.py` (6).
 13. **Configurable export split. — DONE (2026-06-26).** The export dialog
     ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)) gained **„In mehrere Dateien aufteilen"** with a
     page **threshold** (`split_pages`, default 100; off = single PDF) and a **break level**

@@ -211,7 +211,8 @@ def test_split_keeps_uri_links():
         with fitz.open(stream=blob, filetype="pdf") as d:
             for p in d:
                 uris = [lk.get("uri") for lk in p.get_links()]
-                assert "https://example.com/" in uris
+                # exact list-element match (not a substring test of a sanitised URL)
+                assert uris.count("https://example.com/") >= 1
 
 
 def test_split_internal_links_do_not_drag_in_other_pages():

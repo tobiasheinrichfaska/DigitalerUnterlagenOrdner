@@ -667,9 +667,8 @@ open when the confirm dialog breaks; engine variant layer freed on close; prefet
 on `_pcount` fixed. (6) Docs: DATA_CONTRACT `uid` corrected, data-model Werkseinstellungen,
 deep-copy claims removed, `requirements-dev.txt` (pytest), `testpaths = tests`, vitest
 `testTimeout`. Deferred: shared rasterization (L2), Split→fitz (L5), FreeText/JBIG2 e2e,
-import-router + CoreApi split (architecture). Open (needs verification): a host-side origin
-guard / drop-handler for the PDF-Tool window (an OS drop of an URL/HTML file might still
-navigate it — the link path is fixed).
+import-router + CoreApi split (architecture). Drop-Handler: erledigt 2026-11-25; host-seitiger
+WebView2-`AllowExternalDrop=false` bleibt offen (nur unter Windows prüfbar).
 
 **v3.11.4 — second QS round (2026-11-04, Fable review of the UNCHANGED core + Opus
 verification of every finding, all fixed test-first):** (H-1) *a corrupt `.belegtool` can no
@@ -914,6 +913,19 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   (no SSO storm) — toggle DATEV off/on or trigger a write to retry. The DATEVconnect OpenAPI specs in
   `vendor/` are **vendor IP — gitignored, never committed**. `import/` is an inbox: empty after
   processing, processed files go to the gitignored `import-archiv/<timestamp>/`.
+
+- **Security review 2026-11-25 – fixed (4 High):**
+  (H-1) HTML/e-mail import: `block_remote_link` returned `None`, xhtml2pdf then falls back to the original
+  URI → remote fetch + embedding of local images; now an inert `data:` placeholder, guard
+  `tests/test_html_import_e2e.py` (local HTTP server).
+  (H-2) `datev/config.py`: `datev.config.json` is never read from the CWD again (only next to the exe /
+  source root), `base_url` https-only without userinfo, curl with `--proto =https --proto-redir =https`;
+  tests `tests/test_datev_config_security.py`.
+  (H-3) Bridge: `HostApi.open` accepts only the host-assigned `startup_path`; `webui/src/lib/dropGuard.js`
+  blocks navigation by drop/link in organizer and PDF-Tool; `?file=` only in the dev build.
+  (H-4) `UniversalImporter._EXPECTED_MAGIC` pins .docx/.xlsx/.pptx/.odt/.ods/.odp to ZIP magic and
+  .doc/.xls/.ppt to OLE magic (RTF/MHT named „.docx" bypassed the `.rels` scan); `tests/test_import_security.py`.
+  Offen aus dem Review (Medium/Low, nicht behoben): CSP fehlt, PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
 
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**

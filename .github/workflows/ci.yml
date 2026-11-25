@@ -45,7 +45,10 @@ jobs:
       - name: datev-dokab pruefen (installiert, nicht editierbar)
         run: python -I -c "import datev, datev.inapp"
       - name: belegtool-archives pruefen (installiert, nicht editierbar)
-        run: python -I -c "import belegtool_archives, belegtool_archives.archives; import infra.limits, universal_importer.archives"
+        run: python -I -c "import belegtool_archives, belegtool_archives.archives"
+      - name: Hauptrepo-Weiterleitungen auf belegtool-archives pruefen
+        # bewusst OHNE -I: infra/ und universal_importer/ liegen im Repo-Verzeichnis (cwd)
+        run: python -c "import infra.limits, universal_importer.archives"
       - name: pytest
         run: python -m pytest
 

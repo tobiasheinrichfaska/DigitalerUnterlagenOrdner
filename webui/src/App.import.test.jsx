@@ -123,13 +123,22 @@ describe('App — bridge REJECTION surfaces as a visible error', () => {
 
 describe('App import — OS file drag-drop (fake files)', () => {
   it('drops two fake files: placeholders appear, each is imported, then they land as siblings', async () => {
-    const calls = await renderApp()
+    // The mocked import stays pending until released: the placeholders only exist WHILE an
+    // import is running, so an instantly-resolving mock raced the assertions on a slow CI
+    // runner (flaky red on GitHub Actions, green locally).
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    const calls = await renderApp({
+      import_bytes: () => gate.then(() => (
+        { ok: true, session: 's', tree: TREE_AFTER, can_undo: true, can_redo: false })),
+    })
     const files = [new File(['a'], 'eins.pdf'), new File(['b'], 'zwei.pdf')]
     fireEvent.drop(window, { dataTransfer: { files, types: ['Files'] } })
 
     // both dropped files show as progress placeholders immediately (same level)
     expect(await screen.findByText(/eins\.pdf/)).toBeInTheDocument()
     expect(screen.getByText(/zwei\.pdf/)).toBeInTheDocument()
+    release()
 
     // each file is imported via import_bytes (sequentially, order preserved)
     await waitFor(() => expect(callsOf(calls, 'import_bytes').length).toBe(2))

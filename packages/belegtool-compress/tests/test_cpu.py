@@ -1,11 +1,11 @@
-"""Unit tests for the CPU-fairness primitives (services/cpu.py).
+"""Unit tests for the CPU-fairness primitives (belegtool_compress/cpu.py).
 
 All OS calls are injected/forced, so these run deterministically on any host.
 """
 
 import pytest
 
-from services.cpu import (
+from belegtool_compress.cpu import (
     CAP_LOCAL,
     CAP_REMOTE,
     SystemCpuSampler,

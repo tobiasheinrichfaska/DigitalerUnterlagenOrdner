@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "belegtool-compress"
+version = "0.1.0"
+description = "Render-based and structural PDF compression (JPG/PNG/pikepdf variants) with CPU-fairness primitives"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+# PyMuPDF is AGPL-3.0 / Artifex-commercial: see README "Licensing note".
+dependencies = ["PyMuPDF", "Pillow", "pikepdf", "pypdf"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["belegtool_compress"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

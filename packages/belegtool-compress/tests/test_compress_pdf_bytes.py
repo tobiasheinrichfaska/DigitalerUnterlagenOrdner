@@ -1,7 +1,7 @@
 from pypdf import PdfReader
 import io
 
-from formats.compress_pdf_bytes import compress_pdf_bytes
+from belegtool_compress.compress import compress_pdf_bytes
 from helpers import create_valid_pdf
 
 
@@ -33,9 +33,9 @@ def test_compress_render_giant_page_is_bounded(monkeypatch):
     compress sweep on open (audit 2026-06-12)."""
     import fitz
     from PIL import Image
-    from formats import compress_pdf_bytes as cpb
-    from services import render
-    monkeypatch.setattr(render, "MAX_RENDER_PIXELS", 250_000)
+    from belegtool_compress import compress as cpb
+    from belegtool_compress import pixels
+    monkeypatch.setattr(pixels, "MAX_RENDER_PIXELS", 250_000)
     doc = fitz.open()
     doc.new_page(width=595, height=14400)  # A4 width → no width clamp; giant height
     try:
@@ -54,7 +54,7 @@ def test_compress_all_methods_drops_candidates_that_lose_pages(monkeypatch):
     the fixed per-node pdf_length shifts every FOLLOWING document's pages. The live
     path (engine → compress_all_methods) must never offer a truncated candidate;
     the old guard lived only in the unused compress_pdf_bytes()."""
-    from formats import compress_pdf_bytes as cpb
+    from belegtool_compress import compress as cpb
 
     original = create_valid_pdf(pages=3)
     # Precondition against a vacuous pass: the fixture must actually produce at

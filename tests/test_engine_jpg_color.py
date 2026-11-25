@@ -1,15 +1,9 @@
-"""The 'jpg_color' compression variant must keep colour; 'jpg' stays grayscale."""
+"""The 'jpg_color' variant must surface through the engine (needs core.engine -> host repo)."""
 
 import io
 
 import fitz
 from PIL import Image
-
-from formats.compress_pdf_bytes import (
-    CompressionConfig,
-    _render_pdf_as_images,
-    compress_all_methods,
-)
 
 
 def _colorful_pdf(pages=1) -> bytes:
@@ -43,40 +37,6 @@ def _is_grayscale(pdf_bytes: bytes) -> bool:
             if abs(r - g) > 6 or abs(g - b) > 6:
                 return False
     return True
-
-
-def test_jpg_color_variant_present_and_keeps_color():
-    src = _colorful_pdf(pages=2)
-    results = compress_all_methods(src, dpi=100)
-
-    assert "jpg_color" in results, f"variant missing; got {list(results)}"
-    assert not _is_grayscale(results["jpg_color"]), "jpg_color must preserve colour"
-
-
-def test_plain_jpg_still_grayscale():
-    src = _colorful_pdf(pages=1)
-    results = compress_all_methods(src, dpi=100)
-
-    if "jpg" in results:  # only assert if that method beat the original
-        assert _is_grayscale(results["jpg"]), "jpg must stay grayscale"
-
-
-def test_jpg_color_ignores_config_grayscale():
-    """jpg_color must render colour even when the config asks for grayscale."""
-    src = _colorful_pdf(pages=1)
-    gray_cfg = CompressionConfig(colorspace="gray")
-    out = _render_pdf_as_images(src, dpi=100, method="jpg_color", config=gray_cfg)
-    assert not _is_grayscale(out)
-
-
-def test_color_quality_setting_changes_size():
-    """jpeg_quality_color must actually drive the colour JPEG quality."""
-    src = _colorful_pdf(pages=2)
-    lo = _render_pdf_as_images(src, dpi=100, method="jpg_color",
-                               config=CompressionConfig(jpeg_quality_color=30))
-    hi = _render_pdf_as_images(src, dpi=100, method="jpg_color",
-                               config=CompressionConfig(jpeg_quality_color=90))
-    assert len(hi) > len(lo)
 
 
 def test_engine_exposes_jpg_color():

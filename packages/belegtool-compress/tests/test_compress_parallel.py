@@ -9,7 +9,7 @@ import threading
 import fitz
 import pytest
 
-from formats import compress_pdf_bytes as C
+from belegtool_compress import compress as C
 
 
 def _make_pdf(n_pages: int) -> bytes:
@@ -124,12 +124,3 @@ def test_cancellation_propagates_from_parallel_branch(monkeypatch):
     with pytest.raises(C.CompressionCancelled):
         C._render_pdf_as_images(data, dpi=100, method="jpg")
     assert time.time() - t0 < 1.5  # propagated promptly; siblings not awaited
-
-
-def test_engine_does_not_memoise_cancelled():
-    """A cancelled compress returns None and doesn't poison the memo."""
-    from core.engine import RealEngine
-    eng = RealEngine()
-    data = _make_pdf(6)
-    assert eng.compress(data, 100, cancel=lambda: True) is None  # cancelled immediately
-    eng.compress(data, 100)  # uncancelled run must still work (memo wasn't poisoned)

@@ -67,6 +67,21 @@ never imports the host (`infra`/`core`/`formats`/`universal_importer`, guarded b
 `git filter-repo --subdirectory-filter packages/belegtool-archives` (see its `EXTRACTION.md`). Host-side companions:
 `tests/test_zip_member_guard_host.py`, `tests/test_limits.py`.
 
+### `packages/belegtool-compress/` — separable PDF-compression library
+
+`formats/compress_pdf_bytes.py` (render-based jpg/jpg_color/png + pikepdf variants, `CompressionConfig`, `CompressionCancelled`,
+page-count truncation guard) and the CPU-fairness primitives (`services/cpu.py`: `worker_count`, below-normal threads, `SystemCpuSampler`,
+RAM budget) live in `packages/belegtool-compress/` (import name `belegtool_compress`: `compress.py`, `cpu.py`, `pixels.py`; own
+`pyproject.toml`, AGPL-3.0-or-later, deps PyMuPDF/Pillow/pikepdf/pypdf, README with PyMuPDF/Artifex licence note, `EXTRACTION.md`, tests in
+`packages/belegtool-compress/tests/`). **Boundary:** the package never imports the host nor `belegtool_archives` (guarded by `test_standalone.py`);
+logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py` and `services/cpu.py` are thin re-exports (guarded by
+`tests/test_compress_reexports.py`; `core.engine` lazy-imports through the shim). `pixels.capped_dpi` is a deliberate small copy of
+`services/render.capped_dpi` (render.py stays in the host; keep both budgets in step). Stay in the host: `render.py`, `render_service.py`,
+`variant_store`/`variant_blobs`, `infra/limits`, and the engine-bound tests (`test_engine_compress_cancel.py`, `test_engine_jpg_color.py`).
+Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`; `belegtool.spec` collects it; CI has an isolated
+`belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
+to it. Extraction: `git filter-repo --subdirectory-filter packages/belegtool-compress` (see its `EXTRACTION.md`).
+
 ### Data model
 
 | File | Role |

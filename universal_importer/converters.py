@@ -15,7 +15,7 @@ import pikepdf
 import pythoncom
 import win32com.client
 from PIL import Image
-from pillow_heif import register_heif_opener
+from pi_heif import register_heif_opener
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa

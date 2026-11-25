@@ -15,7 +15,7 @@ Bewertet wird zweifach: **AGPL** = Verteilung des Hauptrepos unter AGPL-3.0(-or-
 |---|---|
 | ROT (Komm.) | **PyMuPDF/MuPDF** (AGPL-3.0 oder Artifex-Kommerzlizenz): Der Eigentümer kann Dritten keine Nicht-AGPL-Lizenz am Gesamtprodukt einräumen, ohne selbst eine Artifex-Lizenz zu besitzen. Der Kern (Rendering, Engine) hängt an `fitz`. |
 | ROT (Komm.) | **extract-msg 0.55.0 (GPL-3.0, hart in `requirements.txt` gepinnt)** + transitiv **RTFDE (LGPL-3)**: das ausgelieferte Bundle enthält GPL-Code. Die Kommerzlizenz kann das nicht abdecken (so schon in CLAUDE.md, „Findings 2026-10-18"). |
-| ROT (Komm.) / GELB (AGPL) | **pillow-heif 1.3.0 Win-Wheel bündelt `libx265` (GPLv2)** + libheif/libde265 (LGPLv3): laut `LICENSES_bundled.txt` im Wheel „License for pillow-heif binary wheels: GPLv2". x265 bietet selbst eine proprietäre Kommerzlizenz (MulticoreWare). Mit AGPL-3.0 nur vereinbar, falls x265 „GPL-2.0-or-later" ist (COPYING nennt Version 2, die Beispielnotiz „or later" → juristisch/technisch klären). |
+| ~~ROT~~ erledigt 2026-11-25 | ~~pillow-heif 1.3.0 Win-Wheel bündelt `libx265` (GPLv2)~~ → ersetzt durch **pi-heif 1.4.0** (Win-Wheel cp313: nur libheif/libde265 LGPLv3 + MinGW-Runtime, **keine x265-DLL**, per `pip download --platform win_amd64 --python-version 3.13 --only-binary=:all:` + `unzip -l` belegt; `LICENSES_bundled.txt`: „binary wheels: LGPLv3"). Guard: `tests/test_no_gpl_codec_wheels.py`. Offen: Verhalten mit echten iPhone-HEICs unter PyInstaller/Windows ungeprüft. |
 | GELB | **LGPL-Komponenten** im Bundle: `svglib` (LGPL-3.0-or-later, via xhtml2pdf), `python-bidi` (LGPL, via xhtml2pdf), libheif/libde265 (LGPL-3), RTFDE. Mit AGPL kein Problem; für proprietäre Weitergabe: Austauschbarkeit/Quelltext-Angebot/Lizenztext nötig. |
 | GELB | **Kein Third-Party-Hinweis** im ausgelieferten Bundle/MSIX (vorher keine `THIRD_PARTY_NOTICES`). Jetzt als `THIRD_PARTY_NOTICES.md` im Repo angelegt; Einbindung ins Bundle/MSIX noch offen (To-dos). |
 | GELB | **`LICENSE` ist nur ein Kurztext (34 Zeilen) mit Link, nicht der volle AGPL-3.0-Text** (Hauptrepo und beide Pakete identisch, md5 `6f1c0339…`). AGPL verlangt, den Lizenztext mitzugeben. |
@@ -30,7 +30,7 @@ Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Ab
 |---|---|---|---|---|
 | PyMuPDF 1.27.2.3 | „GNU AGPL 3.0 or Artifex Commercial License" (Wheel-METADATA/`COPYING`; pymupdf.readthedocs.io: „available under both, open-source AGPL and commercial license agreements"; Artifex als Kommerzlizenzgeber) | grün | **rot** | Kommerzlizenz bei Artifex (artifex.com/licensing) nötig, sobald nicht-AGPL weitergegeben wird. |
 | Pillow 13.0.0 | MIT-CMU (PyPI `license_expression`) | grün | grün | Copyright-Hinweis beilegen. |
-| pillow-heif 1.3.0 | Python-Code BSD-3-Clause (Wheel `LICENSE.txt`); **Win-Wheel gesamt „GPLv2"** (`LICENSES_bundled.txt`): libheif LGPLv3 (v1.18.1), libde265 LGPLv3 (v1.0.15), **x265 GPLv2 (Release 3.4)**, libaom BSD-3 | gelb | **rot** | `libx265-*.dll` liegt im Wheel (belegt per `unzip -l`). Die App nutzt HEIC nur zum Lesen; x265 ist Encoder. Mögliche Abhilfe (ungeprüft): x265-DLL aus dem Bundle ausschließen / anderes Wheel; nur machbar, wenn libheif sie nicht hart braucht. |
+| pi-heif 1.4.0 (ersetzt pillow-heif 1.3.0) | Python-Code BSD-3-Clause; Win-Wheel „LGPLv3" (`LICENSES_bundled.txt`): libheif LGPLv3 (v1.18.1), libde265 LGPLv3 (v1.0.15); **kein x265, kein libaom** (Wheel-Inhalt belegt: libde265/libheif/libgcc_s/libstdc++/libwinpthread-DLLs) | gelb | **gelb** (war rot) | Nur Lesen (Decode); kein Encoder. LGPL-Auflage wie svglib/bidi. Test-Guard `tests/test_no_gpl_codec_wheels.py`. Ungeprüft: echte iPhone-HEICs unter Python 3.13/PyInstaller/Windows. |
 | pikepdf 10.7.3 | MPL-2.0; Wheel enthält qpdf (Apache-2.0), libjpeg (IJG), MSVC-Runtime (`licenses-for-wheels.txt`) | grün | grün | MPL: Änderungen an pikepdf-Dateien offenlegen (wir ändern nichts). |
 | pypdf 6.21.4 | BSD-3-Clause | grün | grün | |
 | reportlab 4.5.1 | BSD (PyPI) | grün | grün | |
@@ -92,7 +92,7 @@ Dev-/Build-Abhängigkeiten (vite, vitest, playwright, eslint …) landen nicht i
 ## 8. Juristisch klären
 
 - Trägt die Dual-Lizenz (AGPL + Eigentümer-Kommerzlizenz) bei einem Kern, der PyMuPDF (AGPL, Artifex-Kommerzlizenz) nutzt? Kann der Eigentümer ohne Artifex-Lizenz proprietär lizenzieren?
-- x265: GPL-2.0-only oder -or-later? Vereinbarkeit des pillow-heif-Win-Wheels (GPLv2) mit AGPL-3.0 beim Bündeln im PyInstaller-Verbund.
+- x265: GPL-2.0-only oder -or-later? Vereinbarkeit des pillow-heif-Win-Wheels (GPLv2) mit AGPL-3.0 beim Bündeln im PyInstaller-Verbund. (Seit 2026-11-25 gegenstandslos für das Bundle: x265 entfällt mit pi-heif.)
 - LGPL-3 (svglib, python-bidi, libheif, libde265, RTFDE) in PyInstaller-onedir/MSIX: genügt der Dateiaustausch, wie ist das PYZ-Archiv zu bewerten, was muss der Quelltext-Hinweis enthalten?
 - Liberation-Schriften (GPLv2 + Ausnahme, im pdf.js-Beipack) in einem proprietär weitergegebenen Bundle.
 - CLA: Reicht „nicht-exklusiv" für Unterlizenzierung; Beiträge Dritter in den ausgelagerten Repos.

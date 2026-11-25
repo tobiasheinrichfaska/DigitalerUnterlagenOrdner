@@ -39,6 +39,8 @@ a = Analysis(
     hiddenimports=[
         'PIL',
         'PIL.Image',
+        'pi_heif',
+        '_pi_heif',
         'fitz',
         'pikepdf',
         'pypdf',

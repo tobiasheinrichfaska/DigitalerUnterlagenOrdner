@@ -13,7 +13,7 @@ upstream projects named below (exact versions as pinned).
 |---|---|---|---|
 | PyMuPDF / MuPDF | 1.27.2.3 | AGPL-3.0 (dual: Artifex commercial) | https://github.com/pymupdf/PyMuPDF |
 | Pillow | 13.0.0 | MIT-CMU | https://github.com/python-pillow/Pillow |
-| pillow-heif | 1.3.0 | BSD-3-Clause; Windows wheel bundles libheif (LGPL-3.0, v1.18.1), libde265 (LGPL-3.0, v1.0.15), x265 (GPL-2.0, Release 3.4), libaom (BSD-3-Clause) | https://github.com/bigcat88/pillow_heif |
+| pi-heif | 1.4.0 | BSD-3-Clause; Windows wheel bundles libheif (LGPL-3.0, v1.18.1) and libde265 (LGPL-3.0, v1.0.15) + MinGW runtime; no x265, no libaom (read-only HEIC decode); replaces pillow-heif (x265 GPL-2.0) since 2026-11-25 | https://github.com/bigcat88/pillow_heif |
 | pikepdf | 10.7.3 | MPL-2.0; wheel bundles qpdf (Apache-2.0), libjpeg (IJG) | https://github.com/pikepdf/pikepdf |
 | pypdf | 6.21.4 | BSD-3-Clause | https://github.com/py-pdf/pypdf |
 | reportlab | 4.5.1 | BSD | https://www.reportlab.com/ |

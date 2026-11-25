@@ -2,7 +2,7 @@
 
 > **Status: built in v3.10.0.** This design is now implemented — settings gate
 > ([`infra/settings.py`](../infra/settings.py)), lazy service
-> ([`datev/inapp.py`](../datev/inapp.py)), provenance round-trip (`Node.datev` + `SetDatev`),
+> ([`datev/inapp.py`](../packages/datev-dokab/datev/inapp.py)), provenance round-trip (`Node.datev` + `SetDatev`),
 > and the `CoreApi.datev_*` / `HostApi` ops wired to [`DatevBar.jsx`](../webui/src/DatevBar.jsx)
 > and the export dialog. See the **In-app DATEV integration** section of the project
 > [`CLAUDE.md`](../CLAUDE.md). The text below is the authoritative spec it was built to.

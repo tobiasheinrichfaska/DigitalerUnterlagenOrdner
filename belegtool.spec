@@ -7,6 +7,8 @@ PROJECT_DIR = SPECPATH  # injected by PyInstaller: the spec's directory
 reportlab_imports = collect_submodules('reportlab')
 xhtml2pdf_imports = collect_submodules('xhtml2pdf')
 core_imports = collect_submodules('core')
+# datev-dokab: installed package, imported lazily in DATEV mode only (invisible to static analysis)
+datev_imports = collect_submodules('datev')
 
 # New GUI stack: pywebview + its Windows EdgeChromium backend (pythonnet/clr).
 # collect_all grabs the package submodules, data files and the native DLLs
@@ -49,7 +51,7 @@ a = Analysis(
         'clr',
         'webview.platforms.edgechromium',
         'webview.platforms.winforms',
-    ] + reportlab_imports + xhtml2pdf_imports + core_imports
+    ] + reportlab_imports + xhtml2pdf_imports + core_imports + datev_imports
       + webview_hidden + pynet_hidden + clrloader_hidden,
     hookspath=[],
     hooksconfig={},

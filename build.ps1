@@ -31,7 +31,10 @@ py "-$PyVer" -m venv $VenvDir
 
 Write-Host "=== Abhaengigkeiten installieren ===" -ForegroundColor Cyan
 & "$VenvDir\Scripts\python.exe" -m pip install --upgrade pip --quiet
-& "$VenvDir\Scripts\pip.exe" install -r "$Root\requirements.txt" --quiet
+# requirements.txt references ./packages/datev-dokab (pip resolves it against the cwd) -> run from $Root
+Push-Location $Root
+& "$VenvDir\Scripts\pip.exe" install -r "requirements.txt" --quiet
+Pop-Location
 
 Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
 & "$VenvDir\Scripts\pyinstaller.exe" "$Root\belegtool.spec" `

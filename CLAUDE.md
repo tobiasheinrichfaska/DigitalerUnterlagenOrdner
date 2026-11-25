@@ -26,9 +26,9 @@ engine, bridge, session, api, render_policy) with `core/ipc/` for the named-pipe
 transport; `services/` = stateful infra (render cache, CPU fairness, variants);
 `formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
 compress_pdf_bytes); `universal_importer/` = multi-format import package;
-`datev/` = the lazy DATEVconnect integration (DATEV-mode only; never imported when
+`datev/` = the lazy DATEVconnect integration (now the separable package `packages/datev-dokab/`, see below; DATEV-mode only; never imported when
 off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`,
-`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF), `probe_gui` (research tool));
+`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF); the research tool `probe_gui` lives in `tools/datev_probe/`);
 `infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
 `file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
@@ -38,6 +38,18 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. The **first** window **persists its geometry** (size/position/monitor) to `%APPDATA%\…\window.json` on close and restores it on next launch; a saved geometry whose monitor is gone falls back to the default (validated by the pure [`infra/window_geometry.py`](infra/window_geometry.py), tested). |
+
+### `packages/datev-dokab/` — separable DATEV library
+
+`datev/` (import name stays `datev`) lives in `packages/datev-dokab/` with its own `pyproject.toml`
+(AGPL-3.0-or-later, no dependencies), README, LICENSE and its internal tests (`packages/datev-dokab/tests/`;
+`test_datev_coreapi`/`test_datev_provenance_roundtrip` stay in `tests/` because they need `core`). The main repo
+installs it (non-editable) via `./packages/datev-dokab` in `requirements.txt`; `belegtool.spec` collects it as a
+hidden import; CI has an isolated `datev-dokab` job. **Extraction** into its own repo needs no code change:
+`git filter-repo --subdirectory-filter packages/datev-dokab`, tag `v0.1.0`, then switch `requirements.txt` to the
+pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](packages/datev-dokab/EXTRACTION.md). The package
+must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
+after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
 
 ### Data model
 
@@ -389,8 +401,8 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   user's own profile, never machine-wide) — required because DATEV authenticates via **Windows
   SSO as the logged-in user**. The header **„DATEV"** button ([`DatevBar.jsx`](webui/src/DatevBar.jsx))
   flips it via `HostApi.set_datev_mode` → `CoreApi.set_datev_mode`.
-- **Lazy service** ([`datev/inapp.py`](datev/inapp.py) `DatevService`) — built on first use over
-  the reusable, injected-transport [`datev/client.py`](datev/client.py) (SSO curl). Imports the
+- **Lazy service** ([`datev/inapp.py`](packages/datev-dokab/datev/inapp.py) `DatevService`) — built on first use over
+  the reusable, injected-transport [`datev/client.py`](packages/datev-dokab/datev/client.py) (SSO curl). Imports the
   `datev` package only when mode is on. `CoreApi._datev_get_service()` is the gate.
 - **Provenance** — the DATEV origin `{doc_guid, file_id, structure_item_id,
   correspondence_partner_guid, source_name}` lives on the **root** `Node.datev` field and
@@ -434,7 +446,7 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   illegal chars, trailing dots/spaces, and Windows reserved device names like `NUL`/`COM1`).
 - **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
   then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
-  [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
+  [`datev/writeback.py`](packages/datev-dokab/datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
   unchanged vs baseline · server bytes == opened original). `ok` → backup the fetched server
   bytes to `%APPDATA%\…\datev_backups\`, then `upload_document_file` → `update_structure_item`
   (the **stable** structure-item id; DokAb overwrites, no revision). **Any non-ok verdict
@@ -454,7 +466,7 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   `test_datev_writeback.py`). Frontend: `webui/src/DatevBar.test.jsx`, `lib/datev.test.js`, the
   export-option cases in `ExportDialog.test.jsx`. Live end-to-end is the
   [`manual_tests/10_datev.md`](manual_tests/10_datev.md) checklist (needs a DATEVconnect box).
-- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **maintained research
+- The standalone probe (`tools/datev_probe/probe_gui.py` + entry `datev_probe.py` → `DATEV-Probe.exe`) is **maintained research
   tooling**, not shipped in the BelegTool release. It is the live-DATEVconnect investigation
   vehicle and is used for manual housekeeping (e.g. `delete_document` of test docs). It is the
   **sole** caller of the `datev/client.py` read surface (`list_domains`/`list_documents`/

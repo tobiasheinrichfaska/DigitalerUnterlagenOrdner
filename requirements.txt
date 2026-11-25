@@ -10,3 +10,7 @@ extract-msg==0.55.0
 pywin32==312
 pywebview==6.2.1
 pythonnet==3.1.0
+# DATEV library (import name "datev"), developed in-repo for now; NOT editable.
+./packages/datev-dokab
+# After extraction (see packages/datev-dokab/EXTRACTION.md) replace the line above with:
+# datev-dokab @ git+https://github.com/<owner>/datev-dokab.git@v0.1.0

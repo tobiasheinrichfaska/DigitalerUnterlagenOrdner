@@ -77,7 +77,9 @@ def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path
     We never forward an Authorization header — SSO does the auth."""
     if curl is None:
         curl = system32_exe("curl.exe")  # absolute path, never the CWD search (L9)
-    args = [curl, "-sS", "--http1.1", "--negotiate", "-u", ":",
+    # --proto/--proto-redir: https only, even if a URL or redirect says otherwise (review H-2).
+    args = [curl, "-sS", "--proto", "=https", "--proto-redir", "=https",
+            "--http1.1", "--negotiate", "-u", ":",
             "--connect-timeout", "15", "--max-time", "30",
             "--retry", "1", "--retry-connrefused", "--retry-delay", "2",
             "--compressed", "-X", method, "-w", "%{http_code}", "-o", out_path]

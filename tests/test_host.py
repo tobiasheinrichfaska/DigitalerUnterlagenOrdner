@@ -213,6 +213,7 @@ def test_get_pdf_bytes_returns_bound_pdf(tmp_path):
     p = tmp_path / "scan.pdf"
     p.write_bytes(raw)
     api = host.HostApi(CoreApi())
+    api._startup_path = str(p)  # the host hands the launch path to the window (H-3 allow-list)
     opened = api.open(None, str(p))
     assert opened["ok"]
     res = api.get_pdf_bytes(opened["session"])
@@ -402,3 +403,42 @@ def test_close_guard_keeps_the_window_open_when_the_dialog_fails(monkeypatch):
     assert captured[0]() is False, "Fenster darf bei kaputtem Dialog nicht schließen"
     assert api._session in core._sessions  # nothing was torn down
     assert logged, "der Dialogfehler wurde nicht protokolliert"
+
+
+# --- bridge path allow-list (security review 2026-11-25, H-3) ----------------------------
+# HostApi.open(session, path) is reachable by ANY script that gets the pywebview bridge (e.g. a
+# hostile .html a user drops onto a window). It must only open the file the HOST handed this
+# window at launch (config().startup_path) — never an arbitrary path chosen by page JS.
+def _pdf(tmp_path, name="x.pdf"):
+    p = tmp_path / name
+    p.write_bytes(create_valid_pdf(1))
+    return str(p)
+
+
+def test_open_refuses_a_path_the_host_never_handed_out(tmp_path):
+    api = host.HostApi(CoreApi())
+    res = api.open(None, _pdf(tmp_path))
+    assert res["ok"] is False
+    assert api._session is None  # nothing got bound
+
+
+def test_open_refuses_a_different_path_than_the_startup_path(tmp_path):
+    api = host.HostApi(CoreApi())
+    api._startup_path = _pdf(tmp_path, "allowed.pdf")
+    res = api.open(None, _pdf(tmp_path, "other.pdf"))
+    assert res["ok"] is False
+
+
+def test_open_allows_the_startup_path_and_a_new_empty_document(tmp_path):
+    api = host.HostApi(CoreApi())
+    p = _pdf(tmp_path)
+    api._startup_path = p
+    assert api.open(None, p)["ok"] is True
+    assert host.HostApi(CoreApi()).open()["ok"] is True  # no path = new empty document
+
+
+def test_open_startup_path_comparison_is_normalised(tmp_path):
+    api = host.HostApi(CoreApi())
+    p = _pdf(tmp_path)
+    api._startup_path = p
+    assert api.open(None, str(tmp_path / "." / "x.pdf"))["ok"] is True

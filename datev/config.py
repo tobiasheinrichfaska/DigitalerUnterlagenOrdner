@@ -19,15 +19,19 @@ DEFAULT_BASE = f"https://{DEFAULT_HOST}"
 
 
 def basis_dir():
-    """Where to look for config: next to the exe when frozen, else cwd (as in OPOS)."""
+    """Where the config lives: next to the exe when frozen, else the source tree root.
+
+    NEVER the current working directory: opening a ``.belegtool`` by double-click makes ITS folder
+    the CWD, so a ``datev.config.json`` planted next to a received file would redirect the
+    Negotiate/SSO traffic to an attacker host (security review 2026-11-25, H-2)."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
-    return Path.cwd()
+    return Path(__file__).resolve().parent.parent
 
 
 def load_config(path=None):
-    """Load datev.config.json (explicit path, then cwd, then next to the exe). {} if none."""
-    candidates = [Path(path)] if path else [Path(CONFIG_NAME), basis_dir() / CONFIG_NAME]
+    """Load datev.config.json (explicit path, else next to the exe — never the CWD). {} if none."""
+    candidates = [Path(path)] if path else [basis_dir() / CONFIG_NAME]
     for p in candidates:
         try:
             return json.loads(Path(p).read_text(encoding="utf-8"))
@@ -63,7 +67,9 @@ def dms_base_url(cfg, default=DEFAULT_BASE + DMS_PATH):
     if not raw:
         return default
     p = urlparse(raw)
-    if not p.scheme or not p.netloc:
+    # Only plain https with a real host: no other scheme (cleartext Negotiate, ftp/smb/file via
+    # curl) and no ``user:pw@`` userinfo that could disguise the real target (review H-2).
+    if p.scheme != "https" or not p.hostname or "@" in p.netloc:
         return default
     return f"{p.scheme}://{p.netloc}{DMS_PATH}"
 

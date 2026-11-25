@@ -11,6 +11,11 @@ import 'pdfjs-dist/web/pdf_viewer.css'
 import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
 import { openFileDialog } from './fileDialog.js'
 import { datevSavedNotice, datevVerdictKey } from '../lib/datev.js'
+import { installDropGuard } from '../lib/dropGuard.js'
+
+// A file/link dropped on this window must never navigate it: pywebview would re-inject the JS
+// bridge into the dropped page (security review 2026-11-25, H-3).
+installDropGuard(window)
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -293,7 +298,9 @@ async function getBridge(timeoutMs = 4000) {
 }
 
 async function resolveDocumentArgs() {
-  const fileParam = new URLSearchParams(location.search).get('file')
+  // ?file= is a dev/e2e convenience only — in a production build the page can be navigated
+  // (or linked) with a query string, and must not then load an arbitrary URL as its document.
+  const fileParam = import.meta.env.DEV ? new URLSearchParams(location.search).get('file') : null
   const urlFallback = fileParam || '/spike-form.pdf'
   const api = await getBridge()
   bridge = api

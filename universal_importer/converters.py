@@ -116,9 +116,21 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     return ConvertedPDF(name=name, data=buffer)
 
 
+# Harmloser Ersatz für jede blockierte Ressource: ein 1×1-transparentes PNG als data:-URI.
+# WICHTIG: ``None`` zurückzugeben blockiert in xhtml2pdf NICHTS — ``pisaFileObject`` fällt bei
+# falsy Callback-Ergebnis auf die ORIGINAL-URI zurück (Sicherheitsreview 2026-11-25, H-1:
+# Remote-Abruf + Einbetten lokaler Dateien trotz „Blockade"). Darum liefern wir einen
+# self-contained Platzhalter, der nie ein Netzwerk-/Dateisystemziel hat.
+_BLOCKED_PLACEHOLDER = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+)
+
+
 def block_remote_link(uri: str, rel: str):
     """link_callback für xhtml2pdf: erlaubt NUR selbst-enthaltene Inline-
-    Ressourcen (``data:`` / ``cid:``) und blockiert alles andere.
+    Ressourcen (``data:`` / ``cid:``); alles andere wird durch einen inerten
+    ``data:``-Platzhalter ersetzt (nie ``None`` — siehe ``_BLOCKED_PLACEHOLDER``).
 
     Blockiert damit zwei Klassen von Angriffen aus einer importierten
     HTML-/E-Mail-Datei:
@@ -132,7 +144,7 @@ def block_remote_link(uri: str, rel: str):
     u = (uri or "").strip().lower()
     if u.startswith(("data:", "cid:")):
         return uri  # self-contained inline content only
-    return None  # block remote + local/file/relative
+    return _BLOCKED_PLACEHOLDER  # block remote + local/file/relative
 
 
 def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:

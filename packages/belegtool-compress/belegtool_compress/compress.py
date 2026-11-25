@@ -267,6 +267,12 @@ def _render_pdf_as_images(
 
     # assemble sequentially in page order → byte-identical to the old serial path
     rendered.sort(key=lambda t: t[0])
+    return _assemble_pdf(rendered)
+
+
+def _assemble_pdf(rendered) -> bytes:
+    """One page per ``(index, image_bytes, width_pt, height_pt)``, the image fitted
+    (aspect kept, centred) into the page."""
     output_pdf = fitz.open()
     for _idx, img_bytes, target_width, target_height in rendered:
         rect = fitz.Rect(0, 0, target_width, target_height)

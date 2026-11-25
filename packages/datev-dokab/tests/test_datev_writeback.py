@@ -29,8 +29,8 @@ def test_valid_provenance_accepts_numeric_string_structure_item_id():
                              "source_name": "351932 - 351927 - datev-probe-test.pdf"})
 
 
-def test_valid_provenance_rejects_crafted_belegtool_provenance():
-    # an untrusted .belegtool could carry a hostile datev dict — reject before any server call.
+def test_valid_provenance_rejects_crafted_host_provenance():
+    # an untrusted host document could carry a hostile datev dict — reject before any server call.
     assert not valid_provenance({"doc_guid": "not-a-guid", "file_id": 12})
     # file_id is ALWAYS a real int (parse → int; upload_document_file coerces → int); a string
     # file_id means the value was never a real id → reject (even a numeric one).

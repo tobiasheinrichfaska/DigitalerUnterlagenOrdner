@@ -1,6 +1,7 @@
 # Build the standalone DATEV read-probe as a ONE-FILE exe → dist/DATEV-Probe.exe
 #
-# The probe is stdlib-only (urllib / ssl / tkinter / json), so no requirements install is
+# The probe (tools/datev_probe/probe_gui.py) uses the `datev` library from packages/datev-dokab (put on
+# the PyInstaller path below, no pip install needed). It is stdlib-only (urllib / ssl / tkinter / json), so no requirements install is
 # needed; we reuse .build_venv only for its PyInstaller. Run build.ps1 once if the venv is
 # missing. PyInstaller writes INFO to stderr — do NOT redirect it (PowerShell 5.1 would turn
 # that into a terminating NativeCommandError); we check $LASTEXITCODE for real failure.
@@ -18,7 +19,7 @@ try {
         (Join-Path $root 'DATEV-Probe.spec') -ErrorAction SilentlyContinue
 
     Write-Host 'Building one-file exe (PyInstaller --onefile --windowed)…'
-    & $py -m PyInstaller --onefile --windowed --clean --noconfirm --name 'DATEV-Probe' 'datev_probe.py'
+    & $py -m PyInstaller --onefile --windowed --clean --noconfirm --paths 'tools\datev_probe' --paths 'packages\datev-dokab' --name 'DATEV-Probe' 'datev_probe.py'
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE)" }
 
     $exe = Join-Path $root 'dist\DATEV-Probe.exe'

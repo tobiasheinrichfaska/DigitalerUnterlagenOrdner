@@ -1,4 +1,4 @@
-"""The `datev/` package must stay extractable into its own repo: it may not import the
+"""The `datev` package (packages/datev-dokab) must stay extractable into its own repo: it may not import the
 host application (`infra`, `core`, `version_info`, `formats`, `services`, `host`...).
 Static (AST) check + an isolated-interpreter import without the app on sys.path."""
 
@@ -11,8 +11,7 @@ from pathlib import Path
 DATEV = Path(__file__).resolve().parent.parent / "datev"
 HOST_PACKAGES = {"infra", "core", "version_info", "formats", "services", "host",
                  "universal_importer", "webui"}
-# probe_gui is a research tool (tkinter) and is not part of the extractable library
-LIBRARY_FILES = [p for p in sorted(DATEV.glob("*.py")) if p.name != "probe_gui.py"]
+LIBRARY_FILES = sorted(DATEV.glob("*.py"))
 
 
 def _imported_roots(path):
@@ -33,7 +32,7 @@ def test_library_has_no_host_imports():
 
 def test_import_without_host_packages(tmp_path):
     shutil.copytree(DATEV, tmp_path / "datev",
-                    ignore=shutil.ignore_patterns("__pycache__", "probe_gui.py"))
+                    ignore=shutil.ignore_patterns("__pycache__"))
     code = (
         f"import sys; sys.path.insert(0, {str(tmp_path)!r})\n"
         "import datev, datev.inapp, datev.writeback, datev.provenance, datev.client\n"

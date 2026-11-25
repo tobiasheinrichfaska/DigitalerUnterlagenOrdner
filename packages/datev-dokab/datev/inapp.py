@@ -1,8 +1,8 @@
-"""In-app DATEV orchestration — the glue the BelegTool host calls in **DATEV mode only**.
+"""In-app DATEV orchestration — the glue a host application calls in **DATEV mode only**.
 
 Sits on top of the (tested, injected-transport) ``DatevConnectClient`` and the pure
 ``writeback``/``provenance`` helpers, and turns the open/save/file-anew flows of
-``docs/datev-integration-design.md`` into concrete steps:
+the integration design into concrete steps:
 
 - **capture** a document's DATEV origin from its checkout path (+ the open-time baseline),
 - **write back** edited bytes to an existing DATEV document, **guarded** by ``decide_save_back``
@@ -94,8 +94,8 @@ def is_my_checkout(doc, *, my_machine, my_user, my_dms_id=None):
     DATEV reports ``checkout_computer`` as ``"<label> (<windows-user>)"``, e.g. ``"WTS (USER1)"``.
     On a terminal server ``<label>`` (``WTS``) is a DATEV/TS session label, **not** the Windows
     ``COMPUTERNAME`` (e.g. ``TSHOST``), so comparing the machine string is meaningless — and
-    the same per-person, per-box label is stable. The discriminating part is the **session user**
-    (``USER1``), which equals the Windows ``USERNAME`` (``user1``) → that is "me on this box".
+    the same per-person, per-machine label is stable. The discriminating part is the **session user**
+    (``USER1``), which equals the Windows ``USERNAME`` (``user1``) → that is "me on this machine".
 
     The DMS user id (``checkout_user.id``) is kept as an ADDITIONAL accept signal, but it is NOT
     reliable on its own: a re-provisioned Nutzer leaves the checkout stamped with a now-DELETED
@@ -105,7 +105,7 @@ def is_my_checkout(doc, *, my_machine, my_user, my_dms_id=None):
 
     CONSERVATIVE: with neither the session user nor the DMS id confirmed → False, so a checkout by
     ANOTHER user (a different ``(windows-user)``) BLOCKS the write-back. (The caller logs the live
-    inputs so the match can be verified on the box.)"""
+    inputs so the match can be verified on a live system.)"""
     if not isinstance(doc, dict) or not doc.get("checked_out"):
         return False
     cc = str(doc.get("checkout_computer") or "")
@@ -137,7 +137,7 @@ def build_create_payload(*, file_id, client_guid, description, user_guid, domain
                          folder_id=None, register_id=None, structure_name="beleg.pdf",
                          created=None, receipt_date=None, fiscal_year=None, fiscal_month=None):
     """Pure: the DocumentCreate body for a class-1 ("Dokument") create — the mandatory
-    set proven on the live box (class · correspondence_partner_guid · description · domain ·
+    set proven on the live server (class · correspondence_partner_guid · description · domain ·
     user · one structure_item with counter/parent_counter + the dates + the int file id).
     **No `state` for class 1.** Optional, per the DATEV DMS Document spec: ``folder``/``register``
     placement; ``receipt_date`` (Belegdatum, the document's own date); ``year``/``month`` (the
@@ -229,7 +229,7 @@ def resolve_structure_item(structure_items, path_file_id=None):
 
 class DatevService:
     """Live in-app DATEV operations over an (injected) ``DatevConnectClient``. DATEV-mode
-    only; built lazily by ``CoreApi`` when the user's settings enable DATEV mode."""
+    only; built lazily by the host when the user's settings enable DATEV mode."""
 
     def __init__(self, client, feature=None, my_sid=None, base_url=None):
         self._client = client
@@ -386,7 +386,7 @@ class DatevService:
                 # Defense-in-depth: this is a reusable service — never let a doc_guid /
                 # file_id from a (possibly crafted) provenance inject path separators into
                 # the backup filename. Keep only hex/dash/digits; the result stays inside
-                # backup_dir regardless of caller (CoreApi also gates with valid_provenance).
+                # backup_dir regardless of caller (the host also gates with valid_provenance).
                 safe_guid = re.sub(r"[^0-9A-Fa-f-]", "", str(doc_guid))[:36] or "doc"
                 safe_fid = re.sub(r"[^0-9]", "", str(file_id)) or "f"
                 backup_path = os.path.join(
@@ -519,7 +519,7 @@ class DatevService:
 
         The breadcrumb logs BOTH sides of the computer/owner comparison (the checkout vs. this
         session) so the match rule can be verified — and hardened to require a computer+owner
-        match — from the field diag (belegtool_diag.log). See docs/datev-ticket-deleted-nutzer.md."""
+        match — from the host's field diagnostics."""
         my_machine, my_user = _local_identity()
         me_dms = pick_connection_user(self._safe_users(), self._my_sid) or {}
         mine = is_my_checkout(doc, my_machine=my_machine, my_user=my_user,

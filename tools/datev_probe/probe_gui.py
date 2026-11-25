@@ -19,12 +19,12 @@ from tkinter import filedialog, messagebox, ttk
 _SCIM_EXT = "urn:ietf:params:scim:schemas:extension:datev:2.0:user"
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-from .client import DatevConnectClient
-from .config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
-from .provenance import match_entries, provenance_stats
-from .synthetic_pdf import make_test_pdf
-from .transport import make_curl_sso_transport, make_urllib_transport
-from .types import DatevConfig, DatevError, program_keeps_revisions
+from datev.client import DatevConnectClient
+from datev.config import dms_base_url, load_config, resolve_auth_mode, self_signed_allowed
+from datev.provenance import match_entries, provenance_stats
+from datev.synthetic_pdf import make_test_pdf
+from datev.transport import make_curl_sso_transport, make_urllib_transport
+from datev.types import DatevConfig, DatevError, program_keeps_revisions
 
 DEFAULT_BASE = "https://localhost:58452/datev/api/dms/v2"
 TEST_DESC = "ZZZ TEST – DATEV-Probe – bitte löschen"

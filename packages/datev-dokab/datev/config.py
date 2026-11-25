@@ -1,7 +1,9 @@
-"""Connection config, mirroring OPOS's datev_api so the probe connects the same way:
+"""Connection config:
 a ``datev.config.json`` next to the exe ({base_url, auth, user, password, verify_tls}),
-loopback-aware self-signed TLS, and the same auth-mode resolution."""
+loopback-aware self-signed TLS, and auth-mode resolution."""
 import json
+import os
+import os
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,20 +14,25 @@ MASTER_DATA_PATH = "/datev/api/master-data/v1"  # client master data (spec: Clie
 IAM_PATH = "/datev/api/iam/v1"  # identity/users (per the Mitarbeiter domain link)
 
 # The on-prem DATEVconnect host to use when no datev.config.json is present — a PLACEHOLDER
-# (BelegTool runs on a workstation, DATEVconnect on the server). Set the REAL host in the
+# (the client runs on a workstation, DATEVconnect on the server). Set the REAL host in the
 # site-specific, gitignored datev.config.json; this hard-coded default is only a fallback.
 DEFAULT_HOST = "your-datev-server:58452"
 DEFAULT_BASE = f"https://{DEFAULT_HOST}"
 
 
 def basis_dir():
-    """Where the config lives: next to the exe when frozen, else the source tree root.
+    """Where the config lives: next to the exe when frozen; else the folder named by the
+    ``DATEV_CONFIG_DIR`` environment variable (explicit, for source/dev runs); else the folder
+    that contains the ``datev`` package (the source tree root, or site-packages once installed).
 
-    NEVER the current working directory: opening a ``.belegtool`` by double-click makes ITS folder
+    NEVER the current working directory: opening a document by double-click makes ITS folder
     the CWD, so a ``datev.config.json`` planted next to a received file would redirect the
     Negotiate/SSO traffic to an attacker host (security review 2026-11-25, H-2)."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
+    override = os.environ.get("DATEV_CONFIG_DIR")
+    if override:
+        return Path(override)
     return Path(__file__).resolve().parent.parent
 
 
@@ -50,7 +57,7 @@ def is_loopback(base_url):
 
 
 def resolve_auth_mode(cfg):
-    """Explicit ``auth`` wins; else Basic when a user is configured, else SSO (as in OPOS)."""
+    """Explicit ``auth`` wins; else Basic when a user is configured, else SSO ."""
     a = str((cfg or {}).get("auth") or "").lower()
     if a in ("sso", "basic"):
         return a
@@ -59,7 +66,7 @@ def resolve_auth_mode(cfg):
 
 def dms_base_url(cfg, default=DEFAULT_BASE + DMS_PATH):
     """The Dokumentenablage base, taking host+port from the config but **pinning the DMS
-    path**. An OPOS ``datev.config.json`` points ``base_url`` at the *accounting* API
+    path**. A ``datev.config.json`` often points ``base_url`` at the *accounting* API
     (``/datev/api/accounting/v1``); reusing it here would 404 on ``/info``. We keep its host
     and force ``/datev/api/dms/v2``. No usable host ⇒ ``default``
     (the on-prem DATEV server, not localhost)."""
@@ -77,7 +84,7 @@ def dms_base_url(cfg, default=DEFAULT_BASE + DMS_PATH):
 def master_data_base_url(dms_base, default=DEFAULT_BASE + MASTER_DATA_PATH):
     """The Client-Master-Data base, taking host+port from the DMS base but pinning the
     master-data path. Round 2 needs ``…/master-data/v1/clients`` to turn a Mandant number
-    into the ``correspondence_partner_guid`` a document create requires; the live box serves
+    into the ``correspondence_partner_guid`` a document create requires; the live server serves
     it on the same host:port as DMS (see the domain ``correspondence_partner.link``)."""
     p = urlparse(dms_base or "")
     if not p.scheme or not p.netloc:

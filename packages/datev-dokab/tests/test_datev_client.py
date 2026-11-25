@@ -170,7 +170,7 @@ def test_create_document_posts_json_body_and_returns_doc():
 
 
 def test_create_document_recovers_id_from_location_when_body_empty():
-    # the live box may answer 201 + empty body + Location header (no JSON id).
+    # the live server may answer 201 + empty body + Location header (no JSON id).
     loc = "https://h/v2/documents/doc-guid-xyz"
     cli, _ = _client(lambda *a: _resp(201, body=b"", headers={"location": loc}))
     doc = cli.create_document({"class": {"id": 1}})
@@ -287,7 +287,7 @@ def test_build_curl_args_uses_negotiate_and_drops_auth_header():
                            {"Accept": "application/json", "Authorization": "Basic x"},
                            allow_self_signed=False, out_path="/tmp/o", body_path=None)
     assert "--negotiate" in args and args[args.index("-u") + 1] == ":"  # current Windows user
-    assert "--http1.1" in args                                         # OPOS hardening (avoids 000)
+    assert "--http1.1" in args                                         # hardening (avoids 000)
     assert args[args.index("-X") + 1] == "GET"
     assert args[-1] == "https://h/v2/info"                              # url last
     assert "Accept: application/json" in args                          # forwarded
@@ -313,21 +313,21 @@ def test_build_curl_args_self_signed_and_file_body():
     assert "--data-binary" in args and args[args.index("--data-binary") + 1] == "@/tmp/body"
 
 
-# --- connection config (mirrors OPOS datev_api) ----------------------------
+# --- connection config ----------------------------
 def test_is_loopback():
     assert is_loopback("https://localhost:58452/x") and is_loopback("https://127.0.0.1/x")
     assert not is_loopback("https://server.firma.local/x")
 
 
-def test_resolve_auth_mode_matches_opos():
+def test_resolve_auth_mode_matches_reference_rules():
     assert resolve_auth_mode({"auth": "basic"}) == "basic"   # explicit wins
     assert resolve_auth_mode({"auth": "sso"}) == "sso"
     assert resolve_auth_mode({"user": "u@d.local"}) == "basic"  # user present ⇒ Basic
     assert resolve_auth_mode({}) == "sso"                    # nothing ⇒ Windows SSO
 
 
-def test_dms_base_url_pins_path_from_opos_accounting_config():
-    # the live 404: OPOS config points at the accounting API; we keep the host, pin DMS.
+def test_dms_base_url_pins_path_from_accounting_config():
+    # the live 404: a config may point at the accounting API; we keep the host, pin DMS.
     acc = {"base_url": "https://your-datev-server:58452/datev/api/accounting/v1"}
     assert dms_base_url(acc) == "https://your-datev-server:58452/datev/api/dms/v2"
     # already-correct DMS url is idempotent

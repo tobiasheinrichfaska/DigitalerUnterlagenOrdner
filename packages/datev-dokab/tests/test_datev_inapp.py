@@ -293,10 +293,10 @@ def _connected():
 def test_writeback_ok_uploads_and_puts(tmp_path):
     client, prov, baseline = _connected()
     res = DatevService(client).writeback(prov, baseline, b"%PDF edited",
-                                         comment="BelegTool", backup_dir=str(tmp_path))
+                                         comment="host-app", backup_dir=str(tmp_path))
     assert res["ok"] and res["verdict"] == "ok"
     assert client.uploaded == [b"%PDF edited"]
-    assert client.puts == [(GUID, 9085409, 9001, "BelegTool")]
+    assert client.puts == [(GUID, 9085409, 9001, "host-app")]
     assert res["provenance"]["file_id"] == 9001            # advances; sid stays stable
     assert res["provenance"]["structure_item_id"] == 9085409
     # the fetched server bytes were backed up locally before the overwrite
@@ -329,7 +329,7 @@ def test_writeback_my_own_checkout_returns_checked_out_self(monkeypatch):
     client.document["checked_out"] = True
     client.document["checkout_computer"] = "WTS (USER1)"
     client.document["checkout_user"] = {"id": "11111111", "is_deleted": True, "name": "User One"}
-    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", comment="BelegTool")
+    res = DatevService(client).writeback(prov, baseline, b"%PDF edited", comment="host-app")
     assert not res["ok"] and res["verdict"] == "checked_out_self"
     assert client.puts == [] and client.uploaded == []   # nothing written to the server
 
@@ -337,7 +337,7 @@ def test_writeback_my_own_checkout_returns_checked_out_self(monkeypatch):
 def test_writeback_foreign_checkout_is_locked_and_names_who(monkeypatch):
     # A checkout by ANOTHER user / on ANOTHER computer BLOCKS (LOCKED) and surfaces WHO has it.
     monkeypatch.setenv("COMPUTERNAME", "MYBOX")
-    monkeypatch.setenv("USERNAME", "tobias")
+    monkeypatch.setenv("USERNAME", "anna")
     client, prov, baseline = _connected()
     client.document["checked_out"] = True
     client.document["checkout_computer"] = "OTHERBOX (maxima)"
@@ -356,9 +356,9 @@ def test_writeback_server_bytes_changed_is_conflict_content():
 
 def test_is_my_checkout_and_label_pure():
     from datev.inapp import checkout_label, is_my_checkout
-    me = dict(my_machine="MYBOX", my_user="tobias", my_dms_id="u1")
+    me = dict(my_machine="MYBOX", my_user="anna", my_dms_id="u1")
     # the session user (the "(user)" in checkout_computer) matches my Windows USERNAME → mine
-    assert is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (tobias)"}, **me)
+    assert is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (anna)"}, **me)
     # DMS user id match is an ADDITIONAL accept signal (session label differs) → mine
     assert is_my_checkout({"checked_out": True, "checkout_computer": "SOMEHOST (svc)",
                            "checkout_user": {"id": "u1"}}, **me)
@@ -376,13 +376,13 @@ def test_is_my_checkout_and_label_pure():
     # session-user match is case-insensitive
     assert is_my_checkout({"checked_out": True, "checkout_computer": "WTS (User1)"},
                           my_machine="TSHOST", my_user="USER1")
-    # another USER (a different "(windows-user)") → NOT mine, even on the same box / foreign DMS id
+    # another USER (a different "(windows-user)") → NOT mine, even on the same machine / foreign DMS id
     assert not is_my_checkout({"checked_out": True, "checkout_computer": "WTS (MAXIMA)",
                                "checkout_user": {"id": "u2"}}, **me)
     assert not is_my_checkout({"checked_out": True, "checkout_computer": "MYBOX (maxima)",
                                "checkout_user": {"id": "u2"}}, **me)
     # not checked out / no checkout info → NOT mine (conservative → blocks)
-    assert not is_my_checkout({"checked_out": False, "checkout_computer": "MYBOX (tobias)"}, **me)
+    assert not is_my_checkout({"checked_out": False, "checkout_computer": "MYBOX (anna)"}, **me)
     assert not is_my_checkout({"checked_out": True}, **me)
     assert checkout_label({"checked_out": True, "checkout_user": {"name": "Maxima"},
                            "checkout_computer": "WTS"}) == "Maxima (WTS)"
@@ -399,7 +399,7 @@ def test_writeback_without_structure_item_refuses():
 
 def test_writeback_backup_filename_is_path_safe(tmp_path):
     # defense-in-depth: a crafted provenance must never let the backup escape backup_dir
-    # via path separators in doc_guid (CoreApi also gates with valid_provenance upstream).
+    # via path separators in doc_guid (the host also gates with valid_provenance upstream).
     import os
     client, prov, baseline = _connected()
     prov = dict(prov, doc_guid="../../../etc/evil")

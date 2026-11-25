@@ -185,7 +185,7 @@ class DatevConnectClient:
         return {"http_status": res.status, "raw_body": _text(res.body)}
 
     def create_document(self, payload):
-        """POST a DocumentCreate body -> the created Document. The live box may answer 201 with
+        """POST a DocumentCreate body -> the created Document. The live server may answer 201 with
         an empty body and the new id only in the ``Location`` header, so we fall back to that
         (and always surface the HTTP status) instead of returning a confusing empty result."""
         body = json.dumps(payload).encode("utf-8")

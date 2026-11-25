@@ -16,7 +16,7 @@ import urllib.request
 from .types import DatevError, HttpResponse
 
 # Hide the curl.exe console window on Windows — otherwise each SSO call flashes a window
-# in the windowed exe (mirrors OPOS datev_api._NO_WINDOW).
+# in the windowed exe.
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -66,7 +66,7 @@ def system32_exe(name: str) -> str:
 
 def build_curl_args(method, url, headers, allow_self_signed, out_path, body_path=None,
                     header_path=None, curl=None):
-    """Pure: the curl command line for one SSO request — mirrors OPOS's hardened ``curl_args``.
+    """Pure: the curl command line for one SSO request.
     ``--negotiate -u :`` authenticates as the current Windows user; ``--http1.1`` avoids the
     HTTP/2 framing errors that show up as ``http_code 000`` on large bodies (the big documents
     list); bounded timeouts + one retry let a transient drop self-heal; ``--compressed`` shrinks

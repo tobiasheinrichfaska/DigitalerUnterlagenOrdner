@@ -1,6 +1,6 @@
 """A tiny, hand-assembled one-page PDF — stdlib only, so the onefile probe needs no
 PDF library. Round 2 uploads THIS (never a real document) as the throwaway test file, so a
-create/exchange against the live box can never touch real client content."""
+create/exchange against the live server can never touch real client content."""
 
 
 def make_test_pdf(text="DATEV-Probe Testdokument – bitte löschen"):

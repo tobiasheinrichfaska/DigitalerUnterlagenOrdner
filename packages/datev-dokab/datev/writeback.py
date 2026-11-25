@@ -2,7 +2,7 @@
 the caller gathers the open-time baseline + the save-time re-read and acts on the verdict. Any
 non-OK verdict means: do NOT overwrite the DATEV document — offer a local filesystem save.
 
-See docs/datev-integration-design.md. DokAb keeps no revision, so the overwrite is permanent;
+DokAb keeps no revision, so the overwrite is permanent;
 this guard is what makes "update back to DATEV" safe on productive data.
 """
 
@@ -39,7 +39,7 @@ def is_connected(provenance):
 
 def valid_provenance(provenance):
     """Stronger than ``is_connected``: the provenance is **structurally trustworthy** for a
-    write-back. A ``.belegtool`` is untrusted input and can carry a crafted ``datev`` dict, so
+    write-back. A host document is untrusted input and can carry a crafted ``datev`` dict, so
     before any server call require a real GUID ``doc_guid``, an integer ``file_id``, and (if
     present) a ``structure_item_id`` that is an int OR the numeric string DATEVconnect returns
     for it. A bool is rejected (``bool`` is an ``int`` subclass)."""

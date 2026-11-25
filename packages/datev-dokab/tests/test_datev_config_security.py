@@ -1,5 +1,5 @@
 """Security review 2026-11-25, finding H-2: ``datev.config.json`` must never be read from the
-current working directory. Opening a ``.belegtool`` by double-click makes the file's folder the
+current working directory. Opening a document by double-click makes the file's folder the
 CWD, so a planted config there redirected the SSO (``curl --negotiate -u : -k``) to an
 attacker host. Also: only https, and curl is pinned to https."""
 
@@ -40,7 +40,7 @@ def test_basis_dir_is_never_the_cwd(tmp_path, monkeypatch):
 
 def test_basis_dir_frozen_is_the_exe_folder(tmp_path, monkeypatch):
     monkeypatch.setattr(config.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(config.sys, "executable", str(tmp_path / "BelegTool.exe"))
+    monkeypatch.setattr(config.sys, "executable", str(tmp_path / "app.exe"))
     assert config.basis_dir() == tmp_path
 
 
@@ -64,3 +64,29 @@ def test_curl_is_pinned_to_https():
     assert args[i + 1] == "=https"
     j = args.index("--proto-redir")
     assert args[j + 1] == "=https"
+
+
+def test_basis_dir_env_override_for_source_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(config.sys, "frozen", False, raising=False)
+    monkeypatch.setenv("DATEV_CONFIG_DIR", str(tmp_path))
+    assert config.basis_dir() == tmp_path
+
+
+def test_basis_dir_frozen_ignores_env_override(tmp_path, monkeypatch):
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "executable", str(tmp_path / "app.exe"))
+    monkeypatch.setenv("DATEV_CONFIG_DIR", str(tmp_path / "evil"))
+    assert config.basis_dir() == tmp_path
+
+
+def test_basis_dir_env_override_for_source_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(config.sys, "frozen", False, raising=False)
+    monkeypatch.setenv("DATEV_CONFIG_DIR", str(tmp_path))
+    assert config.basis_dir() == tmp_path
+
+
+def test_basis_dir_frozen_ignores_env_override(tmp_path, monkeypatch):
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "executable", str(tmp_path / "app.exe"))
+    monkeypatch.setenv("DATEV_CONFIG_DIR", str(tmp_path / "evil"))
+    assert config.basis_dir() == tmp_path

@@ -18,3 +18,7 @@ pythonnet==3.1.0
 ./packages/belegtool-archives
 # After extraction (see packages/belegtool-archives/EXTRACTION.md) replace the line above with:
 # belegtool-archives @ git+https://github.com/<owner>/belegtool-archives.git@v0.1.0
+# PDF compression + CPU-fairness primitives (import name "belegtool_compress"), developed in-repo; NOT editable.
+./packages/belegtool-compress
+# After extraction (see packages/belegtool-compress/EXTRACTION.md) replace the line above with:
+# belegtool-compress @ git+https://github.com/<owner>/belegtool-compress.git@v0.1.0

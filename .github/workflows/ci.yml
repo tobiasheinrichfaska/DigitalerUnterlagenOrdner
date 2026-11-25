@@ -49,6 +49,11 @@ jobs:
       - name: Hauptrepo-Weiterleitungen auf belegtool-archives pruefen
         # bewusst OHNE -I: infra/ und universal_importer/ liegen im Repo-Verzeichnis (cwd)
         run: python -c "import infra.limits, universal_importer.archives"
+      - name: belegtool-compress pruefen (installiert, nicht editierbar)
+        run: python -I -c "import belegtool_compress, belegtool_compress.compress, belegtool_compress.cpu"
+      - name: Hauptrepo-Weiterleitungen auf belegtool-compress pruefen
+        # bewusst OHNE -I: formats/ und services/ liegen im Repo-Verzeichnis (cwd)
+        run: python -c "import formats.compress_pdf_bytes, services.cpu"
       - name: pytest
         run: python -m pytest
 
@@ -87,6 +92,28 @@ jobs:
     defaults:
       run:
         working-directory: packages/belegtool-archives
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e .[dev]
+      - run: python -m pytest
+
+  # belegtool-compress (packages/belegtool-compress): Paket-Tests in Isolation - nur das Paket installiert,
+  # das Hauptrepo liegt nicht auf dem Pfad. Spaeter 1:1 in das eigene Repo uebernehmbar.
+  belegtool-compress:
+    name: belegtool-compress (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: packages/belegtool-compress
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

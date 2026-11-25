@@ -11,6 +11,8 @@ core_imports = collect_submodules('core')
 datev_imports = collect_submodules('datev')
 # belegtool-archives: installed package, reached via the lazily imported universal_importer / formats.pdf_storage
 archives_imports = collect_submodules('belegtool_archives')
+# belegtool-compress: installed package, lazily imported by core.engine / host._prewarm via formats.compress_pdf_bytes
+compress_imports = collect_submodules('belegtool_compress')
 
 # New GUI stack: pywebview + its Windows EdgeChromium backend (pythonnet/clr).
 # collect_all grabs the package submodules, data files and the native DLLs
@@ -53,7 +55,7 @@ a = Analysis(
         'clr',
         'webview.platforms.edgechromium',
         'webview.platforms.winforms',
-    ] + reportlab_imports + xhtml2pdf_imports + core_imports + datev_imports + archives_imports
+    ] + reportlab_imports + xhtml2pdf_imports + core_imports + datev_imports + archives_imports + compress_imports
       + webview_hidden + pynet_hidden + clrloader_hidden,
     hookspath=[],
     hooksconfig={},

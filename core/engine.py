@@ -13,6 +13,7 @@ import threading
 from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
 
+import pikepdf
 from pypdf import PdfReader, PdfWriter
 
 
@@ -39,6 +40,40 @@ class Engine(Protocol):
 
     def merge(self, parts: List[bytes]) -> bytes:
         """Concatenate PDFs page-by-page (used in D3b)."""
+
+
+def _cut_page_cross_references(pdf) -> None:
+    """Prepare the (private, in-memory) parse of the source for copying single pages out of it.
+    qpdf nulls references to other source pages on copy, which would leave DEAD internal links
+    (GoTo/Dest -> null) in every part; drop those annotations. Also cut what would drag the
+    siblings' structures along: an annotation's ``/P`` and (non-popup) ``/Parent`` (form-field
+    trees reach the widgets of every other page) and article beads ``/B``."""
+    for page in pdf.pages:
+        obj = page.obj
+        try:
+            if "/B" in obj:
+                del obj["/B"]
+            annots = obj.get("/Annots")
+            if annots is None:
+                continue
+            keep = pikepdf.Array()
+            for a in annots:
+                try:
+                    if "/Dest" in a:
+                        continue
+                    act = a.get("/A")
+                    if act is not None and act.get("/S") == pikepdf.Name.GoTo:
+                        continue
+                    if "/P" in a:
+                        del a["/P"]
+                    if "/Parent" in a and a.get("/Subtype") != pikepdf.Name.Popup:
+                        del a["/Parent"]
+                except Exception:
+                    continue
+                keep.append(a)
+            obj["/Annots"] = keep
+        except Exception:
+            continue
 
 
 class RealEngine:
@@ -202,25 +237,25 @@ class RealEngine:
         return parts
 
     def split_chunks(self, pdf_bytes: bytes, size: int) -> List[tuple]:
-        # Direct page-range copy via PyMuPDF — ~7x faster than per-page split + merge
-        # for chunked splits, and one source parse instead of N.
-        import fitz
+        # Direct page-range copy via pikepdf: one source parse instead of N (the old
+        # per-page split + merge re-parsed per page). Inherited page-tree attributes
+        # (MediaBox/Rotate/CropBox/Resources) are materialised by qpdf's page copy.
+        # Deliberate limit (like the export path): internal link/GoTo annotations are
+        # dropped (their targets live in other chunks); URI links stay. Outlines and the
+        # AcroForm tree are not carried.
         size = max(1, int(size))
-        src = fitz.open(stream=pdf_bytes, filetype="pdf")
-        try:
-            n = src.page_count
-            out: List[tuple] = []
+        out: List[tuple] = []
+        with pikepdf.open(io.BytesIO(pdf_bytes), suppress_warnings=True) as src:
+            _cut_page_cross_references(src)
+            n = len(src.pages)
             for i in range(0, n, size):
-                last = min(i + size - 1, n - 1)
-                d = fitz.open()
-                try:
-                    d.insert_pdf(src, from_page=i, to_page=last)
-                    out.append((d.tobytes(), last - i + 1))
-                finally:
-                    d.close()
-            return out
-        finally:
-            src.close()
+                last = min(i + size, n)
+                with pikepdf.Pdf.new() as dst:
+                    dst.pages.extend(src.pages[i:last])
+                    buf = io.BytesIO()
+                    dst.save(buf)
+                out.append((buf.getvalue(), last - i))
+        return out
 
     def merge(self, parts: List[bytes]) -> bytes:
         writer = PdfWriter()

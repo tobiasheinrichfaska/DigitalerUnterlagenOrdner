@@ -1,7 +1,7 @@
 import io
 import uuid
 from typing import Optional, List, Dict, Any
-import fitz
+import pikepdf
 from pypdf import PdfReader, PdfWriter
 from infra.log_config import logger
 
@@ -58,10 +58,10 @@ class PDFNode:
         if not data:
             return 0
         try:
-            # fitz page_count is ~ms; pypdf's len(reader.pages) parses the whole
+            # pikepdf opens lazily (~ms); pypdf's len(reader.pages) parses the whole
             # page tree and dominated headless import time.
-            with fitz.open(stream=data, filetype="pdf") as doc:
-                return doc.page_count
+            with pikepdf.open(io.BytesIO(data), suppress_warnings=True) as pdf:
+                return len(pdf.pages)
         except Exception:
             try:
                 return len(PdfReader(io.BytesIO(data)).pages)

@@ -82,6 +82,13 @@ Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`
 `belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
 to it. Extraction: `git filter-repo --subdirectory-filter packages/belegtool-compress` (see its `EXTRACTION.md`).
 
+**PyMuPDF only rasterizes now (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)).** Non-raster work runs on
+pikepdf: `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
+Letter default for a missing/empty box; `services/render.page_count/page_dims` delegate), `RealEngine.split_chunks` (pikepdf page copy; **internal
+GoTo/Dest links are dropped** per part, URI links stay), the compressor's image→PDF assembly `_assemble_pdf` (JPEG as DCT, 8-bit PNG as its deflated
+IDAT + predictor, identical page images shared; PNG variants are now genuinely small instead of raw samples, 16-bit grey PNG no longer renders black)
+and the page-count guards. Parity tests (fitz as oracle): `tests/test_pdf_nonraster_parity.py`, `packages/belegtool-compress/tests/test_assemble_*.py`.
+
 ### Data model
 
 | File | Role |
@@ -209,7 +216,7 @@ render/compress path at startup.
 
 | Package | Purpose |
 |---|---|
-| `PyMuPDF` (`fitz`) | PDF rendering to images |
+| `PyMuPDF` (`fitz`) | PDF **rasterizing** only (`services/render.py` render_page/render_pdf_to_*, `belegtool_compress` `_render_chunk`/`_render_one_page`) — every non-raster use was replaced by pikepdf 2026-11-25 |
 | `Pillow` | Image processing; HEIC support via `pillow-heif` |
 | `pikepdf` | Advanced PDF manipulation (annotations, outline/bookmarks) |
 | `pypdf` | PDF read/write (base) |
@@ -1392,7 +1399,7 @@ embedded version). Low effort; do it on the next build bump.
   through `core/engine`/`core/commands` — `test_split_merge`, `test_engine_commands`, …);
   [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) guards the carrier.
 - **Headless import is bytes-only end to end** — plain-PDF *and* archive/email
-  paths store bytes only (the carrier never renders); page count uses `fitz.page_count`;
+  paths store bytes only (the carrier never renders); page count uses pikepdf (`len(pdf.pages)`);
   the `/JSONStructure` metadata
   parse is gated on a cheap `b"/JSONStructure" in data` byte check (the marker
   survives pikepdf's compress+linearize, so `.belegtool`/structured-PDF imports are

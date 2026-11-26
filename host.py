@@ -31,8 +31,8 @@ def _prewarm():
     open/render doesn't pay the cold-import cost. Runs on a daemon thread at
     startup, concurrent with the user looking at the window / picking a file.
 
-    Deliberately does NOT touch universal_importer (win32com/COM, extract-msg,
-    pi-heif): that ~2.6 s cost is only needed to *import* Office/email/archive/
+    Deliberately does NOT touch universal_importer (win32com/COM,
+    pi-heif, the .msg reader): that ~2.6 s cost is only needed to *import* Office/email/archive/
     HEIC files, so it stays lazy and loads on first such import, not at startup.
     Best-effort; never blocks startup.
     """

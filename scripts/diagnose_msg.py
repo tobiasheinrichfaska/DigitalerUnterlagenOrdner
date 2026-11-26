@@ -1,9 +1,8 @@
-"""
-Diagnose-Skript fuer MSG-Dateien.
+r"""
+Diagnose-Skript fuer MSG-Dateien (nutzt den eigenen Leser belegtool_archives.msg_reader: olefile + compressed-rtf).
 Aufruf: python diagnose_msg.py "pfad\zur\datei.msg"
 """
 import sys
-import io
 import os
 
 if len(sys.argv) < 2:
@@ -17,36 +16,36 @@ print()
 
 # --- 1. Rohe Byte-Erkennung ---
 with open(path, "rb") as f:
-    data = f.read(32)
-print(f"Erste 32 Bytes (hex): {data.hex()}")
-with open(path, "rb") as f:
     raw = f.read()
+print(f"Erste 32 Bytes (hex): {raw[:32].hex()}")
+print(f"CFB-Signatur (echtes .msg): {raw[:8] == bytes.fromhex('D0CF11E0A1B11AE1')}")
 print(f"'Content-Type:' in Datei: {b'Content-Type:' in raw}")
 print(f"'From:'         in Datei: {b'From:' in raw}")
 print()
 
-# --- 2. extract_msg ---
+# --- 2. eigener MSG-Leser ---
 try:
-    import extract_msg
-    msg = extract_msg.Message(path)
+    from belegtool_archives import msg_reader
+    msg = msg_reader.open_msg(raw)
     print(f"Betreff  : {msg.subject!r}")
     print(f"Datum    : {msg.date!r}")
-    print(f"Von      : {msg.sender!r}")
-    print(f"htmlBody : {bool(msg.htmlBody)} ({len(msg.htmlBody or b'')} Bytes)")
-    print(f"body     : {bool(msg.body)} ({len(msg.body or '')} Zeichen)")
+    html = msg.html_body
+    print(f"htmlBody : {bool(html)} ({len(html or b'')} Bytes)")
+    print(f"body     : {bool(msg.text_body)} ({len(msg.text_body or '')} Zeichen)")
+    print(f"rtfBody  : {bool(msg.rtf_body)} ({len(msg.rtf_body or b'')} Bytes)")
     print()
-    print(f"Anzahl Anhaenge: {len(msg.attachments)}")
-    for i, att in enumerate(msg.attachments):
+    atts = list(msg.attachments())
+    print(f"Anzahl Anhaenge: {len(atts)}")
+    for i, att in enumerate(atts):
         try:
-            fname = att.longFilename or att.shortFilename or "(kein Name)"
-            data_att = att.data
-            size = len(data_att) if data_att else 0
-            print(f"  [{i}] {fname!r}  |  data={'None' if data_att is None else f'{size} Bytes'}  |  type={type(att).__name__}")
+            fname = att.name or "(kein Name)"
+            print(f"  [{i}] {fname!r}  |  art={att.kind}  |  {att.size} Bytes  |  {att.reason or 'ok'}")
         except Exception as e:
             print(f"  [{i}] FEHLER beim Lesen: {e}")
 except Exception as e:
-    print(f"extract_msg Fehler: {e}")
-    import traceback; traceback.print_exc()
+    print(f"MSG-Leser Fehler: {e}")
+    import traceback
+    traceback.print_exc()
 
 print()
 print("Fertig.")

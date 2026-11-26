@@ -13,9 +13,10 @@ license-files = ["LICENSE", "COPYING"]
 dependencies = []
 
 [project.optional-dependencies]
-# GPLv3 (!): see README "Licensing note". Without it .msg degrades to "nicht importierbar".
-msg = ["extract-msg==0.55.0"]
-dev = ["pytest", "extract-msg==0.55.0"]
+# Outlook .msg reader: olefile (BSD-2-Clause) + compressed-rtf (MIT) -- both permissive, see README.
+# Without them .msg degrades to "nicht importierbar".
+msg = ["olefile>=0.47", "compressed-rtf>=1.0.7"]
+dev = ["pytest", "olefile>=0.47", "compressed-rtf>=1.0.7"]
 
 [tool.setuptools]
 packages = ["belegtool_archives"]

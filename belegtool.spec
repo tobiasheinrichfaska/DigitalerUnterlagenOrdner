@@ -48,6 +48,9 @@ a = Analysis(
         'pypdf.filters',
         'pypdf.generic',
         'pypdf.xmp',
+        # .msg reader of belegtool_archives (olefile BSD-2, compressed-rtf MIT; imported in a try/except)
+        'olefile',
+        'compressed_rtf',
         'formats.pdf_node',
         'formats.pdf_storage',
         'formats.compress_pdf_bytes',
@@ -69,7 +72,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['pytest', 'unittest'],
+    # extract_msg (GPLv3) / RTFDE (LGPL) were replaced by the own olefile reader -- never bundle them again
+    # (guarded by tests/test_no_gpl_msg_deps.py).
+    excludes=['pytest', 'unittest', 'extract_msg', 'RTFDE'],
     noarchive=False,
     optimize=0,
 )

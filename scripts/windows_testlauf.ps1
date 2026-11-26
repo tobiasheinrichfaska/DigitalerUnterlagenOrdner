@@ -351,9 +351,9 @@ $bundleHelper = @'
 # Hilfsskript (vom Testlauf erzeugt): prueft, welche Module im PyInstaller-Bundle (PYZ) stecken.
 import re, sys
 exe, toc_file = sys.argv[1], sys.argv[2]
-REQ = ["datev", "belegtool_archives", "belegtool_compress", "pi_heif"]
-FORBID = ["pillow_heif"]
-INFO = ["extract_msg", "fitz"]
+REQ = ["datev", "belegtool_archives", "belegtool_compress", "pi_heif", "olefile", "compressed_rtf"]
+FORBID = ["pillow_heif", "extract_msg", "RTFDE"]
+INFO = ["fitz"]
 names = None
 source = ""
 try:

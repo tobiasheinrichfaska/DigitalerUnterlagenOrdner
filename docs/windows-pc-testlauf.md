@@ -35,8 +35,8 @@ Das Skript bricht bei einer fehlgeschlagenen Phase nicht ab, sondern protokollie
 - Ergebnisdatei: `testlauf-out\testlauf-ergebnis.md` (mit lokalen Pfaden geschwärzt: `<repo>`, `%USERPROFILE%`).
 
 > **Erwartung auf diesem Stand:** HEIC läuft über `pi-heif` (kein `libx265`), daher müssen die Prüfungen `pi_heif` vorhanden, kein `pillow_heif`
-> und keine `*x265*`-Datei **grün** sein; `datev`, `belegtool_archives`, `belegtool_compress` müssen im Bundle sein. Weiterhin erwartbar nur als **Info**:
-> `extract_msg` und `fitz` stecken noch im Bundle (siehe Lizenz-Audit; werden erst mit dem späteren Ersatz verschwinden). Rot bei den Punkten oben ist ein echter Befund - melden.
+> und keine `*x265*`-Datei **grün** sein; `datev`, `belegtool_archives`, `belegtool_compress`, `olefile` und `compressed_rtf` (eigener `.msg`-Leser) müssen im Bundle sein; `extract_msg` und `RTFDE` (GPLv3/LGPL, seit 2026-11-26 ersetzt) dürfen **nicht** mehr im Bundle sein. Weiterhin erwartbar nur als **Info**:
+> `fitz` steckt noch im Bundle (siehe Lizenz-Audit; verschwindet erst mit dem späteren PyMuPDF-Ersatz). Rot bei den Punkten oben ist ein echter Befund - melden.
 
 ## Phase 0 - Voraussetzungen (Skript)
 
@@ -109,12 +109,12 @@ Erwartung: endet mit „Fertig"; `dist\BelegTool\BelegTool.exe` existiert. Fehle
 | Prüfung | Erwartung | Befund → melden |
 |---|---|---|
 | `COPYING`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | jeweils in `_internal\` und/oder neben der Exe; das Skript meldet **wo** (laut `belegtool.spec` landen sie in `_internal`; neben der Exe kopiert sie nur `packaging\build_msix.ps1`) | „nur `_internal`" ist für den normalen Build zu erwarten; **fehlt** eine Datei → melden |
-| Module `datev`, `belegtool_archives`, `belegtool_compress` | im PYZ der Exe (Lesen über PyInstaller `CArchiveReader`, Fallback `build\belegtool\PYZ-00.toc`) | fehlt → melden (hidden import im `spec` greift nicht) |
+| Module `datev`, `belegtool_archives`, `belegtool_compress`, `olefile`, `compressed_rtf` | im PYZ der Exe (Lesen über PyInstaller `CArchiveReader`, Fallback `build\belegtool\PYZ-00.toc`) | fehlt → melden (hidden import im `spec` greift nicht) |
 | `pi_heif` | im Bundle | fehlt → melden (hidden import im `spec` greift nicht) |
 | **kein** `pillow_heif` | nicht im Bundle | vorhanden → melden |
 | **keine** Datei `*x265*` | keine | vorhanden → melden (Dateiname angeben; Lizenz-Audit rot) |
 | `webui\dist\index.html` und `pdf-tool.html` | enthalten `Content-Security-Policy`; `pdfjs\wasm` vorhanden | fehlt → melden (leere/ungeschützte Oberfläche bzw. leere Scan-Seiten) |
-| Info `extract_msg` | nur Information (soll nach MSG-Ersatz „nein" sein) | - |
+| **kein** `extract_msg`, **kein** `RTFDE` | nicht im Bundle (verboten, seit dem MSG-Ersatz 2026-11-26) | vorhanden → melden (Lizenz-Audit rot) |
 
 Manuell, falls nötig: `dir dist\BelegTool -Recurse -Filter *x265*` und `dist\BelegTool\_internal\webui\dist\index.html` im Editor nach `Content-Security-Policy` durchsuchen.
 
@@ -144,6 +144,17 @@ Start: `dist\BelegTool\BelegTool.exe` (aus Phase 2) oder aus dem Quelltext `test
 - [ ] **Doppelklick `.belegtool`:** im Explorer doppelklicken (Zuordnung nur bei Store-/MSIX-Installation vorhanden; sonst „Öffnen mit" → Exe). **Soll:** App startet mit der Datei, Baum sichtbar. **Fehler:** App startet leer → melden.
 - [ ] **Echte iPhone-HEIC** importieren (eigene Datei, nicht ins Repo/Meldung kopieren). **Soll:** 1 Seite, Bild in der Vorschau sichtbar. **Fehler:** Import-Meldung „nicht importierbar", 0 Seiten, schwarzes/leeres Bild → melden (HEIC-Variante: Live Photo? Format?). Besonders wichtig nach der pi-heif-Umstellung.
 - [ ] **Mail mit Anhang** (`.eml` und `.msg`) importieren. **Soll:** Ordner mit Mailtext + Anhang(en) im Baum; Anhang-PDF öffnet. **Fehler:** Anhang fehlt (bes. bei weitergeleiteter `.msg`) → melden. Nach dem MSG-Ersatz: dieselbe Mail gegen den Ist-Stand vergleichen (Phase 5).
+- [ ] **Echte Outlook-`.msg` (neuer eigener Leser, seit 2026-11-26)** - der Leser ist bisher **nur gegen synthetische Dateien** getestet (`packages\belegtool-archives\tests\msg_fixture.py`), **nicht** gegen echte Outlook-Mails. Deshalb mindestens diese **eigenen** Mails als `.msg` (Outlook: „Speichern unter → Outlook-Nachrichtenformat (Unicode)" bzw. auf den Desktop ziehen; nicht ins Repo und nicht in die Meldung kopieren) importieren und je Mail **Anzahl, Namen, Reihenfolge und Inhalt** der Knoten mit der Mail in Outlook vergleichen:
+  1. nur Text (Nur-Text-Format), mit Umlauten/€/ß in Betreff und Text;
+  2. HTML-Mail mit Formatierung und Bild im Text (Logo/Signatur) - das Bild darf als eigener Anhang erscheinen, der Text muss lesbar sein;
+  3. RTF-Mail (Nachrichtenformat „Rich-Text") ohne HTML - erscheint als `.rtf`/Text, nicht leer;
+  4. Mail mit **mehreren** Anhängen (PDF, Bild, Word/Excel, ZIP): jeder Anhang genau einmal, Dateiname mit Umlaut/Leerzeichen richtig, PDF öffnet;
+  5. **weitergeleitete** Mail („WG:") mit dem Original **als Anhang** (eingebettete `.msg`): **Soll (neu):** Unterordner „….msg" mit Text und Anhängen der eingebetteten Mail; mit dem alten Leser war das „nicht importierbar";
+  6. Mail ohne Betreff und Mail ohne Text (nur Anhang);
+  7. ältere Mail (ANSI-Format, z. B. „Outlook-Nachrichtenformat" statt „Unicode", oder aus einem alten Archiv) mit Umlauten;
+  8. Mail mit sehr großem Anhang (> 50 MB) und eine mit ≥ 20 Anhängen: kein Absturz, ggf. Hinweis „zu groß"/„Limit überschritten".
+
+  **Fehler:** fehlender/zusätzlicher Anhang, falscher Name, vertauschte Reihenfolge, falsches Datum im Namen (Soll: Sendedatum in UTC, `JJJJ-MM-TT`), verstümmelte Umlaute im Text, leerer Mailtext obwohl Outlook Text zeigt, Meldung „Ungültige MSG-Datei" bei einer in Outlook lesbaren Mail → melden (Mailtyp/Outlook-Version/Format angeben, **keinen Mailinhalt**). Hilfe: `python scripts\diagnose_msg.py <datei.msg>` listet Betreff/Datum/Bodies/Anhänge, wie der Leser sie sieht.
 - [ ] **Office-Datei** importieren - **nur mit Office** (Phase 0 „Office: ja"). **Soll:** 1+ Seiten, Text lesbar; ohne Office: verständliche Meldung „nicht importierbar". Wenn kein Office: „übersprungen" vermerken.
 - [ ] **Kompression Farbscan:** `Farbscan_Rechnung_3_Seiten.pdf` (Tester-Kit) importieren, Vorschau-Kompression öffnen. **Soll:** mehrere Verfahren mit Größen; vor/nach notieren (KB); Seitenzahl nach dem Übernehmen gleich (3). **Fehler:** Seitenzahl anders, Seite fehlt/leer, Größe größer als Original → melden.
 - [ ] **Export mit Inhaltsverzeichnis:** Export-Dialog, TOC an → speichern → Ergebnis-PDF in einem Viewer öffnen. **Soll:** Inhaltsverzeichnis vorn, Links springen zum Dokument, Lesezeichen vorhanden, Seitenzahlen stimmen.
@@ -164,7 +175,7 @@ $env:BELEG_FILE_LOCK = '1'
 - Golden-Vergleich alt (PyMuPDF) gegen neu (pypdfium2) auf `tests\data\input\`: Seitenzahl und Seitenmaße **exakt gleich**, Pixeldifferenz (SSIM/PSNR-Schwelle noch festzulegen).
 - Kompressionsgrößen je Methode/DPI vorher/nachher protokollieren (Delta), „Lesbarkeit"-Verhalten stichprobenartig prüfen.
 - `.msg`-Golden: dieselben (eigenen, nicht ins Repo gelegten) Outlook-Mails mit altem und neuem Leser; Betreff, Body, Anhänge, Weiterleitung, Embedded-Message vergleichen.
-- Bundle-Prüfung (Phase 2b) muss dann grün sein: kein `extract_msg`, kein `pillow_heif`, keine `*x265*`.
+- Bundle-Prüfung (Phase 2b) muss dann grün sein: kein `extract_msg`/`RTFDE`, kein `pillow_heif`, keine `*x265*` (die `.msg`-/HEIC-Teile sind bereits umgesetzt und werden schon jetzt geprüft).
 - Vorschau-Latenz auf dem PC (und stichprobenweise auf dem Terminalserver) wegen des Thread-Locks von pypdfium2.
 
 Skript und Befehle dafür gibt es noch nicht - hier nichts ausführen.

@@ -20,6 +20,7 @@ import zipfile
 import pytest
 
 from belegtool_archives import archives
+from helpers import create_valid_pdf
 
 
 def test_zip_invalid_bytes_raises_value_error():
@@ -86,28 +87,15 @@ def test_mail_body_respects_the_member_cap(monkeypatch):
     assert any("Limit überschritten" in n for n in names), names
 
 
-def test_cfb_msg_with_from_marker_routes_to_the_msg_parser(monkeypatch):
-    called = {}
-
-    class _Msg:
-        subject = "Betreff"
-        date = "2024-01-01"
-        htmlBody = None
-        body = "Text"
-        rtfBody = None
-        attachments = []
-
-    def fake_message(*a, **k):
-        called["msg"] = True
-        return _Msg()
-
-    monkeypatch.setattr(archives.extract_msg, "Message", fake_message)
-    # CFB container signature + an eml-looking marker in the raw body bytes
-    # (<b>From:</b> in an English Outlook reply) — must go to extract_msg.
-    data = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 16 + b"<b>From:</b> someone"
+def test_cfb_msg_with_from_marker_routes_to_the_msg_parser():
+    # A real CFB .msg whose HTML body contains an eml-looking marker (<b>From:</b> in an English Outlook
+    # reply): the raw bytes hold b"From:", yet it must go to the .msg reader and keep its attachment.
+    from msg_fixture import msg
+    data = msg("Betreff", None, html="<b>From:</b> someone", attachments=[("anhang.pdf", create_valid_pdf())])
+    assert b"From:" in data
     names = [n["name"] for n in archives.extract_email_to_structure(data)]
-    assert called.get("msg"), "CFB-Datei wurde nicht an den MSG-Parser geleitet"
-    assert any(n.startswith("Betreff") for n in names)
+    assert any(n.startswith("Betreff") for n in names), "CFB-Datei wurde nicht an den MSG-Parser geleitet"
+    assert "anhang.pdf" in names
 
 
 def test_invalid_msg_error_carries_its_cause():

@@ -23,11 +23,7 @@ from email import policy
 from email.parser import BytesParser
 from typing import Any, Callable, Dict, List, Optional, Union
 
-try:  # OPTIONAL (GPLv3, extra "msg"): without it .msg degrades to "nicht importierbar"
-    import extract_msg
-except ImportError:  # pragma: no cover - exercised by test_msg_optional
-    extract_msg = None
-
+from . import msg_reader
 from .limits import BOMB_CAP_BYTES, BOMB_CAP_ENTRIES, unsupported_zip_member
 
 logger = logging.getLogger("belegtool_archives")
@@ -515,15 +511,82 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
         except Exception:
             return _not_importable(filename)
 
-    def _member_for_attachment(content: bytes, name: str) -> Dict[str, Any]:
+    def _member_for_attachment(content: bytes, name: str, depth: int = _depth,
+                               folder_depth: int = _folder_depth) -> Dict[str, Any]:
         # #12: a nested container attachment is recursed; otherwise convert to PDF.
         if _is_nestable(name):
-            return _extract_nested(content, name, _depth, budget, _folder_depth)
+            return _extract_nested(content, name, depth, budget, folder_depth)
         try:
             return {"name": name, "content": _convert(budget, content, name)}
         except Exception as e:
             logger.warning("Anhang '%s' nicht importierbar: %s", name, e)
             return _not_importable(name, reason=str(e))
+
+    def _msg_children(message, depth: int, folder_depth: int) -> List[Dict[str, Any]]:
+        """Body + attachments of one Outlook message (the file itself or an embedded message)."""
+        out: List[Dict[str, Any]] = []
+        base_name = _build_base_name(message.subject, message.date)
+
+        try:
+            body = message.main_body()
+        except msg_reader.MsgTooLarge:
+            body = None
+            out.append(_not_importable(base_name, reason="zu groß"))
+        if body:
+            ext, body_bytes = body
+            file_name = f"{base_name}{ext}"
+            if not budget.can_take_member():  # member cap first (parity with zip/tar)
+                out.append(_not_importable(file_name, reason="Limit überschritten"))
+            else:
+                budget.take_member()
+                if not budget.would_exceed(len(body_bytes)):
+                    budget.take_bytes(len(body_bytes))
+                    out.append(_convert_mail_body(body_bytes, file_name))
+                else:
+                    out.append(_not_importable(file_name, reason="zu groß"))
+        elif not out:
+            out.append(_not_importable(base_name))
+
+        # Anhänge
+        for att in message.attachments():
+            if not budget.can_take_member():
+                out.append(_not_importable("Weitere Anhänge", reason="Limit überschritten"))
+                break
+            fname = "Anhang"  # gebunden, bevor att-Zugriffe werfen können
+            try:
+                fname = att.name or "Anhang"
+                if att.kind == "embedded":
+                    out.append(_embedded_message(att, fname, depth, folder_depth))
+                elif att.kind != "data":
+                    out.append(_not_importable(fname, reason=att.reason))
+                elif att.size:
+                    budget.take_member()
+                    if budget.would_exceed(att.size):
+                        out.append(_not_importable(fname, reason="zu groß"))
+                    else:
+                        data_att = att.read(cap=budget.bytes_remaining)
+                        budget.take_bytes(len(data_att))
+                        out.append(_member_for_attachment(data_att, fname, depth, folder_depth))
+                else:
+                    out.append(_not_importable(fname))
+            except Exception as e:
+                logger.warning("MSG-Anhang konnte nicht gelesen werden: %s", e)
+                out.append(_not_importable(fname if fname else "Anhang"))
+        return out
+
+    def _embedded_message(att, fname: str, depth: int, folder_depth: int) -> Dict[str, Any]:
+        """An attached Outlook message is recursed into a folder of ITS body + attachments (extract-msg
+        degraded it to "nicht importierbar"); same depth/budget rules as every nested container."""
+        budget.take_member()
+        if not _is_nestable(fname):
+            fname = (att.display_name or fname) + ".msg"
+        if depth + 1 > budget.max_depth or folder_depth + 1 >= _MAX_TOTAL_FOLDER_DEPTH:
+            return _not_importable(fname, reason="zu tief verschachtelt")
+        try:
+            children = _msg_children(att.message(), depth + 1, folder_depth + 1)
+        except Exception as e:
+            return _not_importable(fname, reason=str(e) or "Nachricht nicht lesbar")
+        return {"name": fname, "children": children}
 
     result = []
 
@@ -642,58 +705,15 @@ def extract_email_to_structure(path_or_bytes: Union[str, bytes, io.BytesIO],
 
     # .msg
     else:
-        if extract_msg is None:
-            raise ValueError("MSG-Unterstützung nicht installiert (optionales Paket extract-msg)")
         try:
-            msg = extract_msg.Message(io.BytesIO(data))
-            base_name = _build_base_name(msg.subject, msg.date)
-
-            # Body: Prioritätsliste
-            for attr, ext in [("htmlBody", ".html"), ("body", ".txt"), ("rtfBody", ".rtf")]:
-                content = getattr(msg, attr, None)
-                if content:
-                    body_bytes = content.encode("utf-8") if isinstance(content, str) else content
-                    file_name = f"{base_name}{ext}"
-                    if not budget.can_take_member():  # member cap first (parity with zip/tar)
-                        result.append(_not_importable(file_name, reason="Limit überschritten"))
-                        break
-                    budget.take_member()
-                    if not budget.would_exceed(len(body_bytes)):
-                        budget.take_bytes(len(body_bytes))
-                        result.append(_convert_mail_body(content, file_name))
-                    else:
-                        result.append(_not_importable(file_name, reason="zu groß"))
-                    break
-            else:
-                result.append(_not_importable(base_name))
-
-            # Anhänge
-            for att in msg.attachments:
-                if not budget.can_take_member():
-                    result.append(_not_importable("Weitere Anhänge", reason="Limit überschritten"))
-                    break
-                fname = "Anhang"  # gebunden, bevor att-Zugriffe werfen können
-                try:
-                    fname = att.longFilename or att.shortFilename or "Anhang"
-                    data_att = att.data
-                    if data_att:
-                        budget.take_member()
-                        att_len = len(data_att) if isinstance(data_att, (bytes, bytearray)) else 0
-                        if budget.would_exceed(att_len):
-                            result.append(_not_importable(fname, reason="zu groß"))
-                        else:
-                            budget.take_bytes(att_len)
-                            result.append(_member_for_attachment(data_att, fname))
-                    else:
-                        result.append(_not_importable(fname))
-                except Exception as e:
-                    logger.warning("MSG-Anhang konnte nicht gelesen werden: %s", e)
-                    result.append(_not_importable(fname if fname else "Anhang"))
-
+            message = msg_reader.open_msg(data)
+            result.extend(_msg_children(message, _depth, _folder_depth))
         except Exception as e:
             # Ursache mitgeben (Log + __cause__) — "Ungültige MSG-Datei" allein ließ
-            # den eigentlichen Fehler (defekter CFB, extract_msg-Bug) unsichtbar.
+            # den eigentlichen Fehler (defekter CFB, Reader-Bug) unsichtbar.
             logger.warning("MSG-Parsing fehlgeschlagen: %s", e)
+            if not msg_reader.AVAILABLE:
+                raise ValueError("MSG-Unterstützung nicht installiert (optionale Pakete olefile, compressed-rtf)") from e
             raise ValueError("Ungültige MSG-Datei") from e
 
     return result

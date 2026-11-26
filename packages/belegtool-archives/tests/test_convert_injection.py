@@ -86,8 +86,8 @@ def test_tar_and_eml_take_the_converter_too():
     assert "t.png" in seen and "m.png" in seen
 
 
-def test_msg_without_extract_msg_degrades(monkeypatch):
-    monkeypatch.setattr(archives, "extract_msg", None)
+def test_msg_without_the_optional_msg_packages_degrades(monkeypatch):
+    monkeypatch.setattr(archives.msg_reader, "AVAILABLE", False)      # as if olefile/compressed-rtf were missing
     # a bare CFB signature routes to the .msg branch
     cfb = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512
     import pytest

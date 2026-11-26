@@ -143,26 +143,12 @@ def test_forwarded_eml_attachment_is_recursed():
 
 
 # ----------------------------------------------- cross kind: zip inside a .msg
-def test_zip_attachment_in_msg_is_recursed(monkeypatch):
+def test_zip_attachment_in_msg_is_recursed():
     pdf = create_valid_pdf(pages=1)
     inner = _zip_bytes({"m.pdf": pdf})
 
-    class _Att:
-        longFilename = "anhang.zip"
-        shortFilename = None
-        data = inner
-
-    class _Msg:
-        subject = "Mit Zip"
-        date = "2024-01-01"
-        htmlBody = None
-        body = "Text"
-        rtfBody = None
-        attachments = [_Att()]
-
-    # bytes must NOT contain Content-Type:/From: so routing picks the .msg branch
-    monkeypatch.setattr(archives.extract_msg, "Message", lambda *a, **k: _Msg())
-    struct = archives.extract_email_to_structure(b"\xd0\xcf\x11\xe0not-an-eml")
+    from msg_fixture import msg
+    struct = archives.extract_email_to_structure(msg("Mit Zip", "Text", [("anhang.zip", inner)]))
 
     folder = next((n for n in _walk(struct) if n.get("name") == "anhang.zip"), None)
     assert folder is not None and "children" in folder

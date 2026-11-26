@@ -22,3 +22,8 @@ Run in a **fresh clone** of the main repository:
 
 `pixels.capped_dpi` is a deliberate small copy of `services/render.capped_dpi` (the host's preview renderer
 keeps its own); keep the two budgets (`MAX_RENDER_PIXELS`) in step when changing one.
+
+The package depends on **pypdfium2** (permissive) only; PyMuPDF (AGPL/Artifex) is the test oracle in the `dev`/`oracle`
+extras and must stay out of the package's runtime dependencies (the main repo guards this with
+`tests/test_no_agpl_pdf_deps.py`). The parity measurements that justify the swap live in the main repo's
+`docs/pdfium-spike.md` + `scripts/raster_compare.py`; copy them along if the history of that decision should travel with the package.

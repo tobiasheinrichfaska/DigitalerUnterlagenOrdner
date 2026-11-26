@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 DigitalerUnterlagenOrdner (BelegTool) is licensed under AGPL-3.0-or-later (see `LICENSE`, full text in `COPYING`) and incorporates the
-third-party components below. Data compiled 2026-11-25 from PyPI metadata (versions pinned in `requirements.txt`),
+third-party components below. Data compiled 2026-11-25 (pypdfium2 added 2026-11-26) from PyPI metadata (versions pinned in `requirements.txt`),
 wheel licence files (win_amd64, CPython 3.13), the npm lockfile (`webui/package-lock.json`) and upstream licence texts.
 Assessment and open questions: [`docs/licence-audit.md`](docs/licence-audit.md). This is not legal advice.
 Full licence texts ship inside the respective packages; source code of GPL/LGPL parts is available from the
@@ -11,7 +11,7 @@ upstream projects named below (exact versions as pinned).
 
 | Component | Version | Licence | Project |
 |---|---|---|---|
-| PyMuPDF / MuPDF | 1.27.2.3 | AGPL-3.0 (dual: Artifex commercial) | https://github.com/pymupdf/PyMuPDF |
+| pypdfium2 (Python bindings + bundled pdfium binary `pypdfium2_raw/pdfium.dll`) | 5.15.2 | BSD-3-Clause OR Apache-2.0 (bindings); pdfium BSD-3-Clause (c) The PDFium Authors; pdfium-binaries MIT (c) Benoit Blanchon; third-party code inside the binary per the wheel's `dist-info/licenses/BUILD_LICENSES/` (FreeType, HarfBuzz, ICU, lcms, libjpeg-turbo, OpenJPEG, libpng, libtiff, zlib, abseil, AGG, brotli, libyuv, simdutf, ...); replaces PyMuPDF/MuPDF (AGPL) since 2026-11-26; PDF rasterizing only | https://github.com/pypdfium2-team/pypdfium2 |
 | Pillow | 13.0.0 | MIT-CMU | https://github.com/python-pillow/Pillow |
 | pi-heif | 1.4.0 | BSD-3-Clause; Windows wheel bundles libheif (LGPL-3.0, v1.18.1) and libde265 (LGPL-3.0, v1.0.15) + MinGW runtime; no x265, no libaom (read-only HEIC decode); replaces pillow-heif (x265 GPL-2.0) since 2026-11-25 | https://github.com/bigcat88/pillow_heif |
 | pikepdf | 10.7.3 | MPL-2.0; wheel bundles qpdf (Apache-2.0), libjpeg (IJG) | https://github.com/pikepdf/pikepdf |

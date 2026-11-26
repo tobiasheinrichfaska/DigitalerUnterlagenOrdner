@@ -74,8 +74,8 @@ Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test
 
 `formats/compress_pdf_bytes.py` (render-based jpg/jpg_color/png + pikepdf variants, `CompressionConfig`, `CompressionCancelled`,
 page-count truncation guard) and the CPU-fairness primitives (`services/cpu.py`: `worker_count`, below-normal threads, `SystemCpuSampler`,
-RAM budget) live in `packages/belegtool-compress/` (import name `belegtool_compress`: `compress.py`, `cpu.py`, `pixels.py`; own
-`pyproject.toml`, AGPL-3.0-or-later, deps PyMuPDF/Pillow/pikepdf/pypdf, README with PyMuPDF/Artifex licence note, `EXTRACTION.md`, tests in
+RAM budget) live in `packages/belegtool-compress/` (import name `belegtool_compress`: `compress.py`, `cpu.py`, `pixels.py`, `raster.py`, `pdfinfo.py`; own
+`pyproject.toml`, AGPL-3.0-or-later, deps pypdfium2/Pillow/pikepdf/pypdf (PyMuPDF only as `oracle`/`dev` extra), README, `EXTRACTION.md`, tests in
 `packages/belegtool-compress/tests/`). **Boundary:** the package never imports the host nor `belegtool_archives` (guarded by `test_standalone.py`);
 logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py` and `services/cpu.py` are thin re-exports (guarded by
 `tests/test_compress_reexports.py`; `core.engine` lazy-imports through the shim). `pixels.capped_dpi` is a deliberate small copy of
@@ -85,12 +85,31 @@ Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`
 `belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
 to it. Extraction: `git filter-repo --subdirectory-filter packages/belegtool-compress` (see its `EXTRACTION.md`).
 
-**PyMuPDF only rasterizes now (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)).** Non-raster work runs on
-pikepdf: `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
+**Non-raster work runs on pikepdf (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)):** `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
 Letter default for a missing/empty box; `services/render.page_count/page_dims` delegate), `RealEngine.split_chunks` (pikepdf page copy; **internal
 GoTo/Dest links are dropped** per part, URI links stay), the compressor's image→PDF assembly `_assemble_pdf` (JPEG as DCT, 8-bit PNG as its deflated
 IDAT + predictor, identical page images shared; PNG variants are now genuinely small instead of raw samples, 16-bit grey PNG no longer renders black)
 and the page-count guards. Parity tests (fitz as oracle): `tests/test_pdf_nonraster_parity.py`, `packages/belegtool-compress/tests/test_assemble_*.py`.
+
+**PyMuPDF is gone from the product (2026-11-26, step 3): rasterizing = pypdfium2 behind `belegtool_compress/raster.py`.**
+`raster.open_pdf(bytes)` → `page_count` / `page_size(i)` (points as displayed, rotation/CropBox/UserUnit) / `render(i, dpi, gray)` (PIL, white
+background, annotations + form fields drawn); `services/render.py` (`render_page`, `render_pdf_to_images/pngs`) and `compress.py`
+(`_render_chunk`/`_render_one_page`) call ONLY this interface. Backend = `PdfiumBackend` (pypdfium2 5.15.2, BSD-3/Apache-2.0, bundled `pdfium.dll`);
+`BELEG_RASTER` selects another registered backend (default `pdfium`; PyMuPDF is registered only by the test oracle `packages/belegtool-compress/tests/fitz_backend.py`).
+Behaviour worth knowing (all measured in [`docs/pdfium-spike.md`](docs/pdfium-spike.md), tool `scripts/raster_compare.py`):
+- **pdfium is NOT thread safe → one process-wide `PriorityLock`** around every pdfium call. A *foreground* session (interactive preview page; default for
+  a non-pool thread) registers priority for its whole lifetime, so queued *background* work (threads marked by `cpu.set_current_thread_below_normal`
+  = the prefetch and compression pools, or `background=True`) never slips in between its open/size/render calls: an interactive page waits for at most one
+  running render (≈ 1.7× the single-page time under 4 background threads; a plain `Lock` gave 5×). Consequence: **the pools give fairness, not throughput** (they were GIL-bound
+  ~1.2× under PyMuPDF too). Never open a foreground session and then wait for background work on the same thread.
+- **/UserUnit is applied by us** (pdfium ignores it); **grey = RGB render + Pillow `L`** (not pdfium's grayscale flag, not MuPDF's brightening `csGRAY`):
+  colour stamps in the grey `jpg`/`png` variants are a bit darker than before. Pixel size = `ceil(pt·dpi/72)` like before; pixel budget `MAX_RENDER_PIXELS` unchanged
+  (plus a 256 MP hard cap in the backend).
+- A document is opened **per session and closed deterministically** (no leak over 1000 pages); a wrong password / garbage raises `RasterError` (→ empty preview / skipped candidate).
+- Parity tests with PyMuPDF as optional oracle: `packages/belegtool-compress/tests/test_raster_parity.py` (+ `test_raster_pdfium.py`, no oracle needed); licence guard
+  `tests/test_no_agpl_pdf_deps.py`; shipped-set smoke `scripts/smoke_no_pymupdf.py` (CI `no-pymupdf-runtime`); CI `raster-parity` (ubuntu + windows).
+  PyMuPDF stays in `requirements-dev.txt` (+ numpy for the tool) as test oracle and fixture generator for `tests/`/`scripts/` only.
+  **Windows-only unverified:** PyInstaller bundling of `pypdfium2_raw/pdfium.dll`, rendering under RDP, real scans.
 
 ### Data model
 
@@ -126,7 +145,7 @@ migration that this decoupling enabled is effectively complete.
 | `services/render.py` | **Headless** render: `render_pdf_to_images` (PIL), `render_pdf_to_pngs` (PNG bytes for the SPA), and the windowed-cache primitives `render_page` (single page), `page_count`, `page_dims`. |
 | `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
 | `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler that warms **up to `max_workers` pages at once** on a below-normal-priority thread pool. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
-| `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ Thread parallelism is **GIL-limited** for PyMuPDF rasterization (~1.2× on 4 workers); its real value is fairness + foreground preemption, not raw throughput (true multicore would need processes — see Open items). |
+| `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ pdfium rasterization is serialized by `raster.PDFIUM_LOCK` (priority lock, see *PyMuPDF is gone*), so the pool's value is fairness + foreground preemption, not throughput (true multicore would need processes — see Open items). |
 
 ### Data-driven core (`core/`)
 
@@ -219,7 +238,7 @@ render/compress path at startup.
 
 | Package | Purpose |
 |---|---|
-| `PyMuPDF` (`fitz`) | PDF **rasterizing** only (`services/render.py` render_page/render_pdf_to_*, `belegtool_compress` `_render_chunk`/`_render_one_page`) — every non-raster use was replaced by pikepdf 2026-11-25 |
+| `pypdfium2` 5.15.2 (BSD-3/Apache-2.0, bundles `pdfium.dll`) | PDF **rasterizing** only, via `belegtool_compress/raster.py` (`services/render.py`, `compress.py`); replaced PyMuPDF (AGPL/Artifex) 2026-11-26 — PyMuPDF is dev/test-only now (`requirements-dev.txt`: oracle + fixture generators) |
 | `Pillow` | Image processing; HEIC support via `pillow-heif` |
 | `pikepdf` | Advanced PDF manipulation (annotations, outline/bookmarks) |
 | `pypdf` | PDF read/write (base) |
@@ -1417,7 +1436,7 @@ embedded version). Low effort; do it on the next build bump.
   background (`RenderService.seed` → parallel `fill_until_idle`) on a capped,
   below-normal-priority pool that yields to foreground (generation token) and to a busy
   box (real `SystemCpuSampler`, terminal-server fair). ⚠ **Needs on-screen QA** (MT-39).
-  ⚠ **Multicore caveat:** thread parallelism is GIL-limited for PyMuPDF (~1.2×), so this
+  ⚠ **Multicore caveat:** every pdfium call is serialized by a process-wide priority lock (and it was GIL-limited ~1.2× under PyMuPDF), so this
   overlaps prefetch with idle rather than saturating cores; **true multicore would need a
   process pool** (~2.4× measured, warm+chunked) plus `multiprocessing.freeze_support()` in
   `host.py` and testing inside the packaged exe — deliberately deferred (2026-06-03).

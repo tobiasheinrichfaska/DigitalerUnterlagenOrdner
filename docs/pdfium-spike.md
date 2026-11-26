@@ -19,8 +19,8 @@ CropBox (+ gedreht), UserUnit 2, gebrochene Seitengröße, riesige MediaBox 200x
 | (a) Pixelmaße identisch (±1 px) | in **allen** Fällen/DPI **exakt gleich** (inkl. Rotation, CropBox, MediaBox-Offset, gebrochene Größe, Pixelbudget-Deckelung auf 8000x8000). Beide runden `ceil(Punkt * DPI / 72)`. | erfüllt |
 | (b) Pixelabweichung | Roh-MAD auf dichten Textseiten **3,3-5,9** (Ziel 3), realistischer Scan 1,2-3,4 (Ziel 6), reiner Rauschbild-Stresstest bis 7,5 (Downscale-Aliasing, informativ). Erklärung: reine Glyph-Antialiasing-/Gamma-Unterschiede (mittlere Helligkeit gleich auf 0,4/255, kein Versatz, optisch identisch - siehe unten). Nach Gauß-Glättung (r=1,5, entfernt AA, behält Struktur) **alle Fälle ≤ 3 (Text)/≤ 6 (Scan)** bis auf zwei Grenzfälle (CropBox 50 DPI 3,48; CropBox+Rotate 300 DPI 3,17; Subpixel-Ursprung der Crop-Box). Keine sichtbaren Defekte: Annotationen und Formularfelder werden gezeichnet, keine schwarzen Seiten, Rotation korrekt, bester Versatz 0 (max. 1 px bei MediaBox-Offset/16-bit-PNG). | **Abweichung klein + erklärt**, im Test dokumentierbar (Roh-Schwelle wird dort als `AA`-Toleranz formuliert, Struktur-Schwelle hart) |
 | (c) JPEG-Größe der Kompressionsvarianten | alle Fälle innerhalb **±7 %** (Ziel 15 %); pdfium meist 3-6 % kleiner | erfüllt |
-| (d) Geschwindigkeit je Seite | Median **≈ 1,0x** von fitz; Einzelfälle 0,64-0,84x (kleine Seite mit ~2x hochskaliertem Bild bei 150 DPI, Farbscan bei 100/150 DPI); bei 300 DPI bis 1,5x schneller | Median erfüllt, **Einzelfall knapp unter 0,7x** (absolut +4-5 ms je Seite) - dokumentiert |
-| (e) Thread-Sicherheit | pdfium ist nicht thread-sicher: ein prozessweiter **Prioritäts-Lock** (Vordergrund vor Hintergrund) um jeden Aufruf; 8 Threads x 200 Seiten = 1600 Renderings, **0 Abweichungen** (Byte-Gleichheit gegen Einzelthread-Referenz). Vordergrundseite 10,8 ms allein, **19,9 ms Median / 26,1 ms p95 bei 4 rasternden Hintergrund-Threads** (Ziel <= 2x + 1 Seite = 32,5 ms). Ein einfacher `threading.Lock` (ohne Priorität) erreichte das **nicht** (Median 63 ms bei 12,7 ms allein = 5x): erst die Vorrangregel macht es. | erfüllt (nur mit Prioritäts-Lock) |
+| (d) Geschwindigkeit je Seite | Median **≈ 1,0x** von fitz (1,01-1,06x in drei Läufen); Einzelfälle 0,64-0,84x (kleine Seite mit ~2x hochskaliertem Bild bei 150 DPI, Farbscan bei 100/150 DPI); bei 300 DPI bis 1,5x schneller | Median erfüllt, **1 von 9 Fällen knapp unter 0,7x** (absolut +4-6 ms je Seite) - dokumentiert |
+| (e) Thread-Sicherheit | pdfium ist nicht thread-sicher: ein prozessweiter **Prioritäts-Lock** (Vordergrund vor Hintergrund) um jeden Aufruf; 8 Threads x 200 Seiten = 1600 Renderings, **0 Abweichungen** (Byte-Gleichheit gegen Einzelthread-Referenz). Gemessen durch den **ausgelieferten** Code (`belegtool_compress.raster`): Vordergrundseite 9-16 ms allein, **Median 16-30 ms / p95 25-42 ms bei 4 rasternden Hintergrund-Threads** (Ziel <= 2x + 1 Seite). Ein einfacher `threading.Lock` (ohne Priorität) erreichte das **nicht** (Median 63 ms bei 12,7 ms allein = 5x); ein Prioritäts-Lock, der nur je Aufruf vordrängt, ebenfalls nicht ganz (Median 29,6 vs. Grenze 26,9 ms, weil eine Seite aus open+size+render besteht und Hintergrundarbeit dazwischen kam). Erst eine **Foreground-Session mit Vorrang bis `close()`** hält die Hintergrundarbeit zwischen den Aufrufen draußen (Median 16-17 ms). | erfüllt (nur mit Prioritäts-Lock) |
 | (f) Speicher | 1000 Seiten, Dokument je Aufruf geschlossen: RSS 0,0 MB Wachstum (250 -> 1000) | erfüllt |
 
 **Nebenbefunde (alle in Phase 2 abgefangen und per Test gesichert):**
@@ -237,24 +237,24 @@ Annotationen/Widgets: Region-MAD (geglättet) fitz vs pdfium = 2.84; pdfium mit 
 
 | Dokument | DPI | fitz | pdfium | pdfium/fitz-Tempo |
 |---|---|---|---|---|
-| Text+Bild (20 S.) | 100 | 10.7 | 10.5 | 1.01x |
-| Text+Bild (20 S.) | 150 | 9.6 | 15.0 | 0.64x |
-| Text+Bild (20 S.) | 300 | 52.0 | 43.7 | 1.19x |
-| Scan farbig (1 S.) | 100 | 54.3 | 69.0 | 0.79x |
-| Scan farbig (1 S.) | 150 | 66.1 | 79.1 | 0.84x |
-| Scan farbig (1 S.) | 300 | 168.3 | 110.2 | 1.53x |
-| Text dicht (1 S.) | 100 | 5.2 | 4.7 | 1.10x |
-| Text dicht (1 S.) | 150 | 8.7 | 8.8 | 0.99x |
-| Text dicht (1 S.) | 300 | 71.5 | 60.9 | 1.17x |
+| Text+Bild (20 S.) | 100 | 10.9 | 10.2 | 1.07x |
+| Text+Bild (20 S.) | 150 | 9.1 | 14.1 | 0.65x |
+| Text+Bild (20 S.) | 300 | 49.7 | 40.8 | 1.22x |
+| Scan farbig (1 S.) | 100 | 43.3 | 59.3 | 0.73x |
+| Scan farbig (1 S.) | 150 | 64.9 | 81.2 | 0.80x |
+| Scan farbig (1 S.) | 300 | 190.8 | 129.2 | 1.48x |
+| Text dicht (1 S.) | 100 | 4.7 | 4.5 | 1.06x |
+| Text dicht (1 S.) | 150 | 7.7 | 8.0 | 0.96x |
+| Text dicht (1 S.) | 300 | 69.5 | 60.7 | 1.14x |
 
-Median-Verhältnis 1.01x, schlechtester Fall 0.64x (Ziel >= 0.7x)
+Median-Verhältnis 1.06x, schlechtester Fall 0.65x, 1 von 9 Fällen unter 0.7x (Ziel >= 0.7x; hart: Median >= 0.7x und kein Fall < 0.5x, Einzelfälle < 0.7x werden dokumentiert)
 
 #### (e) Thread-Sicherheit mit globalem Lock
 
-8 Threads x 200 Seiten (100 DPI) = 1600 Renderings in 22.0 s; Fehler/Abweichungen: 0
-Vordergrund-Seite allein: 10.8 ms; bei 4 Hintergrund-Threads: Median 19.9 ms, p95 26.1 ms; Ziel <= 2x + 1 Seite = 32.5 ms
+8 Threads x 200 Seiten (100 DPI) = 1600 Renderings in 23.9 s; Fehler/Abweichungen: 0
+Vordergrund-Seite allein: 16.4 ms; bei 4 Hintergrund-Threads: Median 16.3 ms, p95 25.2 ms; Ziel <= 2x + 1 Seite = 49.3 ms
 
 #### (f) Speicher (1000 Seiten, Dokument je Aufruf geschlossen)
 
-RSS vor: 751 MB; nach 250/500/750/1000: 751 / 751 / 751 / 751 MB
+RSS vor: 805 MB; nach 250/500/750/1000: 805 / 805 / 805 / 805 MB
 Wachstum zwischen Seite 250 und 1000: 0.0 MB -> ok

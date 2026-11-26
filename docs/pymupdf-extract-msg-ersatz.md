@@ -1,6 +1,6 @@
 # Ersatz für PyMuPDF und extract-msg – Aufwandsanalyse (Stand 2026-11-25)
 
-Keine Rechtsberatung. Grundlage: `docs/licence-audit.md` (beide rot für die Kommerzlizenz). Grep-Inventar im Repo (ohne `.claude/worktrees`), PyPI-JSON (pypi.org/pypi/pypdfium2/json, /olefile/json) und pypdfium2-Doku (pypdfium2.readthedocs.io, Abschnitt Thread safety).
+Keine Rechtsberatung. Grundlage: `docs/licence-audit.md` (beide waren rot für die Kommerzlizenz; beide sind seit 2026-11-26 erledigt, siehe §0b/§0c). Grep-Inventar im Repo (ohne `.claude/worktrees`), PyPI-JSON (pypi.org/pypi/pypdfium2/json, /olefile/json) und pypdfium2-Doku (pypdfium2.readthedocs.io, Abschnitt Thread safety).
 
 ## 0. Status Schritt 1 (C) – erledigt 2026-11-25
 
@@ -11,6 +11,23 @@ Messwerte (300 Seiten, 18 MB, alt fitz → neu pikepdf): `page_count` 0,4 → 12
 ## 0b. Status Schritt 2 (A, `.msg`) – erledigt 2026-11-26
 
 `extract-msg` (GPLv3) + RTFDE (LGPL) sind komplett entfernt (Code, `requirements.txt`, Paket-Extra, Bundle-Excludes); Ersatz = `belegtool_archives/msg_reader.py` + `rtf_deencap.py` auf `olefile` 0.47 (BSD-2) + `compressed-rtf` 1.0.7 (MIT). Test-first: `packages/belegtool-archives/tests/test_msg_parity.py` (42 Fälle: Betreff, Plain/HTML/komprimiertes RTF (LZFu + MELA), Unicode- und ANSI-Streams mit cp1252/cp1250/cp1251, Datum/UTC/ungesendet, lang/8.3/ohne Namen, Content-ID, 0/500+ Anhänge, Byte-Budget, kaputte/abgeschnittene/fremde OLE) wurde gegen extract-msg 0.58.3 grün geschrieben und läuft unverändert gegen den eigenen Leser. Gemessene extract-msg-Eigenheiten, die übernommen wurden: ANSI-Default ISO-8859-15 ohne 0x3FFD, HTML-Body wird unverändert (nicht umcodiert) durchgereicht, reiner Text wird zu minimalem HTML (`html.escape`, `<br />`), nur ein verkapselter RTF (`\fromhtml1`/`\fromtext`) liefert HTML/Text, ein gewöhnlicher RTF-Body wird als `.rtf` durchgereicht, Datum = 0x0039 in UTC nur wenn nicht „unsent". **Bewusste Abweichungen** (`test_msg_reader.py`): eingebettete `.msg` wird rekursiv als Ordner importiert (extract-msg: „nicht importierbar", beim Konverter kam sogar ein Message-Objekt an); ein Anhang ohne Daten/by-reference lässt nicht mehr die ganze Mail scheitern; vereinfachte RTF-De-Kapselung statt RTFDE; Strings: Gegenstück …001E/…001F als Rückfall, ungültige Bytes → Ersatzzeichen statt Ausnahme. **Ungeprüft:** echte Outlook-Mails (Windows-Testlauf Phase 4), RTFDE-Parität auf komplexem verkapseltem HTML, MSG mit DIFAT/großer CFB aus echten Postfächern, olefile-Verhalten auf Windows-Dateisystemen.
+
+## 0c. Status Schritt 3 (B, Rastern) – erledigt 2026-11-26
+
+**PyMuPDF ist aus dem ausgelieferten Produkt entfernt.** Rastern läuft ausschließlich über die Schnittstelle `belegtool_compress/raster.py`
+(`open_pdf` → `page_count`/`page_size`/`render`, Auswahl per `BELEG_RASTER`, Default `pdfium`) mit **pypdfium2 5.15.2** (BSD-3/Apache-2.0).
+`services/render.py` und `belegtool_compress/compress.py` rufen nur noch diese Schnittstelle. `requirements.txt` ohne PyMuPDF (pypdfium2 gepinnt),
+PyMuPDF nur in `requirements-dev.txt` (Orakel + Fixture-Generatoren) und als Extra `oracle` des Pakets; `belegtool.spec` bündelt `pypdfium2_raw/pdfium.dll`
+und excludet `fitz`/`pymupdf`; Guard `tests/test_no_agpl_pdf_deps.py`; Laufzeit-Smoke `scripts/smoke_no_pymupdf.py` (CI-Job `no-pymupdf-runtime`).
+Vorgehen wie geplant (§4): erst Spike mit harten Schwellen ([`pdfium-spike.md`](pdfium-spike.md), `scripts/raster_compare.py`), dann Umbau test-first.
+
+Messwerte (Linux, geteilter Host; Details/Tabellen in `pdfium-spike.md`): Pixelmaße in allen Fällen/DPI **exakt gleich**; Pixelabweichung nach AA-Glättung ≤ 3 (Text)/≤ 6 (Scan) bis auf zwei dokumentierte
+Crop-Grenzfälle (3,48/3,17), roh auf dichtem Text 3,3–5,9 (nur Antialiasing); JPEG-Variantengrößen ±7 % (Ziel 15 %); Geschwindigkeit Median ≈ 1,0x, Einzelfälle 0,64–0,84x;
+8 Threads x 200 Seiten byte-gleich zur Einzelthread-Referenz; Vordergrundseite unter 4 Hintergrund-Threads ≈ 1,7x der Einzelzeit; 0 MB Wachstum über 1000 Seiten.
+**Bewusste Abweichungen:** (1) pdfium ignoriert `/UserUnit` → wird selbst eingerechnet; (2) Graustufen = RGB-Render + Pillow-Luminanz (MuPDFs natives Gray hellt gesättigte Farben auf:
+farbige Stempel werden in den Grau-Varianten `jpg`/`png` dunkler); (3) ein **prozessweiter Prioritäts-Lock** serialisiert alle pdfium-Aufrufe (pdfium ist nicht thread-sicher, ein einfacher Lock
+erreichte die Latenzvorgabe nicht) – die Hintergrund-Pools liefern damit Fairness, keinen Durchsatz (unter PyMuPDF war er GIL-begrenzt ~1,2x); (4) ein Foreground-Session hält Vorrang bis `close()`.
+Ungeprüft (nur Windows): PyInstaller-Bündelung der `pdfium.dll`, Render unter RDP/Terminalserver, echte Scans, `pytest` der Paritätstests auf Windows (CI-Job `raster-parity`).
 
 ## 1. Inventar `fitz` (PyMuPDF)
 

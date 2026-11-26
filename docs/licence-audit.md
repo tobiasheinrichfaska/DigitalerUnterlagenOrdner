@@ -1,4 +1,4 @@
-# Lizenz-Audit (Stand 2026-11-25, Version 3.11.4)
+# Lizenz-Audit (Stand 2026-11-26, Version 3.11.4)
 
 > **Keine Rechtsberatung.** Technische Bestandsaufnahme. Alles, was als „Fakt" steht, ist mit Quelle belegt
 > (PyPI-JSON-Metadaten der gepinnten Versionen, Lizenzdateien in den heruntergeladenen Win-x64-Wheels
@@ -13,7 +13,7 @@ Bewertet wird zweifach: **AGPL** = Verteilung des Hauptrepos unter AGPL-3.0(-or-
 
 | Ampel | Punkt |
 |---|---|
-| ROT (Komm.) | **PyMuPDF/MuPDF** (AGPL-3.0 oder Artifex-Kommerzlizenz): Der Eigentümer kann Dritten keine Nicht-AGPL-Lizenz am Gesamtprodukt einräumen, ohne selbst eine Artifex-Lizenz zu besitzen. Der Kern (Rendering, Engine) hängt an `fitz`. |
+| ~~ROT~~ erledigt 2026-11-26 | ~~**PyMuPDF/MuPDF** (AGPL-3.0 oder Artifex-Kommerzlizenz)~~ → Rastern läuft über **pypdfium2 5.15.2** (PyPI-Metadaten `License: BSD-3-Clause, Apache-2.0, dependency licenses`; Win-x64-Wheel `py3-none-win_amd64` mit `pypdfium2_raw/pdfium.dll` und `dist-info/licenses/BUILD_LICENSES/*`, per `pip download --platform win_amd64 --only-binary=:all: --no-deps` + `unzip -l` am 2026-11-26 belegt). Schnittstelle `belegtool_compress.raster`; PyMuPDF nur noch Dev-/Test-Orakel (`requirements-dev.txt`, Extra `oracle`), nicht im Bundle (`belegtool.spec` excludes `fitz`/`pymupdf`). Guard: `tests/test_no_agpl_pdf_deps.py`; Laufzeit ohne PyMuPDF: `scripts/smoke_no_pymupdf.py` (CI-Job `no-pymupdf-runtime`). Messbelege/Abweichungen: [`pdfium-spike.md`](pdfium-spike.md). Vorbehalt: PyInstaller-Bündelung der `pdfium.dll` und Render unter RDP/echten Scans nur auf Windows prüfbar (Testlauf Phase 5). |
 | ~~ROT~~ erledigt 2026-11-26 | ~~extract-msg 0.55.0 (GPL-3.0) + transitiv RTFDE (LGPL-3)~~ → ersetzt durch den eigenen `.msg`-Leser `packages/belegtool-archives/belegtool_archives/msg_reader.py` auf **olefile 0.47 (BSD-2-Clause)** + **compressed-rtf 1.0.7 (MIT)** (PyPI-Metadaten + Wheel-Lizenztexte am 2026-11-26 geprüft: olefile `License: BSD`, Klassifikator „BSD License“, `LICENSE.txt` = Zwei-Klausel-BSD, (c) Philippe Lagadec; compressed-rtf `license_expression: MIT`, MIT-Text, (c) 2016 Dmitry Alimov). `extract-msg`/`RTFDE` sind aus `requirements.txt`, Paket-Metadaten, Code und Bundle (`belegtool.spec` excludes) entfernt. Guard: `tests/test_no_gpl_msg_deps.py`. Vorbehalt: Reader nur gegen synthetische `.msg` getestet (Windows-Testlauf Phase 4: echte Outlook-Mails). |
 | ~~ROT~~ erledigt 2026-11-25 | ~~pillow-heif 1.3.0 Win-Wheel bündelt `libx265` (GPLv2)~~ → ersetzt durch **pi-heif 1.4.0** (Win-Wheel cp313: nur libheif/libde265 LGPLv3 + MinGW-Runtime, **keine x265-DLL**, per `pip download --platform win_amd64 --python-version 3.13 --only-binary=:all:` + `unzip -l` belegt; `LICENSES_bundled.txt`: „binary wheels: LGPLv3"). Guard: `tests/test_no_gpl_codec_wheels.py`. Offen: Verhalten mit echten iPhone-HEICs unter PyInstaller/Windows ungeprüft. |
 | GELB | **LGPL-Komponenten** im Bundle: `svglib` (LGPL-3.0-or-later, via xhtml2pdf), `python-bidi` (LGPL, via xhtml2pdf), libheif/libde265 (LGPL-3); RTFDE ist seit 2026-11-26 entfernt. Mit AGPL kein Problem; für proprietäre Weitergabe: Austauschbarkeit/Quelltext-Angebot/Lizenztext nötig. |
@@ -22,13 +22,13 @@ Bewertet wird zweifach: **AGPL** = Verteilung des Hauptrepos unter AGPL-3.0(-or-
 | GELB | pdf.js-Beipack: Liberation-Schriften (`standard_fonts/LICENSE_LIBERATION` = GPL v2 + Font-Ausnahme, Red Hat) – als eigenständige Datendateien (Aggregation) wohl unkritisch, juristisch klären. |
 | GRÜN | Pillow (MIT-CMU), pikepdf (MPL-2.0; qpdf Apache-2.0), pypdf (BSD-3), reportlab (BSD), xhtml2pdf (Apache-2.0), pywin32 (PSF), pywebview (BSD-3), pythonnet/clr-loader (MIT), PyInstaller (GPLv2+ mit Bootloader-Ausnahme), React/ReactDOM/scheduler (MIT), pdfjs-dist (Apache-2.0), `datev-dokab` (keine Abhängigkeiten). |
 
-Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Abhängigkeiten vereinbar (Vorbehalt: x265-„or later"). Die **kommerzielle Zusatzlizenz ist für das ausgelieferte Gesamtprodukt derzeit nicht ohne Weiteres haltbar** (PyMuPDF; extract-msg und libx265 sind seit 2026-11-25/26 ersetzt).
+Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Abhängigkeiten vereinbar (Vorbehalt: x265-„or later"). Nach dem Ersatz von libx265 (2026-11-25), extract-msg/RTFDE und PyMuPDF (2026-11-26) bleibt **kein roter Punkt** mehr; offen sind die gelben LGPL-/Hinweis-Punkte und die juristische Klärung (Abschnitt 8). Die kommerzielle Zusatzlizenz hängt nicht mehr an Artifex.
 
 ## 2. Abhängigkeiten – Python (`requirements.txt`, gepinnte Versionen)
 
 | Paket (Version) | Lizenz (Beleg) | AGPL | Komm. | Anmerkung |
 |---|---|---|---|---|
-| PyMuPDF 1.27.2.3 | „GNU AGPL 3.0 or Artifex Commercial License" (Wheel-METADATA/`COPYING`; pymupdf.readthedocs.io: „available under both, open-source AGPL and commercial license agreements"; Artifex als Kommerzlizenzgeber) | grün | **rot** | Kommerzlizenz bei Artifex (artifex.com/licensing) nötig, sobald nicht-AGPL weitergegeben wird. |
+| pypdfium2 5.15.2 (ersetzt PyMuPDF 1.27.2.3) | PyPI-METADATA: „License: BSD-3-Clause, Apache-2.0, dependency licenses“. Wheel `py3-none-win_amd64` enthält `pypdfium2_raw/pdfium.dll` (7,8 MB) und `dist-info/licenses/`: `LICENSES/{Apache-2.0,BSD-3-Clause,CC-BY-4.0}.txt` sowie `BUILD_LICENSES/` mit pdfium (BSD-3, (c) The PDFium Authors), pdfium-binaries (MIT, (c) Benoit Blanchon), FreeType, HarfBuzz, ICU, lcms, libjpeg-turbo (IJG/BSD), OpenJPEG, libpng, libtiff, zlib, abseil, agg23, dragonbox, fast_float, highway, simdutf, brotli, libyuv (+ `v8_xfa/*` nur für die V8/XFA-Variante des Binärs; ob die ausgelieferte DLL V8 enthält, nicht im Binär geprüft). **Keine Skia-/Chromium-Gesamtlizenz im Wheel** (pdfium rendert mit AGG). | grün | grün | Permissiv: Hinweis-/Copyright-Pflicht, in `THIRD_PARTY_NOTICES.md`. PyMuPDF (AGPL/Artifex) bleibt nur als Dev-/Test-Orakel (nicht ausgeliefert). |
 | Pillow 13.0.0 | MIT-CMU (PyPI `license_expression`) | grün | grün | Copyright-Hinweis beilegen. |
 | pi-heif 1.4.0 (ersetzt pillow-heif 1.3.0) | Python-Code BSD-3-Clause; Win-Wheel „LGPLv3" (`LICENSES_bundled.txt`): libheif LGPLv3 (v1.18.1), libde265 LGPLv3 (v1.0.15); **kein x265, kein libaom** (Wheel-Inhalt belegt: libde265/libheif/libgcc_s/libstdc++/libwinpthread-DLLs) | gelb | **gelb** (war rot) | Nur Lesen (Decode); kein Encoder. LGPL-Auflage wie svglib/bidi. Test-Guard `tests/test_no_gpl_codec_wheels.py`. Ungeprüft: echte iPhone-HEICs unter Python 3.13/PyInstaller/Windows. |
 | pikepdf 10.7.3 | MPL-2.0; Wheel enthält qpdf (Apache-2.0), libjpeg (IJG), MSVC-Runtime (`licenses-for-wheels.txt`) | grün | grün | MPL: Änderungen an pikepdf-Dateien offenlegen (wir ändern nichts). |
@@ -85,7 +85,7 @@ Dev-/Build-Abhängigkeiten (vite, vitest, playwright, eslint …) landen nicht i
 
 ## 7. To-dos (nach Priorität)
 
-1. Geschäftsmodell-Entscheidung für die Kommerzlizenz: (a) Artifex-Lizenz für PyMuPDF oder andere PDF-Engine; (b) ~~`extract-msg` entfernen/ersetzen~~ erledigt 2026-11-26 (olefile-Eigenbau); (c) Bundle ohne `libx265` bzw. anderer HEIC-Weg.
+1. Geschäftsmodell-Entscheidung für die Kommerzlizenz: (a) ~~Artifex-Lizenz für PyMuPDF oder andere PDF-Engine~~ erledigt 2026-11-26 (pypdfium2/pdfium); (b) ~~`extract-msg` entfernen/ersetzen~~ erledigt 2026-11-26 (olefile-Eigenbau); (c) Bundle ohne `libx265` bzw. anderer HEIC-Weg.
 2. Vollständigen AGPL-3.0-Text als `LICENSE` ins Hauptrepo und beide Pakete.
 3. `THIRD_PARTY_NOTICES.md` ins Bundle/MSIX; Apache-2.0-/MIT-Texte (pdf.js, React) sicherstellen; Quelltext-Hinweis für LGPL/GPL-Teile (Link + Pins).
 4. SPDX-Header; „or later" in README/CONTRIBUTING angleichen; `CONTRIBUTING.md` (CLA) in die ausgelagerten Repos; `LICENSE_COMMERCIAL.md` um Drittkomponenten-Klausel ergänzen.
@@ -93,7 +93,7 @@ Dev-/Build-Abhängigkeiten (vite, vitest, playwright, eslint …) landen nicht i
 
 ## 8. Juristisch klären
 
-- Trägt die Dual-Lizenz (AGPL + Eigentümer-Kommerzlizenz) bei einem Kern, der PyMuPDF (AGPL, Artifex-Kommerzlizenz) nutzt? Kann der Eigentümer ohne Artifex-Lizenz proprietär lizenzieren?
+- ~~Trägt die Dual-Lizenz bei einem Kern, der PyMuPDF nutzt?~~ Gegenstandslos seit 2026-11-26 (PyMuPDF nicht mehr im Produkt). Offen bleibt nur die Frage nach den gelben LGPL-Punkten.
 - x265: GPL-2.0-only oder -or-later? Vereinbarkeit des pillow-heif-Win-Wheels (GPLv2) mit AGPL-3.0 beim Bündeln im PyInstaller-Verbund. (Seit 2026-11-25 gegenstandslos für das Bundle: x265 entfällt mit pi-heif.)
 - LGPL-3 (svglib, python-bidi, libheif, libde265, RTFDE) in PyInstaller-onedir/MSIX: genügt der Dateiaustausch, wie ist das PYZ-Archiv zu bewerten, was muss der Quelltext-Hinweis enthalten?
 - Liberation-Schriften (GPLv2 + Ausnahme, im pdf.js-Beipack) in einem proprietär weitergegebenen Bundle.

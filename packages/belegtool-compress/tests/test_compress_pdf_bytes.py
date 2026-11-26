@@ -34,18 +34,17 @@ def test_compress_render_giant_page_is_bounded(monkeypatch):
     import fitz
     from PIL import Image
     from belegtool_compress import compress as cpb
-    from belegtool_compress import pixels
+    from belegtool_compress import pixels, raster
     monkeypatch.setattr(pixels, "MAX_RENDER_PIXELS", 250_000)
     doc = fitz.open()
     doc.new_page(width=595, height=14400)  # A4 width → no width clamp; giant height
-    try:
-        img, w, h = cpb._render_one_page(doc, 0, 150, "jpg",
-                                         cpb.DEFAULT_CONFIG, fitz.csGRAY, "L")
-        with Image.open(io.BytesIO(img)) as im:
-            assert im.width * im.height <= 250_000  # rendered small, not GBs
-        assert (w, h) == (595, 14400)  # placement dims in the output PDF unchanged
-    finally:
-        doc.close()
+    data = doc.tobytes()
+    doc.close()
+    with raster.open_pdf(data) as session:
+        img, w, h = cpb._render_one_page(session, 0, 150, "jpg", cpb.DEFAULT_CONFIG, "L")
+    with Image.open(io.BytesIO(img)) as im:
+        assert im.width * im.height <= 250_000  # rendered small, not GBs
+    assert (w, h) == (595, 14400)  # placement dims in the output PDF unchanged
 
 
 def test_compress_all_methods_drops_candidates_that_lose_pages(monkeypatch):

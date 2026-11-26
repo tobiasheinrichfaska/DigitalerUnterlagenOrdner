@@ -73,10 +73,20 @@ def worker_count(
     return max(1, min(cap, cores - 1))
 
 
+_tls = threading.local()
+
+
+def is_background_thread() -> bool:
+    """True for a thread that ran :func:`set_current_thread_below_normal` (a pool worker for background
+    work). The rasterizer's process-wide lock gives such threads lower priority than interactive ones."""
+    return bool(getattr(_tls, "background", False))
+
+
 def set_current_thread_below_normal() -> None:
-    """Lower the calling thread's priority so the OS preempts it for interactive
-    work. No-op (and never raises) off Windows or if the call fails — used as a
+    """Mark the calling thread as background work and lower its priority so the OS preempts it for
+    interactive work. The OS part is a no-op (and never raises) off Windows or if the call fails — used as a
     ``ThreadPoolExecutor(initializer=…)``."""
+    _tls.background = True
     if not IS_WINDOWS:
         return
     try:

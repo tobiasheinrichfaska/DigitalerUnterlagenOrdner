@@ -26,7 +26,7 @@ def _imported_roots(path):
 
 
 def test_library_files_exist():
-    assert {p.name for p in LIBRARY_FILES} >= {"__init__.py", "compress.py", "cpu.py", "pixels.py"}
+    assert {p.name for p in LIBRARY_FILES} >= {"__init__.py", "compress.py", "cpu.py", "pixels.py", "raster.py"}
 
 
 def test_library_has_no_host_imports():
@@ -45,7 +45,7 @@ def test_import_without_host_packages(tmp_path):
                     ignore=shutil.ignore_patterns("__pycache__"))
     code = (
         f"import sys; sys.path.insert(0, {str(tmp_path)!r})\n"
-        "import belegtool_compress, belegtool_compress.compress, belegtool_compress.cpu, belegtool_compress.pixels\n"
+        "import belegtool_compress, belegtool_compress.compress, belegtool_compress.cpu, belegtool_compress.pixels, belegtool_compress.raster\n"
         "bad = [m for m in ('infra', 'core', 'version_info', 'universal_importer', 'services', 'formats',\n"
         "                   'belegtool_archives') if m in sys.modules]\n"
         "assert not bad, bad\n"

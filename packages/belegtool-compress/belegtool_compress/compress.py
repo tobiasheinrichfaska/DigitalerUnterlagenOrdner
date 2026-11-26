@@ -1,4 +1,3 @@
-import fitz
 from PIL import Image
 import hashlib
 import io
@@ -9,8 +8,8 @@ from typing import Tuple
 from pypdf import PdfReader, PdfWriter
 import pikepdf
 
-from belegtool_compress import cpu
-from belegtool_compress.pixels import capped_dpi
+from belegtool_compress import cpu, raster
+from belegtool_compress.pixels import capped_dpi_for_size
 
 logger = logging.getLogger("belegtool_compress")
 
@@ -28,7 +27,7 @@ class CompressionConfig:
         dpi: Default render DPI for image-based methods (jpg / png).
         jpeg_quality: JPEG quality (0–95).  Higher = better quality, larger file.
         png_compress_level: PNG deflate level (0–9).
-        colorspace: Fitz colorspace string.  "gray" = grayscale (smaller),
+        colorspace: Colorspace string.  "gray" = grayscale (smaller),
             "rgb" = colour (larger but faithful).
         max_width_pt: Pages wider than this are scaled down to this width
             before rendering.  Set to None to disable downscaling.
@@ -144,14 +143,14 @@ def compress_all_methods(
 # --- parallel page rendering ----------------------------------------------
 # Compression rasterizes every page (the slow part). We spread that across a
 # capped, below-normal-priority thread pool (terminal-server fair, see cpu.py).
-# PyMuPDF 1.26 renders concurrently as long as each thread uses its OWN Document,
-# so each worker opens its own doc over a contiguous page range; the image bytes
-# are deterministic and assembled back in page order → output stays byte-identical
-# to the old sequential path.
-# Only parallelize documents big enough to amortize the pool coordination. Thread
-# parallelism is GIL-limited for PyMuPDF (~1.2x), so the win is marginal and only
-# worth the overhead (extra fitz doc opens, task dispatch) on large documents — small
-# and medium PDFs render inline (sequentially), which is plenty fast. One-line tunable.
+# Each worker opens its own raster session over a contiguous page range and the image bytes are
+# assembled back in page order → output is byte-identical to the sequential path. pdfium is not thread
+# safe, so ``belegtool_compress.raster`` serialises every pdfium call under one process-wide lock
+# (background priority: an interactive preview page overtakes this work). The pool therefore buys
+# fairness (below-normal threads, the JPEG/PNG encoding overlaps the next render), not raw rasterizing
+# throughput — which was GIL-limited (~1.2x) under PyMuPDF anyway.
+# Only parallelize documents big enough to amortize the pool coordination; small and medium PDFs render
+# inline (sequentially), which is plenty fast. One-line tunable.
 _PARALLEL_MIN_PAGES = 50
 _compress_pool = None
 _compress_pool_lock = threading.Lock()
@@ -177,24 +176,23 @@ def _contiguous_chunks(n: int, k: int):
     return [list(range(i, min(i + size, n))) for i in range(0, n, size)]
 
 
-def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
-    """Rasterize + encode a single page → (img_bytes, width, height). Pure: no
-    shared state, so it is safe to run on a worker thread (with that thread's doc)."""
-    page = doc.load_page(page_index)
-    if config.max_width_pt is not None and page.rect.width > config.max_width_pt:
-        scale_factor = config.max_width_pt / page.rect.width
+def _render_one_page(doc, page_index, dpi, method, config, pil_mode):
+    """Rasterize + encode a single page → (img_bytes, width, height). Pure: no shared state besides the
+    rasterizer's own lock, so it is safe to run on a worker thread (with that thread's session ``doc``)."""
+    page_w, page_h = doc.page_size(page_index)
+    if config.max_width_pt is not None and page_w > config.max_width_pt:
+        scale_factor = config.max_width_pt / page_w
         dpi_rel = int(dpi * scale_factor)
         target_width = config.max_width_pt
-        target_height = page.rect.height * scale_factor
+        target_height = page_h * scale_factor
     else:
         dpi_rel = dpi
-        target_width = page.rect.width
-        target_height = page.rect.height
-    # Same per-page pixel budget as the host's preview renders (pixels.capped_dpi): the
+        target_width = page_w
+        target_height = page_h
+    # Same per-page pixel budget as the host's preview renders (pixels.capped_dpi_for_size): the
     # width clamp alone leaves the height unbounded against an oversized MediaBox.
-    dpi_rel = capped_dpi(page, dpi_rel)
-    pix = page.get_pixmap(dpi=dpi_rel, colorspace=cs)
-    image = Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(pil_mode)
+    dpi_rel = capped_dpi_for_size(page_w, page_h, dpi_rel)
+    image = doc.render(page_index, dpi_rel, gray=(pil_mode == "L"))
     buf = io.BytesIO()
     if method in ("jpg", "jpg_color"):
         quality = config.jpeg_quality_color if method == "jpg_color" else config.jpeg_quality
@@ -206,24 +204,21 @@ def _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode):
     return buf.getvalue(), target_width, target_height
 
 
-def _render_chunk(input_bytes, indices, dpi, method, config, cs, pil_mode, cancel=None):
-    """Render a contiguous range of pages on one worker, each on its OWN doc.
+def _render_chunk(input_bytes, indices, dpi, method, config, pil_mode, cancel=None):
+    """Render a contiguous range of pages on one worker, each chunk on its OWN raster session.
     Checks ``cancel`` per page so a removed node's compression stops promptly."""
-    doc = fitz.open(stream=input_bytes, filetype="pdf")
     out = []
-    try:
+    with raster.open_pdf(input_bytes, background=True) as doc:
         for page_index in indices:
             if cancel is not None and cancel():
                 raise CompressionCancelled()
             try:
-                img, w, h = _render_one_page(doc, page_index, dpi, method, config, cs, pil_mode)
+                img, w, h = _render_one_page(doc, page_index, dpi, method, config, pil_mode)
                 out.append((page_index, img, w, h))
             except CompressionCancelled:
                 raise
             except Exception as e:
                 logger.warning("Fehler bei Seite %d: %s", page_index, e)
-    finally:
-        doc.close()
     return out
 
 
@@ -245,23 +240,22 @@ def _render_pdf_as_images(
     # "jpg_color" always renders colour, regardless of the config colorspace;
     # the other image methods follow config.colorspace (grayscale by default).
     if method == "jpg_color":
-        cs, pil_mode = fitz.csRGB, "RGB"
+        pil_mode = "RGB"
     else:
-        cs = fitz.csGRAY if config.colorspace == "gray" else fitz.csRGB
         pil_mode = "L" if config.colorspace == "gray" else "RGB"
 
-    with fitz.open(stream=input_bytes, filetype="pdf") as src:
+    with raster.open_pdf(input_bytes, background=True) as src:
         n_pages = src.page_count
 
     # rasterize+encode every page (the slow part) — across workers when it pays off
     workers = min(cpu.worker_count(), max(1, n_pages))
     if workers <= 1 or n_pages < _PARALLEL_MIN_PAGES:
-        rendered = _render_chunk(input_bytes, range(n_pages), dpi, method, config, cs, pil_mode, cancel)
+        rendered = _render_chunk(input_bytes, range(n_pages), dpi, method, config, pil_mode, cancel)
     else:
         pool = _get_compress_pool()
         chunks = _contiguous_chunks(n_pages, workers)
         rendered = []
-        futures = [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, cs, pil_mode, cancel)
+        futures = [pool.submit(_render_chunk, input_bytes, ch, dpi, method, config, pil_mode, cancel)
                    for ch in chunks]
         try:
             for fut in futures:

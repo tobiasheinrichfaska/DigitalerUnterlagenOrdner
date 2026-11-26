@@ -44,7 +44,7 @@ def _prewarm():
         from formats import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
         from core.bridge import save_belegtool, load_belegtool
         from core.model import Document, Node
-        from services.render import render_pdf_to_pngs   # PyMuPDF/fitz
+        from services.render import render_pdf_to_pngs   # pypdfium2
         from formats.compress_pdf_bytes import compress_all_methods  # PIL/pikepdf
 
         writer = PdfWriter()
@@ -58,7 +58,7 @@ def _prewarm():
         path = os.path.join(tempfile.gettempdir(), "_belegtool_warm.belegtool")
         save_belegtool(doc, path)           # warm the save path
         load_belegtool(path)                # warm the parse/slice load path
-        render_pdf_to_pngs(tiny)            # warm the fitz render path
+        render_pdf_to_pngs(tiny)            # warm the render path
         compress_all_methods(tiny, dpi=72)  # warm the PIL/pikepdf compress path
         try:
             os.remove(path)

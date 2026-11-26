@@ -70,3 +70,26 @@ def test_render_page_giant_mediabox_is_bounded(monkeypatch):
     assert png.startswith(b"\x89PNG")
     with Image.open(io.BytesIO(png)) as im:
         assert im.width * im.height <= 250_000
+
+
+# --- rasterizer swap (pdfium): geometry the host-facing render_page must keep honouring -------------------
+def _png_size(png):
+    import io
+    from PIL import Image
+    with Image.open(io.BytesIO(png)) as im:
+        return im.size
+
+
+def test_render_page_honours_rotate_and_userunit():
+    from pdf_synth import make_pdf
+    assert _png_size(render_page(make_pdf([{"rotate": 90}]), 0, dpi=72)) == (842, 595)
+    # /UserUnit 2: pdfium alone would ignore it (595x842); MuPDF/Acrobat give 2x
+    assert _png_size(render_page(make_pdf([{"userunit": 2.0}]), 0, dpi=72)) == (1190, 1684)
+
+
+def test_render_pdf_to_pngs_one_png_per_page_and_garbage_is_empty():
+    from pdf_synth import make_pdf
+    from services.render import render_pdf_to_pngs
+    pngs = render_pdf_to_pngs(make_pdf(pages=3), dpi=50)
+    assert len(pngs) == 3 and all(p.startswith(b"\x89PNG") for p in pngs)
+    assert render_pdf_to_pngs(b"kein pdf") == []

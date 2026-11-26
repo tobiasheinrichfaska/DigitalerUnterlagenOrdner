@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 FORBIDDEN = ("fitz", "pymupdf")                                  # compared after lower() and "-" / "." -> "_"
 # Production code = everything except dev-only places: tests, build/fixture scripts, the web UI and tooling dirs.
 _SKIP_DIRS = {".git", ".claude", "node_modules", "dist", "build", ".build_venv", ".venv", "venv", "__pycache__",
-              ".pytest_cache", "vendor", "import-archiv", "tests", "scripts", "webui", "manual_tests"}
+              ".pytest_cache", "vendor", "import-archiv", "tests", "scripts", "webui", "manual_tests",
+              ".tmp"}  # .tmp = gitignored local scratch, not production code
 
 
 def _norm(name: str) -> str:

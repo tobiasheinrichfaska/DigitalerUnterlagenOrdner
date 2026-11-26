@@ -50,7 +50,7 @@ jobs:
         # bewusst OHNE -I: infra/ und universal_importer/ liegen im Repo-Verzeichnis (cwd)
         run: python -c "import infra.limits, universal_importer.archives"
       - name: belegtool-compress pruefen (installiert, nicht editierbar)
-        run: python -I -c "import belegtool_compress, belegtool_compress.compress, belegtool_compress.cpu"
+        run: python -I -c "import belegtool_compress, belegtool_compress.compress, belegtool_compress.cpu, belegtool_compress.raster"
       - name: Hauptrepo-Weiterleitungen auf belegtool-compress pruefen
         # bewusst OHNE -I: formats/ und services/ liegen im Repo-Verzeichnis (cwd)
         run: python -c "import formats.compress_pdf_bytes, services.cpu"
@@ -122,6 +122,45 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e .[dev]
       - run: python -m pytest
+
+  # Raster-Paritaet pypdfium2 (Produktion) gegen PyMuPDF (nur Dev-Orakel), Messwerkzeug + Paritaetstests.
+  # Grundlage/Schwellen: docs/pdfium-spike.md. Zeitmessung (speed) und Latenz sind absichtlich NICHT im CI
+  # (geteilte Runner = verrauscht); Thread-Sicherheit/Prioritaet sind per pytest abgedeckt.
+  raster-parity:
+    name: raster-parity pdfium vs PyMuPDF (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - name: pypdfium2 + belegtool-compress + PyMuPDF (Orakel, dev) + numpy
+        run: python -m pip install -r requirements-dev.txt ./packages/belegtool-compress pypdfium2==5.15.2 Pillow pikepdf pypdf
+      - name: Paritaets- und pdfium-Tests des Pakets
+        run: python -m pytest packages/belegtool-compress/tests/test_raster_pdfium.py packages/belegtool-compress/tests/test_raster_parity.py -q
+      - name: scripts/raster_compare.py (Masse, Abweichung, Versatz, JPEG-Groessen, Speicher)
+        run: python scripts/raster_compare.py --only dims,align,jpeg,memory
+
+  # Der ausgelieferte Abhaengigkeitssatz (nur requirements.txt, OHNE PyMuPDF) rendert und komprimiert.
+  no-pymupdf-runtime:
+    name: Laufzeit ohne PyMuPDF (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - name: Smoke - Vorschau + Kompression, fitz darf nicht installierbar/importierbar sein
+        run: python scripts/smoke_no_pymupdf.py
 
   # Plattformneutrale Frontend-Teile: lint, Vitest (jsdom), Produktions-Build.
   webui:

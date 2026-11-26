@@ -17,7 +17,6 @@ import os
 import sys
 import threading
 import time
-import zlib
 
 import numpy as np
 import pikepdf
@@ -29,37 +28,11 @@ except ImportError:  # pragma: no cover
     fitz = None
 import pypdfium2 as pdfium
 
+from belegtool_compress import raster
+
 DPIS = (50, 100, 150, 300)
 MAX_PIXELS = 64_000_000
-class PriorityLock:
-    """Process-wide pdfium lock with foreground priority: a background acquirer waits while any
-    foreground acquirer is queued, so an interactive page waits for at most ONE running render."""
-
-    def __init__(self):
-        self._cv = threading.Condition(threading.Lock())
-        self._busy = False
-        self._fg_waiting = 0
-        self.background = False  # default for plain `with lock:`
-
-    def acquire(self, background: bool = False):
-        with self._cv:
-            if not background:
-                self._fg_waiting += 1
-            try:
-                while self._busy or (background and self._fg_waiting):
-                    self._cv.wait()
-            finally:
-                if not background:
-                    self._fg_waiting -= 1
-            self._busy = True
-
-    def release(self):
-        with self._cv:
-            self._busy = False
-            self._cv.notify_all()
-
-
-PDFIUM_LOCK = PriorityLock()
+PDFIUM_LOCK = raster.PDFIUM_LOCK  # the production lock (measured as shipped)
 
 
 # ---------------------------------------------------------------- backends
@@ -70,53 +43,10 @@ def fitz_render(data: bytes, index: int, dpi: int, gray: bool = False) -> Image.
         return Image.open(io.BytesIO(pix.tobytes("ppm"))).convert("L" if gray else "RGB")
 
 
-_UU_CACHE = {}
-
-
-def user_unit(data: bytes, index: int) -> float:
-    """/UserUnit of a page (pdfium ignores it; MuPDF/Acrobat honour it -> scale ourselves).
-    Looked up once per document (keyed by length+crc32), not per page."""
-    key = (len(data), zlib.crc32(data))
-    units = _UU_CACHE.get(key)
-    if units is None:
-        units = ()
-        if b"UserUnit" in data or b"ObjStm" in data:
-            try:
-                with pikepdf.open(io.BytesIO(data), suppress_warnings=True) as pdf:
-                    units = tuple(float(p.obj.get("/UserUnit", 1.0)) for p in pdf.pages)
-            except Exception:
-                units = ()
-        if len(_UU_CACHE) > 8:
-            _UU_CACHE.clear()
-        _UU_CACHE[key] = units
-    u = units[index] if index < len(units) else 1.0
-    return u if u > 0 else 1.0
-
-
-def pdfium_render(data: bytes, index: int, dpi: int, gray: bool = False, lock=PDFIUM_LOCK,
-                  background: bool = False) -> Image.Image:
-    dpi = dpi * user_unit(data, index)
-    lock.acquire(background)
-    try:
-        pdf = pdfium.PdfDocument(data)
-        try:
-            try:
-                pdf.init_forms()
-            except Exception:
-                pass
-            page = pdf[index]
-            try:
-                bm = page.render(scale=dpi / 72.0, grayscale=False, fill_color=(255, 255, 255, 255),
-                                 may_draw_forms=True, draw_annots=True)
-                img = bm.to_pil()
-                img.load()
-            finally:
-                page.close()
-        finally:
-            pdf.close()
-    finally:
-        lock.release()
-    return img.convert("L" if gray else "RGB")
+def pdfium_render(data: bytes, index: int, dpi: int, gray: bool = False, background: bool = False) -> Image.Image:
+    """Render through the PRODUCTION backend (belegtool_compress.raster): lock, UserUnit, RGB->L grey."""
+    with raster.get_backend("pdfium").open(data, background=background) as doc:
+        return doc.render(index, dpi, gray=gray)
 
 
 # ---------------------------------------------------------------- fixtures
@@ -551,15 +481,33 @@ def check_threads():
 
 
 def rss_mb():
+    """Resident set size in MB: /proc on Linux, GetProcessMemoryInfo on Windows (no psutil needed), else nan."""
     try:
         with open("/proc/self/statm") as f:
             return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1e6
     except Exception:
+        pass
+    if sys.platform == "win32":  # pragma: no cover - only exercised on Windows
         try:
-            import psutil
-            return psutil.Process().memory_info().rss / 1e6
+            import ctypes
+            from ctypes import wintypes
+
+            class PMC(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                            ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            counters = PMC()
+            counters.cb = ctypes.sizeof(PMC)
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                return counters.WorkingSetSize / 1e6
         except Exception:
-            return float("nan")
+            pass
+    return float("nan")
 
 
 def check_memory():
@@ -575,8 +523,10 @@ def check_memory():
     print("\n### (f) Speicher (1000 Seiten, Dokument je Aufruf geschlossen)\n")
     print(f"RSS vor: {r0:.0f} MB; nach 250/500/750/1000: " + " / ".join(f"{m:.0f}" for m in marks) + " MB")
     growth = marks[-1] - marks[0]
-    ok = growth < 30 or growth != growth
-    print(f"Wachstum zwischen Seite 250 und 1000: {growth:.1f} MB -> {'ok' if ok else 'LECK?'}")
+    measurable = growth == growth
+    ok = growth < 30 or not measurable
+    print(f"Wachstum zwischen Seite 250 und 1000: {growth:.1f} MB -> "
+          f"{'nicht messbar auf dieser Plattform' if not measurable else ('ok' if ok else 'LECK?')}")
     return [] if ok else [("memory", "", f"{growth:.0f}MB")]
 
 

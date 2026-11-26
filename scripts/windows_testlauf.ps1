@@ -351,9 +351,9 @@ $bundleHelper = @'
 # Hilfsskript (vom Testlauf erzeugt): prueft, welche Module im PyInstaller-Bundle (PYZ) stecken.
 import re, sys
 exe, toc_file = sys.argv[1], sys.argv[2]
-REQ = ["datev", "belegtool_archives", "belegtool_compress", "pi_heif", "olefile", "compressed_rtf"]
-FORBID = ["pillow_heif", "extract_msg", "RTFDE"]
-INFO = ["fitz"]
+REQ = ["datev", "belegtool_archives", "belegtool_compress", "pi_heif", "olefile", "compressed_rtf", "pypdfium2", "pypdfium2_raw"]
+FORBID = ["pillow_heif", "extract_msg", "RTFDE", "fitz", "pymupdf"]
+INFO = []
 names = None
 source = ""
 try:
@@ -450,6 +450,15 @@ Invoke-Phase '2b Bundle-Pruefung' {
         foreach ($f in $x265) { Add-Detail ('- VERBOTEN VORHANDEN: ' + $f.FullName.Replace($script:Root, '<repo>')) }
     }
     else { Add-Detail '- ok: keine Datei *x265*' }
+
+    # 3b. pdfium-DLL (pypdfium2_raw) muss im Bundle liegen, sonst rendert nichts (Vorschau/Kompression leer)
+    $pdfium = @(Get-ChildItem $dist -Recurse -File -Filter 'pdfium*.dll' -ErrorAction SilentlyContinue)
+    if ($pdfium.Count -eq 0) {
+        [void]$fails.Add('pdfium.dll fehlt im Bundle (pypdfium2_raw)')
+        Add-Detail '- FEHLT: pdfium.dll (pypdfium2_raw) - Vorschau/Kompression wuerden nicht rendern'
+    }
+    else { Add-Detail ('- ok: ' + $pdfium[0].Name + ' im Bundle (' + [string][math]::Round($pdfium[0].Length / 1MB, 1) + ' MB)') }
+    if (Test-Path (Join-Path $dist '*fitz*')) { [void]$fails.Add('fitz-Ordner im Bundle') }
 
     # 4. webui/dist mit CSP-Meta
     $web = Join-Path $internal 'webui\dist'
@@ -568,7 +577,31 @@ Invoke-Phase '3 Echte GUI per CDP (Playwright/WebView2)' {
     return (New-Res 'UEBERSPRUNGEN' 'nicht implementiert (Plan Ebene G, docs/test-automation-plan.md; tests\gui\ existiert nicht)')
 }
 Invoke-Phase '4 Manuell-kurz' { return (New-Res 'OFFEN' 'von Hand, Checkliste: docs/windows-pc-testlauf.md Phase 4') }
-Invoke-Phase '5 Paritaetsvergleich (nach PyMuPDF-Austausch)' { return (New-Res 'OFFEN' 'Platzhalter: erst nach dem Merge des Austauschs, docs/windows-pc-testlauf.md Phase 5') }
+Invoke-Phase '5a Raster-Paritaet pdfium vs PyMuPDF' {
+    if (-not $script:Phase0Ok) { return (New-Res 'UEBERSPRUNGEN' $skipPh1) }
+    # Test-venv hat requirements.txt + requirements-dev.txt: pypdfium2 (Produktion) UND PyMuPDF (nur Orakel, dev).
+    # Exit 1 bei hartem Fail; Zeit-/Latenzwerte (Abschnitt d/e) sind auf Windows/RDP die eigentliche Information.
+    $c = Invoke-Native '5a-raster-compare' $script:VenvPy 'scripts\raster_compare.py' $script:Root
+    Add-Detail ''
+    Add-Detail '### Raster-Paritaet (scripts/raster_compare.py, Auszug der Ergebnisse; vollstaendig: Log 5a-raster-compare.log)'
+    Add-Detail ''
+    foreach ($l in @(Get-Content (Join-Path $script:LogDir '5a-raster-compare.log') -ErrorAction SilentlyContinue | Where-Object { $_ -match '^(fitz |Median|Vordergrund|8 Threads|RSS|Wachstum|FAIL|alle Schwellen|Annotationen)' })) { Add-Detail ('- ' + $l) }
+    if ($c -ne 0) { return (New-Res 'FEHLER' ('Exitcode ' + $c + ': ' + (Get-LogTail '5a-raster-compare' 4))) }
+    return (New-Res 'OK' (Get-LogLine '5a-raster-compare' 'Median'))
+}
+Invoke-Phase '5b Laufzeit ohne PyMuPDF (nur requirements.txt)' {
+    if (-not $script:Phase0Ok) { return (New-Res 'UEBERSPRUNGEN' $skipPh1) }
+    # frisches venv NUR mit dem ausgelieferten Satz: PyMuPDF darf weder installiert noch noetig sein
+    $venv = Join-Path $script:Out 'pkgvenv\ohne-pymupdf'
+    $pyp = Join-Path $venv 'Scripts\python.exe'
+    $c = Initialize-Venv $venv
+    if ($c -ne 0) { return (New-Res 'FEHLER' ('venv anlegen Exitcode ' + $c)) }
+    $c = Invoke-Native '5b-install' $pyp '-m pip install -r requirements.txt' $script:Root
+    if ($c -ne 0) { return (New-Res 'FEHLER' ('pip install -r requirements.txt Exitcode ' + $c + ': ' + (Get-LogTail '5b-install' 2))) }
+    $c = Invoke-Native '5b-smoke' $pyp 'scripts\smoke_no_pymupdf.py' $script:Root
+    if ($c -ne 0) { return (New-Res 'FEHLER' ('Exitcode ' + $c + ': ' + (Get-LogTail '5b-smoke' 3))) }
+    return (New-Res 'OK' (Get-LogLine '5b-smoke' 'OK:'))
+}
 
 # ---------------------------------------------------------------- Ergebnis schreiben
 

@@ -5,7 +5,7 @@
 > Der erste Lauf auf dem PC ist zugleich der Test des Skripts: Skriptfehler (Phase meldet „Ausnahme" / „kein Ergebnis") bitte als solche melden.
 > Grundlagen: [`test-automation-plan.md`](test-automation-plan.md), [`licence-audit.md`](licence-audit.md), [`pymupdf-extract-msg-ersatz.md`](pymupdf-extract-msg-ersatz.md), Abschnitte Build/Tests in `CLAUDE.md`.
 
-**Zweck:** vor dem Austausch von PyMuPDF/extract-msg/pillow-heif (siehe Ersatz-Analyse) einen belegten Ist-Stand auf echtem Windows erheben
+**Zweck:** (Stand vor dem Austausch; PyMuPDF/extract-msg/pillow-heif sind inzwischen ersetzt, Phase 5 prüft jetzt den Austausch) vor dem Austausch von PyMuPDF/extract-msg/pillow-heif (siehe Ersatz-Analyse) einen belegten Ist-Stand auf echtem Windows erheben
 (Python-Suite, Pakete, Frontend, Build, Bundle-Inhalt, Start) und eine kurze manuelle Prüfung ergänzen. Ergebnis: eine Tabelle (Phase 6).
 
 **Wer/wo:** der Eigentümer, auf seinem Entwicklungs-PC, ohne Admin-Rechte. Dauer grob 30-60 min mit Build (nicht gemessen).
@@ -34,9 +34,9 @@ Das Skript bricht bei einer fehlgeschlagenen Phase nicht ab, sondern protokollie
 - `build.ps1` löscht und baut `build\`, `dist\` und `.build_venv\` neu (bekanntes Verhalten, vgl. CLAUDE.md); danach fehlt pytest in `.build_venv` - der Testlauf nutzt dafür sein eigenes venv `testlauf-out\venv`.
 - Ergebnisdatei: `testlauf-out\testlauf-ergebnis.md` (mit lokalen Pfaden geschwärzt: `<repo>`, `%USERPROFILE%`).
 
-> **Erwartung auf diesem Stand:** HEIC läuft über `pi-heif` (kein `libx265`), daher müssen die Prüfungen `pi_heif` vorhanden, kein `pillow_heif`
-> und keine `*x265*`-Datei **grün** sein; `datev`, `belegtool_archives`, `belegtool_compress`, `olefile` und `compressed_rtf` (eigener `.msg`-Leser) müssen im Bundle sein; `extract_msg` und `RTFDE` (GPLv3/LGPL, seit 2026-11-26 ersetzt) dürfen **nicht** mehr im Bundle sein. Weiterhin erwartbar nur als **Info**:
-> `fitz` steckt noch im Bundle (siehe Lizenz-Audit; verschwindet erst mit dem späteren PyMuPDF-Ersatz). Rot bei den Punkten oben ist ein echter Befund - melden.
+> **Erwartung auf diesem Stand:** HEIC läuft über `pi-heif` (kein `libx265`), Rastern über `pypdfium2` (kein PyMuPDF). Im Bundle müssen sein: `pi_heif`, `pypdfium2`, `pypdfium2_raw`
+> (samt `pdfium.dll`), `datev`, `belegtool_archives`, `belegtool_compress`, `olefile`, `compressed_rtf`. **Nicht** mehr im Bundle sein dürfen: `pillow_heif`, `*x265*`,
+> `extract_msg`/`RTFDE` (seit 2026-11-26 ersetzt) und `fitz`/`pymupdf` (AGPL/Artifex, seit 2026-11-26 ersetzt). Rot bei einem dieser Punkte ist ein echter Befund - melden.
 
 ## Phase 0 - Voraussetzungen (Skript)
 
@@ -168,17 +168,25 @@ $env:BELEG_FILE_LOCK = '1'
   Zweite Instanz mit derselben Datei starten. **Soll:** zweite meldet „in Benutzung" (deutsche Meldung), erste speichert normal. Danach `Remove-Item Env:\BELEG_FILE_LOCK`.
 - [ ] **DATEV:** nur gegen eine **Testumgebung** (kein Produktivbestand!). Ohne Testumgebung: „übersprungen (keine Testumgebung)" vermerken - **nichts** gegen echte Mandanten testen. Zugangsdaten/Hostnamen nicht in die Meldung schreiben.
 
-## Phase 5 - Paritätsvergleich nach dem PyMuPDF-Austausch (Platzhalter)
+## Phase 5 - Paritätsvergleich nach dem PyMuPDF-Austausch
 
-**Wird ergänzt, sobald der Austausch (pypdfium2 für Rastern/Maße, olefile-Eigenbau für `.msg`, pi-heif für HEIC) gemergt ist.** Vorgesehen laut [`pymupdf-extract-msg-ersatz.md`](pymupdf-extract-msg-ersatz.md) (Abschnitt 6, Qualitätssicherung):
+Der Austausch ist umgesetzt (pypdfium2 fürs Rastern, olefile-Eigenbau für `.msg`, pi-heif für HEIC). Messgrundlage und Schwellen: [`pdfium-spike.md`](pdfium-spike.md)
+(auf Linux gemessen); **Windows ist hier die eigentliche Prüfung** (andere pdfium-Binärdatei, PyInstaller-Bündelung, RDP). Das Skript führt 5a/5b automatisch aus; die Befehle von Hand:
 
-- Golden-Vergleich alt (PyMuPDF) gegen neu (pypdfium2) auf `tests\data\input\`: Seitenzahl und Seitenmaße **exakt gleich**, Pixeldifferenz (SSIM/PSNR-Schwelle noch festzulegen).
-- Kompressionsgrößen je Methode/DPI vorher/nachher protokollieren (Delta), „Lesbarkeit"-Verhalten stichprobenartig prüfen.
-- `.msg`-Golden: dieselben (eigenen, nicht ins Repo gelegten) Outlook-Mails mit altem und neuem Leser; Betreff, Body, Anhänge, Weiterleitung, Embedded-Message vergleichen.
-- Bundle-Prüfung (Phase 2b) muss dann grün sein: kein `extract_msg`/`RTFDE`, kein `pillow_heif`, keine `*x265*` (die `.msg`-/HEIC-Teile sind bereits umgesetzt und werden schon jetzt geprüft).
-- Vorschau-Latenz auf dem PC (und stichprobenweise auf dem Terminalserver) wegen des Thread-Locks von pypdfium2.
+| Schritt | Befehl (im Repo, Test-venv mit `requirements.txt` + `requirements-dev.txt`) | Erwartung | Melden, wenn |
+|---|---|---|---|
+| 5a Raster-Parität | `.\testlauf-out\venv\Scripts\python.exe scripts\raster_compare.py` (Dauer ca. 3-5 min; nur Teile: `--only dims,align,jpeg`) | Exit 0, „alle Schwellen erfüllt". Maße exakt gleich; `GRENZE` nur bei `cropbox` (50 DPI) und `cropbox_rot90` (300 DPI) erlaubt; Tempo-Median ≥ 0.7x; 8 Threads x 200 Seiten ohne Abweichung; Wachstum über 1000 Seiten < 30 MB | irgendein `FAIL:`, `STRUKTUR`, Absturz/Hänger bei „Thread-Sicherheit", Wachstum > 30 MB, Tempo-Median < 0.7x |
+| 5a-pytest | `.\testlauf-out\venv\Scripts\python.exe -m pytest packages\belegtool-compress\tests\test_raster_pdfium.py packages\belegtool-compress\tests\test_raster_parity.py -q` | alles grün (Phase 1b läuft das ohnehin mit) | rote Tests, besonders `test_*orientation*`, `*userunit*`, `*widget*` |
+| 5b Laufzeit ohne PyMuPDF | frisches venv nur mit `requirements.txt`, dann `python scripts\smoke_no_pymupdf.py` | `OK: Vorschau + Kompression laufen ohne PyMuPDF` | Fehlermeldung, „fitz ist installiert" |
+| 5c Bundle (Phase 2b) | prüft `pypdfium2`, `pypdfium2_raw`, `pdfium.dll` im Bundle und `fitz`/`pymupdf` **nicht** | grün | `pdfium.dll fehlt im Bundle` = PyInstaller sammelt die DLL nicht (dann `collect_dynamic_libs('pypdfium2_raw')` im Spec prüfen) |
+| 5d Exe von Hand | `.\dist\BelegTool\BelegTool.exe` starten, ein mehrseitiges PDF **und** einen Farbscan importieren | Vorschau zeigt Seiten (nicht leer/schwarz), Kompressions-Dropdown füllt sich, „Seite n / m" stimmt | leere Vorschau, „Keine Vorschau", Kompression bietet nichts an |
+| 5e Terminalserver/RDP | wie 5d, im RDP-Fenster; auf einem Server mit mehreren Sitzungen zusätzlich 5a (nur Abschnitt d/e) | Vorschau-Latenz unauffällig; im Abschnitt (e) „Median bei 4 Hintergrund-Threads" nicht über das Dreifache der Einzelzeit | Vorschau ruckelt beim Scrollen, während im Hintergrund komprimiert wird |
 
-Skript und Befehle dafür gibt es noch nicht - hier nichts ausführen.
+Zusätzlich (stichprobenartig, nicht automatisiert):
+
+- Kompressionsgrößen je Methode/DPI mit einem **echten Scan**: `python scripts\raster_compare.py --pdf <scan.pdf> --only dims,jpeg` (Datei **nicht** ins Repo legen, nicht mitschicken; nur die Zahlen). Abweichung der JPEG-Größen soll unter 15 % liegen.
+- Farbige Stempel/Schrift in den Grau-Varianten `jpg`/`png` sind jetzt etwas **dunkler** als vor dem Austausch (Luminanz statt MuPDF-Aufhellung, siehe Spike §Nebenbefunde 3): prüfen, dass Rot/Blau auf dem Scan lesbar bleibt.
+- `.msg`-Golden: dieselben (eigenen, nicht ins Repo gelegten) Outlook-Mails mit altem und neuem Leser; Betreff, Body, Anhänge, Weiterleitung, Embedded-Message vergleichen (Phase 4 Mail-Punkt).
 
 ## Phase 6 - Ergebnisse zurückmelden
 

@@ -10,6 +10,8 @@ __pycache__/
 tests/__pycache__/
 
 # Build / Distribution
+# Generated licence texts of all dependencies (scripts/gen_third_party_notices.py; bundled by belegtool.spec)
+/licenses/
 build/
 dist/
 .build_venv/
@@ -83,3 +85,7 @@ datev.config.json
 # NEVER commit to this PUBLIC repo; kept locally as reference only.
 docs/datev-ticket-deleted-nutzer.md
 docs/SESSION_HANDOFF.md
+
+# Python build artifacts (pip install ./packages/...)
+*.egg-info/
+build/

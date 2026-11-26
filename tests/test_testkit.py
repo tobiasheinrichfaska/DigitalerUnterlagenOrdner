@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The human-tester kit (scripts/testkit + scripts/build_testkit.py): the Markdown subset,
 the test-case model, the real manual_tests sources and the sample-file catalog.
 

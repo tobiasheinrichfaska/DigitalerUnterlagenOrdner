@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Pure helpers for persisting the main window's geometry (remember size / position /
 monitor across launches). The file I/O and the OS virtual-screen query live in
 ``host.py``; this module holds the validation that a saved geometry is still usable —

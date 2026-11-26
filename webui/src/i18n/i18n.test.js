@@ -61,9 +61,9 @@ describe('translate (source-string keys)', () => {
     // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206,
     // PLUS the 12 load/export integrity warnings (QS 2026-11-04: degraded .belegtool open/import,
     // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
-    // failed export slices, preview render error) = 218.
+    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(218)
+    expect(Object.keys(en).length).toBe(220)
   })
 })
 
@@ -79,6 +79,9 @@ describe('full-coverage languages', () => {
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
   const PENDING_TRANSLATIONS = new Set([
     'Im PDF-Tool öffnen',
+    // AGPL §13 licence & source footer of the Help modal — de + en only, batch-translated later
+    'Lizenz & Quelltext',
+    'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md',
     // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
     'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
     'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',

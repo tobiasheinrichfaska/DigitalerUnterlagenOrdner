@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """#13 configurable export split — grouping engine (top-folder / any-folder levels).
 
 Locks the previously-untested top-level boundary split and adds the any-folder level

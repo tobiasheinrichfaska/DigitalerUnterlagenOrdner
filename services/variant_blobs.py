@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Serialize a node's computed compression variants to/from a single blob, for
 embedding in the .belegtool as a per-node attachment.
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Regression net for the upcoming structure refactors (see the 2026-06-04
 structure audit). These lock the *observable* behaviour and the public import
 surface so that moving/renaming/splitting modules (formats/, infra/, importers/,

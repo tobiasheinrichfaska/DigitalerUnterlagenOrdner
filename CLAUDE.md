@@ -26,10 +26,10 @@ engine, bridge, session, api, render_policy) with `core/ipc/` for the named-pipe
 transport; `services/` = stateful infra (render cache, CPU fairness, variants);
 `formats/` = `.belegtool` I/O + conversion (pdf_node, pdf_storage, toc_export,
 compress_pdf_bytes); `universal_importer/` = multi-format import package;
-`datev/` = the lazy DATEVconnect integration (DATEV-mode only; never imported when
+`datev/` = the lazy DATEVconnect integration (now the separable package `packages/datev-dokab/`, see below; DATEV-mode only; never imported when
 off — `inapp`, `client`, `writeback`, `provenance`, `config`, `transport`, `types`,
-`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF), `probe_gui` (research tool));
-`infra/` = ports + per-user state (tasks, log_config, tools, `settings.py`,
+`endpoints` (URL builder), `synthetic_pdf` (probe/test PDF); the research tool `probe_gui` lives in `tools/datev_probe/`);
+`infra/` = ports + per-user state (tasks, log_config, tools, `limits.py` re-export, `settings.py`,
 `file_lock.py`, `window_geometry.py`); `host.py`/`version_info.py` =
 entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
@@ -38,6 +38,78 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 | File | Role |
 |---|---|
 | `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. The **first** window **persists its geometry** (size/position/monitor) to `%APPDATA%\…\window.json` on close and restores it on next launch; a saved geometry whose monitor is gone falls back to the default (validated by the pure [`infra/window_geometry.py`](infra/window_geometry.py), tested). |
+
+### `packages/datev-dokab/` — separable DATEV library
+
+`datev/` (import name stays `datev`) lives in `packages/datev-dokab/` with its own `pyproject.toml`
+(AGPL-3.0-or-later, no dependencies), README, LICENSE and its internal tests (`packages/datev-dokab/tests/`;
+`test_datev_coreapi`/`test_datev_provenance_roundtrip` stay in `tests/` because they need `core`). The main repo
+installs it (non-editable) via `./packages/datev-dokab` in `requirements.txt`; `belegtool.spec` collects it as a
+hidden import; CI has an isolated `datev-dokab` job. **Extraction** into its own repo needs no code change:
+`git filter-repo --subdirectory-filter packages/datev-dokab`, tag `v0.1.0`, then switch `requirements.txt` to the
+pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](packages/datev-dokab/EXTRACTION.md). The package
+must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
+after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
+
+### `packages/belegtool-archives/` — separable container-extraction library
+
+The container readers (ZIP/TAR/TGZ/EML/MSG extraction, nesting limits, bomb guards) and the shared caps
+(`limits.py`) live in `packages/belegtool-archives/` (import name `belegtool_archives`; own `pyproject.toml`, AGPL-3.0-or-later,
+no hard dependencies, README, LICENSE, `EXTRACTION.md`, tests in `packages/belegtool-archives/tests/`). **Boundary:** the package
+never imports the host (`infra`/`core`/`formats`/`universal_importer`, guarded by `test_standalone.py`); logger
+`logging.getLogger("belegtool_archives")`; member conversion (image/Office/HTML → PDF) is **injected** as
+`convert_member(content: bytes, name: str) -> bytes | BytesIO` (default: only `.pdf` passes through).
+`universal_importer/archives.py` is a thin shim that injects `UniversalImporter.convert`; `infra/limits.py` is a re-export
+(`services/variant_blobs.py`/`infra/tools.py` unchanged). `.msg` is read by the package's OWN reader `msg_reader.py` (+ `rtf_deencap.py`) on `olefile` (BSD-2) + `compressed-rtf` (MIT),
+extra `msg` (**2026-11-26: `extract-msg` GPLv3 + RTFDE LGPL removed completely** — see *Findings from 2026-10-18*, guard
+`tests/test_no_gpl_msg_deps.py`); without the extra `.msg` degrades to „nicht importierbar". Body order HTML > HTML unwrapped from
+encapsulated RTF > plain text as minimal HTML > raw `.rtf` (an ordinary RTF is not converted); an attached Outlook message is recursed.
+Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test_msg_reader.py`; **synthetic fixtures only**. Installed non-editable via
+`./packages/belegtool-archives` in `requirements.txt`; `belegtool.spec` collects it as a hidden import; CI has an isolated
+`belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it. Extraction:
+`git filter-repo --subdirectory-filter packages/belegtool-archives` (see its `EXTRACTION.md`). Host-side companions:
+`tests/test_zip_member_guard_host.py`, `tests/test_limits.py`.
+
+### `packages/belegtool-compress/` — separable PDF-compression library
+
+`formats/compress_pdf_bytes.py` (render-based jpg/jpg_color/png + pikepdf variants, `CompressionConfig`, `CompressionCancelled`,
+page-count truncation guard) and the CPU-fairness primitives (`services/cpu.py`: `worker_count`, below-normal threads, `SystemCpuSampler`,
+RAM budget) live in `packages/belegtool-compress/` (import name `belegtool_compress`: `compress.py`, `cpu.py`, `pixels.py`, `raster.py`, `pdfinfo.py`; own
+`pyproject.toml`, AGPL-3.0-or-later, deps pypdfium2/Pillow/pikepdf/pypdf (PyMuPDF only as `oracle`/`dev` extra), README, `EXTRACTION.md`, tests in
+`packages/belegtool-compress/tests/`). **Boundary:** the package never imports the host nor `belegtool_archives` (guarded by `test_standalone.py`);
+logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py` and `services/cpu.py` are thin re-exports (guarded by
+`tests/test_compress_reexports.py`; `core.engine` lazy-imports through the shim). `pixels.capped_dpi` is a deliberate small copy of
+`services/render.capped_dpi` (render.py stays in the host; keep both budgets in step). Stay in the host: `render.py`, `render_service.py`,
+`variant_store`/`variant_blobs`, `infra/limits`, and the engine-bound tests (`test_engine_compress_cancel.py`, `test_engine_jpg_color.py`).
+Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`; `belegtool.spec` collects it; CI has an isolated
+`belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
+to it. Extraction: `git filter-repo --subdirectory-filter packages/belegtool-compress` (see its `EXTRACTION.md`).
+
+**Non-raster work runs on pikepdf (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)):** `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
+Letter default for a missing/empty box; `services/render.page_count/page_dims` delegate), `RealEngine.split_chunks` (pikepdf page copy; **internal
+GoTo/Dest links are dropped** per part, URI links stay), the compressor's image→PDF assembly `_assemble_pdf` (JPEG as DCT, 8-bit PNG as its deflated
+IDAT + predictor, identical page images shared; PNG variants are now genuinely small instead of raw samples, 16-bit grey PNG no longer renders black)
+and the page-count guards. Parity tests (fitz as oracle): `tests/test_pdf_nonraster_parity.py`, `packages/belegtool-compress/tests/test_assemble_*.py`.
+
+**PyMuPDF is gone from the product (2026-11-26, step 3): rasterizing = pypdfium2 behind `belegtool_compress/raster.py`.**
+`raster.open_pdf(bytes)` → `page_count` / `page_size(i)` (points as displayed, rotation/CropBox/UserUnit) / `render(i, dpi, gray)` (PIL, white
+background, annotations + form fields drawn); `services/render.py` (`render_page`, `render_pdf_to_images/pngs`) and `compress.py`
+(`_render_chunk`/`_render_one_page`) call ONLY this interface. Backend = `PdfiumBackend` (pypdfium2 5.15.2, BSD-3/Apache-2.0, bundled `pdfium.dll`);
+`BELEG_RASTER` selects another registered backend (default `pdfium`; PyMuPDF is registered only by the test oracle `packages/belegtool-compress/tests/fitz_backend.py`).
+Behaviour worth knowing (all measured in [`docs/pdfium-spike.md`](docs/pdfium-spike.md), tool `scripts/raster_compare.py`):
+- **pdfium is NOT thread safe → one process-wide `PriorityLock`** around every pdfium call. A *foreground* session (interactive preview page; default for
+  a non-pool thread) registers priority for its whole lifetime, so queued *background* work (threads marked by `cpu.set_current_thread_below_normal`
+  = the prefetch and compression pools, or `background=True`) never slips in between its open/size/render calls: an interactive page waits for at most one
+  running render (≈ 1.7× the single-page time under 4 background threads; a plain `Lock` gave 5×). Consequence: **the pools give fairness, not throughput** (they were GIL-bound
+  ~1.2× under PyMuPDF too). Never open a foreground session and then wait for background work on the same thread.
+- **/UserUnit is applied by us** (pdfium ignores it); **grey = RGB render + Pillow `L`** (not pdfium's grayscale flag, not MuPDF's brightening `csGRAY`):
+  colour stamps in the grey `jpg`/`png` variants are a bit darker than before. Pixel size = `ceil(pt·dpi/72)` like before; pixel budget `MAX_RENDER_PIXELS` unchanged
+  (plus a 256 MP hard cap in the backend).
+- A document is opened **per session and closed deterministically** (no leak over 1000 pages); a wrong password / garbage raises `RasterError` (→ empty preview / skipped candidate).
+- Parity tests with PyMuPDF as optional oracle: `packages/belegtool-compress/tests/test_raster_parity.py` (+ `test_raster_pdfium.py`, no oracle needed); licence guard
+  `tests/test_no_agpl_pdf_deps.py`; shipped-set smoke `scripts/smoke_no_pymupdf.py` (CI `no-pymupdf-runtime`); CI `raster-parity` (ubuntu + windows).
+  PyMuPDF stays in `requirements-dev.txt` (+ numpy for the tool) as test oracle and fixture generator for `tests/`/`scripts/` only.
+  **Windows-only unverified:** PyInstaller bundling of `pypdfium2_raw/pdfium.dll`, rendering under RDP, real scans.
 
 ### Data model
 
@@ -50,7 +122,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 
 | File | Role |
 |---|---|
-| `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (ZIP/TAR/email extraction + bomb guards). `__init__` re-exports the public surface. |
+| `universal_importer/` | Multi-format import **package**: `importer.py` (the `UniversalImporter` detect+dispatch class), `converters.py` (per-format functions: images jpg/png/webp/heic, Office via COM, txt/html + the `data:`/`cid:` link guard), `archives.py` (thin shim over the separable package `belegtool_archives`, see below: ZIP/TAR/email extraction + bomb guards, with `UniversalImporter` injected as the member converter). `__init__` re-exports the public surface. |
 | `formats/toc_export.py` | PDF export with printed TOC, clickable annotations (pikepdf), sidebar bookmarks, auto-split >100 pages |
 | `formats/compress_pdf_bytes.py` | Render-based compression (JPG/PNG), pikepdf structural compression, method comparison |
 
@@ -73,7 +145,7 @@ migration that this decoupling enabled is effectively complete.
 | `services/render.py` | **Headless** render: `render_pdf_to_images` (PIL), `render_pdf_to_pngs` (PNG bytes for the SPA), and the windowed-cache primitives `render_page` (single page), `page_count`, `page_dims`. |
 | `core/render_policy.py` | **Pure** prefetch policy: `predict_window`, `next_fill_target`/`fill_order`. No rendering/threads/UI — the brain of the windowed render cache. |
 | `services/render_service.py` | **Stateful** `RenderService` + `RenderCache`: global 200 MiB LRU keyed `(node, version, page, dpi)`, generation token, CPU-throttled background filler that warms **up to `max_workers` pages at once** on a below-normal-priority thread pool. Rendering + CPU reading are injected (testable with fakes). `CoreApi` owns one instance; `render_window`/`page_count`/`page_dims` use it (version = `crc32` of the effective bytes → auto-invalidates on edit). |
-| `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ Thread parallelism is **GIL-limited** for PyMuPDF rasterization (~1.2× on 4 workers); its real value is fairness + foreground preemption, not raw throughput (true multicore would need processes — see Open items). |
+| `services/cpu.py` | **CPU-fairness primitives** for the background pools: `worker_count` (capped 4 local / 2 RDP, `BELEG_WORKERS` override), `set_current_thread_below_normal` (so background work yields to interactive/other sessions), `SystemCpuSampler` (`GetSystemTimes`, no extra dep → prefetch backs off under load), `is_remote_session`. Pure/injected → unit-tested headless. ⚠ pdfium rasterization is serialized by `raster.PDFIUM_LOCK` (priority lock, see *PyMuPDF is gone*), so the pool's value is fairness + foreground preemption, not throughput (true multicore would need processes — see Open items). |
 
 ### Data-driven core (`core/`)
 
@@ -166,13 +238,13 @@ render/compress path at startup.
 
 | Package | Purpose |
 |---|---|
-| `PyMuPDF` (`fitz`) | PDF rendering to images |
+| `pypdfium2` 5.15.2 (BSD-3/Apache-2.0, bundles `pdfium.dll`) | PDF **rasterizing** only, via `belegtool_compress/raster.py` (`services/render.py`, `compress.py`); replaced PyMuPDF (AGPL/Artifex) 2026-11-26 — PyMuPDF is dev/test-only now (`requirements-dev.txt`: oracle + fixture generators) |
 | `Pillow` | Image processing; HEIC support via `pillow-heif` |
 | `pikepdf` | Advanced PDF manipulation (annotations, outline/bookmarks) |
 | `pypdf` | PDF read/write (base) |
 | `reportlab` | Render TOC pages (Canvas) |
 | `xhtml2pdf` | HTML-to-PDF |
-| `extract-msg` | Parse Outlook MSG files — ⚠ GPLv3, see Known Limitations (2026-10-18) |
+| `olefile` 0.47 (BSD-2) + `compressed-rtf` 1.0.7 (MIT) | Own Outlook `.msg` reader in `belegtool_archives/msg_reader.py` (replaced extract-msg GPLv3 + RTFDE LGPL on 2026-11-26) |
 | `pywin32` | Word/Excel/PPT conversion via COM |
 | `pyinstaller` | Build tool |
 
@@ -389,8 +461,8 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   user's own profile, never machine-wide) — required because DATEV authenticates via **Windows
   SSO as the logged-in user**. The header **„DATEV"** button ([`DatevBar.jsx`](webui/src/DatevBar.jsx))
   flips it via `HostApi.set_datev_mode` → `CoreApi.set_datev_mode`.
-- **Lazy service** ([`datev/inapp.py`](datev/inapp.py) `DatevService`) — built on first use over
-  the reusable, injected-transport [`datev/client.py`](datev/client.py) (SSO curl). Imports the
+- **Lazy service** ([`datev/inapp.py`](packages/datev-dokab/datev/inapp.py) `DatevService`) — built on first use over
+  the reusable, injected-transport [`datev/client.py`](packages/datev-dokab/datev/client.py) (SSO curl). Imports the
   `datev` package only when mode is on. `CoreApi._datev_get_service()` is the gate.
 - **Provenance** — the DATEV origin `{doc_guid, file_id, structure_item_id,
   correspondence_partner_guid, source_name}` lives on the **root** `Node.datev` field and
@@ -434,7 +506,7 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   illegal chars, trailing dots/spaces, and Windows reserved device names like `NUL`/`COM1`).
 - **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
   then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
-  [`datev/writeback.py`](datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
+  [`datev/writeback.py`](packages/datev-dokab/datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
   unchanged vs baseline · server bytes == opened original). `ok` → backup the fetched server
   bytes to `%APPDATA%\…\datev_backups\`, then `upload_document_file` → `update_structure_item`
   (the **stable** structure-item id; DokAb overwrites, no revision). **Any non-ok verdict
@@ -454,7 +526,7 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   `test_datev_writeback.py`). Frontend: `webui/src/DatevBar.test.jsx`, `lib/datev.test.js`, the
   export-option cases in `ExportDialog.test.jsx`. Live end-to-end is the
   [`manual_tests/10_datev.md`](manual_tests/10_datev.md) checklist (needs a DATEVconnect box).
-- The standalone probe (`datev/probe_gui.py` → `DATEV-Probe.exe`) is **maintained research
+- The standalone probe (`tools/datev_probe/probe_gui.py` + entry `datev_probe.py` → `DATEV-Probe.exe`) is **maintained research
   tooling**, not shipped in the BelegTool release. It is the live-DATEVconnect investigation
   vehicle and is used for manual housekeeping (e.g. `delete_document` of test docs). It is the
   **sole** caller of the `datev/client.py` read surface (`list_domains`/`list_documents`/
@@ -667,9 +739,8 @@ open when the confirm dialog breaks; engine variant layer freed on close; prefet
 on `_pcount` fixed. (6) Docs: DATA_CONTRACT `uid` corrected, data-model Werkseinstellungen,
 deep-copy claims removed, `requirements-dev.txt` (pytest), `testpaths = tests`, vitest
 `testTimeout`. Deferred: shared rasterization (L2), Split→fitz (L5), FreeText/JBIG2 e2e,
-import-router + CoreApi split (architecture). Open (needs verification): a host-side origin
-guard / drop-handler for the PDF-Tool window (an OS drop of an URL/HTML file might still
-navigate it — the link path is fixed).
+import-router + CoreApi split (architecture). Drop-Handler: erledigt 2026-11-25; host-seitiger
+WebView2-`AllowExternalDrop=false` bleibt offen (nur unter Windows prüfbar).
 
 **v3.11.4 — second QS round (2026-11-04, Fable review of the UNCHANGED core + Opus
 verification of every finding, all fixed test-first):** (H-1) *a corrupt `.belegtool` can no
@@ -847,7 +918,7 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   build is capped at **`_MAX_TOTAL_FOLDER_DEPTH = 120`** (nesting × member-path folders
   combined; overflow folds into names) so a crafted archive can never produce a tree the
   `.belegtool` loader (`_MAX_TREE_DEPTH = 200`) refuses to REOPEN — all guarded by
-  `tests/test_zip_member_guard.py` + `tests/test_archive_total_depth.py`.
+  `packages/belegtool-archives/tests/test_zip_member_guard.py` + `packages/belegtool-archives/tests/test_archive_total_depth.py`.
 - **Depth cap is per IMPORT, not per TREE** *(QS-Gegenprüfung 2026-11-04, N-1 — accepted)*: there is
   no depth check at the insertion target or on save, so importing a ~120-deep archive INTO the
   deepest folder of a previously imported ~120-deep archive can build >200 levels — save succeeds,
@@ -915,6 +986,22 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   `vendor/` are **vendor IP — gitignored, never committed**. `import/` is an inbox: empty after
   processing, processed files go to the gitignored `import-archiv/<timestamp>/`.
 
+- **Security review 2026-11-25 – fixed (4 High):**
+  (H-1) HTML/e-mail import: `block_remote_link` returned `None`, xhtml2pdf then falls back to the original
+  URI → remote fetch + embedding of local images; now an inert `data:` placeholder, guard
+  `tests/test_html_import_e2e.py` (local HTTP server).
+  (H-2) `datev/config.py`: `datev.config.json` is never read from the CWD again (only next to the exe /
+  source root), `base_url` https-only without userinfo, curl with `--proto =https --proto-redir =https`;
+  tests `tests/test_datev_config_security.py`.
+  (H-3) Bridge: `HostApi.open` accepts only the host-assigned `startup_path`; `webui/src/lib/dropGuard.js`
+  blocks navigation by drop/link in organizer and PDF-Tool; `?file=` only in the dev build.
+  (H-4) `UniversalImporter._EXPECTED_MAGIC` pins .docx/.xlsx/.pptx/.odt/.ods/.odp to ZIP magic and
+  .doc/.xls/.ppt to OLE magic (RTF/MHT named „.docx" bypassed the `.rels` scan); `tests/test_import_security.py`.
+  CSP: erledigt (`vite.config.js` Plugin `csp-meta`, nur Production-Build, `<meta http-equiv>` in `index.html` + `pdf-tool.html`: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; object-src/base-uri/form-action none). Guard: `webui/e2e/csp.spec.js` via `npm run test:csp` (vite preview, Port 5179; in `test:all`). Nicht verifiziert: WebView2 unter Windows.
+  Offen aus dem Review (Medium/Low, nicht behoben): PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
+
+- **Licence hygiene (2026-11-26):** `scripts/gen_third_party_notices.py` (stdlib only, offline, reproducible) collects name/version/licence/licence files of every `requirements.txt` distribution + recursive installed deps (pdfium/Skia `BUILD_LICENSES` from the pypdfium2 wheel) + npm runtime packages into `licenses/<dist>/` (**generated, git-ignored, bundled by `belegtool.spec`**, copied next to the exe by `build_msix.ps1`, run by `build.ps1` before PyInstaller) and refreshes the generated table in `THIRD_PARTY_NOTICES.md`; a distribution without licence text is an ERROR (exception list with reason: only `proxy_tools`). `tests/test_third_party_notices.py` (distributions missing in the test venv are SKIPPED with a message, not green). svglib/bidi are collected as `.py` via `module_collection_mode` (LGPL exchangeability, `docs/licence-audit.md` 5a; Windows unverified). SPDX headers (`# SPDX-License-Identifier: AGPL-3.0-or-later` + copyright line from `/LICENSE`) in all `packages/*/**/*.py` AND the main repo's Python sources (`core/ services/ formats/ infra/ universal_importer/ tools/ scripts/ tests/ host.py version_info.py datev_probe.py`, released by the owner and done 2026-11-26): `python scripts/add_spdx_headers.py [--check]`, guard `tests/test_spdx_headers.py` (also checks that every git-tracked `.py` is inside that scope). JS/JSX in `webui/src/` has **no** SPDX headers yet (separate script needed). Each package has its own `CONTRIBUTING.md` with the CLA copied **verbatim** from the main one (`tests/test_package_cla.py` compares; change all four together). Help modal has „Lizenz & Quelltext“ (AGPL §13 source offer); DATEV non-affiliation sentence in README, store listing and help.
+
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**
   - **Single-file `.pdf` import bypasses the content gate.** `CoreApi._import_path` hands
@@ -949,28 +1036,23 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     round): routing now checks the OLE/CFB signature (`D0 CF 11 E0 A1 B1 1A E1`) FIRST, so a
     `.msg` whose raw bytes contain `b"From:"`/`b"Content-Type:"` (attached mail, HTML body of an
     English reply) no longer lands in the EML parser. The former strict-xfail guard
-    [`tests/test_msg_import.py`](tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
+    [`packages/belegtool-archives/tests/test_msg_import.py`](packages/belegtool-archives/tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
     went red on the fix and is now a normal passing test (marker dropped).
-  - **Synthetic `.msg` files for tests:** [`tests/msg_fixture.py`](tests/msg_fixture.py) writes real
-    CFB/MSG files (stdlib only: subject, body, attachments, optional content id) that `extract_msg`
-    reads — so `.msg` paths can now be tested without real mail (Outlook is never touched).
-  - **Licence: `extract-msg` is GPLv3** (checked in the 0.56.1 wheel's `LICENSE.txt`; `License: GPL`). It is
-    pinned here (`extract-msg==0.55.0`) and therefore bundled into the exe/Store package. Combining it with
-    this AGPLv3 code is allowed, but the **commercial licence** (`LICENSE_COMMERCIAL.md`) cannot cover a
-    build that contains GPLv3 code — the CLA only covers our own code, not third-party GPL code. To confirm
-    with a licence specialist; options: drop `.msg` from commercially licensed builds, or replace the
-    library (below).
-  - **Weight of `extract-msg`:** `pip install extract-msg==0.55.0` pulls 16 packages (olefile,
-    beautifulsoup4, compressed-rtf, ebcdic, red-black-tree-mod, RTFDE → lark 1.3.1, oletools, pyparsing,
-    pcodedmp, colorclass, easygui, msoffcrypto-tool, …). Irrelevant for the frozen exe, but it collided
-    with vLLM's pinned `lark` on the box, which is why the box does not use it.
-  - **Alternatives (researched 2026-10-18):** `olefile` (BSD, maintained, the base of extract-msg) + an own
-    small reader for the attachment streams (`__attach_version1.0_#…` → `__substg1.0_3707001F` long name,
-    `__substg1.0_37010102` data, `3701000D` embedded message) — recommended, licence-clean; `msg-parser`
-    (BSD, only olefile, MSG→EML + attachments, but last release 1.2.0 in **2019**); `convert-outlook-msg-file`
-    (MIT script, MSG→EML, deps compoundfiles (2014) / compressed-rtf / rtfparse / beautifulsoup4);
-    `msgconvert` (Perl, Artistic/GPL, Linux package — no option for Windows). The mail body (HTML/RTF) is
-    the part that needs the RTF tooling; attachments alone need only olefile.
+  - **Synthetic `.msg` files for tests:** [`packages/belegtool-archives/tests/msg_fixture.py`](packages/belegtool-archives/tests/msg_fixture.py) writes real
+    CFB/MSG files (stdlib only: subject, plain/HTML/compressed-RTF body, Unicode or ANSI strings + code page, attachments with long/8.3 names,
+    content id, embedded messages, sent date) — so `.msg` paths are tested without real mail (Outlook is never touched).
+  - **Licence — RESOLVED 2026-11-26:** `extract-msg` (GPLv3) and its dependency RTFDE (LGPLv3) are **gone** from `requirements.txt`, the
+    package metadata, the code and the bundle (`belegtool.spec` excludes them; guard `tests/test_no_gpl_msg_deps.py`: requirements, pyproject,
+    AST import scan, spec). Replacement: the own reader `belegtool_archives/msg_reader.py` on **olefile 0.47 (BSD-2-Clause)** and
+    **compressed-rtf 1.0.7 (MIT)** (licences verified on PyPI + in the wheels 2026-11-26; `docs/licence-audit.md`). Done test-first: the parity suite
+    `tests/test_msg_parity.py` (42 cases) was written and green against extract-msg 0.58.3 on the synthetic files, then the reader replaced it
+    with the suite unchanged. **Deliberate deviations** (`test_msg_reader.py`): an embedded `.msg` attachment is recursed into a folder (extract-msg
+    degraded it to „nicht importierbar"); an attachment without data / a by-reference attachment is marked and no longer fails the whole mail;
+    unreadable strings/RTF degrade instead of raising; the other string type (…001E/…001F) is a fallback; HTML unwrapped from `\fromhtml1` RTF
+    is a SIMPLIFIED de-encapsulation (`rtf_deencap.py`, no RTFDE) — equal on the simple synthetic cases, untested on real RTF-wrapped HTML.
+    ⚠ **Not verified against real Outlook mails** (none available): Windows test run Phase 4 has the checklist (`docs/windows-pc-testlauf.md`).
+  - **History (2026-10-18):** `extract-msg` pulled 16 packages and was GPLv3 — the commercial licence could not cover a build containing it; the
+    options researched then (`olefile` own reader, `msg-parser` (2019), `convert-outlook-msg-file`, `msgconvert`) led to the olefile reader above.
 
 > *Fixed 2026-06-29 (PDF-Tool renders scanned PDFs — was BLANK):* PDF.js **v6** keeps its image
 > decoders + font/cmap data out of the main bundle — JBIG2 / JPEG2000 (the encodings DATEV scans use)
@@ -1237,7 +1319,7 @@ as **v3.10.0**.
     zip-quine → „zu tief verschachtelt"), and the bomb caps are now a **shared `_Budget`** (decoded
     bytes + member count) threaded through every level, so nesting can't compound past
     `infra.limits.BOMB_CAP_BYTES`/`BOMB_CAP_ENTRIES`. A corrupt/oversized inner container degrades to
-    „nicht importierbar" without aborting the import. Tests: `tests/test_archive_nested.py` (9 cases:
+    „nicht importierbar" without aborting the import. Tests: `packages/belegtool-archives/tests/test_archive_nested.py` (9 cases:
     cross-kind recursion, depth bound, shared byte+member budget, corrupt-nested degrade); existing
     `test_archive_*` unchanged. (Logged from the 2026-06-16 audit, finding #6; extended to nested
     mail 2026-06-26.)
@@ -1247,7 +1329,7 @@ as **v3.10.0**.
     merging siblings under shared folders — fixing the old zip **path-in-the-leaf-name** and the tar
     **basename-flatten** (which also dropped same-named files in different folders). Composes with
     the nesting above (a container at `sub/inner.zip` → `Ordner sub › Ordner inner.zip › …`). Tests:
-    `tests/test_archive_subfolders.py` (6).
+    `packages/belegtool-archives/tests/test_archive_subfolders.py` (6).
 13. **Configurable export split. — DONE (2026-06-26).** The export dialog
     ([`ExportDialog.jsx`](webui/src/ExportDialog.jsx)) gained **„In mehrere Dateien aufteilen"** with a
     page **threshold** (`split_pages`, default 100; off = single PDF) and a **break level**
@@ -1336,7 +1418,7 @@ embedded version). Low effort; do it on the next build bump.
   through `core/engine`/`core/commands` — `test_split_merge`, `test_engine_commands`, …);
   [`test_belegtool_roundtrip`](tests/test_belegtool_roundtrip.py) guards the carrier.
 - **Headless import is bytes-only end to end** — plain-PDF *and* archive/email
-  paths store bytes only (the carrier never renders); page count uses `fitz.page_count`;
+  paths store bytes only (the carrier never renders); page count uses pikepdf (`len(pdf.pages)`);
   the `/JSONStructure` metadata
   parse is gated on a cheap `b"/JSONStructure" in data` byte check (the marker
   survives pikepdf's compress+linearize, so `.belegtool`/structured-PDF imports are
@@ -1356,7 +1438,7 @@ embedded version). Low effort; do it on the next build bump.
   background (`RenderService.seed` → parallel `fill_until_idle`) on a capped,
   below-normal-priority pool that yields to foreground (generation token) and to a busy
   box (real `SystemCpuSampler`, terminal-server fair). ⚠ **Needs on-screen QA** (MT-39).
-  ⚠ **Multicore caveat:** thread parallelism is GIL-limited for PyMuPDF (~1.2×), so this
+  ⚠ **Multicore caveat:** every pdfium call is serialized by a process-wide priority lock (and it was GIL-limited ~1.2× under PyMuPDF), so this
   overlaps prefetch with idle rather than saturating cores; **true multicore would need a
   process pool** (~2.4× measured, warm+chunked) plus `multiprocessing.freeze_support()` in
   `host.py` and testing inside the packaged exe — deliberately deferred (2026-06-03).

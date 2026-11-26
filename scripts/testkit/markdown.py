@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Markdown subset → HTML for the tester documents (pure, no I/O).
 
 Covers exactly what ``manual_tests/*.md`` and the installation guide use: headings,

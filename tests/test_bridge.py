@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Tests for the Document <-> PDFStorage / .belegtool bridge (D5)."""
 
 import io

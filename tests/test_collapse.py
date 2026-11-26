@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Folder `collapsed` is a persisted Node field, set via SetCollapsed/SetAllCollapsed."""
 
 import pytest

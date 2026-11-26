@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Exclusive single-writer lock on a file (Windows), used optionally for the
 client-server / SMB store so only one person edits a ``.belegtool`` at a time.
 

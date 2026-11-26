@@ -296,4 +296,7 @@ export const en = {
   'Bitte eine Bezeichnung eingeben.': 'Please enter a name.',
   'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.':
     'A month without a year is not possible — please choose a year.',
+  'Lizenz & Quelltext': 'Licence & source code',
+  'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md':
+    'Free software under AGPL-3.0-or-later; licences of the components: THIRD_PARTY_NOTICES.md',
 }

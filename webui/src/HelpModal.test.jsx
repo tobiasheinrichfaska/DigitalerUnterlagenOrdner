@@ -45,6 +45,27 @@ describe('HelpModal — correction links', () => {
   })
 })
 
+describe('HelpModal — licence & source (AGPL §13)', () => {
+  it('footer links to the source repository and names THIRD_PARTY_NOTICES.md', () => {
+    render(<HelpModal lang="de" onClose={() => {}} />)
+    const a = screen.getByRole('link', { name: 'Lizenz & Quelltext' })
+    expect(a.getAttribute('href')).toBe('https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner')
+    expect(screen.getByText(/Freie Software unter AGPL-3\.0-or-later/)).toBeTruthy()
+    expect(screen.getByText(/Bestandteile: THIRD_PARTY_NOTICES\.md/)).toBeTruthy()
+  })
+
+  it('the authoritative DE and EN help each carry a licence section incl. the DATEV non-affiliation sentence', () => {
+    for (const lang of ['de', 'en']) {
+      const sec = helpFor(lang).find((s) => /Lizenz|Licen[cs]e/.test(s.t))
+      expect(sec, `licence section in ${lang}`).toBeTruthy()
+      const txt = sec.items.join(' ')
+      expect(txt).toContain('github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner')
+      expect(txt).toContain('THIRD_PARTY_NOTICES.md')
+      expect(txt).toMatch(/DATEV eG/)
+    }
+  })
+})
+
 describe('HelpModal — close', () => {
   it('the ✕ button closes', () => {
     const onClose = vi.fn()

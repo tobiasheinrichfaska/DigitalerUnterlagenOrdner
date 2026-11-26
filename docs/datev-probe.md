@@ -32,7 +32,7 @@ facts decide the design and only the live box reveals them:
 
 ## Safety
 - Round 1 is read-only.
-- Round 2a **creates** one document from **synthetic PDF bytes** (`datev/synthetic_pdf.py` —
+- Round 2a **creates** one document from **synthetic PDF bytes** (`packages/datev-dokab/datev/synthetic_pdf.py` —
   never a real document), under a **client and folder/register you choose in the GUI**,
   auto-labelled `ZZZ TEST – DATEV-Probe – bitte löschen`, behind an explicit confirm dialog.
   No existing document is read, modified, or deleted. The Mandant number is entered at runtime
@@ -43,12 +43,12 @@ facts decide the design and only the live box reveals them:
 ## Architecture (BelegTool, Python)
 | File | Role |
 |---|---|
-| `datev/types.py` | `DatevConfig`, injected `Transport`, errors, `program_keeps_revisions` (DokAB ⇒ overwrite) |
-| `datev/endpoints.py` | data-driven DMS v2 endpoint catalog (read) + `build_url` |
-| `datev/transport.py` | stdlib `urllib` transport (Basic auth header from the client; self-signed-TLS tolerant). SSO/Negotiate later. |
-| `datev/client.py` | `DatevConnectClient` — read: `get_info` / `list_domains` / `list_documents` / `get_document` / `list_structure_items` / `get_document_file`; create (2a): `resolve_client_guid` / `list_clients` / `upload_document_file` / `create_document`; maps 401 → `DatevAuthError`, license envelope → `DatevLicenseError` |
-| `datev/synthetic_pdf.py` | `make_test_pdf` — a tiny hand-built one-page PDF (stdlib only), the throwaway bytes for 2a |
-| `datev/probe_gui.py` | Tkinter governing GUI — every retrieval/write is an explicit, logged button; 2a create is confirm-gated |
+| `packages/datev-dokab/datev/types.py` | `DatevConfig`, injected `Transport`, errors, `program_keeps_revisions` (DokAB ⇒ overwrite) |
+| `packages/datev-dokab/datev/endpoints.py` | data-driven DMS v2 endpoint catalog (read) + `build_url` |
+| `packages/datev-dokab/datev/transport.py` | stdlib `urllib` transport (Basic auth header from the client; self-signed-TLS tolerant). SSO/Negotiate later. |
+| `packages/datev-dokab/datev/client.py` | `DatevConnectClient` — read: `get_info` / `list_domains` / `list_documents` / `get_document` / `list_structure_items` / `get_document_file`; create (2a): `resolve_client_guid` / `list_clients` / `upload_document_file` / `create_document`; maps 401 → `DatevAuthError`, license envelope → `DatevLicenseError` |
+| `packages/datev-dokab/datev/synthetic_pdf.py` | `make_test_pdf` — a tiny hand-built one-page PDF (stdlib only), the throwaway bytes for 2a |
+| `tools/datev_probe/probe_gui.py` | Tkinter governing GUI — every retrieval/write is an explicit, logged button; 2a create is confirm-gated |
 | `datev_probe.py` | one-file exe entry point |
 | `tests/test_datev_client.py` | unit tests with a fake transport (no live DATEV): feature, reads, query/path building, Basic auth, error mapping |
 

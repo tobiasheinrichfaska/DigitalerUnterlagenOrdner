@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Embed/read per-node compression variants in a .belegtool, as PDF attachments
 keyed by node id (``variant_<id>``). Attachments are not pages and not tree nodes —
 invisible in the document, ignored by plain PDF viewers and older app versions.

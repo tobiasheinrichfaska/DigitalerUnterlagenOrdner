@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """PDF-Tool node binding: lock a node while it's edited in the PDF-Tool, block
 content changes from the organizer (allow reposition/rename), save edited bytes back
 into the node, and break/close the binding. See docs/pdf-tool.md."""

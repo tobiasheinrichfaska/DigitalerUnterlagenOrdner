@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "belegtool-archives"
+version = "0.1.0"
+description = "Bomb-guarded extraction of ZIP/TAR/TGZ/EML/MSG containers into a nested document structure"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "COPYING"]
+dependencies = []
+
+[project.optional-dependencies]
+# Outlook .msg reader: olefile (BSD-2-Clause) + compressed-rtf (MIT) -- both permissive, see README.
+# Without them .msg degrades to "nicht importierbar".
+msg = ["olefile>=0.47", "compressed-rtf>=1.0.7"]
+dev = ["pytest", "olefile>=0.47", "compressed-rtf>=1.0.7"]
+
+[tool.setuptools]
+packages = ["belegtool_archives"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

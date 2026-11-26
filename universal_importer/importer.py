@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The `UniversalImporter` dispatcher: detect a file's type (extension + leading
 magic / dangerous-signature checks), then route it to the matching converter in
 :mod:`universal_importer.converters`. Container formats (zip/tar/email) are
@@ -13,6 +15,10 @@ from infra.log_config import logger
 
 from . import converters
 from .converters import ConvertedPDF
+
+
+_ZIP_MAGIC = b"PK\x03\x04"
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 class UniversalImporter:
@@ -48,6 +54,14 @@ class UniversalImporter:
         ".bmp":  [b"BM"],
         ".tif":  [b"II*\x00", b"MM\x00*"],
         ".tiff": [b"II*\x00", b"MM\x00*"],
+        # Office (security review 2026-11-25, H-4): Word/Excel/PowerPoint choose their parser by
+        # CONTENT, not extension. The OOXML `.rels` pre-scan only sees ZIPs and is deliberately
+        # fail-open for non-ZIPs (legacy OLE), so an RTF/MHT/HTML file named `.docx` skipped it
+        # and could still pull a remote template on open. Pin each extension to its real
+        # container: ZIP for OOXML/ODF, OLE compound file for legacy .doc/.xls/.ppt.
+        ".docx": [_ZIP_MAGIC], ".xlsx": [_ZIP_MAGIC], ".pptx": [_ZIP_MAGIC],
+        ".odt":  [_ZIP_MAGIC], ".ods":  [_ZIP_MAGIC], ".odp":  [_ZIP_MAGIC],
+        ".doc":  [_OLE_MAGIC], ".xls":  [_OLE_MAGIC], ".ppt":  [_OLE_MAGIC],
     }
 
     @classmethod

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """RenderCache + RenderService — deterministic, with a fake renderer and fake CPU."""
 
 from services.render_service import RenderCache, RenderService

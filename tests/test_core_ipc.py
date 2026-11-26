@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """End-to-end Step 0a: core server over a real named pipe, multiple clients."""
 
 import uuid

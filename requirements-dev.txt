@@ -3,3 +3,7 @@
 # build the test runner must be restored with:
 #   .build_venv\Scripts\pip.exe install -r requirements-dev.txt
 pytest==9.2.0
+# Test oracle + fixture generators ONLY (AGPL/Artifex - never part of the shipped product; guard:
+# tests/test_no_agpl_pdf_deps.py). Parity tests compare pypdfium2 against it; scripts/raster_compare.py needs numpy.
+PyMuPDF==1.27.2.3
+numpy==2.5.5

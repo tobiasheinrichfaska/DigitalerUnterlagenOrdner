@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Manual test cases as data: parse ``manual_tests/NN_<area>.md`` into areas and cases.
 
 Pure logic (no rendering, no file output). The Markdown files stay the single source

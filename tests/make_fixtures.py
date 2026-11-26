@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Generate the input PDF fixtures the test suite expects.
 
 The tests render-compress these PDFs at 150 DPI grayscale (JPEG q60) and assert

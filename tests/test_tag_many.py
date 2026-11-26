@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """#7 — multi-select tagging: TagMany adds/removes ONE tag across many nodes as a
 single undoable step, preserving each node's other tags. (SetTags replaces a whole
 set and only ever targeted one node.)

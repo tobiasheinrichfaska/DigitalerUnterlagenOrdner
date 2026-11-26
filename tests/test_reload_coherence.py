@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Step A: committed nodes reload coherently (current_data=bytes, no original).
 
 A "Lesbarkeit geprüft" node saves only its compressed result (the source is

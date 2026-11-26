@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 from infra.tools import sanitize_pdf
 
 def test_sanitize_pdf_returns_bytes():

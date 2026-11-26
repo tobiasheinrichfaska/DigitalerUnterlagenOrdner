@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """In-process façade over the data-driven core.
 
 JSON-able request/response, managing one ``DocumentSession`` per open document
@@ -1224,8 +1226,16 @@ class CoreApi:
         worker from a superseded epoch discards its result and leaves the current state untouched."""
         svc = None
         try:
+            from datev import _log as datev_log
             from datev.inapp import DatevService
             from infra.settings import load_settings
+            # datev has no host imports: inject the always-on diag sink and mirror the host
+            # logger's level/handlers onto datev's own logger so behaviour stays identical.
+            datev_log.set_diag(diag)
+            datev_log.logger.setLevel(logger.level)
+            for h in logger.handlers:
+                if h not in datev_log.logger.handlers:
+                    datev_log.logger.addHandler(h)
             svc = DatevService.connect(load_settings())
         except Exception:
             logger.warning("[datev] connect failed", exc_info=True)

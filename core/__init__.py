@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Headless core service for the BelegTool.
 
 A per-user process that exposes the PDF logic over a local named pipe, so a React UI

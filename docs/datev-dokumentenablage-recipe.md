@@ -2,7 +2,7 @@
 
 Authoritative, **live-verified** (2026-06-27, on the practice DATEVconnect host, `feature = DokAb`)
 notes for talking to the DATEV Dokumentenablage from BelegTool. Everything below was proven
-end-to-end with the standalone `DATEV-Probe.exe` (package `datev/`). The spec source is
+end-to-end with the standalone `DATEV-Probe.exe` (package `datev`, `packages/datev-dokab/`). The spec source is
 `vendor/document management-2.3.1.json` (vendor IP — **gitignored, never commit**).
 
 ## 1. Connection

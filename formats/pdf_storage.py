@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 import io
 import json
 import datetime
@@ -6,7 +8,7 @@ from pypdf import PdfReader, PdfWriter
 from formats.pdf_node import PDFNode
 import os
 # NOTE: universal_importer is imported lazily inside the archive/e-mail branches
-# below — it pulls in win32com/COM, extract-msg, pillow-heif (~2.6 s) which a plain
+# below — it pulls in win32com/COM, pi-heif, the .msg reader (~2.6 s) which a plain
 # .belegtool/PDF load does not need. Keeping it out of module import makes loading
 # (and the headless core's startup) fast.
 from pikepdf import open as pike_open

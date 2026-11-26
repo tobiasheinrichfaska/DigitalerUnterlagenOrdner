@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Pure render-prefetch policy — the 'brain' of the windowed render cache.
 
 No rendering, no threads, no UI, no model imports: just page arithmetic over an

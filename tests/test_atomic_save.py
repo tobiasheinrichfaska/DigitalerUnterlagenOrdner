@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Atomic unlocked save (QS-Gegenprüfung 2026-11-04, M-1).
 
 ``PDFStorage.save`` used to ``open(target, 'wb')`` the existing file directly —

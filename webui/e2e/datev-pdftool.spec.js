@@ -234,6 +234,8 @@ test.describe('PDF-Tool DATEV', () => {
     await expect(btn).toBeVisible({ timeout: 20000 })
     await expect(btn).toHaveText(/Nach DATEV ablegen/)   // file-anew, not write-back
     await fileViaDialog(page, { name: 'Eingangsrechnung' })  // node binding has no prefilled name
+    // wait for the async bake+file chain to finish before reading the recorded calls (race: was flaky)
+    await expect(page.locator('#pdf-status')).toHaveText(/In DATEV abgelegt ✓/, { timeout: 20000 })
     const calls = await page.evaluate(() => window.__calls.map((c) => c[0]))
     expect(calls).toEqual(['update_pdf_bytes', 'datev_file'])
   })

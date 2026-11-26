@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """HTML pages for the tester documents — presentation only.
 
 Takes the parsed model (cases.py) and already-built HTML fragments; knows nothing about

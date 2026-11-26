@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Unit tests for engine-backed single-node commands (D3a) with a FakeEngine."""
 
 import pytest

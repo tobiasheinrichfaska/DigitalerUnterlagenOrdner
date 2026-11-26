@@ -51,6 +51,11 @@ const de = [
   { t: 'Exportieren', items: [
     '⬇ Export PDF erzeugt ein PDF mit Inhaltsverzeichnis, klickbaren Links und Lesezeichen; bei einer Auswahl nur diese.',
   ] },
+  { t: 'Lizenz & Quelltext', items: [
+    'BelegTool ist freie Software unter der AGPL-3.0-or-later. Quelltext: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
+    'Die Lizenzen der enthaltenen Fremdkomponenten stehen in THIRD_PARTY_NOTICES.md und im Ordner licenses/ neben dem Programm.',
+    'Dieses Projekt steht in keiner Verbindung zur DATEV eG; DATEV ist eine eingetragene Marke der DATEV eG.',
+  ] },
 ]
 
 const en = [
@@ -95,6 +100,11 @@ const en = [
   ] },
   { t: 'Export', items: [
     '⬇ Export PDF produces a PDF with a table of contents, clickable links and bookmarks; with a selection, only those.',
+  ] },
+  { t: 'Licence & source code', items: [
+    'BelegTool is free software under the AGPL-3.0-or-later. Source code: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
+    'The licences of the bundled third-party components are listed in THIRD_PARTY_NOTICES.md and the licenses/ folder next to the program.',
+    'This project is not affiliated with DATEV eG; DATEV is a registered trademark of DATEV eG.',
   ] },
 ]
 
@@ -141,6 +151,11 @@ const fr = [
   { t: 'Exporter', items: [
     '⬇ Export PDF produit un PDF avec table des matières, liens cliquables et signets ; avec une sélection, uniquement ceux-ci.',
   ] },
+  { t: 'Licence et code source', items: [
+    'BelegTool est un logiciel libre sous AGPL-3.0-or-later. Code source : https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
+    'Les licences des composants tiers inclus figurent dans THIRD_PARTY_NOTICES.md et dans le dossier licenses/ à côté du programme.',
+    'Ce projet n’a aucun lien avec DATEV eG ; DATEV est une marque déposée de DATEV eG.',
+  ] },
 ]
 
 const es = [
@@ -185,6 +200,11 @@ const es = [
   ] },
   { t: 'Exportar', items: [
     '⬇ Export PDF genera un PDF con índice, enlaces y marcadores; con una selección, solo esos.',
+  ] },
+  { t: 'Licencia y código fuente', items: [
+    'BelegTool es software libre bajo AGPL-3.0-or-later. Código fuente: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
+    'Las licencias de los componentes de terceros incluidos están en THIRD_PARTY_NOTICES.md y en la carpeta licenses/ junto al programa.',
+    'Este proyecto no tiene relación con DATEV eG; DATEV es una marca registrada de DATEV eG.',
   ] },
 ]
 

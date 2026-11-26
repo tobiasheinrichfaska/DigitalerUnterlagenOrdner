@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """sanitize_pdf is wired back into the plain-PDF import path (PDF auto-repair),
 but must never touch the /JSONStructure (.belegtool) path."""
 

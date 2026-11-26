@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Pure render-prefetch policy: predict_window + next_fill_target.
 
 No rendering, no UI, no threads — just asserting the page arithmetic and

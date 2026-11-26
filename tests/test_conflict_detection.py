@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 import pytest
 from formats.pdf_node import PDFNode
 from formats.pdf_storage import PDFStorage

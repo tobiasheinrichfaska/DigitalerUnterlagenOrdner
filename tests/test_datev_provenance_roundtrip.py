@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """DATEV provenance survives the model + .belegtool round-trip, and the SetDatev
 command sets/clears it on the root (DATEV-mode in-app gate)."""
 

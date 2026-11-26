@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """pywebview host — the single warm process for the React UI.
 
 Embeds the data-driven core (core.api.CoreApi) and exposes it to the React app as
@@ -31,8 +33,8 @@ def _prewarm():
     open/render doesn't pay the cold-import cost. Runs on a daemon thread at
     startup, concurrent with the user looking at the window / picking a file.
 
-    Deliberately does NOT touch universal_importer (win32com/COM, extract-msg,
-    pillow-heif): that ~2.6 s cost is only needed to *import* Office/email/archive/
+    Deliberately does NOT touch universal_importer (win32com/COM,
+    pi-heif, the .msg reader): that ~2.6 s cost is only needed to *import* Office/email/archive/
     HEIC files, so it stays lazy and loads on first such import, not at startup.
     Best-effort; never blocks startup.
     """
@@ -44,7 +46,7 @@ def _prewarm():
         from formats import pdf_storage  # noqa: F401  (the big one: universal_importer/COM/pikepdf)
         from core.bridge import save_belegtool, load_belegtool
         from core.model import Document, Node
-        from services.render import render_pdf_to_pngs   # PyMuPDF/fitz
+        from services.render import render_pdf_to_pngs   # pypdfium2
         from formats.compress_pdf_bytes import compress_all_methods  # PIL/pikepdf
 
         writer = PdfWriter()
@@ -58,7 +60,7 @@ def _prewarm():
         path = os.path.join(tempfile.gettempdir(), "_belegtool_warm.belegtool")
         save_belegtool(doc, path)           # warm the save path
         load_belegtool(path)                # warm the parse/slice load path
-        render_pdf_to_pngs(tiny)            # warm the fitz render path
+        render_pdf_to_pngs(tiny)            # warm the render path
         compress_all_methods(tiny, dpi=72)  # warm the PIL/pikepdf compress path
         try:
             os.remove(path)
@@ -398,7 +400,24 @@ class HostApi:
     def break_node_binding(self, session, node_id):
         return self._core.break_node_binding(session, node_id)
 
+    def _is_granted_path(self, path):
+        """Only the file the HOST handed this window at launch may be opened by page JS."""
+        if not self._startup_path:
+            return False
+        try:
+            return os.path.normcase(os.path.abspath(path)) == \
+                os.path.normcase(os.path.abspath(self._startup_path))
+        except (TypeError, ValueError):
+            return False
+
     def open(self, session=None, path=None):
+        # H-3 (security review 2026-11-25): this method is reachable by ANY script that obtains
+        # the pywebview bridge (e.g. a hostile .html navigated into the window). A path is
+        # accepted only if the host itself handed it out (config().startup_path); all other
+        # opens go through the native dialogs (open_file / import_dialog), which pick the path
+        # in Python, never in page JS.
+        if path is not None and not self._is_granted_path(path):
+            return {"ok": False, "error": "Dieser Pfad darf nicht direkt geöffnet werden"}
         resp = self._core.open(session, path)
         if resp.get("ok"):
             self._session = resp.get("session")  # remember for the close-time lock release

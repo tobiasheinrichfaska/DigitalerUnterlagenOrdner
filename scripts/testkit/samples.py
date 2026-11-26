@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Sample files for the manual tests: a catalog of file name → description + builder.
 
 Every file is synthetic (invented names and numbers — no personal data) and built from
@@ -12,6 +14,7 @@ Two properties the tests rely on, both guarded by tests/test_testkit_samples.py:
 
 import hashlib
 import io
+import os
 import random
 import re
 import tarfile
@@ -276,10 +279,15 @@ def _chart() -> Image.Image:
     return img
 
 
+def _asset(name: str) -> bytes:
+    """Committed binary sample. HEIC is read-only in the app (pi-heif ships no encoder,
+    deliberately: no GPL x265), so this one is a fixed asset encoded once from
+    ``_receipt_photo().resize((900, 1200))`` with a dev-only HEVC encoder."""
+    with open(os.path.join(os.path.dirname(__file__), "assets", name), "rb") as f:
+        return f.read()
+
+
 def _image_bytes(image: Image.Image, fmt: str, **options) -> bytes:
-    if fmt == "HEIF":
-        import pillow_heif
-        pillow_heif.register_heif_opener()
     buf = io.BytesIO()
     image.save(buf, format=fmt, **options)
     return buf.getvalue()
@@ -487,7 +495,7 @@ _CATALOG = (
     Sample("Grafik_Diagramm.webp", "Diagramm als WEBP-Bild.",
            lambda: _image_bytes(_chart(), "WEBP", quality=85)),
     Sample("Handyfoto_Beleg.heic", "Handyfoto im HEIC-Format (iPhone-Standard).",
-           lambda: _image_bytes(_receipt_photo().resize((900, 1200)), "HEIF", quality=70)),
+           lambda: _asset("Handyfoto_Beleg.heic")),
     Sample("Scan_Kontoblatt.bmp", "Gescanntes Blatt als BMP-Bild.",
            lambda: _image_bytes(_clean_scan().convert("L").resize((600, 847)), "BMP")),
     Sample("Scan_Vertrag.tif", "Gescanntes Blatt als TIFF-Bild (eine Seite).",

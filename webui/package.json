@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:all": "vitest run && playwright test"
+    "test:all": "vitest run && playwright test && npm run test:csp",
+    "test:csp": "vite build && playwright test -c playwright.csp.config.js"
   },
   "dependencies": {
     "pdfjs-dist": "^6.5.438",

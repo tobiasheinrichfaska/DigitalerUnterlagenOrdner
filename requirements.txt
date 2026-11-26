@@ -1,5 +1,7 @@
 pyinstaller==6.20.0
-PyMuPDF==1.27.2.3
+# PDF rasterizer (bundled pdfium DLL), BSD-3-Clause / Apache-2.0. Replaced PyMuPDF (AGPL/Artifex) 2026-11-26,
+# see docs/pdfium-spike.md. PyMuPDF is dev-only now (requirements-dev.txt).
+pypdfium2==5.15.2
 Pillow==13.0.0
 pi-heif==1.4.0
 pikepdf==10.7.3

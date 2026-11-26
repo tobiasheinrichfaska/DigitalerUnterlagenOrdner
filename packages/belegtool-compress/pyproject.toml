@@ -5,16 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "belegtool-compress"
 version = "0.1.0"
-description = "Render-based and structural PDF compression (JPG/PNG/pikepdf variants) with CPU-fairness primitives"
+description = "Render-based and structural PDF compression (JPG/PNG/pikepdf variants), pdfium rasterizer port and CPU-fairness primitives"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "COPYING"]
-# PyMuPDF is AGPL-3.0 / Artifex-commercial: see README "Licensing note".
-dependencies = ["PyMuPDF", "Pillow", "pikepdf", "pypdf"]
+# Rasterizing: pypdfium2 (BSD-3-Clause / Apache-2.0, bundled pdfium). PyMuPDF (AGPL) is only the optional test oracle.
+dependencies = ["pypdfium2", "Pillow", "pikepdf", "pypdf"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+oracle = ["PyMuPDF"]          # parity oracle + fixture generator for the tests (AGPL-3.0 / Artifex; not a runtime dependency)
+dev = ["pytest", "PyMuPDF"]
 
 [tool.setuptools]
 packages = ["belegtool_compress"]

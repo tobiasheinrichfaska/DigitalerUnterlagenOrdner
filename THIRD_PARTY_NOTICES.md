@@ -22,9 +22,8 @@ upstream projects named below (exact versions as pinned).
 | python-bidi (via xhtml2pdf) | 0.6.12 | LGPL (COPYING + COPYING.LESSER) | https://github.com/MeirKriheli/python-bidi |
 | pyHanko, pyhanko-certvalidator (via xhtml2pdf) | 0.38.2 / 0.33.0 | MIT | https://github.com/MatthiasValvekens/pyHanko |
 | arabic-reshaper, html5lib, lxml, cssselect2, tinycss2, webencodings | see PyPI | MIT / MIT / BSD-3-Clause / BSD / BSD / BSD | PyPI |
-| extract-msg | 0.55.0 | GPL-3.0 | https://github.com/TeamMsgExtractor/msg-extractor |
-| RTFDE (via extract-msg) | 0.1.2.2 | LGPL-3.0 | https://github.com/seamustuohy/RTFDE |
-| olefile, compressed-rtf, ebcdic, beautifulsoup4, red-black-tree-mod, lark, oletools, tzlocal | see PyPI | BSD / MIT / BSD-2-Clause / MIT / MIT / MIT / BSD / MIT | PyPI |
+| olefile | 0.47 | BSD-2-Clause (c) 2005-2023 Philippe Lagadec; reads Outlook .msg containers | https://github.com/decalage2/olefile |
+| compressed-rtf | 1.0.7 | MIT (c) 2016 Dmitry Alimov; decompresses the RTF body of .msg files | https://github.com/delimitry/compressed_rtf |
 | pywin32 | 312 | PSF | https://github.com/mhammond/pywin32 |
 | pywebview | 6.2.1 | BSD-3-Clause (c) Roman Sirokov | https://github.com/r0x0r/pywebview |
 | bottle, proxy_tools, typing_extensions | see PyPI | MIT / MIT / PSF-2.0 | PyPI |

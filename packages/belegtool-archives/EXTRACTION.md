@@ -18,10 +18,9 @@ Run in a **fresh clone** of the main repository:
    - keep `infra/limits.py` (re-export) and `universal_importer/archives.py` (injects `UniversalImporter` as `convert_member`)
 7. Later changes: bump the version in `pyproject.toml`, tag, update the tag in `requirements.txt`.
 
-## Licensing note (`extract-msg`, GPLv3)
+## Licensing note (`.msg` reader)
 
-`.msg` support needs the OPTIONAL `extract-msg` (extra `msg`, GPLv3). The main repo's `requirements.txt`
-currently pins `extract-msg==0.55.0` itself, so shipped builds contain it; the open licence question
-(commercial licence vs. GPLv3 component, options: drop `.msg` from commercial builds or replace the
-library by an own `olefile` reader) is documented in the main repo's CLAUDE.md, "Findings from 2026-10-18".
-Replacing the reader happens inside this package only (`archives.py`, the `extract_msg` block).
+`.msg` support needs the extra `msg` = `olefile` (BSD-2-Clause) + `compressed-rtf` (MIT) - both permissive; `extract-msg` (GPLv3) and
+RTFDE (LGPLv3) were replaced by the own reader `msg_reader.py` on 2026-11-26 (main repo: `docs/licence-audit.md`,
+`tests/test_no_gpl_msg_deps.py`). The main repo's `requirements.txt` pins `olefile==0.47` and `compressed-rtf==1.0.7`. After the
+extraction nothing changes: the reader never imports the host.

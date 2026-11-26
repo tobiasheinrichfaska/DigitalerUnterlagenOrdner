@@ -20,7 +20,7 @@ Windows bindings:
 | Build | PyInstaller `win64` onedir + `build.ps1` | `.app`/`dmg` (macOS) and an AppImage/binary (Linux) build scripts |
 
 Cross-platform already: PyMuPDF, Pillow/pillow-heif, pikepdf, pypdf, reportlab,
-xhtml2pdf, extract-msg — so import (minus COM Office), compression, preview, TOC/index
+xhtml2pdf, olefile/compressed-rtf (.msg) — so import (minus COM Office), compression, preview, TOC/index
 export and the `.belegtool` format should work as-is.
 
 ## Suggested approach

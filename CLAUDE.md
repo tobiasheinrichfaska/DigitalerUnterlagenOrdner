@@ -60,8 +60,11 @@ never imports the host (`infra`/`core`/`formats`/`universal_importer`, guarded b
 `logging.getLogger("belegtool_archives")`; member conversion (image/Office/HTML → PDF) is **injected** as
 `convert_member(content: bytes, name: str) -> bytes | BytesIO` (default: only `.pdf` passes through).
 `universal_importer/archives.py` is a thin shim that injects `UniversalImporter.convert`; `infra/limits.py` is a re-export
-(`services/variant_blobs.py`/`infra/tools.py` unchanged). `extract_msg` is an OPTIONAL extra (`msg`, ⚠ GPLv3 — see
-*Findings from 2026-10-18*); without it `.msg` degrades to „nicht importierbar". Installed non-editable via
+(`services/variant_blobs.py`/`infra/tools.py` unchanged). `.msg` is read by the package's OWN reader `msg_reader.py` (+ `rtf_deencap.py`) on `olefile` (BSD-2) + `compressed-rtf` (MIT),
+extra `msg` (**2026-11-26: `extract-msg` GPLv3 + RTFDE LGPL removed completely** — see *Findings from 2026-10-18*, guard
+`tests/test_no_gpl_msg_deps.py`); without the extra `.msg` degrades to „nicht importierbar". Body order HTML > HTML unwrapped from
+encapsulated RTF > plain text as minimal HTML > raw `.rtf` (an ordinary RTF is not converted); an attached Outlook message is recursed.
+Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test_msg_reader.py`; **synthetic fixtures only**. Installed non-editable via
 `./packages/belegtool-archives` in `requirements.txt`; `belegtool.spec` collects it as a hidden import; CI has an isolated
 `belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it. Extraction:
 `git filter-repo --subdirectory-filter packages/belegtool-archives` (see its `EXTRACTION.md`). Host-side companions:
@@ -222,7 +225,7 @@ render/compress path at startup.
 | `pypdf` | PDF read/write (base) |
 | `reportlab` | Render TOC pages (Canvas) |
 | `xhtml2pdf` | HTML-to-PDF |
-| `extract-msg` | Parse Outlook MSG files — ⚠ GPLv3, see Known Limitations (2026-10-18) |
+| `olefile` 0.47 (BSD-2) + `compressed-rtf` 1.0.7 (MIT) | Own Outlook `.msg` reader in `belegtool_archives/msg_reader.py` (replaced extract-msg GPLv3 + RTFDE LGPL on 2026-11-26) |
 | `pywin32` | Word/Excel/PPT conversion via COM |
 | `pyinstaller` | Build tool |
 
@@ -1015,25 +1018,20 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     [`packages/belegtool-archives/tests/test_msg_import.py`](packages/belegtool-archives/tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
     went red on the fix and is now a normal passing test (marker dropped).
   - **Synthetic `.msg` files for tests:** [`packages/belegtool-archives/tests/msg_fixture.py`](packages/belegtool-archives/tests/msg_fixture.py) writes real
-    CFB/MSG files (stdlib only: subject, body, attachments, optional content id) that `extract_msg`
-    reads — so `.msg` paths can now be tested without real mail (Outlook is never touched).
-  - **Licence: `extract-msg` is GPLv3** (checked in the 0.56.1 wheel's `LICENSE.txt`; `License: GPL`). It is
-    pinned here (`extract-msg==0.55.0`) and therefore bundled into the exe/Store package. Combining it with
-    this AGPLv3 code is allowed, but the **commercial licence** (`LICENSE_COMMERCIAL.md`) cannot cover a
-    build that contains GPLv3 code — the CLA only covers our own code, not third-party GPL code. To confirm
-    with a licence specialist; options: drop `.msg` from commercially licensed builds, or replace the
-    library (below).
-  - **Weight of `extract-msg`:** `pip install extract-msg==0.55.0` pulls 16 packages (olefile,
-    beautifulsoup4, compressed-rtf, ebcdic, red-black-tree-mod, RTFDE → lark 1.3.1, oletools, pyparsing,
-    pcodedmp, colorclass, easygui, msoffcrypto-tool, …). Irrelevant for the frozen exe, but it collided
-    with vLLM's pinned `lark` on the box, which is why the box does not use it.
-  - **Alternatives (researched 2026-10-18):** `olefile` (BSD, maintained, the base of extract-msg) + an own
-    small reader for the attachment streams (`__attach_version1.0_#…` → `__substg1.0_3707001F` long name,
-    `__substg1.0_37010102` data, `3701000D` embedded message) — recommended, licence-clean; `msg-parser`
-    (BSD, only olefile, MSG→EML + attachments, but last release 1.2.0 in **2019**); `convert-outlook-msg-file`
-    (MIT script, MSG→EML, deps compoundfiles (2014) / compressed-rtf / rtfparse / beautifulsoup4);
-    `msgconvert` (Perl, Artistic/GPL, Linux package — no option for Windows). The mail body (HTML/RTF) is
-    the part that needs the RTF tooling; attachments alone need only olefile.
+    CFB/MSG files (stdlib only: subject, plain/HTML/compressed-RTF body, Unicode or ANSI strings + code page, attachments with long/8.3 names,
+    content id, embedded messages, sent date) — so `.msg` paths are tested without real mail (Outlook is never touched).
+  - **Licence — RESOLVED 2026-11-26:** `extract-msg` (GPLv3) and its dependency RTFDE (LGPLv3) are **gone** from `requirements.txt`, the
+    package metadata, the code and the bundle (`belegtool.spec` excludes them; guard `tests/test_no_gpl_msg_deps.py`: requirements, pyproject,
+    AST import scan, spec). Replacement: the own reader `belegtool_archives/msg_reader.py` on **olefile 0.47 (BSD-2-Clause)** and
+    **compressed-rtf 1.0.7 (MIT)** (licences verified on PyPI + in the wheels 2026-11-26; `docs/licence-audit.md`). Done test-first: the parity suite
+    `tests/test_msg_parity.py` (42 cases) was written and green against extract-msg 0.58.3 on the synthetic files, then the reader replaced it
+    with the suite unchanged. **Deliberate deviations** (`test_msg_reader.py`): an embedded `.msg` attachment is recursed into a folder (extract-msg
+    degraded it to „nicht importierbar"); an attachment without data / a by-reference attachment is marked and no longer fails the whole mail;
+    unreadable strings/RTF degrade instead of raising; the other string type (…001E/…001F) is a fallback; HTML unwrapped from `\fromhtml1` RTF
+    is a SIMPLIFIED de-encapsulation (`rtf_deencap.py`, no RTFDE) — equal on the simple synthetic cases, untested on real RTF-wrapped HTML.
+    ⚠ **Not verified against real Outlook mails** (none available): Windows test run Phase 4 has the checklist (`docs/windows-pc-testlauf.md`).
+  - **History (2026-10-18):** `extract-msg` pulled 16 packages and was GPLv3 — the commercial licence could not cover a build containing it; the
+    options researched then (`olefile` own reader, `msg-parser` (2019), `convert-outlook-msg-file`, `msgconvert`) led to the olefile reader above.
 
 > *Fixed 2026-06-29 (PDF-Tool renders scanned PDFs — was BLANK):* PDF.js **v6** keeps its image
 > decoders + font/cmap data out of the main bundle — JBIG2 / JPEG2000 (the encodings DATEV scans use)

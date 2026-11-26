@@ -1,6 +1,6 @@
 # belegtool-archives
 
-Dependency-free Python library that unpacks **ZIP / TAR / TGZ / EML / MSG** containers into a nested
+Python library (no hard dependencies; `.msg` needs the permissive extra `msg`) that unpacks **ZIP / TAR / TGZ / EML / MSG** containers into a nested
 structure (`{"name", "content": BytesIO}` leaves, `{"name", "children": [...]}` folders) with hard
 **decompression-bomb guards**. The import name is `belegtool_archives`.
 
@@ -14,7 +14,7 @@ pipeline. It does not import the host application.
 - Zip members are limited to stored/deflate (bzip2/LZMA are refused); tar streams (gz/bz2/xz, multi-stream) are
   inflated bounded by the remaining budget; member paths become folder nodes (path traversal and drive letters
   stripped, total folder depth capped).
-- Mail: body + attachments (EML via the standard library; MSG via the optional `extract-msg`).
+- Mail: body + attachments (EML via the standard library; MSG via the own reader `msg_reader.py` on `olefile` + `compressed-rtf`, extra `msg`). An Outlook message attached to a `.msg` is recursed like any nested container.
 
 ## Converting members
 
@@ -41,13 +41,19 @@ pip install "belegtool-archives @ git+https://github.com/<owner>/belegtool-archi
 pip install -e .[dev] && pytest    # development
 ```
 
-## Licensing note - `extract-msg` is GPLv3
+## Licensing note - the `.msg` reader (2026-11-26)
 
-`.msg` support uses the **optional** dependency `extract-msg` (GPLv3). It is **not** installed by default
-(extra `msg`); without it `.msg` files degrade to "nicht importierbar" and everything else works. A build that
-bundles it is subject to GPLv3 on that component; the commercial license of the main project cannot cover it
-(open question tracked in the main repository's CLAUDE.md, "Findings from 2026-10-18"). Library code here only
-uses it through a guarded `try: import extract_msg`.
+`.msg` support is an own reader (`belegtool_archives/msg_reader.py`, `rtf_deencap.py`) on two **permissive** packages, installed by the
+extra `msg`: **`olefile` 0.47 - BSD-2-Clause** (PyPI: `License: BSD`, classifier "BSD License", wheel `LICENSE.txt` = two-clause BSD) and
+**`compressed-rtf` 1.0.7 - MIT** (PyPI: `license_expression: MIT`). They replace `extract-msg` (GPLv3) and its dependency RTFDE (LGPLv3),
+which are no longer imported, listed or bundled (guarded by `tests/test_no_gpl_msg_deps.py` in the main repository). Without the extra,
+`.msg` files degrade to "nicht importierbar" and everything else works.
+
+Behaviour notes (pinned in `tests/test_msg_parity.py` / `tests/test_msg_reader.py`): body priority HTML (0x1013, bytes as stored) > HTML
+unwrapped from an encapsulated RTF (`\fromhtml1`, simplified de-encapsulation, no RTFDE) > plain text turned into minimal HTML > raw RTF as
+`.rtf`; an ordinary (non-encapsulated) RTF is NOT converted. Deliberate deviations from extract-msg: embedded messages are recursed (extract-msg
+degraded them), an attachment without data no longer fails the whole mail, unreadable RTF/strings degrade instead of raising.
+**Tested with synthetic files only (`tests/msg_fixture.py`) - never with real Outlook mails.**
 
 ## License
 

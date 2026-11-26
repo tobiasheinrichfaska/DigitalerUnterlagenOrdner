@@ -14,15 +14,15 @@ Bewertet wird zweifach: **AGPL** = Verteilung des Hauptrepos unter AGPL-3.0(-or-
 | Ampel | Punkt |
 |---|---|
 | ROT (Komm.) | **PyMuPDF/MuPDF** (AGPL-3.0 oder Artifex-Kommerzlizenz): Der Eigentümer kann Dritten keine Nicht-AGPL-Lizenz am Gesamtprodukt einräumen, ohne selbst eine Artifex-Lizenz zu besitzen. Der Kern (Rendering, Engine) hängt an `fitz`. |
-| ROT (Komm.) | **extract-msg 0.55.0 (GPL-3.0, hart in `requirements.txt` gepinnt)** + transitiv **RTFDE (LGPL-3)**: das ausgelieferte Bundle enthält GPL-Code. Die Kommerzlizenz kann das nicht abdecken (so schon in CLAUDE.md, „Findings 2026-10-18"). |
+| ~~ROT~~ erledigt 2026-11-26 | ~~extract-msg 0.55.0 (GPL-3.0) + transitiv RTFDE (LGPL-3)~~ → ersetzt durch den eigenen `.msg`-Leser `packages/belegtool-archives/belegtool_archives/msg_reader.py` auf **olefile 0.47 (BSD-2-Clause)** + **compressed-rtf 1.0.7 (MIT)** (PyPI-Metadaten + Wheel-Lizenztexte am 2026-11-26 geprüft: olefile `License: BSD`, Klassifikator „BSD License“, `LICENSE.txt` = Zwei-Klausel-BSD, (c) Philippe Lagadec; compressed-rtf `license_expression: MIT`, MIT-Text, (c) 2016 Dmitry Alimov). `extract-msg`/`RTFDE` sind aus `requirements.txt`, Paket-Metadaten, Code und Bundle (`belegtool.spec` excludes) entfernt. Guard: `tests/test_no_gpl_msg_deps.py`. Vorbehalt: Reader nur gegen synthetische `.msg` getestet (Windows-Testlauf Phase 4: echte Outlook-Mails). |
 | ~~ROT~~ erledigt 2026-11-25 | ~~pillow-heif 1.3.0 Win-Wheel bündelt `libx265` (GPLv2)~~ → ersetzt durch **pi-heif 1.4.0** (Win-Wheel cp313: nur libheif/libde265 LGPLv3 + MinGW-Runtime, **keine x265-DLL**, per `pip download --platform win_amd64 --python-version 3.13 --only-binary=:all:` + `unzip -l` belegt; `LICENSES_bundled.txt`: „binary wheels: LGPLv3"). Guard: `tests/test_no_gpl_codec_wheels.py`. Offen: Verhalten mit echten iPhone-HEICs unter PyInstaller/Windows ungeprüft. |
-| GELB | **LGPL-Komponenten** im Bundle: `svglib` (LGPL-3.0-or-later, via xhtml2pdf), `python-bidi` (LGPL, via xhtml2pdf), libheif/libde265 (LGPL-3), RTFDE. Mit AGPL kein Problem; für proprietäre Weitergabe: Austauschbarkeit/Quelltext-Angebot/Lizenztext nötig. |
+| GELB | **LGPL-Komponenten** im Bundle: `svglib` (LGPL-3.0-or-later, via xhtml2pdf), `python-bidi` (LGPL, via xhtml2pdf), libheif/libde265 (LGPL-3); RTFDE ist seit 2026-11-26 entfernt. Mit AGPL kein Problem; für proprietäre Weitergabe: Austauschbarkeit/Quelltext-Angebot/Lizenztext nötig. |
 | GELB | **Kein Third-Party-Hinweis** im ausgelieferten Bundle/MSIX (vorher keine `THIRD_PARTY_NOTICES`). Jetzt als `THIRD_PARTY_NOTICES.md` im Repo angelegt; Einbindung ins Bundle/MSIX noch offen (To-dos). |
 | GELB | **`LICENSE` ist nur ein Kurztext (34 Zeilen) mit Link, nicht der volle AGPL-3.0-Text** (Hauptrepo und beide Pakete identisch, md5 `6f1c0339…`). AGPL verlangt, den Lizenztext mitzugeben. |
 | GELB | pdf.js-Beipack: Liberation-Schriften (`standard_fonts/LICENSE_LIBERATION` = GPL v2 + Font-Ausnahme, Red Hat) – als eigenständige Datendateien (Aggregation) wohl unkritisch, juristisch klären. |
 | GRÜN | Pillow (MIT-CMU), pikepdf (MPL-2.0; qpdf Apache-2.0), pypdf (BSD-3), reportlab (BSD), xhtml2pdf (Apache-2.0), pywin32 (PSF), pywebview (BSD-3), pythonnet/clr-loader (MIT), PyInstaller (GPLv2+ mit Bootloader-Ausnahme), React/ReactDOM/scheduler (MIT), pdfjs-dist (Apache-2.0), `datev-dokab` (keine Abhängigkeiten). |
 
-Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Abhängigkeiten vereinbar (Vorbehalt: x265-„or later"). Die **kommerzielle Zusatzlizenz ist für das ausgelieferte Gesamtprodukt derzeit nicht ohne Weiteres haltbar** (PyMuPDF, extract-msg, libx265).
+Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Abhängigkeiten vereinbar (Vorbehalt: x265-„or later"). Die **kommerzielle Zusatzlizenz ist für das ausgelieferte Gesamtprodukt derzeit nicht ohne Weiteres haltbar** (PyMuPDF; extract-msg und libx265 sind seit 2026-11-25/26 ersetzt).
 
 ## 2. Abhängigkeiten – Python (`requirements.txt`, gepinnte Versionen)
 
@@ -39,13 +39,15 @@ Mit der AGPL des Hauptrepos sind nach aktueller Datenlage **alle** geprüften Ab
 | ↳ python-bidi 0.6.12 | **LGPL** (Wheel enthält `COPYING` + `COPYING.LESSER`; Rust-Erweiterung `.pyd`) | gelb | gelb | Als separate `.pyd` im onedir austauschbar. |
 | ↳ pyHanko 0.38.2, pyhanko-certvalidator 0.33.0 | MIT | grün | grün | Zieht aiohttp, cryptography (Apache-2.0 OR BSD-3), oscrypto/asn1crypto/uritools (MIT), tzlocal (MIT), certifi (nicht einzeln geprüft). |
 | ↳ arabic-reshaper 3.1.0, html5lib 1.1, lxml 6.1.3, cssselect2, tinycss2, webencodings | MIT / MIT / BSD-3 / BSD | grün | grün | |
-| extract-msg 0.55.0 | **GPL** (`LICENSE.txt` im Wheel = GPLv3-Text) | grün (GPLv3 ↔ AGPLv3 kombinierbar, GPLv3 §13) | **rot** | Transitiv: olefile (BSD), tzlocal, compressed-rtf (MIT), ebcdic (BSD-2), beautifulsoup4 (MIT), red-black-tree-mod (MIT), **RTFDE 0.1.2.2 (LGPLv3)** → lark (MIT), oletools (BSD). Im Hauptrepo hart gepinnt (anders als das optionale Extra im Paket `belegtool-archives`). |
+| ~~extract-msg 0.55.0~~ (erledigt 2026-11-26) | war **GPL** (GPLv3, transitiv RTFDE 0.1.2.2 LGPLv3) | – | war rot | Ersetzt, nicht mehr in `requirements.txt`/Bundle (s. Ampel oben). |
+| olefile 0.47 | **BSD-2-Clause** (PyPI: `License: BSD`; Wheel-`LICENSE.txt` = zwei Klauseln, Philippe Lagadec; Upload 2023-12-01) | grün | grün | Rein Python, keine Abhängigkeiten. Neu: Extra `msg` des Pakets `belegtool-archives` + in `requirements.txt` gepinnt. |
+| compressed-rtf 1.0.7 | **MIT** (PyPI `license_expression: MIT`; Lizenztext im Wheel, (c) 2016 Dmitry Alimov; Upload 2025-03-24) | grün | grün | Rein Python, keine Abhängigkeiten (LZFu/MELA-Dekompression). |
 | pywin32 312 | PSF (PyPI-Klassifikator) | grün | grün | |
 | pywebview 6.2.1 | BSD-3-Clause (Roman Sirokov) | grün | grün | Zieht bottle (MIT), proxy_tools (MIT), typing_extensions (PSF-2.0). |
 | pythonnet 3.1.0 | MIT | grün | grün | clr-loader 0.3.1: PyPI-Metadaten leer, **Upstream-LICENSE = MIT** (github.com/pythonnet/clr-loader); cffi nicht einzeln geprüft. |
 | pyinstaller 6.20.0 | GPLv2-or-later **mit Sonderausnahme** (PyPI); laut pyinstaller.org dürfen erzeugte Apps unter beliebiger Lizenz stehen, „as long as it complies with the licenses of your dependencies"; keine Lizenzbeilage nötig | grün | grün | Build-Werkzeug. pyinstaller-hooks-contrib 2026.10 (Apache-2.0 / GPLv2): Runtime-Hook-Details nicht separat geprüft (niedrige Priorität, juristisch klären). |
 | datev-dokab (lokal) | AGPL-3.0-or-later, **keine** Abhängigkeiten | grün | grün | Nur Eigentümer-Code. |
-| belegtool-archives (lokal) | AGPL-3.0-or-later, keine harten Abhängigkeiten; Extra `msg` = extract-msg (GPLv3) | grün | grün (ohne Extra) | README warnt korrekt vor GPLv3 beim Extra. |
+| belegtool-archives (lokal) | AGPL-3.0-or-later, keine harten Abhängigkeiten; Extra `msg` = olefile (BSD-2) + compressed-rtf (MIT) | grün | grün | Seit 2026-11-26 auch mit Extra grün (extract-msg ersetzt). |
 
 ## 3. Abhängigkeiten – npm (Laufzeit, `webui/package-lock.json`)
 
@@ -83,7 +85,7 @@ Dev-/Build-Abhängigkeiten (vite, vitest, playwright, eslint …) landen nicht i
 
 ## 7. To-dos (nach Priorität)
 
-1. Geschäftsmodell-Entscheidung für die Kommerzlizenz: (a) Artifex-Lizenz für PyMuPDF oder andere PDF-Engine; (b) `extract-msg` entfernen/ersetzen (olefile-Eigenbau, s. CLAUDE.md); (c) Bundle ohne `libx265` bzw. anderer HEIC-Weg.
+1. Geschäftsmodell-Entscheidung für die Kommerzlizenz: (a) Artifex-Lizenz für PyMuPDF oder andere PDF-Engine; (b) ~~`extract-msg` entfernen/ersetzen~~ erledigt 2026-11-26 (olefile-Eigenbau); (c) Bundle ohne `libx265` bzw. anderer HEIC-Weg.
 2. Vollständigen AGPL-3.0-Text als `LICENSE` ins Hauptrepo und beide Pakete.
 3. `THIRD_PARTY_NOTICES.md` ins Bundle/MSIX; Apache-2.0-/MIT-Texte (pdf.js, React) sicherstellen; Quelltext-Hinweis für LGPL/GPL-Teile (Link + Pins).
 4. SPDX-Header; „or later" in README/CONTRIBUTING angleichen; `CONTRIBUTING.md` (CLA) in die ausgelagerten Repos; `LICENSE_COMMERCIAL.md` um Drittkomponenten-Klausel ergänzen.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Stateless per-format converters: each turns one file (path or text/bytes)
 into a single PDF (`ConvertedPDF`). No detection/dispatch logic lives here — the
 `UniversalImporter` class decides *which* converter to call.

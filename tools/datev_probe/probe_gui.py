@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Tkinter governing GUI for the DATEVconnect read probe (round 1). Every retrieval is an
 explicit button — you decide what is pulled and see the raw result in the log. Nothing is
 fetched automatically. Logic lives in the (tested) client; this is only the shell.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Unit tests for the core IPC framing (no pipe needed)."""
 
 from core.ipc import protocol

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Intensive tests for the exclusive single-writer FileLock (Windows share-mode lock).
 
 These are real-filesystem integration tests — OS locking can't be faked. Skipped off

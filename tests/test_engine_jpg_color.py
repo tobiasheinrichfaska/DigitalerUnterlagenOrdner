@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The 'jpg_color' variant must surface through the engine (needs core.engine -> host repo)."""
 
 import io

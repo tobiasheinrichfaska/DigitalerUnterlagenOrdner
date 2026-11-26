@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Licence texts of every dependency ship with the bundle (scripts/gen_third_party_notices.py).
 
 * The generator is run against the venv the tests run in (offline, stdlib only).

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Shared constants for the golden Office/ODF round-trip fixtures.
 
 Import-light (no heavy deps) so both the generator (``make_office_fixtures.py``)

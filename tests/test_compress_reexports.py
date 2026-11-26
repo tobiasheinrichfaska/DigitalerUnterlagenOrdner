@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The host's thin re-exports must be the SAME objects as the package's (single implementation)."""
 
 import belegtool_compress.compress as pkg_compress

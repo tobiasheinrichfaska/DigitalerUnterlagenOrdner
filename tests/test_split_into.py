@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """SplitInto: chunks of N pages, optionally into a new folder named after the node."""
 
 import fitz

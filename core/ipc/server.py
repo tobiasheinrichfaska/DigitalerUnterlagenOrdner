@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The core server: accepts multiple pipe clients and dispatches requests.
 
 Each connection gets its own editing session (an immutable Document + undo/redo).

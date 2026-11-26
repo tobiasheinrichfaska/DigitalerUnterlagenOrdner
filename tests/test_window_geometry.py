@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Pure validation for window-geometry persistence — so a window saved on a now-gone
 monitor falls back to the default instead of opening off-screen."""
 from infra.window_geometry import valid_geometry, geometry_visible

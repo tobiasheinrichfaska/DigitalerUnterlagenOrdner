@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Host-side half of the zip-member guard tests (the library half lives in
 packages/belegtool-archives/tests/test_zip_member_guard.py): the same compression-method
 refusal must hold in the variant-blob unpack and the OOXML .rels scan, and a refused

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """A plain PDF must import as a single leaf node, not folder -> pdf."""
 
 from formats.pdf_storage import PDFStorage, create_wrapper_node

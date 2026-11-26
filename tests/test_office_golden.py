@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Golden Office/ODF -> PDF round-trip through office_via_com (REAL Office, Windows).
 
 For each committed fixture in tests/data/input/ (see office_fixtures.SENTINELS) this

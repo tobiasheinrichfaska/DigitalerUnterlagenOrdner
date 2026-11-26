@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Characterisation of the HEIC import path (UniversalImporter.convert).
 
 Fixture ``tests/data/input/golden_heic.heic`` is synthetic (96x64 gradient and two

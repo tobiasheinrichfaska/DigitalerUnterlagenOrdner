@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The three separable packages carry the CLA verbatim (so it travels with them on extraction, see EXTRACTION.md).
 
 Source of truth: the "Contributor License Agreement" section of the main repo's CONTRIBUTING.md. Each package has its own

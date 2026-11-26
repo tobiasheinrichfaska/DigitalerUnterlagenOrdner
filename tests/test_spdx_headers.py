@@ -1,8 +1,10 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """SPDX headers in all Python sources of the three packages (scripts/add_spdx_headers.py).
 
 The insertion logic is unit-tested (shebang / encoding line / ``from __future__`` / BOM / CRLF / idempotence); the real tree is
-then checked with the script's own check logic. The main repo (core/, services/, ...) is deliberately NOT covered yet: the owner has
-not released it for headers (docs/licence-audit.md, open item).
+then checked with the script's own check logic. Covers the three packages AND (since 2026-11-26, released by the owner) the main repo
+(core/, services/, formats/, infra/, universal_importer/, tools/, scripts/, tests/, host.py, ...).
 """
 import ast
 import subprocess
@@ -67,7 +69,7 @@ def test_foreign_identifier_is_reported_not_overwritten():
 
 def test_every_package_source_has_the_header():
     cr = sp.copyright_line()
-    files = sp.source_files(sp.default_roots())
+    files = sp.source_files(sp.package_roots())
     assert len(files) > 50, "package sources not found"
     bad = []
     for f in files:
@@ -76,6 +78,26 @@ def test_every_package_source_has_the_header():
         if not (sp.has_header(text) and f"SPDX-FileCopyrightText: {cr}" in head):
             bad.append(f.relative_to(ROOT).as_posix())
     assert not bad, f"{len(bad)} file(s) without SPDX header, run scripts/add_spdx_headers.py: {bad[:10]}"
+
+
+def test_every_main_repo_source_has_the_header():
+    cr = sp.copyright_line()
+    files = sp.source_files(sp.main_roots())
+    assert len(files) > 100, "main repo sources not found"
+    bad = []
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        head = "\n".join(text.splitlines()[:15])
+        if not (sp.has_header(text) and f"SPDX-FileCopyrightText: {cr}" in head):
+            bad.append(f.relative_to(ROOT).as_posix())
+    assert not bad, f"{len(bad)} file(s) without SPDX header, run scripts/add_spdx_headers.py: {bad[:10]}"
+
+
+def test_main_roots_cover_every_tracked_python_file():
+    tracked = subprocess.run(["git", "ls-files", "*.py"], capture_output=True, text=True, cwd=ROOT).stdout.split()
+    covered = {f.relative_to(ROOT).as_posix() for f in sp.source_files(sp.default_roots())}
+    missing = [t for t in tracked if t not in covered and not t.startswith(".claude/")]
+    assert not missing, f"tracked .py files outside the SPDX scope: {missing[:10]}"
 
 
 def test_check_mode_cli_agrees():

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Regression tests for PDFNode folder data aggregation.
 
 A folder's ``current_pdf_data`` / ``original_pdf_data`` must aggregate the

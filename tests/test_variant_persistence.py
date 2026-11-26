@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Compression variants persist in the .belegtool (embedded per-node attachments)
 and are rehydrated into the engine on reopen — no recompute."""
 

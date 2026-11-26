@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Lock the bomb-guard caps to the single source of truth in infra.limits, so
 the mirrored module-level names can't silently drift apart (audit 2026-06-15)."""
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Characterization tests for the headless importer paths, to lock behaviour
 before `universal_importer` is split into an `importers/` subpackage (structure
 audit finding 2). Each converter must keep producing a valid %PDF / structure.

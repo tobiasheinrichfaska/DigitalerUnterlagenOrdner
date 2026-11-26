@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The status vocabulary has ONE source — core.model.STATUSES — and config()
 exposes exactly it (so the UI never re-defines the vocabulary)."""
 

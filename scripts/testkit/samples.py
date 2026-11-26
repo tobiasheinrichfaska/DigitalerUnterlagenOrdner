@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Sample files for the manual tests: a catalog of file name → description + builder.
 
 Every file is synthetic (invented names and numbers — no personal data) and built from

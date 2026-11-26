@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Raster comparison tool: PyMuPDF (fitz) vs. pypdfium2 on synthetic + fixture PDFs.
 
 Phase-1 spike tool (docs/pdfium-spike.md) and later the Windows parity runner

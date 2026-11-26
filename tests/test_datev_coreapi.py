@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """CoreApi DATEV-mode wiring (the lazy gate + open-capture + save-back + file/export
 dispatch) — exercised with a FAKE DatevService injected into CoreApi (no live DATEV,
 no curl). The service's own logic is covered in test_datev_inapp.py."""

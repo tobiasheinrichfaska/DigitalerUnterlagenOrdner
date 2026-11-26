@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Synthetic PDFs with deliberately tricky page geometry (test-only, pikepdf-built).
 
 Used by the non-raster parity tests (page count / page size / split). Every page

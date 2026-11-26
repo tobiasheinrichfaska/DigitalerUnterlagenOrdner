@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Headless PDF preview rendering — no Tk, no GUI.
 
 Pure functions: PDF bytes -> page images / PNG bytes. Extracted from

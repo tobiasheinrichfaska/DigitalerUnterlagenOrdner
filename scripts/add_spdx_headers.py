@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""Add (or verify) SPDX headers in the Python sources of the separable packages under packages/*/.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
+"""Add (or verify) SPDX headers in the Python sources of the separable packages under packages/*/ and of the main repo.
 
 Every ``.py`` file gets, at the very top (after a shebang and/or an encoding line, before any docstring / ``from __future__``)::
 
@@ -8,10 +10,9 @@ Every ``.py`` file gets, at the very top (after a shebang and/or an encoding lin
 
 Idempotent (a file that already has the identifier is left byte-for-byte untouched), line endings and a UTF-8 BOM are preserved.
 
-    python scripts/add_spdx_headers.py            # add the missing headers in packages/*/
+    python scripts/add_spdx_headers.py            # add the missing headers in packages/*/ AND the main repo
     python scripts/add_spdx_headers.py --check    # exit 1 and list the files that lack one (writes nothing)
-    python scripts/add_spdx_headers.py --paths core services   # extend to other directories (NOT done yet for the main repo:
-                                                               # the owner has not released it, see docs/licence-audit.md)
+    python scripts/add_spdx_headers.py --paths core services   # restrict to the given directories/files
 """
 from __future__ import annotations
 
@@ -39,9 +40,21 @@ def header_lines(copyright: str) -> list[str]:
     return [f"# SPDX-License-Identifier: {LICENSE_ID}", f"# SPDX-FileCopyrightText: {copyright}"]
 
 
+MAIN_PATHS = ["core", "services", "formats", "infra", "universal_importer", "tools", "scripts", "tests",
+              "host.py", "version_info.py", "datev_probe.py"]
+
+
+def main_roots() -> list[Path]:
+    """The main repo's own Python sources (directories and single files; released by the owner 2026-11-26)."""
+    return [ROOT / p for p in MAIN_PATHS if (ROOT / p).exists()]
+
+
 def source_files(roots: list[Path]) -> list[Path]:
     out: list[Path] = []
     for r in roots:
+        if r.is_file():
+            out.append(r)
+            continue
         for p in sorted(r.rglob("*.py")):
             rel = p.relative_to(r).parts
             if any(part in _SKIP_DIRS or part.endswith(".egg-info") for part in rel):
@@ -51,6 +64,11 @@ def source_files(roots: list[Path]) -> list[Path]:
 
 
 def default_roots() -> list[Path]:
+    """The three separable packages AND the main repo."""
+    return package_roots() + main_roots()
+
+
+def package_roots() -> list[Path]:
     return sorted(d for d in (ROOT / "packages").iterdir() if d.is_dir())
 
 

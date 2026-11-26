@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Thin re-export: the bomb-guard caps live in the separable package ``belegtool_archives``
 (packages/belegtool-archives). Kept so ``from infra.limits import ...`` stays valid."""
 

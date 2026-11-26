@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """(Re)build the PDF-Tool e2e fixtures under webui/public/ (committed).
 
     python scripts/make_pdftool_fixtures.py

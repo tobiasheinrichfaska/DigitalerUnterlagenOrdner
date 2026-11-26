@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """End-to-end .belegtool round-trip fidelity. Locks down the PDFNode/PDFStorage I/O
 path (the part the app actually uses) so a future data-model cleanup of the dead
 preview machinery cannot silently break load/save."""

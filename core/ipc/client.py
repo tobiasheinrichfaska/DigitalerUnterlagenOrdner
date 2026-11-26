@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Thin client for the core service (used by the CLI and tests)."""
 
 from core.ipc.pipe import connect, default_pipe_name

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """In-process façade over the data-driven core.
 
 JSON-able request/response, managing one ``DocumentSession`` per open document

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """File lock wired into CoreApi.open/save/release: single-writer, locked in-place save
 through the handle (+ .bak guard + restore), and save-as re-lock. Windows-only."""
 

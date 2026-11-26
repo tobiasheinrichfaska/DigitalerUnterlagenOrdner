@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Licence guard: the Outlook .msg import must stay free of GPL/LGPL code (docs/licence-audit.md).
 
 extract-msg (GPLv3) and its dependency RTFDE (LGPLv3) were replaced on 2026-11-26 by the own reader in

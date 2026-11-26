@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Immutable document model — the data-driven core.
 
 A `Document` is an immutable tree of `Node`s. Nothing here renders, threads, or

@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Collect the licence texts of every runtime dependency and (re)generate THIRD_PARTY_NOTICES.md.
 
 Reproducible and offline: standard library only (``importlib.metadata`` + ``json`` + ``tomllib``), no timestamps

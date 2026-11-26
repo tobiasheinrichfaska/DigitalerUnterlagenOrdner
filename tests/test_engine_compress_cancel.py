@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Engine-level cancellation of compression (needs core.engine, so it stays in the host repo)."""
 
 import fitz

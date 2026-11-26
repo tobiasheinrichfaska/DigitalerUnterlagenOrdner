@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Licence guard: the shipped product must not contain PyMuPDF/MuPDF (AGPL-3.0 / Artifex commercial).
 
 PyMuPDF was the last "red" dependency of docs/licence-audit.md. It was replaced on 2026-11-26 by pypdfium2

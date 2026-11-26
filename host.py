@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """pywebview host — the single warm process for the React UI.
 
 Embeds the data-driven core (core.api.CoreApi) and exposes it to the React app as

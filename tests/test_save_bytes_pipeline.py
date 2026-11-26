@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Phase 2 of the file lock: the save→bytes pipeline must produce the same result as
 the existing path-based save/embed (so the locked single-write path is faithful)."""
 

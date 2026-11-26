@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The `UniversalImporter` dispatcher: detect a file's type (extension + leading
 magic / dangerous-signature checks), then route it to the matching converter in
 :mod:`universal_importer.converters`. Container formats (zip/tar/email) are

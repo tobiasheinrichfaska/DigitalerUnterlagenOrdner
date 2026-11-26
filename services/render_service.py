@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Stateful windowed render cache — application layer (no UI, no model imports).
 
 Holds a global LRU of rendered PNG pages keyed by ``(node_id, version, page, dpi)``,

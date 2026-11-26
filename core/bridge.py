@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Bridge between the immutable Document model and the existing PDFStorage/.belegtool.
 
 Lets the data-driven core read/write the real on-disk format and interoperate

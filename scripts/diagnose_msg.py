@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 r"""
 Diagnose-Skript fuer MSG-Dateien (nutzt den eigenen Leser belegtool_archives.msg_reader: olefile + compressed-rtf).
 Aufruf: python diagnose_msg.py "pfad\zur\datei.msg"

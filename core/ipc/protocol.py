@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Message framing for the core IPC: 4-byte big-endian length + UTF-8 JSON.
 
 Transport-agnostic: the read side takes a ``read_exact(n)`` callable (returns

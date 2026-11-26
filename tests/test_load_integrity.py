@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Load integrity of corrupt .belegtool files (QS-Gegenprüfung 2026-11-04: H-1, M-3, N-4).
 
 A damaged file must open with VISIBLE warnings (``PDFStorage.load_warnings`` →

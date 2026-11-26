@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Licence guard: no GPL HEVC encoder (x265) may ride along in the HEIC dependency.
 
 pillow-heif's Windows wheel bundles ``libx265`` (GPLv2) -> docs/licence-audit.md (red).

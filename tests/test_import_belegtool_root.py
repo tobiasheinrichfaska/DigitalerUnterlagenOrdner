@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Check: importing a .belegtool must NOT nest its 'root' folder under the app root.
 
 The user flagged that the import logic must avoid pulling a .belegtool's own

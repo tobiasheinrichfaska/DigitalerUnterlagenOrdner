@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Unit tests for the single-writer disk-I/O policy extracted from CoreApi (audit S-1).
 
 `restore_from_bak` and `write_through_lock` are now stateless module functions in

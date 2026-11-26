@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Characterisation/parity tests for the NON-raster PDF operations (page count, page
 size, split into chunks) — PyMuPDF replacement, step 1 (docs/pymupdf-extract-msg-ersatz.md).
 

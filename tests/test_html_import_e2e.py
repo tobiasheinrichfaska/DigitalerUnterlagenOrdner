@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """End-to-end guard for the HTML/e-mail import (security review 2026-11-25, finding H-1).
 
 ``block_remote_link`` returning ``None`` does NOT block anything in xhtml2pdf: it falls back to

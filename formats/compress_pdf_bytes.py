@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Thin re-export of the separable package ``belegtool_compress`` (packages/belegtool-compress).
 
 Kept so every existing import path (``core.engine`` lazy-imports ``compress_all_methods`` /

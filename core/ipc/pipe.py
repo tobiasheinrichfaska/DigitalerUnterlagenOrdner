@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Windows named-pipe transport for the core IPC.
 
 Per-user pipe name; the server accepts unlimited concurrent instances (one per

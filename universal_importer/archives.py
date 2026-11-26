@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Compatibility shim: container extraction lives in the separable package
 ``belegtool_archives`` (packages/belegtool-archives). This module re-exports its public
 and test-visible surface and injects :class:`UniversalImporter` as the member converter,

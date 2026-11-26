@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Smoke test of the SHIPPED dependency set: runs with only requirements.txt installed (no PyMuPDF).
 
     python scripts/smoke_no_pymupdf.py        # exit 0 = preview render + compression work without fitz

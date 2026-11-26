@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Thin re-export of the CPU-fairness primitives of the separable package ``belegtool_compress``
 (packages/belegtool-compress, module ``belegtool_compress.cpu``).
 

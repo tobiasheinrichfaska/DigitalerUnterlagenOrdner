@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """A tiny, hand-assembled one-page PDF — stdlib only, so the onefile probe needs no
 PDF library. Round 2 uploads THIS (never a real document) as the throwaway test file, so a
 create/exchange against the live server can never touch real client content."""

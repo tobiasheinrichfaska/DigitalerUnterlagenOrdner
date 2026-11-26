@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Per-page pixel budget for rasterization (pure; no host imports).
 
 A hostile/oversized MediaBox (up to 200x200 in) would otherwise make the rasterizer allocate GBs.

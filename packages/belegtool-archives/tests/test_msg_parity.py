@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Parity suite for the Outlook .msg reader (2026-11-26).
 
 Written FIRST against the extract-msg based implementation (GPLv3) and kept green across the switch to the

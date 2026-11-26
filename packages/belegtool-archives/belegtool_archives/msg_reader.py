@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Own Outlook ``.msg`` reader on ``olefile`` (BSD-2) + ``compressed-rtf`` (MIT) — replaces ``extract-msg``
 (GPLv3) and its LGPL dependency RTFDE. Reads only what the importer needs: subject, sent date, the body in
 the order HTML > plain text > RTF, and the attachments (by value, embedded message). Never imports the host.

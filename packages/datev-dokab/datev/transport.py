@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """HTTP transports for the DATEVconnect client:
   • make_curl_sso_transport — Windows SSO (Negotiate) as the current user via curl.exe,
     matching how the other DATEV programs authenticate (no username/password needed). This is

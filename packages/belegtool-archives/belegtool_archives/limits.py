@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Shared bomb-guard caps for untrusted-container decoding.
 
 Single source of truth for the decoded-size / entry-count limits applied

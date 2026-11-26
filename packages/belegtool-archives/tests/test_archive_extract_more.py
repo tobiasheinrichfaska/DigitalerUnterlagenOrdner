@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Happy-path container extraction coverage (audit C-1, 2026-06-16).
 
 `belegtool_archives.archives` sat at ~58 % line coverage — the bomb guards and

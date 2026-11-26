@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Small RTF de-encapsulation (MS-OXRTFEX) for the .msg reader — pure stdlib, no host imports.
 
 Outlook stores a mail body as *compressed RTF* (property 0x1009). That RTF is either an ordinary RTF document

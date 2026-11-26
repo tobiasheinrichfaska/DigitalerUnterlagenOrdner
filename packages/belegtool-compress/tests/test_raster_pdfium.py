@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The pdfium rasterizer (production backend): geometry, orientation, annotations/forms, failure modes,
 backend selection and the process-wide lock. Needs NO PyMuPDF (PDFs come from ``synth.py``)."""
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """M4 (audit 2026-11-03): since _ARCHIVE_MAX_DEPTH=10, a crafted archive (deep
 member paths at every nesting level) could build an import tree deeper than the
 .belegtool loader's _MAX_TREE_DEPTH=200 — the save succeeds, the reopen throws

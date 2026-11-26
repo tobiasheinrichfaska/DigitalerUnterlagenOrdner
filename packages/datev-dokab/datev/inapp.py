@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """In-app DATEV orchestration — the glue a host application calls in **DATEV mode only**.
 
 Sits on top of the (tested, injected-transport) ``DatevConnectClient`` and the pure

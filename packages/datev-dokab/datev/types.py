@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Core types for the DATEVconnect DMS v2 connector: config, an injected transport,
 errors, and the program-type helper. HTTP is injected so the client is unit-testable
 without a live DATEVconnect."""

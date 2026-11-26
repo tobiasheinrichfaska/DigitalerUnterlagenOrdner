@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """belegtool-archives: bomb-guarded extraction of ZIP / TAR / TGZ / EML / MSG containers
 into a nested structure (``{"name", "content"|"children"}``). No host-application imports.
 

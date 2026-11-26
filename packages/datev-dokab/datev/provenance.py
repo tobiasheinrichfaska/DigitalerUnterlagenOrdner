@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Provenance / reverse-match: given a file (size, title, name) decide which DATEV document it
 came from, and measure how *uniquely* each component identifies a document over a real set.
 

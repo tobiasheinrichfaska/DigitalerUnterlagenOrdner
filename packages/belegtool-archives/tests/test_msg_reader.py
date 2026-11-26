@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The own .msg reader (olefile + compressed-rtf): deliberate deviations from extract-msg, robustness against
 hostile/corrupt files, and the small RTF de-encapsulation. The behaviour shared with extract-msg is pinned in
 test_msg_parity.py. Synthetic files only (tests/msg_fixture.py) — no real Outlook mail was available."""

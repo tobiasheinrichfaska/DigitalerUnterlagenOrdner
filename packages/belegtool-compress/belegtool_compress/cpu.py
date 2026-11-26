@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """CPU fairness primitives for the background render/compression workers.
 
 The point of this module is to be a *good neighbour* on a shared host (a Windows

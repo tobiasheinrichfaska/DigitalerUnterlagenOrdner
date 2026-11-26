@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Unit tests for the CPU-fairness primitives (belegtool_compress/cpu.py).
 
 All OS calls are injected/forced, so these run deterministically on any host.

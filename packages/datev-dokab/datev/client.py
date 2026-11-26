@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """DATEVconnect DMS v2 client, governed by the probe GUI. Round 1 = read; round 2a adds
 CREATE-ONLY writes (upload a file, create a document) + the master-data client lookup that
 turns a Mandant number into the required ``correspondence_partner_guid``. HTTP is injected

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Robustness of the image -> PDF assembly for image kinds the compressor does not produce
 itself (it always emits grey/RGB JPEG/PNG): alpha, palette, 16 bit, 1 bit, CMYK JPEG,
 interlaced PNG. Green against the pikepdf implementation; against the former fitz one all

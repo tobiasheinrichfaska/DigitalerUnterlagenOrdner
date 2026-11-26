@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Parity of the production rasterizer (pdfium) with PyMuPDF as the ORACLE (docs/pdfium-spike.md).
 
 Skipped where PyMuPDF is not installed (it is a dev-only dependency); CI runs it on Windows and Linux.

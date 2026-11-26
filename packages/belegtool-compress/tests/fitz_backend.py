@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """PyMuPDF as a raster backend - TEST ORACLE ONLY (never imported by production code; PyMuPDF is AGPL/Artifex
 and lives in requirements-dev). Importing this module registers it as ``BELEG_RASTER=pymupdf``."""
 

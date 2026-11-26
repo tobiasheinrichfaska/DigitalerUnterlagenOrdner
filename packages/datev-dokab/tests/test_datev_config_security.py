@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Security review 2026-11-25, finding H-2: ``datev.config.json`` must never be read from the
 current working directory. Opening a document by double-click makes the file's folder the
 CWD, so a planted config there redirected the SSO (``curl --negotiate -u : -k``) to an

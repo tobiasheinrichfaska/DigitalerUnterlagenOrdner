@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """PDF rasterizer port + the pdfium backend (the ONLY place that rasterizes).
 
 Replaces PyMuPDF/fitz (AGPL/Artifex) with ``pypdfium2`` (BSD-3-Clause / Apache-2.0, bundled pdfium).

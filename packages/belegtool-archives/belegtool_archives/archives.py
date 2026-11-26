@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Container extraction: turn a .zip / .tar / .eml / .msg into a nested
 structure of importable members. Carries the zip/tar bomb guards (member-count +
 uncompressed-size caps).

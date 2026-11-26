@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """DATEVconnect read client (round 1) — unit-tested with a fake transport (no live
 DATEVconnect). Covers feature detection, the read calls, query/path building, Basic auth,
 and the 401 / license / error mappings."""

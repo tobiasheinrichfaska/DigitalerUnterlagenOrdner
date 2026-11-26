@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The `datev` package (packages/datev-dokab) must stay extractable into its own repo: it may not import the
 host application (`infra`, `core`, `version_info`, `formats`, `services`, `host`...).
 Static (AST) check + an isolated-interpreter import without the app on sys.path."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Audit follow-up: archive bomb guards (member count + decompressed-size limits).
 
 Locks the ZIP/TAR protections in `belegtool_archives.archives` so they can't

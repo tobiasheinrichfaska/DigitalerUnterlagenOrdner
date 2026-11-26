@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Parallel compression must match the sequential path exactly (same per-page
 content, same order) and actually use multiple workers. The legacy fixtures are
 all <8 pages (below _PARALLEL_MIN_PAGES), so this is the only test exercising the

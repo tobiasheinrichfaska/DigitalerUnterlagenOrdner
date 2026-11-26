@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Synthetic Outlook .msg files for tests (stdlib only): a minimal Compound File Binary (CFB v3) writer and an
 MSG layout on top — subject, body, attachments with long/short file names, an optional content id (inline
 image). Fictitious content only; nothing here comes from a real mailbox (Outlook is never touched)."""

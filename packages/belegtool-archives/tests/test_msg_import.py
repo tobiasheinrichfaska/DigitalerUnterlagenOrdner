@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Outlook .msg import with SYNTHETIC .msg files (tests/msg_fixture.py writes real CFB/MSG files; extract_msg
 reads them). Found 2026-10-18 while adding .msg support to a sibling tool:
 

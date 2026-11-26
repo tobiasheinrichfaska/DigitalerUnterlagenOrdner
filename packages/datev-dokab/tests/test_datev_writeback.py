@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Unit tests for the pure DATEV write-back guard (no live DATEV)."""
 from datev.writeback import (
     CONFLICT_CHANGED,

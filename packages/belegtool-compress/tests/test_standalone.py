@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The `belegtool_compress` package (packages/belegtool-compress) must stay extractable into its own repo:
 it may not import the host application (`infra`, `core`, `formats`, `services`, `universal_importer`...)
 nor its sibling package `belegtool_archives`.

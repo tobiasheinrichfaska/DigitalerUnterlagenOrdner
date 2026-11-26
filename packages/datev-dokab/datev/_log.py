@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Logging seam of the ``datev`` package (keeps the package free of host-app imports).
 
 ``logger`` is a plain stdlib logger named ``"datev"``. ``diag`` is an always-on diagnostic

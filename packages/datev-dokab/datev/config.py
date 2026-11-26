@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Connection config:
 a ``datev.config.json`` next to the exe ({base_url, auth, user, password, verify_tls}),
 loopback-aware self-signed TLS, and auth-mode resolution."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Data-driven DATEVconnect DMS v2 endpoint catalog + URL builder.
 
 Full surface: read endpoints, the create endpoints (upload a file + create a document), and

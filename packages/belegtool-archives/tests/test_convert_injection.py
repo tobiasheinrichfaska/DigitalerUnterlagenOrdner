@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """The converter interface: `convert_member(content, name) -> bytes | BytesIO`, injected by the host.
 This module runs WITHOUT the conftest fake (see conftest) so the library's own fallback is exercised."""
 

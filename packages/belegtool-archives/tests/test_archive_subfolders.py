@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Honor zip/tar subfolders as real folder nodes (not a path embedded in the leaf
 name). A member ``rechnungen/2024/beleg.pdf`` becomes
 ``DIR rechnungen > DIR 2024 > PDF beleg.pdf``; siblings merge under shared folders.

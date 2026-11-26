@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """DATEVconnect Dokumentenablage (DMS v2) connector (package ``datev-dokab``).
 
 A small, UI-free, injected-transport client + orchestration (``DatevService``) to read /

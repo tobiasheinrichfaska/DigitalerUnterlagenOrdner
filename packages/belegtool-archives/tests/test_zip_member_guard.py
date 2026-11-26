@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """H3 (audit 2026-11-03): bzip2/LZMA zip members bypass the byte budget.
 
 CPython's zipfile decompresses ZIP_BZIP2/ZIP_LZMA chunks WITHOUT a max_length

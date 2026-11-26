@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Cheap, non-rasterizing PDF facts (page count, page sizes) via pikepdf.
 
 Replaces the former PyMuPDF (``fitz``) uses that never rendered anything. Pure: no host

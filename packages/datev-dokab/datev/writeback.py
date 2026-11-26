@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Pure decision logic for the DATEV write-back guard — DATEV mode only. UI-free, no live DATEV;
 the caller gathers the open-time baseline + the save-time re-read and acts on the verdict. Any
 non-OK verdict means: do NOT overwrite the DATEV document — offer a local filesystem save.

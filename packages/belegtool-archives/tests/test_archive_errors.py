@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Audit follow-up (2026-06-12): archive error-contract + cap notes.
 
 `extract_zip_to_structure` / `extract_tar_to_structure` translate a corrupt container

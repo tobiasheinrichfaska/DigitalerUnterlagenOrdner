@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Test setup: the library needs a host-injected converter for non-PDF members. The legacy tests were
 written against the host's real converter (images/HTML -> PDF); here a deterministic fake stands in for it
 by replacing the library's fallback converter. `ORIGINAL_DEFAULT` keeps the real fallback for its own tests."""

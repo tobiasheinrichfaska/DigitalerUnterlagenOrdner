@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """In-app DATEV orchestration (DATEV mode) — unit-tested with a FAKE client (no live
 DATEVconnect). Covers provenance capture, the guarded write-back (every verdict), the
 create/file flow, the SCIM user pick, and the pure payload/structure-item helpers."""

@@ -109,6 +109,8 @@ Erwartung: endet mit „Fertig"; `dist\BelegTool\BelegTool.exe` existiert. Fehle
 | Prüfung | Erwartung | Befund → melden |
 |---|---|---|
 | `COPYING`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | jeweils in `_internal\` und/oder neben der Exe; das Skript meldet **wo** (laut `belegtool.spec` landen sie in `_internal`; neben der Exe kopiert sie nur `packaging\build_msix.ps1`) | „nur `_internal`" ist für den normalen Build zu erwarten; **fehlt** eine Datei → melden |
+| Ordner `licenses\` (in `_internal\`, bei MSIX zusätzlich neben der Exe) | enthält `pypdfium2\BUILD_LICENSES\pdfium.txt` (pdfium/Skia-Texte) sowie `pikepdf`, `svglib`, `xhtml2pdf`, `olefile`, `pywebview`; `build.ps1` bricht vorher ab, wenn eine Distribution keinen Lizenztext hat | fehlt/unvollständig → melden (Ausgabe von `gen_third_party_notices.py` im Build-Log beilegen) |
+| `_internal\svglib\svglib.py` | vorhanden: svglib (LGPL) liegt als `.py` im Bundle statt im PYZ (`module_collection_mode`, siehe `docs/licence-audit.md` „LGPL: Austausch/Relinking"); ebenso `_internal\bidi\*.py` | fehlt → melden (Austauschbarkeit nicht gegeben); **auf Windows bisher ungeprüft** |
 | Module `datev`, `belegtool_archives`, `belegtool_compress`, `olefile`, `compressed_rtf` | im PYZ der Exe (Lesen über PyInstaller `CArchiveReader`, Fallback `build\belegtool\PYZ-00.toc`) | fehlt → melden (hidden import im `spec` greift nicht) |
 | `pi_heif` | im Bundle | fehlt → melden (hidden import im `spec` greift nicht) |
 | **kein** `pillow_heif` | nicht im Bundle | vorhanden → melden |

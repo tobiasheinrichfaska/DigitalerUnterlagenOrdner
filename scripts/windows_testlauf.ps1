@@ -404,6 +404,24 @@ Invoke-Phase '2b Bundle-Pruefung' {
         else { Add-Detail ('- ok: ' + $f + ' in: ' + ($where -join ' + ')); [void]$infos.Add($f + '=' + ($where -join '+')) }
     }
 
+    # 1b. Lizenztexte aller Abhaengigkeiten (licenses\<dist>\..., erzeugt von scripts\gen_third_party_notices.py)
+    $licDir = @($internal, $dist | ForEach-Object { Join-Path $_ 'licenses' } | Where-Object { Test-Path $_ })
+    if ($licDir.Count -eq 0) { [void]$fails.Add('licenses\ fehlt im Bundle'); Add-Detail '- FEHLT: licenses\ (Lizenztexte der Abhaengigkeiten)' }
+    else {
+        $lf = @(Get-ChildItem $licDir[0] -Recurse -File -ErrorAction SilentlyContinue)
+        foreach ($d in @('pypdfium2', 'pikepdf', 'svglib', 'xhtml2pdf', 'olefile', 'pywebview')) {
+            if (-not (Test-Path (Join-Path $licDir[0] $d))) { [void]$fails.Add('licenses\' + $d + ' fehlt'); Add-Detail ('- FEHLT: licenses\' + $d) }
+        }
+        if (-not (Get-ChildItem (Join-Path $licDir[0] 'pypdfium2') -Recurse -Filter 'pdfium.txt' -ErrorAction SilentlyContinue)) {
+            [void]$fails.Add('pdfium-Lizenztext (pypdfium2 BUILD_LICENSES) fehlt'); Add-Detail '- FEHLT: licenses\pypdfium2\BUILD_LICENSES\pdfium.txt'
+        }
+        Add-Detail ('- ok: licenses\ vorhanden (' + $lf.Count + ' Dateien) in: ' + $licDir[0])
+    }
+    # 1c. LGPL-Austauschbarkeit: svglib (pure Python) muss als .py-Datei in _internal liegen, nicht nur im PYZ
+    $svg = Join-Path $internal 'svglib\svglib.py'
+    if (-not (Test-Path $svg)) { [void]$fails.Add('svglib\svglib.py fehlt in _internal (module_collection_mode=py wirkungslos?)'); Add-Detail '- FEHLT: _internal\svglib\svglib.py (LGPL-Austausch)' }
+    else { Add-Detail '- ok: svglib liegt als .py in _internal (austauschbar)' }
+
     # 2. Python-Module im PYZ
     $helper = Join-Path $script:Out 'bundle_check.py'
     Set-Content -Path $helper -Value $bundleHelper -Encoding ASCII

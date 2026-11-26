@@ -4,6 +4,15 @@ from PyInstaller.utils.hooks import collect_submodules, collect_all, collect_dyn
 
 PROJECT_DIR = SPECPATH  # injected by PyInstaller: the spec's directory
 
+# Licence texts of every bundled dependency (licenses/<dist>/..., generated; NOT checked in, see .gitignore).
+# build.ps1 runs the generator BEFORE PyInstaller; this fallback covers a direct `pyinstaller belegtool.spec`.
+# A distribution without a findable licence text makes the generator (and so this build) fail on purpose.
+LICENSES_DIR = os.path.join(PROJECT_DIR, 'licenses')
+if not os.path.isdir(LICENSES_DIR):
+    import subprocess
+    import sys
+    subprocess.check_call([sys.executable, os.path.join(PROJECT_DIR, 'scripts', 'gen_third_party_notices.py')])
+
 reportlab_imports = collect_submodules('reportlab')
 xhtml2pdf_imports = collect_submodules('xhtml2pdf')
 core_imports = collect_submodules('core')
@@ -41,6 +50,7 @@ a = Analysis(
         (os.path.join(PROJECT_DIR, 'COPYING'), '.'),
         (os.path.join(PROJECT_DIR, 'LICENSE'), '.'),
         (os.path.join(PROJECT_DIR, 'THIRD_PARTY_NOTICES.md'), '.'),
+        (LICENSES_DIR, 'licenses'),
     ] + webview_datas + pynet_datas + clrloader_datas + pdfium_datas,
     hiddenimports=[
         'PIL',
@@ -82,6 +92,10 @@ a = Analysis(
     # (guarded by tests/test_no_agpl_pdf_deps.py).
     excludes=['pytest', 'unittest', 'extract_msg', 'RTFDE', 'fitz', 'pymupdf'],
     noarchive=False,
+    # LGPL relinking/exchangeability (docs/licence-audit.md, "LGPL: Austausch/Relinking"): the pure-Python LGPL libraries
+    # are collected as plain .py files in _internal/ instead of .pyc inside the PYZ archive, so a user can replace them.
+    # 'py' (NOT 'pyz+py': the PYZ copy would win at import). Verified on Linux with PyInstaller 6.20.0; Windows: unverified.
+    module_collection_mode={'svglib': 'py', 'bidi': 'py'},
     optimize=0,
 )
 

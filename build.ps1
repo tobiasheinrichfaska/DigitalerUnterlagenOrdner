@@ -36,6 +36,12 @@ Push-Location $Root
 & "$VenvDir\Scripts\pip.exe" install -r "requirements.txt" --quiet
 Pop-Location
 
+# Licence texts of ALL installed dependencies -> licenses\ + THIRD_PARTY_NOTICES.md table (bundled by belegtool.spec).
+# Fails the build when a distribution has no findable licence text. (Linux: syntax only; not yet run on Windows.)
+Write-Host "=== Lizenztexte erzeugen (licenses\) ===" -ForegroundColor Cyan
+& "$VenvDir\Scripts\python.exe" "$Root\scripts\gen_third_party_notices.py"
+if ($LASTEXITCODE -ne 0) { throw "gen_third_party_notices.py failed - a dependency has no licence text (see output above)" }
+
 Write-Host "=== PyInstaller Build (onedir) ===" -ForegroundColor Cyan
 & "$VenvDir\Scripts\pyinstaller.exe" "$Root\belegtool.spec" `
     --distpath "$Root\dist" `

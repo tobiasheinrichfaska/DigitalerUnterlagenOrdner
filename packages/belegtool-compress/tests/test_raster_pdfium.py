@@ -218,6 +218,45 @@ def test_foreground_overtakes_waiting_background():
     assert sorted(order) == ["bg0", "bg1", "bg2", "fg"]
 
 
+def test_open_foreground_session_keeps_background_work_out_between_its_calls():
+    """An interactive page = open + size + render (several lock acquisitions): background work must not slip in
+    between them, or the page waits for a whole background render at EVERY step (measured ~3x single-page latency)."""
+    data = make_pdf()
+    got = []
+
+    def background():
+        raster.PDFIUM_LOCK.acquire(background=True)
+        got.append(1)
+        raster.PDFIUM_LOCK.release()
+
+    fg = raster.open_pdf(data, background=False)
+    t = threading.Thread(target=background)
+    t.start()
+    fg.page_size(0)
+    fg.render(0, 50)
+    time.sleep(0.1)
+    assert not got, "background work ran while a foreground session was open"
+    fg.close()
+    t.join(5)
+    assert got == [1]
+
+
+def test_background_session_does_not_block_other_background_work():
+    bg = raster.open_pdf(make_pdf(), background=True)
+    try:
+        raster.PDFIUM_LOCK.acquire(background=True)  # would deadlock if a bg session held priority
+        raster.PDFIUM_LOCK.release()
+    finally:
+        bg.close()
+
+
+def test_failed_foreground_open_releases_its_priority():
+    with pytest.raises(raster.RasterError):
+        raster.open_pdf(b"%PDF-1.4 kaputt", background=False)
+    raster.PDFIUM_LOCK.acquire(background=True)  # must not wait forever
+    raster.PDFIUM_LOCK.release()
+
+
 def test_threads_with_own_sessions_render_identical_bytes():
     """8 threads x 25 pages over shared + separate sessions vs. the single-thread reference."""
     data = make_pdf(pages=5, rects=[(10, 10, 300, 300, (0.2, 0.4, 0.9))])

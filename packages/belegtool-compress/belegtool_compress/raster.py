@@ -14,7 +14,7 @@ Measured parity with PyMuPDF and the decisions behind the details below: ``docs/
 * **Thread safety.** pdfium is NOT thread safe. Every pdfium call (open, size, render, close) runs under one
   process-wide ``PriorityLock``. Foreground requests (an interactive preview page) overtake queued background
   work (prefetch fill, compression), so an interactive page waits for at most ONE running render. A plain
-  ``threading.Lock`` measured 5x the single-page latency under 4 background threads; the priority lock ~1.8x.
+  ``threading.Lock`` measured 5x the single-page latency under 4 background threads; the priority lock ~1.7x.
   Consequence: the background pools give fairness, not parallelism (they were GIL-bound under PyMuPDF too).
 * **/UserUnit** is ignored by pdfium but honoured by MuPDF/Acrobat: the scale is multiplied by it here.
 * **Greyscale** is rendered as RGB and converted with Pillow (``"L"``, ITU-R 601 luminance); pdfium's native
@@ -71,6 +71,17 @@ class PriorityLock:
     def release(self) -> None:
         with self._cv:
             self._busy = False
+            self._cv.notify_all()
+
+    def foreground_enter(self) -> None:
+        """Register a foreground *session*: background work waits until every such session has left, so an
+        interactive page (open + size + render = several acquisitions) is not interleaved with background renders."""
+        with self._cv:
+            self._fg_waiting += 1
+
+    def foreground_leave(self) -> None:
+        with self._cv:
+            self._fg_waiting -= 1
             self._cv.notify_all()
 
 
@@ -131,6 +142,16 @@ class _PdfiumSession:
         self._raw = raw
         self._units = _user_units(raw) if raw else ()
         self._pdf = None
+        self._fg = not self._bg
+        if self._fg:  # held until close(): keeps background work out between this session's own calls
+            PDFIUM_LOCK.foreground_enter()
+        try:
+            self._open(raw)
+        except BaseException:
+            self._leave_foreground()
+            raise
+
+    def _open(self, raw: bytes) -> None:
         pdfium = _pdfium()
         PDFIUM_LOCK.acquire(self._bg)
         try:
@@ -156,6 +177,11 @@ class _PdfiumSession:
             raise RasterError("Dokument ist geschlossen")
         if not 0 <= index < self._count:
             raise IndexError(f"Seite {index} außerhalb 0..{self._count - 1}")
+
+    def _leave_foreground(self) -> None:
+        if self._fg:
+            self._fg = False
+            PDFIUM_LOCK.foreground_leave()
 
     def _close_locked(self) -> None:
         pdf, self._pdf = self._pdf, None
@@ -213,13 +239,21 @@ class _PdfiumSession:
         return img.convert("L" if gray else "RGB")
 
     def close(self) -> None:
-        if self._pdf is None:
-            return
-        PDFIUM_LOCK.acquire(self._bg)
         try:
-            self._close_locked()
+            if self._pdf is not None:
+                PDFIUM_LOCK.acquire(self._bg)
+                try:
+                    self._close_locked()
+                finally:
+                    PDFIUM_LOCK.release()
         finally:
-            PDFIUM_LOCK.release()
+            self._leave_foreground()
+
+    def __del__(self):  # a leaked foreground session must never starve background work for good
+        try:
+            self._leave_foreground()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self

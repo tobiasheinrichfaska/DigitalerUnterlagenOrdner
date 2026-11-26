@@ -33,6 +33,12 @@ Copy these into Partner Center. Two listing languages: **de-DE** (primary) and *
 >
 > Open Source (AGPLv3 oder neuer). Für Steuerberatung, Buchhaltung und alle, die Belege ordentlich
 > ablegen wollen.
+>
+> Quelltext: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner – Lizenzen der enthaltenen
+> Fremdkomponenten: Datei THIRD_PARTY_NOTICES.md und Ordner „licenses" im Programmverzeichnis
+> (in der App unter ❓ Hilfe → „Lizenz & Quelltext").
+>
+> Dieses Projekt steht in keiner Verbindung zur DATEV eG; DATEV ist eine eingetragene Marke der DATEV eG.
 
 **Was ist neu (v3.11.4):**
 > Sicherheitsupdate: aktualisierte Bild- und PDF-Bibliotheken (Pillow, pypdf, PDF.js) –
@@ -74,6 +80,12 @@ Inhaltsverzeichnis
 > • Everything runs **locally** — no cloud, no accounts, no telemetry
 >
 > Open source (AGPLv3 or later). For tax advisors, bookkeeping, and anyone who wants receipts filed neatly.
+>
+> Source code: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner — licences of the bundled
+> third-party components: file THIRD_PARTY_NOTICES.md and the "licenses" folder in the program directory
+> (in the app under ❓ Help → "Lizenz & Quelltext" / "Licence & source code").
+>
+> This project is not affiliated with DATEV eG; DATEV is a registered trademark of DATEV eG.
 
 **What's new (v3.11.4):**
 > Security update: updated image and PDF libraries (Pillow, pypdf, PDF.js) — among other

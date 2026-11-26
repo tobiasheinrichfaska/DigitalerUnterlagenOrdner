@@ -48,6 +48,11 @@ export function HelpModal({ lang, onClose }) {
           ))}
         </div>
 
+        <div className="help-foot help-licence">
+          <a href={REPO} target="_blank" rel="noreferrer">{t('Lizenz & Quelltext')}</a>
+          <span>{t('Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md')}</span>
+        </div>
+
         <div className="help-foot">
           <span>{t('Übersetzungsfehler melden:')}</span>
           <a href={ghUrl} target="_blank" rel="noreferrer">▸ GitHub</a>

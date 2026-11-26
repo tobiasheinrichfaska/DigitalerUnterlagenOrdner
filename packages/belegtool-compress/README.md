@@ -50,4 +50,4 @@ tobias.a.w.heinrich@gmail.com; terms in that repository's `LICENSE_COMMERCIAL.md
 are subject to the project's **Contributor License Agreement** (see `CONTRIBUTING.md` of the main
 repository): you grant the maintainer a perpetual, worldwide, non-exclusive, royalty-free,
 irrevocable right to use, modify and redistribute your contribution under any license, including
-commercial licenses.
+commercial licenses. The full wording of the CLA is part of this package: [`CONTRIBUTING.md`](CONTRIBUTING.md).

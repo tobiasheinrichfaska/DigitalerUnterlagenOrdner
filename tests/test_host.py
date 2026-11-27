@@ -265,6 +265,8 @@ def test_hostapi_delegates_core_ops():
                                          "name": "X", "index": None, "new_id": "x"})
     assert [c["name"] for c in r["tree"]["children"]] == ["X"]
     assert api.undo(opened["session"])["tree"]["children"] == []
+    st = api.get_state(opened["session"])
+    assert st["ok"] and st["tree"]["children"] == [] and st["can_redo"] is True
 
 
 class _Hook:

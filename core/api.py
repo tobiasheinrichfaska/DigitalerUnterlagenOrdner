@@ -588,6 +588,15 @@ class CoreApi:
             return blocked
         return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
 
+    def get_state(self, session: str) -> dict:
+        """Read-only current document state (same shape as a dispatch/undo response);
+        lets a window re-sync after e.g. another window/PDF-Tool changed the session."""
+        with self._slock(session):
+            with self._lock:
+                if session not in self._sessions:
+                    return {"ok": False, "error": "unknown session"}
+                return self._doc_response_locked(session)
+
     # ----------------------------------------------------------------------
     # Rendering: whole-doc (IPC/test-only) + windowed + render-cache stats
     # ----------------------------------------------------------------------

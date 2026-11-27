@@ -439,6 +439,9 @@ class HostApi:
     def redo(self, session):
         return self._core.redo(session)
 
+    def get_state(self, session):
+        return self._core.get_state(session)
+
     # (render/render_compressed bridge wrappers removed 2026-06-12 — the React UI
     # only uses the windowed variants below; CoreApi.render stays for the IPC
     # server, CoreApi.render_compressed for tests.)

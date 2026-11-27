@@ -41,6 +41,10 @@ def _to_rgb(img: Image.Image) -> Image.Image:
     """Apply EXIF orientation and flatten transparency onto WHITE (a plain
     convert("RGB") shows the colour stored under alpha=0, often black)."""
     img = ImageOps.exif_transpose(img)
+    if img.mode.startswith("I"):
+        # 16/32-bit grey (scanner PNG/TIFF): a plain convert("RGB") clips every
+        # value > 255 to white -> scale the 16-bit range down to 8 bit first.
+        img = img.point(lambda v: v * (1 / 256)).convert("L")
     if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
         rgba = img.convert("RGBA")
         bg = Image.new("RGB", rgba.size, (255, 255, 255))
@@ -98,6 +102,12 @@ def _decode_text(data: bytes, html: bool = False) -> str:
     return data.decode("cp1252", errors="replace")
 
 
+def _printable(text: str) -> str:
+    """Expand tabs and replace characters the built-in Helvetica (cp1252) cannot
+    draw with '?' (they would render as black boxes)."""
+    return text.expandtabs(4).encode("cp1252", errors="replace").decode("cp1252")
+
+
 def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     # Cap before decode/render: an oversized text file would otherwise pin the
     # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
@@ -106,6 +116,7 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
         raise ValueError("Textdatei zu groß")
     if isinstance(text, bytes):
         text = _decode_text(bytes(text))
+    text = _printable(text)
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -187,10 +198,21 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
     if isinstance(html, bytes):
         html = _decode_text(bytes(html), html=True)
 
-    buffer = io.BytesIO()
-    pisa_status = pisa.CreatePDF(src=html, dest=buffer, link_callback=block_remote_link)
+    html = _printable(html)
 
-    if pisa_status.err:
+    def _render(src: str):
+        out = io.BytesIO()
+        try:
+            return pisa.CreatePDF(src=src, dest=out, link_callback=block_remote_link), out
+        except Exception:  # e.g. ZeroDivisionError on an empty SVG data-URI
+            return None, out
+
+    pisa_status, buffer = _render(html)
+    if pisa_status is None:  # retry once without the (SVG) data-URI images
+        stripped = re.sub(r"<img\b[^>]*data:image/svg[^>]*>", "", html, flags=re.I)
+        pisa_status, buffer = _render(stripped)
+
+    if pisa_status is None or pisa_status.err:
         # Fallback als leeres Dummy-PDF mit Hinweis
         fallback = io.BytesIO()
         c = canvas.Canvas(fallback, pagesize=A4)

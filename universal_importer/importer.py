@@ -78,7 +78,8 @@ class UniversalImporter:
         # the unambiguous binary signatures apply there.
         is_text = ext in cls.TEXT_EXTENSIONS or ext in cls.HTML_EXTENSIONS
         for sig, label in cls._DANGEROUS_SIGNATURES:
-            if is_text and sig in (b"MZ", b"#!"):
+            # R-12: only when the content really is text (no NUL in the first 4 KB).
+            if is_text and sig in (b"MZ", b"#!") and b"\x00" not in data[:4096]:
                 continue
             if head.startswith(sig):
                 raise ValueError(f"'{name}' sieht aus wie {label}, nicht wie {ext} – abgelehnt.")

@@ -91,3 +91,10 @@ def test_f5_slash_variants_flagged(tmp_path, target):
     with zipfile.ZipFile(p, "w") as z:
         z.writestr("word/_rels/settings.xml.rels", rels)
     assert converters.scan_ooxml_external_targets(str(p)) == target
+
+
+@pytest.mark.parametrize("ext", [".txt", ".html", ".md", ".rtf"])
+def test_r12_binary_mz_or_shebang_renamed_as_text_is_refused(ext):
+    # R-12: the F-4 relaxation must not let a real PE (NULs in the header) through.
+    with pytest.raises(ValueError):
+        UniversalImporter.verify_content_matches_extension(b"MZ\x90\x00\x03\x00\x00\x00" + b"\x00" * 60, ext, "a" + ext)

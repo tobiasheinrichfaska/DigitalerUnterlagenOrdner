@@ -117,7 +117,23 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
         with pikepdf.open(path) as pdf:
             _attach_blobs(pdf, blobs)
             pdf.save(tmp)
-        os.replace(tmp, path)
+        try:
+            os.replace(tmp, path)
+        except OSError as e:
+            # R-10: target held open elsewhere (Windows, no FILE_SHARE_DELETE) — the
+            # save already fell back to in-place; do the same here instead of dropping variants.
+            logger.info("[variants] atomic swap refused (%s); embedding in place", e)
+            # (pikepdf's allow_overwriting_input itself swaps via os.replace, so write
+            # the finished bytes through a plain handle instead.)
+            with open(tmp, "rb") as src:
+                data = src.read()
+            with open(path, "r+b") as dst:
+                dst.write(data)
+                dst.truncate()
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     except Exception as e:  # never let variant persistence break a save
         logger.warning("[variants] embed failed: %s", e)
         try:

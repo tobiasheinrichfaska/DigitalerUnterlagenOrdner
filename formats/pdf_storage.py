@@ -68,8 +68,20 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
                 break
         if base is None:
             return
-        fields, seen, names = [], set(), set()
-        for page in writer.pages:
+        fields, seen = [], set()
+        claimed, own, cur = set(), set(), None  # names of earlier nodes / of the current node
+        # page -> source node (readers are appended in page order; fallback: all one node)
+        bounds, acc = [], 0
+        for r in sources:
+            acc += len(r.pages)
+            bounds.append(acc)
+        if acc != len(writer.pages):
+            bounds = [len(writer.pages)]
+        for pi, page in enumerate(writer.pages):
+            node_idx = next((i for i, b in enumerate(bounds) if pi < b), 0)
+            if node_idx != cur:
+                claimed |= own
+                own, cur = set(), node_idx
             for a in page.get("/Annots") or []:
                 w = a.get_object()
                 if w.get("/Subtype") != "/Widget":
@@ -86,13 +98,13 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
                     tobj = top.get_object()
                     if "/T" in tobj:
                         t = str(tobj["/T"])
-                        if t in names:
+                        if t in claimed:
                             n = 2
-                            while f"{t}_{n}" in names:
+                            while f"{t}_{n}" in claimed or f"{t}_{n}" in own:
                                 n += 1
                             t = f"{t}_{n}"
                             tobj[NameObject("/T")] = TextStringObject(t)
-                        names.add(t)
+                        own.add(t)
         if not fields:
             return
         form = DictionaryObject()

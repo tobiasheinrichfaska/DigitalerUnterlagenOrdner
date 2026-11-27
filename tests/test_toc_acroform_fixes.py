@@ -76,3 +76,32 @@ def test_z1_colliding_field_names_are_made_unique():
     assert names[0] == "name" and len(set(names)) == 3
     assert {str(f["/V"]) for f in tops} == {"AAA", "BBB", "CCC"}
     assert {k: v.get("/V") for k, v in r.get_fields().items()}.__len__() == 3
+
+
+def _same_name_two_widgets_pdf():
+    """ONE source PDF, 2 pages, two separate top-level fields both named "Name"
+    (copied widget; viewers treat it as ONE field)."""
+    from pikepdf import Pdf, Dictionary, Name, Array, String
+    pdf = Pdf.new()
+    for _ in range(2):
+        pdf.add_blank_page(page_size=(200, 200))
+    ws = []
+    for p in pdf.pages:
+        w = pdf.make_indirect(Dictionary(Type=Name.Annot, Subtype=Name.Widget, FT=Name.Tx,
+                                         T=String("Name"), Rect=[10, 10, 100, 30], P=p.obj))
+        p.obj.Annots = Array([w])
+        ws.append(w)
+    pdf.Root.AcroForm = Dictionary(Fields=Array(ws))
+    b = io.BytesIO()
+    pdf.save(b)
+    return b.getvalue()
+
+
+def test_l1_same_name_fields_within_one_node_keep_their_names():
+    from formats.pdf_storage import PDFStorage
+    root = PDFNode(name="r", is_folder=True)
+    root.children.append(PDFNode(name="n1", parent=root, pdf_data=_same_name_two_widgets_pdf()))
+    st = PDFStorage()
+    st.root = root
+    r = pikepdf.open(io.BytesIO(st.to_bytes()))
+    assert [str(f.T) for f in r.Root.AcroForm.Fields] == ["Name", "Name"]

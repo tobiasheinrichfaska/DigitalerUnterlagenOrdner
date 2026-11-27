@@ -157,4 +157,24 @@ describe('Tree', () => {
       expect.any(Number), expect.any(Number), expect.objectContaining({ id: 'L2' }),
     )
   })
+  it('X-1: dropping a dragged row onto itself is a no-op (does not bubble to the root drop)', () => {
+    const { onMove, onMoveMany } = renderTree()
+    const row = screen.getByText(/doc1/).closest('.row')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', files: [], types: [] }
+    fireEvent.dragStart(row, { dataTransfer })
+    fireEvent.dragOver(row, { dataTransfer })
+    fireEvent.drop(row, { dataTransfer })
+    expect(onMove).not.toHaveBeenCalled()
+    expect(onMoveMany).not.toHaveBeenCalled()
+  })
+
+  it('X-1: dropping a folder onto itself is a no-op as well', () => {
+    const { onMove } = renderTree()
+    const row = screen.getByText(/Ordner/).closest('.row')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', files: [], types: [] }
+    fireEvent.dragStart(row, { dataTransfer })
+    fireEvent.dragOver(row, { dataTransfer })
+    fireEvent.drop(row, { dataTransfer })
+    expect(onMove).not.toHaveBeenCalled()
+  })
 })

@@ -94,9 +94,16 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   }
 
   const handleDrop = (e) => {
-    if (!over) { setOver(null); return }
+    if (!over) {
+      if (drag === node.id) { e.preventDefault(); e.stopPropagation() } // self-drop (see below)
+      setOver(null); return
+    }
     const isFile = over.files
-    if (!isFile && (!drag || drag === node.id)) { setOver(null); return }
+    if (!isFile && (!drag || drag === node.id)) {
+      // self-drop: swallow it, or it bubbles to the root drop and moves the row to the end of the root
+      if (drag) { e.preventDefault(); e.stopPropagation() }
+      setOver(null); return
+    }
     e.preventDefault()
     e.stopPropagation()
     const files = isFile ? Array.from(e.dataTransfer.files) : null

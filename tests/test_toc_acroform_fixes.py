@@ -50,3 +50,29 @@ def test_toc_text_has_no_box_glyphs(tmp_path):
     text = PdfReader(p).pages[0].extract_text()
     assert "■" not in text and "■" not in text
     assert "\t" not in text
+
+
+def _text_form(name, value):
+    from reportlab.pdfgen import canvas
+    b = io.BytesIO()
+    c = canvas.Canvas(b)
+    c.acroForm.textfield(name=name, x=50, y=700, width=100, height=20, value=value)
+    c.showPage()
+    c.save()
+    return b.getvalue()
+
+
+def test_z1_colliding_field_names_are_made_unique():
+    from formats.pdf_storage import PDFStorage
+    root = PDFNode(name="r", is_folder=True)
+    for nm, v in (("n1", "AAA"), ("n2", "BBB"), ("n3", "CCC")):
+        n = PDFNode(name=nm, parent=root, pdf_data=_text_form("name", v))
+        root.children.append(n)
+    st = PDFStorage()
+    st.root = root
+    r = PdfReader(io.BytesIO(st.to_bytes()))
+    tops = [f.get_object() for f in r.trailer["/Root"]["/AcroForm"]["/Fields"]]
+    names = [str(f["/T"]) for f in tops]
+    assert names[0] == "name" and len(set(names)) == 3
+    assert {str(f["/V"]) for f in tops} == {"AAA", "BBB", "CCC"}
+    assert {k: v.get("/V") for k, v in r.get_fields().items()}.__len__() == 3

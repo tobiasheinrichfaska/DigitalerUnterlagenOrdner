@@ -59,7 +59,7 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
     from the first source form. ``sources`` = readers whose /AcroForm may be carried."""
     try:
         from pypdf.generic import (ArrayObject, BooleanObject, DictionaryObject,
-                                   NameObject)
+                                   NameObject, TextStringObject)
         base = None
         for r in sources:
             af = r.trailer["/Root"].get("/AcroForm")
@@ -68,7 +68,7 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
                 break
         if base is None:
             return
-        fields, seen = [], set()
+        fields, seen, names = [], set(), set()
         for page in writer.pages:
             for a in page.get("/Annots") or []:
                 w = a.get_object()
@@ -81,6 +81,18 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
                 if key not in seen:
                     seen.add(key)
                     fields.append(top)
+                    # Z-1: fully-qualified names must be unique across nodes, else
+                    # viewers treat colliding top-level fields as ONE field.
+                    tobj = top.get_object()
+                    if "/T" in tobj:
+                        t = str(tobj["/T"])
+                        if t in names:
+                            n = 2
+                            while f"{t}_{n}" in names:
+                                n += 1
+                            t = f"{t}_{n}"
+                            tobj[NameObject("/T")] = TextStringObject(t)
+                        names.add(t)
         if not fields:
             return
         form = DictionaryObject()

@@ -6,6 +6,8 @@ import uuid
 
 import pytest
 
+pytest.importorskip("win32file", reason="named-pipe IPC transport is Windows-only (pywin32)")
+
 from core.ipc.client import CoreClient
 from core.ipc.pipe import default_pipe_name
 from core.ipc.server import CoreServer

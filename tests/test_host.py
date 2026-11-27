@@ -351,6 +351,8 @@ def test_main_logs_and_explains_clr_load_failure(monkeypatch):
     # A pythonnet load failure must be LOGGED (not only shown in the dialog) and
     # routed to the MotW explanation instead of a raw traceback.
     calls = {"warned": None, "logged": False}
+    # host.main only explains a CLR failure on Windows (the guard under test is platform-gated)
+    monkeypatch.setattr(host.sys, "platform", "win32")
 
     class _Log:
         def exception(self, *a, **k):

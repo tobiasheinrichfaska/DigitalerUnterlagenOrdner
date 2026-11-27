@@ -1,0 +1,40 @@
+diff --git a/manual_tests/01_import.md b/manual_tests/01_import.md
+index cec9943..2e0cd21 100644
+--- a/manual_tests/01_import.md
++++ b/manual_tests/01_import.md
+@@ -103,6 +103,7 @@ Ein `.belegtool` lässt sich nicht nur öffnen, sondern auch in ein anderes Doku
+ - Jede Datei wird in ein PDF umgewandelt und erscheint als eigener Eintrag (`Notiz.pdf`, `Liesmich.pdf`, `Bestellbestaetigung.pdf`).
+ - Die Vorschau zeigt den Text lesbar, **Umlaute** eingeschlossen.
+ - Bei der HTML-Datei ist die Überschrift „Bestellbestätigung“ als Überschrift gesetzt.
++- *Nicht offensichtlich:* Zeichen außerhalb des Windows-Zeichensatzes (z. B. kyrillische Buchstaben, Emoji, „→“) erscheinen als **?**; Tabulatoren werden zu vier Leerzeichen.
+ - *Nicht offensichtlich:* Eine Markdown-Datei wird als **reiner Text** übernommen – die Zeichen `#`, `*` und `-` bleiben sichtbar und werden nicht als Formatierung umgesetzt.
+ 
+ ---
+diff --git a/manual_tests/09_pdf_tool.md b/manual_tests/09_pdf_tool.md
+index 907dd92..c5313b9 100644
+--- a/manual_tests/09_pdf_tool.md
++++ b/manual_tests/09_pdf_tool.md
+@@ -15,12 +15,12 @@ Das PDF-Tool ist die zweite Arbeitsfläche: Es öffnet **ein einzelnes PDF** in
+ **Schritte:**
+ 1. Rechtsklick auf ein **Dokument**, z. B. `Telefon_2025-01.pdf`.
+ 2. Auf **Im PDF-Tool öffnen** klicken.
+-3. Im Hauptfenster versuchen, dasselbe Dokument zu drehen (**↻**) oder zu löschen (**Entf**).
++3. Im Hauptfenster versuchen, dasselbe Dokument zu drehen (**↻**) oder zu löschen (**Entf**), außerdem **↶ Rückgängig** zu klicken.
+ 4. Das PDF-Tool-Fenster schließen. Rechtsklick auf einen **Ordner**.
+ 
+ **Erwartet:**
+ - Schritt 2: Ein **neues Fenster** zeigt das PDF; oben stehen die Schaltflächen **✎ Text** und **💾 Speichern**. Der Text lässt sich mit der Maus markieren.
+-- Schritt 3: Solange das Dokument im PDF-Tool offen ist, ist es im Hauptfenster **gesperrt** – Drehen, Splitten, Zusammenführen, Komprimieren und Löschen werden abgelehnt, bis das PDF-Tool-Fenster geschlossen ist.
++- Schritt 3: Solange das Dokument im PDF-Tool offen ist, ist es im Hauptfenster **gesperrt** – Drehen, Splitten, Zusammenführen, Komprimieren und Löschen werden abgelehnt (auch das Löschen/Zusammenführen eines Ordners, der das Dokument enthält). Außerdem sind **↶ Rückgängig** und **↷ Wiederholen** (auch Strg+Z/Strg+Y) für das ganze Fenster gesperrt, bis das PDF-Tool-Fenster geschlossen ist. Die Meldung lautet „Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann nicht gleichzeitig geändert werden.“
+ - Schritt 4: Im Kontextmenü eines Ordners **fehlt** der Eintrag **Im PDF-Tool öffnen** – ein Ordner hat kein eigenes PDF. Der Eintrag ist nicht ausgegraut, sondern nicht vorhanden.
+ 
+ ---
+@@ -43,7 +43,7 @@ Das PDF-Tool ist die zweite Arbeitsfläche: Es öffnet **ein einzelnes PDF** in
+ - Schritt 1: **✎ Text** ist hervorgehoben (aktiv).
+ - Schritt 2: Der Klick setzt ein Textfeld, das sich beschreiben und verschieben lässt.
+ - Schritt 3: Der Statustext wechselt von **„Speichern…“** zu **„Gespeichert ✓“**. Erscheint stattdessen eine Fehlermeldung, bitte ihren Wortlaut notieren.
+-- Schritt 4: Das Hauptfenster zeigt **ungespeicherte Änderungen („•“)** – der Eintrag hat das bearbeitete PDF als neuen Inhalt übernommen. **↶ Rückgängig** nimmt das zurück; erst **💾** im Hauptfenster schreibt die Änderung in die `.belegtool`-Datei.
++- Schritt 4: Das Hauptfenster zeigt **ungespeicherte Änderungen („•“)** – der Eintrag hat das bearbeitete PDF als neuen Inhalt übernommen. (nach dem Schließen des PDF-Tool-Fensters) **↶ Rückgängig** nimmt das zurück; erst **💾** im Hauptfenster schreibt die Änderung in die `.belegtool`-Datei.
+ 
+ ---
+ 

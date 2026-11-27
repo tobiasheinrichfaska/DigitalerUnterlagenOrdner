@@ -11,14 +11,62 @@ so win32com/pythoncom are mocked. The SaveAs/ExportAsFixedFormat mock writes a r
 so the pywin32 bump (and future edits) can't silently regress them.
 """
 import sys
+import types
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="win32com is Windows-only")
 
-from unittest.mock import MagicMock, patch  # noqa: E402
+def _import_converters():
+    """Import the converters; without pywin32 (non-Windows) stub the COM modules just for the
+    import and restore sys.modules afterwards (nothing leaks into other tests)."""
+    saved = {}
+    names = ("pythoncom", "pywintypes", "win32com", "win32com.client")
+    try:
+        import universal_importer.converters as mod
+        return mod
+    except ImportError:
+        pass
+    try:
+        for n in names:
+            saved[n] = sys.modules.get(n)
+            sys.modules[n] = types.ModuleType(n)
+        sys.modules["win32com"].client = sys.modules["win32com.client"]
+        sys.modules.pop("universal_importer.converters", None)
+        sys.modules.pop("universal_importer", None)
+        import universal_importer.converters as mod
+        return mod
+    finally:
+        for n, old in saved.items():
+            if old is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = old
 
-from universal_importer.converters import office_via_com  # noqa: E402
+
+_conv = _import_converters()
+office_via_com = _conv.office_via_com
+
+
+@pytest.fixture(autouse=True)
+def _stub_com_modules(monkeypatch):
+    """The tests patch pythoncom/win32com.client by dotted name; make those resolve to the very
+    module objects converters bound (stubs on machines without pywin32). monkeypatch restores."""
+    for n in ("pythoncom", "pywintypes", "win32com", "win32com.client"):
+        obj = {"pythoncom": getattr(_conv, "pythoncom", None),
+               "win32com": getattr(_conv, "win32com", None)}.get(n)
+        if n == "win32com.client":
+            obj = getattr(_conv.win32com, "client", None)
+        if obj is None and n == "pywintypes":
+            obj = sys.modules.get(n) or types.ModuleType(n)
+        if obj is not None:
+            monkeypatch.setitem(sys.modules, n, obj)
+    for fn in ("CoInitialize", "CoUninitialize"):
+        if not hasattr(sys.modules["pythoncom"], fn):
+            monkeypatch.setattr(sys.modules["pythoncom"], fn, lambda *a, **k: None, raising=False)
+    if not hasattr(sys.modules["win32com.client"], "Dispatch"):
+        monkeypatch.setattr(sys.modules["win32com.client"], "Dispatch", lambda *a, **k: None, raising=False)
+
 
 _PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n"
 

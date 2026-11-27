@@ -61,9 +61,7 @@ SPDX: `scripts/add_spdx_headers.py` only covers this repo now. The sections belo
 (AGPL-3.0-or-later, no dependencies), README, LICENSE and its internal tests (`packages/datev-dokab/tests/`;
 `test_datev_coreapi`/`test_datev_provenance_roundtrip` stay in `tests/` because they need `core`). The main repo
 installs it (non-editable) via `./packages/datev-dokab` in `requirements.txt`; `belegtool.spec` collects it as a
-hidden import; CI has an isolated `datev-dokab` job. **Extraction** into its own repo needs no code change:
-`git filter-repo --subdirectory-filter packages/datev-dokab`, tag `v0.1.0`, then switch `requirements.txt` to the
-pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](https://github.com/tobiasheinrichfaska/datev-dokab). The package
+hidden import; **Extracted 2026-11-27** into its own repo (tag `v0.1.0`). The package
 must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
 after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
 
@@ -71,7 +69,7 @@ after every change to it; a non-frozen `datev.config.json` is read from `DATEV_C
 
 The container readers (ZIP/TAR/TGZ/EML/MSG extraction, nesting limits, bomb guards) and the shared caps
 (`limits.py`) live in `packages/belegtool-archives/` (import name `belegtool_archives`; own `pyproject.toml`, AGPL-3.0-or-later,
-no hard dependencies, README, LICENSE, `EXTRACTION.md`, tests in `packages/belegtool-archives/tests/`). **Boundary:** the package
+no hard dependencies, README, LICENSE, tests in `packages/belegtool-archives/tests/`). **Boundary:** the package
 never imports the host (`infra`/`core`/`formats`/`universal_importer`, guarded by `test_standalone.py`); logger
 `logging.getLogger("belegtool_archives")`; member conversion (image/Office/HTML → PDF) is **injected** as
 `convert_member(content: bytes, name: str) -> bytes | BytesIO` (default: only `.pdf` passes through).
@@ -82,8 +80,8 @@ extra `msg` (**2026-11-26: `extract-msg` GPLv3 + RTFDE LGPL removed completely**
 encapsulated RTF > plain text as minimal HTML > raw `.rtf` (an ordinary RTF is not converted); an attached Outlook message is recursed.
 Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test_msg_reader.py`; **synthetic fixtures only**. Installed non-editable via
 `./packages/belegtool-archives` in `requirements.txt`; `belegtool.spec` collects it as a hidden import; CI has an isolated
-`belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it. Extraction:
-`git filter-repo --subdirectory-filter packages/belegtool-archives` (see its `EXTRACTION.md`). Host-side companions:
+`belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it.
+Extracted 2026-11-27. Host-side companions:
 `tests/test_zip_member_guard_host.py`, `tests/test_limits.py`.
 
 ### `packages/belegtool-compress/` — separable PDF-compression library
@@ -91,7 +89,7 @@ Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test
 `formats/compress_pdf_bytes.py` (render-based jpg/jpg_color/png + pikepdf variants, `CompressionConfig`, `CompressionCancelled`,
 page-count truncation guard) and the CPU-fairness primitives (`services/cpu.py`: `worker_count`, below-normal threads, `SystemCpuSampler`,
 RAM budget) live in `packages/belegtool-compress/` (import name `belegtool_compress`: `compress.py`, `cpu.py`, `pixels.py`, `raster.py`, `pdfinfo.py`; own
-`pyproject.toml`, AGPL-3.0-or-later, deps pypdfium2/Pillow/pikepdf/pypdf (PyMuPDF only as `oracle`/`dev` extra), README, `EXTRACTION.md`, tests in
+`pyproject.toml`, AGPL-3.0-or-later, deps pypdfium2/Pillow/pikepdf/pypdf (PyMuPDF only as `oracle`/`dev` extra), README, tests in
 `packages/belegtool-compress/tests/`). **Boundary:** the package never imports the host nor `belegtool_archives` (guarded by `test_standalone.py`);
 logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py` and `services/cpu.py` are thin re-exports (guarded by
 `tests/test_compress_reexports.py`; `core.engine` lazy-imports through the shim). `pixels.capped_dpi` is a deliberate small copy of
@@ -99,7 +97,7 @@ logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py
 `variant_store`/`variant_blobs`, `infra/limits`, and the engine-bound tests (`test_engine_compress_cancel.py`, `test_engine_jpg_color.py`).
 Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`; `belegtool.spec` collects it; CI has an isolated
 `belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
-to it. Extraction: `git filter-repo --subdirectory-filter packages/belegtool-compress` (see its `EXTRACTION.md`).
+to it. Extracted 2026-11-27 (history kept).
 
 **Non-raster work runs on pikepdf (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)):** `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
 Letter default for a missing/empty box; `services/render.page_count/page_dims` delegate), `RealEngine.split_chunks` (pikepdf page copy; **internal

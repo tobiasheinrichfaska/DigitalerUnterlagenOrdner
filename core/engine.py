@@ -241,6 +241,17 @@ class RealEngine:
         # clone the whole document (not page-by-page) so the catalog survives — notably
         # /AcroForm; add_page alone dropped it and left orphaned widgets (C-6)
         writer = PdfWriter(clone_from=reader)
+        # the old page-by-page path dropped the catalog; keep /AcroForm but never carry
+        # document-level active content (OpenAction / additional actions / JS name tree)
+        root = writer._root_object
+        for key in ("/OpenAction", "/AA"):
+            if key in root:
+                del root[key]
+        names = root.get("/Names")
+        if names is not None:
+            names = names.get_object()
+            if "/JavaScript" in names:
+                del names["/JavaScript"]
         for page in writer.pages:
             page.rotate(angle)
         buf = io.BytesIO()

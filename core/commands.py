@@ -15,6 +15,7 @@ KeyError/ValueError from the low-level transforms.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -620,9 +621,13 @@ def _reid_colliding(node: Node, taken: set) -> Node:
     returned as-is."""
     nid = node.id
     if nid in taken:
-        nid = new_id()
-        while nid in taken:
-            nid = new_id()
+        # deterministic (replay invariant): derived from the old id + a counter
+        n = 0
+        while True:
+            nid = hashlib.sha1(f"{node.id}:{n}".encode()).hexdigest()[:32]
+            if nid not in taken:
+                break
+            n += 1
     taken.add(nid)
     kids = tuple(_reid_colliding(c, taken) for c in node.children)
     if nid == node.id and all(a is b for a, b in zip(kids, node.children)):

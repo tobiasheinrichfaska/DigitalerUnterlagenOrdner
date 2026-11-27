@@ -305,4 +305,5 @@ export const en = {
   'Ordner können nicht im PDF-Tool geöffnet werden.': 'Folders cannot be opened in the PDF tool.',
   'Knoten hat keine PDF-Daten.': 'The node has no PDF data.',
   'PDF-Tool konnte nicht geöffnet werden.': 'The PDF tool could not be opened.',
+  'ungültiges PDF': 'invalid PDF',
 }

@@ -1212,16 +1212,17 @@ class CoreApi:
             if owner.document.find(node_id) is None:
                 return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
             if data_b64 is not None and leaves:
-                try:
-                    edited = base64.b64decode(data_b64)
-                except Exception:
-                    edited = None
-                if edited:
-                    # keep the tool session in sync (reopen shows + re-edits the additions)
-                    # AND write these edited bytes to the owner — the immutable document means
-                    # the post-dispatch leaf is a new object, so use `edited` directly here.
-                    t.dispatch(SetNodeBytes(leaves[0].id, edited))
-                    data = edited
+                edited, err = self._decode_pdf_b64(data_b64)
+                if err:
+                    return err
+                err = self._check_pdf_payload(edited, leaves[0].pdf_length)
+                if err:
+                    return err
+                # keep the tool session in sync (reopen shows + re-edits the additions)
+                # AND write these edited bytes to the owner — the immutable document means
+                # the post-dispatch leaf is a new object, so use `edited` directly here.
+                t.dispatch(SetNodeBytes(leaves[0].id, edited))
+                data = edited
             if not data:
                 return {"ok": False, "error": "keine Daten zum Speichern"}
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
@@ -1235,9 +1236,27 @@ class CoreApi:
         if not data_b64:
             return None, {"ok": False, "error": "keine Daten zum Speichern"}
         try:
-            return base64.b64decode(data_b64), None
+            data = base64.b64decode(data_b64)
         except Exception:
             return None, {"ok": False, "error": "ungültige Daten"}
+        if not data:
+            return None, {"ok": False, "error": "ungültige Daten"}
+        return data, None
+
+    @staticmethod
+    def _check_pdf_payload(data, old_pages=None):
+        """T-4: ``None`` if ``data`` opens as a PDF with >= 1 page (0 pages only when the
+        node legitimately had 0), else an error dict. Nothing is changed by the caller then."""
+        import io
+        import pikepdf
+        try:
+            with pikepdf.open(io.BytesIO(data)) as pdf:
+                pages = len(pdf.pages)
+        except Exception:
+            return {"ok": False, "error": "ungültiges PDF"}
+        if pages < 1 and old_pages != 0:
+            return {"ok": False, "error": "ungültiges PDF"}
+        return None
 
     def _dispatch_pdf_bytes(self, session, data):
         """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
@@ -1250,6 +1269,9 @@ class CoreApi:
             leaves = [n for n in s.document.root.iter() if not n.is_folder]
             if not leaves:
                 return {"ok": False, "error": "kein PDF im Dokument"}
+            err = self._check_pdf_payload(data, leaves[0].pdf_length)
+            if err:
+                return err
             try:
                 s.dispatch(SetNodeBytes(leaves[0].id, data))
             except CommandError as e:

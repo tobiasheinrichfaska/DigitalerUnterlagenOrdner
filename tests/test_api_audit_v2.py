@@ -7,6 +7,8 @@ cleanup, save_node_back ordering, IPC error reply + session cleanup."""
 import base64
 import os
 import threading
+
+import pytest
 import types
 
 from core.api import CoreApi
@@ -180,3 +182,37 @@ def test_a9_server_dispatch_returns_error_reply_and_cleans_up(monkeypatch):
     assert r["ok"] and owned == {r["session"]}
     srv._cleanup_sessions(owned)
     assert srv.api.session_count() == base
+
+
+# --- T-4: PDF-Tool save payload validation ---------------------------------
+@pytest.mark.parametrize("payload", ["!!!!", "a", "", base64.b64encode(b"garbage").decode()])
+def test_t4_save_node_back_rejects_bad_payload_and_changes_nothing(payload):
+    api, sid = _api(_tree())
+    pt = api.open_node_in_pdftool(sid, "L")["session"]
+    owner_before = api._sessions[sid].document.find("L").original_data
+    tool_before = base64.b64decode(api.get_pdf_bytes(pt)["data_b64"])
+    r = api.save_node_back(pt, payload)
+    assert r["ok"] is False and r["error"]
+    assert api._sessions[sid].document.find("L").original_data == owner_before
+    assert base64.b64decode(api.get_pdf_bytes(pt)["data_b64"]) == tool_before
+
+
+def test_t4_save_node_back_valid_payload_updates_bytes_and_pdf_length():
+    api, sid = _api(_tree())
+    pt = api.open_node_in_pdftool(sid, "L")["session"]
+    edited = create_valid_pdf(pages=3)
+    assert api.save_node_back(pt, base64.b64encode(edited).decode())["ok"]
+    n = api._sessions[sid].document.find("L")
+    assert n.original_data == edited and n.pdf_length == 3
+
+
+def test_t4_save_pdf_bytes_rejects_garbage_without_disk_write(tmp_path):
+    pdf = tmp_path / "x.pdf"
+    good = create_valid_pdf(pages=1)
+    pdf.write_bytes(good)
+    api = CoreApi()
+    sid = api.open(path=str(pdf))["session"]
+    for payload in (base64.b64encode(b"garbage").decode(), "!!!!"):
+        assert api.save_pdf_bytes(sid, payload)["ok"] is False
+        assert api.update_pdf_bytes(sid, payload)["ok"] is False
+    assert pdf.read_bytes() == good

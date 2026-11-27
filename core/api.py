@@ -387,6 +387,12 @@ class CoreApi:
             if session and session in self._sessions:
                 sid = session
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
+                # R-2: the old document's PDF-Tool node locks/bindings are meaningless for the
+                # new one and would make undo/redo refuse forever.
+                for key in [k for k in self._node_locks if k[0] == sid]:
+                    self._node_locks.pop(key, None)
+                for pt in [p for p, (own, _n) in self._pdftool_bindings.items() if own == sid]:
+                    self._pdftool_bindings.pop(pt, None)
             else:
                 sid = self._new_locked(document)
             prev_lock = self._locks.pop(sid, None)  # reopening in the same session → drop old lock
@@ -1237,7 +1243,7 @@ class CoreApi:
         """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
         (``SetNodeBytes``). No disk write. Returns ``{ok}`` or an error dict."""
         from core.commands import SetNodeBytes  # CommandError is module-level (line 25)
-        with self._lock:
+        with self._slock(session), self._lock:  # R-1: serialise with the unlocked slow _mutate
             s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unbekannte Sitzung"}
@@ -1447,7 +1453,7 @@ class CoreApi:
         """Set/clear the root's provenance SILENTLY (origin metadata, not a user edit;
         no undo/dirty), so a later save persists it."""
         from core.commands import SetDatev
-        with self._lock:
+        with self._slock(session), self._lock:  # R-1
             s = self._sessions.get(session)
             if s is not None:
                 s.apply_silent(SetDatev(provenance))
@@ -1570,6 +1576,9 @@ class CoreApi:
             # "no local path" error.
             from core.commands import SetNodeBytes
             with self._lock:
+                _b = self._pdftool_bindings.get(session)
+            # R-1: owner's per-session lock first (order _slock -> _lock), then re-read.
+            with (self._slock(_b[0]) if _b else threading.RLock()), self._lock:
                 binding = self._pdftool_bindings.get(session)
                 owner = self._sessions.get(binding[0]) if binding else None
                 node_id = binding[1] if binding else None

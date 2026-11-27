@@ -136,12 +136,13 @@ describe('App import — OS file drag-drop (fake files)', () => {
     fireEvent.drop(window, { dataTransfer: { files, types: ['Files'] } })
 
     // both dropped files show as progress placeholders immediately (same level)
-    expect(await screen.findByText(/eins\.pdf/)).toBeInTheDocument()
+    // explicit generous timeout: the 1000 ms default is too tight on a loaded CI runner
+    expect(await screen.findByText(/eins\.pdf/, {}, { timeout: 8000 })).toBeInTheDocument()
     expect(screen.getByText(/zwei\.pdf/)).toBeInTheDocument()
     release()
 
     // each file is imported via import_bytes (sequentially, order preserved)
-    await waitFor(() => expect(callsOf(calls, 'import_bytes').length).toBe(2))
+    await waitFor(() => expect(callsOf(calls, 'import_bytes').length).toBe(2), { timeout: 8000 })
     expect(callsOf(calls, 'import_bytes').map((c) => c.args[1])).toEqual(['eins.pdf', 'zwei.pdf'])
     // multiple files append (index null) so they don't collide / stagger
     for (const c of callsOf(calls, 'import_bytes')) expect(c.args[4]).toBeNull()

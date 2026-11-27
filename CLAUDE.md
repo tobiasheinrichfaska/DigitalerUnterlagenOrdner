@@ -60,9 +60,9 @@ SPDX: `scripts/add_spdx_headers.py` only covers this repo now. The sections belo
 `datev/` (import name stays `datev`) lives in `packages/datev-dokab/` with its own `pyproject.toml`
 (AGPL-3.0-or-later, no dependencies), README, LICENSE and its internal tests (`packages/datev-dokab/tests/`;
 `test_datev_coreapi`/`test_datev_provenance_roundtrip` stay in `tests/` because they need `core`). The main repo
-installs it (non-editable) via `./packages/datev-dokab` in `requirements.txt`; `belegtool.spec` collects it as a
+installs it (non-editable) from the git tag pinned in `requirements.txt` (`datev-dokab@v0.1.0`); `belegtool.spec` collects it as a
 hidden import; **Extracted 2026-11-27** into its own repo (tag `v0.1.0`). The package
-must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
+must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: `pip install -e <clone>` into the build venv (reinstall the pinned tag before committing)
 after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
 
 ### `packages/belegtool-archives/` — separable container-extraction library
@@ -79,8 +79,8 @@ extra `msg` (**2026-11-26: `extract-msg` GPLv3 + RTFDE LGPL removed completely**
 `tests/test_no_gpl_msg_deps.py`); without the extra `.msg` degrades to „nicht importierbar". Body order HTML > HTML unwrapped from
 encapsulated RTF > plain text as minimal HTML > raw `.rtf` (an ordinary RTF is not converted); an attached Outlook message is recursed.
 Pinned by `tests/test_msg_parity.py` (written first against extract-msg) + `test_msg_reader.py`; **synthetic fixtures only**. Installed non-editable via
-`./packages/belegtool-archives` in `requirements.txt`; `belegtool.spec` collects it as a hidden import; CI has an isolated
-`belegtool-archives` job. Re-run `pip install ./packages/belegtool-archives` after every change to it.
+the git tag pinned in `requirements.txt` (`belegtool-archives@v0.1.0`); `belegtool.spec` collects it as a hidden import; CI has
+import-smoke steps for it in the `pytest` job (`.github/workflows/ci.yml`), and the package has its own CI in its repo. After a change to it: test in the package repo, tag, bump the pin (or `pip install -e <clone>` for a dev loop).
 Extracted 2026-11-27. Host-side companions:
 `tests/test_zip_member_guard_host.py`, `tests/test_limits.py`.
 
@@ -95,9 +95,9 @@ logger `logging.getLogger("belegtool_compress")`. `formats/compress_pdf_bytes.py
 `tests/test_compress_reexports.py`; `core.engine` lazy-imports through the shim). `pixels.capped_dpi` is a deliberate small copy of
 `services/render.capped_dpi` (render.py stays in the host; keep both budgets in step). Stay in the host: `render.py`, `render_service.py`,
 `variant_store`/`variant_blobs`, `infra/limits`, and the engine-bound tests (`test_engine_compress_cancel.py`, `test_engine_jpg_color.py`).
-Installed non-editable via `./packages/belegtool-compress` in `requirements.txt`; `belegtool.spec` collects it; CI has an isolated
-`belegtool-compress` job plus a non-`-I` import check of the re-exports. Re-run `pip install ./packages/belegtool-compress` after every change
-to it. Extracted 2026-11-27 (history kept).
+Installed non-editable from the git tag pinned in `requirements.txt` (`belegtool-compress@v0.1.0`); `belegtool.spec` collects it; CI has
+import-smoke steps for it in the `pytest` job (`-I` for the package, a non-`-I` check of the re-exports), and the package has its own CI in its repo. After a change
+to it: test in the package repo, tag, bump the pin (or `pip install -e <clone>` for a dev loop). Extracted 2026-11-27 (history kept).
 
 **Non-raster work runs on pikepdf (2026-11-25, step 1 of [`docs/pymupdf-extract-msg-ersatz.md`](docs/pymupdf-extract-msg-ersatz.md)):** `belegtool_compress/pdfinfo.py` (`page_count`, `page_dims` = CropBox∩MediaBox, inherited attrs, /Rotate snapped to 90°, /UserUnit, MuPDF's
 Letter default for a missing/empty box; `services/render.page_count/page_dims` delegate), `RealEngine.split_chunks` (pikepdf page copy; **internal
@@ -643,13 +643,13 @@ is a **separate** npm script (`test:e2e`, NOT part of `npm test`), so it is easy
 the drag-drop + preview-virtualization layer can regress unseen. Run every one:
 
 ```powershell
-.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~498)
+.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~747 collected 2026-11-27, Linux)
 cd webui ; npm run lint                            # eslint — 0 errors
-cd webui ; npm run test:all                        # vitest jsdom (~281) + Playwright REAL Chromium e2e (3)
+cd webui ; npm run test:all                        # vitest jsdom (~441) + Playwright REAL Chromium e2e (24 + 3 CSP)
 cd webui ; npm run build                           # vite build must succeed
 ```
 
-(`npm run test:all` = `vitest run && playwright test` — runs both frontend layers so the
+(`npm run test:all` = `vitest run && playwright test && npm run test:csp` — runs all frontend layers so the
 e2e layer can't be skipped. First run on a fresh machine: `npx playwright install chromium`.
 You can still run them apart with `npm test` / `npm run test:e2e`.)
 
@@ -1014,7 +1014,7 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   CSP: erledigt (`vite.config.js` Plugin `csp-meta`, nur Production-Build, `<meta http-equiv>` in `index.html` + `pdf-tool.html`: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; object-src/base-uri/form-action none). Guard: `webui/e2e/csp.spec.js` via `npm run test:csp` (vite preview, Port 5179; in `test:all`). Nicht verifiziert: WebView2 unter Windows.
   Offen aus dem Review (Medium/Low, nicht behoben): PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
 
-- **Licence hygiene (2026-11-26):** `scripts/gen_third_party_notices.py` (stdlib only, offline, reproducible) collects name/version/licence/licence files of every `requirements.txt` distribution + recursive installed deps (pdfium/Skia `BUILD_LICENSES` from the pypdfium2 wheel) + npm runtime packages into `licenses/<dist>/` (**generated, git-ignored, bundled by `belegtool.spec`**, copied next to the exe by `build_msix.ps1`, run by `build.ps1` before PyInstaller) and refreshes the generated table in `THIRD_PARTY_NOTICES.md`; a distribution without licence text is an ERROR (exception list with reason: only `proxy_tools`). `tests/test_third_party_notices.py` (distributions missing in the test venv are SKIPPED with a message, not green). svglib/bidi are collected as `.py` via `module_collection_mode` (LGPL exchangeability, `docs/licence-audit.md` 5a; Windows unverified). SPDX headers (`# SPDX-License-Identifier: AGPL-3.0-or-later` + copyright line from `/LICENSE`) in all `packages/*/**/*.py` AND the main repo's Python sources (`core/ services/ formats/ infra/ universal_importer/ tools/ scripts/ tests/ host.py version_info.py datev_probe.py`, released by the owner and done 2026-11-26): `python scripts/add_spdx_headers.py [--check]`, guard `tests/test_spdx_headers.py` (also checks that every git-tracked `.py` is inside that scope). JS/JSX in `webui/src/` has **no** SPDX headers yet (separate script needed). Each package has its own `CONTRIBUTING.md` with the CLA copied **verbatim** from the main one (`tests/test_package_cla.py` compares; change all four together). Help modal has „Lizenz & Quelltext“ (AGPL §13 source offer); DATEV non-affiliation sentence in README, store listing and help.
+- **Licence hygiene (2026-11-26):** `scripts/gen_third_party_notices.py` (stdlib only, offline, reproducible) collects name/version/licence/licence files of every `requirements.txt` distribution + recursive installed deps (pdfium/Skia `BUILD_LICENSES` from the pypdfium2 wheel) + npm runtime packages into `licenses/<dist>/` (**generated, git-ignored, bundled by `belegtool.spec`**, copied next to the exe by `build_msix.ps1`, run by `build.ps1` before PyInstaller) and refreshes the generated table in `THIRD_PARTY_NOTICES.md`; a distribution without licence text is an ERROR (exception list with reason: only `proxy_tools`). `tests/test_third_party_notices.py` (distributions missing in the test venv are SKIPPED with a message, not green). svglib/bidi are collected as `.py` via `module_collection_mode` (LGPL exchangeability, `docs/licence-audit.md` 5a; Windows unverified). SPDX headers (`# SPDX-License-Identifier: AGPL-3.0-or-later` + copyright line from `/LICENSE`) in the main repo's Python sources (`core/ services/ formats/ infra/ universal_importer/ tools/ scripts/ tests/ host.py version_info.py datev_probe.py`, released by the owner and done 2026-11-26; the package repos carry their own headers): `python scripts/add_spdx_headers.py [--check]`, guard `tests/test_spdx_headers.py` (also checks that every git-tracked `.py` is inside that scope). JS/JSX in `webui/src/` has **no** SPDX headers yet (separate script needed). Each package has its own `CONTRIBUTING.md` with the CLA copied **verbatim** from the main one (change all four together by hand). Help modal has „Lizenz & Quelltext“ (AGPL §13 source offer); DATEV non-affiliation sentence in README, store listing and help.
 
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**
@@ -1500,10 +1500,11 @@ embedded version). Low effort; do it on the next build bump.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**218 keys** —
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**220 keys** —
 the v3.9 base of 163 strings plus the DATEV v3.10/v3.11 additions: mode toggle, no-connection guard,
-filing dialog, Bezeichnung, checked-out-self notice; the exact count is asserted by `i18n.test.js`
-(`Object.keys(en).length === 218`), which also asserts every full-coverage language's
+filing dialog, Bezeichnung, checked-out-self notice, the 12 load/export integrity warnings, and the 2
+AGPL §13 licence/source-offer strings of the Help modal; the exact count is asserted by `i18n.test.js`
+(`Object.keys(en).length === 220`), which also asserts every full-coverage language's
 key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker

@@ -69,7 +69,9 @@ def default_roots() -> list[Path]:
 
 
 def package_roots() -> list[Path]:
-    return sorted(d for d in (ROOT / "packages").iterdir() if d.is_dir())
+    # The packages moved to their own repos on 2026-11-27; kept for a checkout that still vendors some under packages/.
+    pk = ROOT / "packages"
+    return sorted(d for d in pk.iterdir() if d.is_dir()) if pk.is_dir() else []
 
 
 def has_header(text: str) -> bool:

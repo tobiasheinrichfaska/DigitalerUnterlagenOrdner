@@ -39,6 +39,22 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 |---|---|
 | `host.py` | **The single entry point.** pywebview host: one shared `CoreApi`, one `HostApi` **per window** (bound to the window uid). Native dialogs, `new_window`, per-window close guard (`window.__belegDirty`), startup `_prewarm` of the heavy PDF libs. The **first** window **persists its geometry** (size/position/monitor) to `%APPDATA%\…\window.json` on close and restores it on next launch; a saved geometry whose monitor is gone falls back to the default (validated by the pure [`infra/window_geometry.py`](infra/window_geometry.py), tested). |
 
+### The three separable libraries live in their own public repos (since 2026-11-27)
+
+⚠️ **`packages/` no longer exists in this repo.** `datev-dokab`, `belegtool-archives` and `belegtool-compress` were extracted with
+their full history (`git filter-repo --subdirectory-filter`) into
+[`tobiasheinrichfaska/datev-dokab`](https://github.com/tobiasheinrichfaska/datev-dokab),
+[`…/belegtool-archives`](https://github.com/tobiasheinrichfaska/belegtool-archives) and
+[`…/belegtool-compress`](https://github.com/tobiasheinrichfaska/belegtool-compress) (tag `v0.1.0`, branch `main`).
+`requirements.txt` pins them as `name @ git+https://github.com/tobiasheinrichfaska/<name>.git@v0.1.0` (non-editable; build needs git + network).
+**Change flow:** edit + test in the package repo → tag → bump the tag in `requirements.txt` (and the CI job `raster-parity`) → re-run the
+full gate here. For a local dev loop: `pip install -e <clone>` into `.build_venv`, then reinstall the pinned tag before committing.
+The package CI jobs moved with them (none exists in the new repos yet — add one before the first change there). The host tests that
+read package metadata (`tests/test_no_agpl_pdf_deps.py`) now use the installed distribution's metadata; the CLA-copy test
+(`test_package_cla.py`) is gone — **the CLA exists in four `CONTRIBUTING.md` copies (this repo + the three packages); change them together by hand.**
+SPDX: `scripts/add_spdx_headers.py` only covers this repo now. The sections below describe the packages' design; file paths
+`packages/<name>/…` in them mean the root of the respective package repo.
+
 ### `packages/datev-dokab/` — separable DATEV library
 
 `datev/` (import name stays `datev`) lives in `packages/datev-dokab/` with its own `pyproject.toml`
@@ -47,7 +63,7 @@ entry/config; `webui/` = React frontend (`src/lib/` holds its UI-free logic).
 installs it (non-editable) via `./packages/datev-dokab` in `requirements.txt`; `belegtool.spec` collects it as a
 hidden import; CI has an isolated `datev-dokab` job. **Extraction** into its own repo needs no code change:
 `git filter-repo --subdirectory-filter packages/datev-dokab`, tag `v0.1.0`, then switch `requirements.txt` to the
-pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](packages/datev-dokab/EXTRACTION.md). The package
+pip-git URL — steps in [`packages/datev-dokab/EXTRACTION.md`](https://github.com/tobiasheinrichfaska/datev-dokab). The package
 must not import host modules (guarded by `test_datev_standalone.py`). Dev runs: re-run `pip install ./packages/datev-dokab`
 after every change to it; a non-frozen `datev.config.json` is read from `DATEV_CONFIG_DIR` (never the CWD).
 
@@ -461,8 +477,8 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   user's own profile, never machine-wide) — required because DATEV authenticates via **Windows
   SSO as the logged-in user**. The header **„DATEV"** button ([`DatevBar.jsx`](webui/src/DatevBar.jsx))
   flips it via `HostApi.set_datev_mode` → `CoreApi.set_datev_mode`.
-- **Lazy service** ([`datev/inapp.py`](packages/datev-dokab/datev/inapp.py) `DatevService`) — built on first use over
-  the reusable, injected-transport [`datev/client.py`](packages/datev-dokab/datev/client.py) (SSO curl). Imports the
+- **Lazy service** ([`datev/inapp.py`](https://github.com/tobiasheinrichfaska/datev-dokab/blob/main/datev/inapp.py) `DatevService`) — built on first use over
+  the reusable, injected-transport [`datev/client.py`](https://github.com/tobiasheinrichfaska/datev-dokab/blob/main/datev/client.py) (SSO curl). Imports the
   `datev` package only when mode is on. `CoreApi._datev_get_service()` is the gate.
 - **Provenance** — the DATEV origin `{doc_guid, file_id, structure_item_id,
   correspondence_partner_guid, source_name}` lives on the **root** `Node.datev` field and
@@ -506,7 +522,7 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   illegal chars, trailing dots/spaces, and Windows reserved device names like `NUL`/`COM1`).
 - **On save** — the guarded write-back: `HostApi.save_to_datev` asks „nach DATEV zurückschreiben?",
   then `CoreApi.datev_save_back` re-reads the server NOW and runs the **pure**
-  [`datev/writeback.py`](packages/datev-dokab/datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
+  [`datev/writeback.py`](https://github.com/tobiasheinrichfaska/datev-dokab/blob/main/datev/writeback.py) `decide_save_back` (not checked out · `change_date_time`
   unchanged vs baseline · server bytes == opened original). `ok` → backup the fetched server
   bytes to `%APPDATA%\…\datev_backups\`, then `upload_document_file` → `update_structure_item`
   (the **stable** structure-item id; DokAb overwrites, no revision). **Any non-ok verdict
@@ -1036,9 +1052,9 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
     round): routing now checks the OLE/CFB signature (`D0 CF 11 E0 A1 B1 1A E1`) FIRST, so a
     `.msg` whose raw bytes contain `b"From:"`/`b"Content-Type:"` (attached mail, HTML body of an
     English reply) no longer lands in the EML parser. The former strict-xfail guard
-    [`packages/belegtool-archives/tests/test_msg_import.py`](packages/belegtool-archives/tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
+    [`packages/belegtool-archives/tests/test_msg_import.py`](https://github.com/tobiasheinrichfaska/belegtool-archives/blob/main/tests/test_msg_import.py) `test_a_forwarded_msg_keeps_its_attachments`
     went red on the fix and is now a normal passing test (marker dropped).
-  - **Synthetic `.msg` files for tests:** [`packages/belegtool-archives/tests/msg_fixture.py`](packages/belegtool-archives/tests/msg_fixture.py) writes real
+  - **Synthetic `.msg` files for tests:** [`packages/belegtool-archives/tests/msg_fixture.py`](https://github.com/tobiasheinrichfaska/belegtool-archives/blob/main/tests/msg_fixture.py) writes real
     CFB/MSG files (stdlib only: subject, plain/HTML/compressed-RTF body, Unicode or ANSI strings + code page, attachments with long/8.3 names,
     content id, embedded messages, sent date) — so `.msg` paths are tested without real mail (Outlook is never touched).
   - **Licence — RESOLVED 2026-11-26:** `extract-msg` (GPLv3) and its dependency RTFDE (LGPLv3) are **gone** from `requirements.txt`, the

@@ -137,6 +137,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npm run test:csp # CSP-Guard (Production-Build + vite preview, Port 5179)
       - name: Playwright-Spuren hochladen (bei Fehlern)
         if: failure()
         uses: actions/upload-artifact@v4 # feste Hauptversion

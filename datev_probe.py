@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (C) 2026 Tobias Heinrich
 """Entry point for the standalone DATEV read-probe (one-file exe). See tools/datev_probe/probe_gui.py.
 Build: scripts/build_datev_probe.ps1  ->  dist/DATEV-Probe.exe
-Needs the `datev` package (pip install ./packages/datev-dokab) importable."""
+Needs the `datev` package (the datev-dokab pin from requirements.txt) importable."""
 import os
 import sys
 

@@ -280,6 +280,7 @@ Invoke-Phase '1a pytest Hauptrepo' {
 }
 
 $pkgDirs = @()
+# Die Pakete leben seit 2026-11-27 in eigenen Repos (eigene CI); ein evtl. lokales packages/ wird nur mitgenommen, falls vorhanden.
 if (Test-Path (Join-Path $script:Root 'packages')) {
     $pkgDirs = @(Get-ChildItem (Join-Path $script:Root 'packages') -Directory | Sort-Object Name)
 }

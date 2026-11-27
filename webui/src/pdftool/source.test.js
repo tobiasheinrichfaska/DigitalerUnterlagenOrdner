@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction, saveFailure } from './source.js'
 
 describe('chooseSource', () => {
   it('uses the bridge when a .pdf is bound in the host', () => {
@@ -99,5 +99,18 @@ describe('uint8ToBase64', () => {
   it('handles a payload larger than the 0x8000 chunk size', () => {
     const big = new Uint8Array(0x8000 * 2 + 17).map((_, i) => i % 256)
     expect(Array.from(base64ToUint8(uint8ToBase64(big)))).toEqual(Array.from(big))
+  })
+})
+
+describe('saveFailure', () => {
+  it('is null on a clean save', () => {
+    expect(saveFailure({ ok: true })).toBeNull()
+  })
+  it('reports local_error even when ok is true (disk write failed)', () => {
+    expect(saveFailure({ ok: true, local_error: 'Zugriff verweigert' })).toBe('Zugriff verweigert')
+  })
+  it('reports error / unknown when not ok', () => {
+    expect(saveFailure({ ok: false, error: 'boom' })).toBe('boom')
+    expect(saveFailure(null)).toBe('unbekannt')
   })
 })

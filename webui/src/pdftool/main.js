@@ -8,7 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { EventBus, PDFViewer, PDFLinkService, LinkTarget } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
-import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction } from './source.js'
+import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction, saveFailure } from './source.js'
 import { openFileDialog } from './fileDialog.js'
 import { datevSavedNotice, datevVerdictKey } from '../lib/datev.js'
 import { installDropGuard } from '../lib/dropGuard.js'
@@ -115,8 +115,8 @@ async function saveBack() {
   setStatus('Speichern…')
   try {
     const res = await bakeEdits()
-    setStatus(res && res.ok ? datevSavedNotice('Gespeichert ✓', res)
-      : `Fehler: ${(res && res.error) || 'unbekannt'}`)
+    const fail = saveFailure(res)
+    setStatus(fail === null ? datevSavedNotice('Gespeichert ✓', res) : `Fehler: ${fail}`)
   } catch (e) {
     setStatus(`Fehler: ${e}`)
   }

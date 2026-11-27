@@ -70,7 +70,8 @@ def test_foreign_identifier_is_reported_not_overwritten():
 def test_every_package_source_has_the_header():
     cr = sp.copyright_line()
     files = sp.source_files(sp.package_roots())
-    assert len(files) > 50, "package sources not found"
+    if not files:
+        pytest.skip("packages live in their own repos since 2026-11-27 (belegtool-archives, belegtool-compress, datev-dokab)")
     bad = []
     for f in files:
         text = f.read_text(encoding="utf-8")

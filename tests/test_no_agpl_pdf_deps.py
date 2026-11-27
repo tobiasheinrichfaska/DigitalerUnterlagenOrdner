@@ -11,8 +11,8 @@ This test fails when it comes back into the product: requirements.txt, the packa
 production code, or a PyInstaller spec that bundles it / forgets pdfium's DLL.
 """
 import ast
+import importlib.metadata
 import re
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,22 +66,31 @@ def test_pymupdf_is_dev_only_oracle():
     assert "pymupdf" in dev, "tests/fixture generators and the parity oracle need PyMuPDF in requirements-dev.txt"
 
 
+def _requires(dist: str):
+    """(runtime deps, extra-name -> deps) of an INSTALLED package (they live in their own repos since 2026-11-27)."""
+    reqs = importlib.metadata.requires(dist) or []
+    runtime, extras = set(), {}
+    for r in reqs:
+        name = _norm(re.match(r"[A-Za-z0-9_.\-]+", r).group(0))
+        m = re.search(r"extra\s*==\s*['\"]([^'\"]+)['\"]", r)
+        if m:
+            extras.setdefault(m.group(1), set()).add(name)
+        else:
+            runtime.add(name)
+    return runtime, extras
+
+
 def test_compress_package_depends_on_pdfium_not_pymupdf():
-    meta = tomllib.loads((ROOT / "packages" / "belegtool-compress" / "pyproject.toml").read_text(encoding="utf-8"))
-    deps = {_norm(re.match(r"[A-Za-z0-9_.\-]+", d).group(0)) for d in meta["project"]["dependencies"]}
+    deps, extras = _requires("belegtool-compress")
     assert "pypdfium2" in deps and not (deps & set(FORBIDDEN)), deps
-    oracle = {_norm(re.match(r"[A-Za-z0-9_.\-]+", d).group(0))
-              for d in meta["project"]["optional-dependencies"]["oracle"]}
-    assert oracle == {"pymupdf"}
+    assert extras["oracle"] == {"pymupdf"}
 
 
 def test_no_other_package_metadata_depends_on_it():
-    for pyproject in (ROOT / "packages").glob("*/pyproject.toml"):
-        if pyproject.parent.name == "belegtool-compress":
-            continue
-        text = _norm(pyproject.read_text(encoding="utf-8"))
-        for f in FORBIDDEN:
-            assert f not in text, f"{pyproject} mentions {f}"
+    for dist in ("belegtool-archives", "datev-dokab"):
+        deps, extras = _requires(dist)
+        everything = deps.union(*extras.values())
+        assert not (everything & set(FORBIDDEN)), f"{dist} depends on {everything & set(FORBIDDEN)}"
 
 
 def test_no_production_source_imports_pymupdf():

@@ -31,7 +31,7 @@ py "-$PyVer" -m venv $VenvDir
 
 Write-Host "=== Abhaengigkeiten installieren ===" -ForegroundColor Cyan
 & "$VenvDir\Scripts\python.exe" -m pip install --upgrade pip --quiet
-# requirements.txt references ./packages/datev-dokab and ./packages/belegtool-archives (pip resolves it against the cwd) -> run from $Root
+# requirements.txt pins datev-dokab, belegtool-archives and belegtool-compress as git+https tags (own repos, needs git + network)
 Push-Location $Root
 & "$VenvDir\Scripts\pip.exe" install -r "requirements.txt" --quiet
 Pop-Location

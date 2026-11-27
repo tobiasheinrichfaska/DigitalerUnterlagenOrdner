@@ -57,72 +57,6 @@ jobs:
       - name: pytest
         run: python -m pytest
 
-  # datev-dokab (packages/datev-dokab): Paket-Tests in Isolation - nur das Paket installiert,
-  # das Hauptrepo liegt nicht auf dem Pfad. Spaeter 1:1 in das eigene Repo uebernehmbar.
-  datev-dokab:
-    name: datev-dokab (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: packages/datev-dokab
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e .[dev]
-      - run: python -m pytest
-
-  # belegtool-archives (packages/belegtool-archives): Paket-Tests in Isolation - nur das Paket (+ Extra msg)
-  # installiert, das Hauptrepo liegt nicht auf dem Pfad. Spaeter 1:1 in das eigene Repo uebernehmbar.
-  belegtool-archives:
-    name: belegtool-archives (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: packages/belegtool-archives
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e .[dev]
-      - run: python -m pytest
-
-  # belegtool-compress (packages/belegtool-compress): Paket-Tests in Isolation - nur das Paket installiert,
-  # das Hauptrepo liegt nicht auf dem Pfad. Spaeter 1:1 in das eigene Repo uebernehmbar.
-  belegtool-compress:
-    name: belegtool-compress (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: packages/belegtool-compress
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e .[dev]
-      - run: python -m pytest
-
   # Raster-Paritaet pypdfium2 (Produktion) gegen PyMuPDF (nur Dev-Orakel), Messwerkzeug + Paritaetstests.
   # Grundlage/Schwellen: docs/pdfium-spike.md. Zeitmessung (speed) und Latenz sind absichtlich NICHT im CI
   # (geteilte Runner = verrauscht); Thread-Sicherheit/Prioritaet sind per pytest abgedeckt.
@@ -140,10 +74,9 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install --upgrade pip
+      # Die Paritaets-/pdfium-Tests des Pakets laufen jetzt im Repo belegtool-compress (eigene CI dort).
       - name: pypdfium2 + belegtool-compress + PyMuPDF (Orakel, dev) + numpy
-        run: python -m pip install -r requirements-dev.txt ./packages/belegtool-compress pypdfium2==5.15.2 Pillow pikepdf pypdf
-      - name: Paritaets- und pdfium-Tests des Pakets
-        run: python -m pytest packages/belegtool-compress/tests/test_raster_pdfium.py packages/belegtool-compress/tests/test_raster_parity.py -q
+        run: python -m pip install -r requirements-dev.txt "belegtool-compress @ git+https://github.com/tobiasheinrichfaska/belegtool-compress.git@v0.1.0" pypdfium2==5.15.2 Pillow pikepdf pypdf
       - name: scripts/raster_compare.py (Masse, Abweichung, Versatz, JPEG-Groessen, Speicher)
         run: python scripts/raster_compare.py --only dims,align,jpeg,memory
 

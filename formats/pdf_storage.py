@@ -53,6 +53,48 @@ def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
         child.parent = wrapper
     return wrapper
 
+def _carry_acroform(writer: PdfWriter, sources) -> None:
+    """Y-6: pypdf copies pages (widgets survive) but never the catalog /AcroForm.
+    Rebuild it from the widgets on the writer's pages; /DR /DA /NeedAppearances come
+    from the first source form. ``sources`` = readers whose /AcroForm may be carried."""
+    try:
+        from pypdf.generic import (ArrayObject, BooleanObject, DictionaryObject,
+                                   NameObject)
+        base = None
+        for r in sources:
+            af = r.trailer["/Root"].get("/AcroForm")
+            if af is not None:
+                base = af.get_object()
+                break
+        if base is None:
+            return
+        fields, seen = [], set()
+        for page in writer.pages:
+            for a in page.get("/Annots") or []:
+                w = a.get_object()
+                if w.get("/Subtype") != "/Widget":
+                    continue
+                top = a
+                while "/Parent" in top.get_object():
+                    top = top.get_object()["/Parent"]
+                key = top.idnum if hasattr(top, "idnum") and top.idnum else id(top)
+                if key not in seen:
+                    seen.add(key)
+                    fields.append(top)
+        if not fields:
+            return
+        form = DictionaryObject()
+        form[NameObject("/Fields")] = ArrayObject(fields)
+        for k in ("/DR", "/DA", "/Q", "/NeedAppearances"):
+            if k in base:
+                v = base[k]
+                form[NameObject(k)] = v.clone(writer) if hasattr(v, "clone") and not isinstance(v, BooleanObject) else v
+        writer._root_object[NameObject("/AcroForm")] = writer._add_object(form)
+    except Exception as e:  # never fail a save over form metadata
+        logger.warning("[save] AcroForm konnte nicht übernommen werden: %s", e)
+
+
+
 class PDFStorage:
     def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):
         self.filename: Optional[str] = None
@@ -303,6 +345,9 @@ class PDFStorage:
 
             for page in reader.pages:
                 writer.add_page(page)
+            if not hasattr(writer, '_beleg_forms'):
+                writer._beleg_forms = []
+            writer._beleg_forms.append(reader)
 
             # Lesezeichen für Dokument
             outline_entry = writer.add_outline_item(
@@ -340,6 +385,7 @@ class PDFStorage:
         buffer = io.BytesIO()
         writer = PdfWriter()
         self._append_pages_with_outline(writer, self.root)
+        _carry_acroform(writer, getattr(writer, '_beleg_forms', []))
         writer.add_metadata({"/JSONStructure": structure_json})
         writer.write(buffer)
         raw_pdf = buffer.getvalue()
@@ -456,6 +502,7 @@ class PDFStorage:
         for i in range(start, end + 1):
             if 0 <= i < len(reader.pages):
                 writer.add_page(reader.pages[i])
+        _carry_acroform(writer, [reader])
         buf = io.BytesIO()
         writer.write(buf)
         return buf.getvalue()

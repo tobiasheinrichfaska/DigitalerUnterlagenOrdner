@@ -22,6 +22,28 @@ from reportlab.lib.units import cm
 from formats.pdf_node import PDFNode
 from formats.pdf_storage import PDFStorage
 
+def _pdf_safe(text: str) -> str:
+    """Y-4: the base-14 fonts only cover cp1252; anything else (and tabs/newlines)
+    rendered as black boxes. Expand tabs, fold accents where possible, else '?'."""
+    import unicodedata
+    out = []
+    for ch in str(text).replace("\t", "    ").replace("\r", " ").replace("\n", " "):
+        try:
+            ch.encode("cp1252")
+            out.append(ch)
+            continue
+        except UnicodeEncodeError:
+            pass
+        base = "".join(c for c in unicodedata.normalize("NFKD", ch)
+                       if not unicodedata.combining(c))
+        try:
+            base.encode("cp1252")
+            out.append(base or "?")
+        except UnicodeEncodeError:
+            out.append("?")
+    return "".join(out)
+
+
 # Seitenabmessungen A4 in Punkten
 _A4_W, _A4_H = A4
 _ML = 2.2 * cm
@@ -162,12 +184,12 @@ def _render_toc_pdf(items: List[_TocItem],
 
     # ── Titel ────────────────────────────────────────────────────────────────
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(_ML, y, title)
+    c.drawString(_ML, y, _pdf_safe(title))
     y -= 22
     if subtitle:
         c.setFont("Helvetica", 9)
         c.setFillColorRGB(0.4, 0.4, 0.4)
-        c.drawString(_ML, y, subtitle)
+        c.drawString(_ML, y, _pdf_safe(subtitle))
         c.setFillColorRGB(0, 0, 0)
         y -= 14
     c.setLineWidth(0.6)
@@ -197,6 +219,7 @@ def _render_toc_pdf(items: List[_TocItem],
 
         x = _ML + item.depth * _INDENT
         name = item.name if len(item.name) <= 74 else item.name[:72] + "…"
+        name = _pdf_safe(name)
 
         if item.other_file:
             # ── Querverweis auf andere Datei ─────────────────────────────────
@@ -210,7 +233,7 @@ def _render_toc_pdf(items: List[_TocItem],
             # TOC offset (parts do not share one TOC page count)
             off = (other_offsets or {}).get(item.other_file, toc_offset)
             ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + off}"
-            c.drawRightString(_A4_W - _MR, y, f"→ {ref}")
+            c.drawRightString(_A4_W - _MR, y, "→ " + _pdf_safe(ref))
 
         elif item.is_folder:
             # ── Ordner-Überschrift ────────────────────────────────────────────
@@ -323,7 +346,7 @@ def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
     y = _A4_H - _MT
 
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(_ML, y, title)
+    c.drawString(_ML, y, _pdf_safe(title))
     y -= 22
     c.setLineWidth(0.6)
     c.line(_ML, y, _A4_W - _MR, y)
@@ -339,11 +362,12 @@ def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
             y -= 4
             c.setFont("Helvetica-Bold", 11)
             c.setFillColorRGB(0, 0, 0)
-            c.drawString(_ML, y, item.text)
+            c.drawString(_ML, y, _pdf_safe(item.text))
             y -= _ROW
             continue
 
         name = item.text if len(item.text) <= 74 else item.text[:72] + "…"
+        name = _pdf_safe(name)
         c.setFont("Helvetica", 10)
         page_text = f"S. {item.page + toc_offset}"
         nw = c.stringWidth(name, "Helvetica", 10)

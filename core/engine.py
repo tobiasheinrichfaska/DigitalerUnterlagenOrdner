@@ -91,6 +91,8 @@ class RealEngine:
         self._mcache: "OrderedDict[tuple, dict]" = OrderedDict()
         self._mcache_max = 16
         self._mcache_lock = threading.Lock()
+        # in-flight compress_all_methods per key, so concurrent callers share one run (C-7)
+        self._inflight: dict = {}
         # variants loaded from a .belegtool (persisted): NOT LRU-bounded, so every
         # node's saved variants stay available after reopening. Keyed like _mcache.
         # Guarded by _mcache_lock too — seed_variants writes it during open() while
@@ -192,16 +194,33 @@ class RealEngine:
             if hit is not None:
                 self._mcache.move_to_end(key)
                 return hit
-        from formats.compress_pdf_bytes import compress_all_methods, CompressionCancelled
-        try:
-            result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
-        except CompressionCancelled:
-            return {}  # node was removed mid-compress → don't memoise a partial/empty result
         with self._mcache_lock:
-            self._mcache[key] = result
-            if len(self._mcache) > self._mcache_max:
-                self._mcache.popitem(last=False)  # evict the least-recently-used
-        return result
+            waiter = self._inflight.get(key)
+            if waiter is None:
+                self._inflight[key] = threading.Event()
+        if waiter is not None:
+            waiter.wait()  # another thread computes the same key — reuse its result
+            with self._mcache_lock:
+                hit = self._mcache.get(key) or self._persisted.get(key)
+            if hit is not None:
+                return hit
+            return self._all_methods(pdf_bytes, dpi, cancel)  # it was cancelled/failed: retry
+        try:
+            from formats.compress_pdf_bytes import compress_all_methods, CompressionCancelled
+            try:
+                result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
+            except CompressionCancelled:
+                return {}  # node was removed mid-compress → don't memoise a partial/empty result
+            with self._mcache_lock:
+                self._mcache[key] = result
+                if len(self._mcache) > self._mcache_max:
+                    self._mcache.popitem(last=False)  # evict the least-recently-used
+            return result
+        finally:
+            with self._mcache_lock:
+                ev = self._inflight.pop(key, None)
+            if ev is not None:
+                ev.set()
 
     def page_count(self, pdf_bytes: bytes) -> int:
         return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
@@ -219,10 +238,11 @@ class RealEngine:
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
         reader = PdfReader(io.BytesIO(pdf_bytes))
-        writer = PdfWriter()
-        for page in reader.pages:
+        # clone the whole document (not page-by-page) so the catalog survives — notably
+        # /AcroForm; add_page alone dropped it and left orphaned widgets (C-6)
+        writer = PdfWriter(clone_from=reader)
+        for page in writer.pages:
             page.rotate(angle)
-            writer.add_page(page)
         buf = io.BytesIO()
         writer.write(buf)
         return buf.getvalue()

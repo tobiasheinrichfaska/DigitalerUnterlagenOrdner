@@ -18,7 +18,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-from core.model import Document, Node, STATUSES, STATUS_NONE
+from core.model import Document, Node, STATUSES, STATUS_NONE, new_id
 from infra.log_config import logger
 
 # Fixed core defaults (the model/logic layer owns these — not the UI).
@@ -564,6 +564,7 @@ def _parent_id_map(root: Node) -> dict:
 def _top_level_ids(doc: Document, ids):
     """Drop ids that already sit inside another selected id (so a folder + one of
     its descendants only moves the folder). O(n) via a single parent map."""
+    ids = list(dict.fromkeys(ids))  # a repeated id must not be moved/grouped twice (C-2)
     id_set = set(ids)
     pmap = _parent_id_map(doc.root)
     out = []
@@ -613,12 +614,33 @@ def _move_many(doc: Document, cmd: MoveMany, engine=None) -> Document:
     return doc
 
 
+def _reid_colliding(node: Node, taken: set) -> Node:
+    """Return ``node`` with every id that is already in ``taken`` replaced by a fresh
+    one (recursively); registers all resulting ids in ``taken``. Unchanged subtrees are
+    returned as-is."""
+    nid = node.id
+    if nid in taken:
+        nid = new_id()
+        while nid in taken:
+            nid = new_id()
+    taken.add(nid)
+    kids = tuple(_reid_colliding(c, taken) for c in node.children)
+    if nid == node.id and all(a is b for a, b in zip(kids, node.children)):
+        return node
+    return dataclasses.replace(node, id=nid, children=kids)
+
+
 @_handler(InsertNodes)
 def _insert_nodes(doc: Document, cmd: InsertNodes, engine=None) -> Document:
     _require_folder(doc, cmd.parent_id)
     if not cmd.nodes:
         return doc
-    for offset, node in enumerate(cmd.nodes):
+    # Imported subtrees may carry persisted uids that already exist in the document
+    # (re-importing a .belegtool) — ids must stay unique, so colliding nodes get fresh
+    # ids (C-1/A-1). Variants seeded under the old id simply recompute.
+    taken = {n.id for n in doc.root.iter()}
+    nodes = [_reid_colliding(n, taken) for n in cmd.nodes]
+    for offset, node in enumerate(nodes):
         at = None if cmd.index is None else cmd.index + offset
         doc = doc.insert_child(cmd.parent_id, node, at)
     return doc
@@ -831,7 +853,7 @@ def _split_into(doc: Document, cmd: SplitInto, engine=None) -> Document:
 @_handler(Merge)
 def _merge(doc: Document, cmd: Merge, engine=None) -> Document:
     _require_engine(engine)
-    ids = list(cmd.node_ids)
+    ids = list(dict.fromkeys(cmd.node_ids))  # duplicates would double the pages (C-2)
     if len(ids) < 2:
         raise CommandError("Zum Zusammenführen sind mindestens zwei Knoten nötig.")
     nodes = [_require_leaf(doc, nid) for nid in ids]

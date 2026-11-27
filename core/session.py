@@ -23,7 +23,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from core.commands import Command, apply
+from dataclasses import replace
+
+from core.commands import Command, SetDatev, apply
 from core.model import Document
 
 
@@ -87,6 +89,21 @@ class DocumentSession:
         for facts recomputable from the bytes — it intentionally relaxes the replay
         invariant for those fields (see module docstring)."""
         self._doc = apply(self._doc, cmd, self._engine)
+        if isinstance(cmd, SetDatev):
+            # origin metadata must survive undo/redo: carry it into every snapshot too
+            # (identity of the saved-state marker is preserved via the memo) (C-3)
+            memo: dict = {id(self._doc): self._doc}
+
+            def carry(d: Document) -> Document:
+                nd = memo.get(id(d))
+                if nd is None:
+                    nd = Document(replace(d.root, datev=cmd.provenance))
+                    memo[id(d)] = nd
+                return nd
+            self._undo = [(carry(d), c) for d, c in self._undo]
+            self._redo = [(carry(d), c) for d, c in self._redo]
+            if self._saved_doc is not self._doc:
+                self._saved_doc = carry(self._saved_doc)
         if not self._dirty:
             # a silent fact on a clean document keeps it clean — move the marker along
             # so a later undo/redo identity check still recognises the saved state

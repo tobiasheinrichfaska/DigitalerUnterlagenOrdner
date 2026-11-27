@@ -571,12 +571,13 @@ def _pack_units(units, max_pages):
 
 
 def _leaves_with_path(nodes, _path=()):
-    """All non-empty leaves in document order, each paired with its folder-name path
-    (so a split part can be rebuilt with the document's folder structure)."""
+    """All non-empty leaves in document order, each paired with its folder path of
+    ``(folder identity, name)`` pairs (so a split part can be rebuilt with the
+    document's folder structure; two distinct same-named folders stay distinct, F-6)."""
     out = []
     for node in nodes:
         if node.is_folder:
-            out.extend(_leaves_with_path(node.children, _path + (node.name,)))
+            out.extend(_leaves_with_path(node.children, _path + ((id(node), node.name),)))
         elif count_node_pages(node) > 0:
             out.append((node, _path))
     return out
@@ -595,7 +596,7 @@ def _subtree_from_leaves(items):
         if path in index:
             return index[path]
         parent = ensure(path[:-1])
-        folder = PDFNode(name=path[-1], is_folder=True)
+        folder = PDFNode(name=path[-1][1], is_folder=True)
         index[path] = folder
         if parent is None:
             roots.append(folder)
@@ -659,6 +660,18 @@ def _subtree_from_pages(group, problems=None):
 
 
 def _plan_groups(nodes, max_pages, level, problems=None):
+    """Plan the parts WITHOUT leaving the source tree re-parented (F-7): building a
+    part's folders reparents the reused leaves, so restore parent/position afterwards."""
+    saved = [(leaf, leaf.parent, leaf.position) for leaf, _ in _leaves_with_path(nodes)]
+    try:
+        return _plan_groups_impl(nodes, max_pages, level, problems)
+    finally:
+        for leaf, parent, position in saved:
+            leaf.parent = parent
+            leaf.position = position
+
+
+def _plan_groups_impl(nodes, max_pages, level, problems=None):
     """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
 
     ``level``:

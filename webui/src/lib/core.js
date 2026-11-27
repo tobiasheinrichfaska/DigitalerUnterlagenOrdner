@@ -79,6 +79,7 @@ export const core = {
   saveInfo: (session) => call('save_info', session),
   saveFile: (session, storeAlternatives = true) => call('save_file', session, storeAlternatives),
   saveFileAs: (session, storeAlternatives = true) => call('save_file_as', session, storeAlternatives),
+  getState: (session) => call('get_state', session),
   dispatch: (session, command) => call('dispatch', session, command),
   undo: (session) => call('undo', session),
   redo: (session) => call('redo', session),

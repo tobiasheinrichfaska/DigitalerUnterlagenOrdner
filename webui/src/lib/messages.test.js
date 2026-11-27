@@ -16,6 +16,16 @@ describe('localizeMessage (host-level backend messages)', () => {
       .toBe('This file is already being edited and can only be opened by one person at a time.')
   })
 
+  it('W-9: localizes the PDF-Tool open/lock errors', () => {
+    for (const de of [
+      'Dieser Knoten ist bereits im PDF-Tool geöffnet.',
+      'Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann nicht gleichzeitig geändert werden.',
+      'Ordner können nicht im PDF-Tool geöffnet werden.',
+      'Knoten hat keine PDF-Daten.',
+      'PDF-Tool konnte nicht geöffnet werden.',
+    ]) expect(localizeMessage(t, de), de).not.toBe(de)
+  })
+
   it('keeps the dynamic part of "ungültige Daten: …"', () => {
     expect(localizeMessage(t, 'ungültige Daten: Incorrect padding'))
       .toBe('invalid data: Incorrect padding')

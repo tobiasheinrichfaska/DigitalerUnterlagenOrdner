@@ -94,6 +94,11 @@ class CoreApi:
         self._sessions = {}
         self._paths = {}  # session -> on-disk path (so Speichern saves in place, not Save-As)
         self._lock = threading.Lock()
+        # Per-session mutation locks (audit v2 A-4): the slow engine work of a command
+        # (split/compress/merge) runs under ITS session's lock only, never under the
+        # global self._lock. Lock order: _slock(session) → self._lock (never invert).
+        self._slocks = {}
+        self._slocks_guard = threading.Lock()
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
@@ -342,15 +347,21 @@ class CoreApi:
     def open(self, session: str = None, path: str = None) -> dict:
         import dataclasses
         lock = None
+        reused_lock = False
         if self._should_lock(path):
             from infra import file_lock
             from infra.file_lock import FileInUseError
-            try:
-                lock = file_lock.acquire_lock(path)
-            except FileInUseError:
-                return {"ok": False, "code": "in_use",
-                        "error": "Diese Datei wird bereits bearbeitet und kann nur von "
-                                 "einer Person gleichzeitig geöffnet werden."}
+            with self._lock:
+                cur = self._locks.get(session) if session else None
+            if cur is not None and self._same_path(getattr(cur, "path", None), path):
+                lock, reused_lock = cur, True  # A-5: reopen of our OWN locked file — our handle would deny us
+            else:
+                try:
+                    lock = file_lock.acquire_lock(path)
+                except FileInUseError:
+                    return {"ok": False, "code": "in_use",
+                            "error": "Diese Datei wird bereits bearbeitet und kann nur von "
+                                     "einer Person gleichzeitig geöffnet werden."}
         load_warnings: list = []
         try:
             if path:
@@ -365,7 +376,7 @@ class CoreApi:
             else:
                 document = Document.empty(self._next_untitled_name())  # "Dokument N"
         except Exception:
-            if lock is not None:
+            if lock is not None and not reused_lock:
                 lock.release()  # never leak the handle if the load fails
             raise
         # H-1 (QS 2026-11-04): a DEGRADED load (corrupt structure/pages) must never bind
@@ -379,6 +390,7 @@ class CoreApi:
             else:
                 sid = self._new_locked(document)
             prev_lock = self._locks.pop(sid, None)  # reopening in the same session → drop old lock
+            self._datev_baseline.pop(sid, None)  # A-5: the old file's write-back baseline must not leak to the new one
             self._paths[sid] = path if (path and not degraded) else None  # remember where it came from
             if degraded:
                 self._degraded.add(sid)
@@ -394,7 +406,7 @@ class CoreApi:
                 self._view_dirs[sid] = view_dir
                 self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
             resp = self._doc_response_locked(sid)
-        if prev_lock is not None:
+        if prev_lock is not None and prev_lock is not lock:
             prev_lock.release()
         # uids persist in .belegtool: a node deleted (set token) in another window
         # must be compressible in this fresh session of the same file.
@@ -406,6 +418,21 @@ class CoreApi:
             # degraded content must never feed a DATEV write-back baseline
             resp = self._datev_capture_on_open(sid, path, resp)
         return resp
+
+    @staticmethod
+    def _same_path(a, b) -> bool:
+        """Whether two spellings (case, slashes, '..') name the same file."""
+        if not a or not b:
+            return False
+        if a == b:
+            return True
+        na, nb = os.path.normcase(os.path.abspath(a)), os.path.normcase(os.path.abspath(b))
+        if na == nb:
+            return True
+        try:
+            return os.path.samefile(a, b)
+        except OSError:
+            return False
 
     def document_path(self, session: str):
         """The on-disk path this session is bound to (None if never saved/opened)."""
@@ -537,10 +564,28 @@ class CoreApi:
                     ids.add(n.id)
         return ids
 
+    def _history_locked(self, session):
+        """Undo/redo may reverse ANY earlier command (incl. content changes of a node the
+        PDF-Tool holds), so they are refused while this session has a node locked
+        (audit v2 A-2). Returns a node_locked error dict or None."""
+        with self._lock:
+            held = next((nid for (own, nid) in self._node_locks if own == session), None)
+        if held is None:
+            return None
+        return {"ok": False, "code": "node_locked", "node_id": held,
+                "error": "Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann "
+                         "nicht gleichzeitig geändert werden."}
+
     def undo(self, session: str) -> dict:
+        blocked = self._history_locked(session)
+        if blocked is not None:
+            return blocked
         return self._after_mutate(session, self._mutate(session, lambda s: s.undo()))
 
     def redo(self, session: str) -> dict:
+        blocked = self._history_locked(session)
+        if blocked is not None:
+            return blocked
         return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
 
     # ----------------------------------------------------------------------
@@ -746,7 +791,9 @@ class CoreApi:
             document = s.document
         document = self._bake_no_gain(document)  # persist auto-confirmed no-gain leaves
         lock = self._locks.get(session)
-        in_place_locked = lock is not None and path == self._paths.get(session)
+        in_place_locked = lock is not None and (
+            self._same_path(path, self._paths.get(session))
+            or self._same_path(path, getattr(lock, "path", None)))  # degraded session: _paths is None
         try:
             if in_place_locked:
                 self._save_through_lock(lock, path, document, store_alternatives)
@@ -818,6 +865,15 @@ class CoreApi:
             self._degraded.discard(session)
             lock = self._locks.pop(session, None)
             self._datev_baseline.pop(session, None)  # free the DATEV write-back baseline
+            with self._slocks_guard:
+                self._slocks.pop(session, None)
+            # A-7: PDF-Tool sessions bound to nodes of this (organizer) window die with it
+            tool_sessions = [pt for pt, (own, _nid) in self._pdftool_bindings.items() if own == session]
+            for pt in tool_sessions:
+                binding = self._pdftool_bindings.pop(pt, None)
+                if binding is not None:
+                    self._node_locks.pop(binding, None)
+                self._sessions.pop(pt, None)
             view_dir = self._view_dirs.pop(session, None)
             if view_dir is not None:
                 self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
@@ -1016,20 +1072,24 @@ class CoreApi:
             # verdict so the red 'undecided' dot stays resolved across moves/reopen.
             # A cancelled run (token set) ALSO yields no options but wasn't evaluated,
             # so it is skipped. Silent: this is not a human edit (no undo, no dirty).
-            self._mark_no_gain(session, node_id)
+            self._mark_no_gain(session, node_id, data)
         return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                 "original_size": len(data), "options": options}
 
-    def _mark_no_gain(self, session: str, node_id: str) -> None:
+    def _mark_no_gain(self, session: str, node_id: str, data=None) -> None:
         """Record the derived 'nothing smaller found' verdict on a still-compressible
         leaf (no source dropped, not already applied/blocked/decided). Applied silently
         so it neither enters undo/redo nor marks the document dirty."""
         from core.commands import SetNoGain
-        with self._lock:
+        with self._slock(session), self._lock:
             s = self._sessions.get(session)
             if s is None:
                 return
             node = s.document.find(node_id)
+            # A-3: the verdict belongs to the bytes that were evaluated — a Rotate /
+            # SetNodeBytes during the (slow) evaluation makes it stale.
+            if data is not None and node is not None and node.original_data is not data:
+                return
             if (node is not None and not node.is_folder and node.original_data is not None
                     and not node.is_compressed and not node.no_compression
                     and not node.compression_no_gain):
@@ -1066,9 +1126,16 @@ class CoreApi:
     def _locked_conflict(self, session, cmd):
         """The locked node id a command would content-mutate, or None."""
         with self._lock:
+            s = self._sessions.get(session)
             for nid in self._content_mutated_ids(cmd):
                 if (session, nid) in self._node_locks:
                     return nid
+                # deleting/merging an ANCESTOR folder content-mutates every descendant
+                node = s.document.find(nid) if s is not None else None
+                if node is not None and node.is_folder:
+                    for d in node.iter():
+                        if (session, d.id) in self._node_locks:
+                            return d.id
         return None
 
     def node_locked(self, session: str, node_id: str) -> bool:
@@ -1112,6 +1179,11 @@ class CoreApi:
         from core.commands import SetNodeBytes
         with self._lock:
             binding = self._pdftool_bindings.get(pdftool_session)
+        if binding is None:
+            return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
+        owner_session, node_id = binding
+        with self._slock(owner_session), self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
             if binding is None:
                 return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
             owner_session, node_id = binding
@@ -1121,6 +1193,9 @@ class CoreApi:
                 return {"ok": False, "error": "Sitzung nicht mehr vorhanden"}
             leaves = [n for n in t.document.root.iter() if not n.is_folder]
             data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
+            # A-8: validate the target BEFORE touching the tool session
+            if owner.document.find(node_id) is None:
+                return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
             if data_b64 is not None and leaves:
                 try:
                     edited = base64.b64decode(data_b64)
@@ -1134,9 +1209,8 @@ class CoreApi:
                     data = edited
             if not data:
                 return {"ok": False, "error": "keine Daten zum Speichern"}
-            if owner.document.find(node_id) is None:
-                return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
+        self._after_mutate(owner_session, {"ok": True})  # token revive / cache prune / prefetch kick
         return {"ok": True, "owner": owner_session, "node": node_id}
 
     @staticmethod
@@ -1810,7 +1884,7 @@ class CoreApi:
             except Exception as e:
                 logger.exception("import failed: %s", path)
                 errors.append(_friendly_import_error(path, e))
-        with self._lock:
+        with self._slock(session), self._lock:
             s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unknown session"}
@@ -1863,9 +1937,22 @@ class CoreApi:
         self._sessions[sid] = DocumentSession(document, engine=self._engine)
         return sid
 
+    def _slock(self, session):
+        """The mutation lock of one session (RLock; created lazily, only for live sessions)."""
+        with self._slocks_guard:
+            lk = self._slocks.get(session)
+            if lk is None:
+                lk = threading.RLock()
+                if session in self._sessions:
+                    self._slocks[session] = lk
+            return lk
+
     def _mutate(self, session: str, action) -> dict:
-        with self._lock:
-            s = self._sessions.get(session)
+        # The (possibly slow) action runs outside the global lock, serialised per
+        # session, so one window's split/compress/merge never stalls the others.
+        with self._slock(session):
+            with self._lock:
+                s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unknown session"}
             try:
@@ -1875,7 +1962,10 @@ class CoreApi:
             except Exception as e:  # defensive — never crash the host
                 logger.exception("CoreApi op failed")
                 return {"ok": False, "error": str(e)}
-            return self._doc_response_locked(session)
+            with self._lock:
+                if self._sessions.get(session) is not s:  # closed/reopened meanwhile
+                    return {"ok": False, "error": "unknown session"}
+                return self._doc_response_locked(session)
 
     def _compression_undecided(self, node) -> bool:
         """Red-dot signal: a leaf whose compression has NOT been confirmed — neither

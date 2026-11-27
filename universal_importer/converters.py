@@ -16,7 +16,7 @@ from typing import Optional, Union
 import pikepdf
 import pythoncom
 import win32com.client
-from PIL import Image
+from PIL import Image, ImageOps
 from pi_heif import register_heif_opener
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -37,8 +37,20 @@ def passthrough(path: str) -> ConvertedPDF:
         return ConvertedPDF(name=os.path.basename(path), data=io.BytesIO(f.read()))
 
 
+def _to_rgb(img: Image.Image) -> Image.Image:
+    """Apply EXIF orientation and flatten transparency onto WHITE (a plain
+    convert("RGB") shows the colour stored under alpha=0, often black)."""
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
+        rgba = img.convert("RGBA")
+        bg = Image.new("RGB", rgba.size, (255, 255, 255))
+        bg.paste(rgba, mask=rgba.getchannel("A"))
+        return bg
+    return img.convert("RGB")
+
+
 def standard_image(path: str) -> ConvertedPDF:
-    img = Image.open(path).convert("RGB")
+    img = _to_rgb(Image.open(path))
     buffer = io.BytesIO()
     img.save(buffer, format="PDF")
     buffer.seek(0)
@@ -47,7 +59,7 @@ def standard_image(path: str) -> ConvertedPDF:
 
 def modern_image(path: str) -> ConvertedPDF:
     register_heif_opener()
-    img = Image.open(path).convert("RGB")
+    img = _to_rgb(Image.open(path))
     buffer = io.BytesIO()
     img.save(buffer, format="PDF")
     buffer.seek(0)
@@ -66,6 +78,26 @@ def _exceeds_byte_cap(data: Union[str, bytes]) -> bool:
     return len(data) > BOMB_CAP_BYTES or len(data.encode("utf-8")) > BOMB_CAP_BYTES
 
 
+def _decode_text(data: bytes, html: bool = False) -> str:
+    """BOM sniff, strict UTF-8, then (HTML: declared charset, then) cp1252."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data.decode("utf-8-sig", errors="replace")
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if html:
+        m = re.search(rb"charset\s*=\s*[\"']?\s*([A-Za-z0-9_\-]+)", data[:4096], re.I)
+        if m:
+            try:
+                return data.decode(m.group(1).decode("ascii"))
+            except (LookupError, UnicodeDecodeError):
+                pass
+    return data.decode("cp1252", errors="replace")
+
+
 def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     # Cap before decode/render: an oversized text file would otherwise pin the
     # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
@@ -73,7 +105,7 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     if _exceeds_byte_cap(text):
         raise ValueError("Textdatei zu groß")
     if isinstance(text, bytes):
-        text = text.decode("utf-8", errors="replace")
+        text = _decode_text(bytes(text))
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -153,7 +185,7 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
     if _exceeds_byte_cap(html):  # bound the parse/render like txt_to_pdf (byte-accurate)
         raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
-        html = html.decode("utf-8", errors="replace")
+        html = _decode_text(bytes(html), html=True)
 
     buffer = io.BytesIO()
     pisa_status = pisa.CreatePDF(src=html, dest=buffer, link_callback=block_remote_link)
@@ -192,6 +224,7 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
 # (AutomationSecurity=3, ReadOnly, UpdateLinks aus).
 _RELS_EXTERNAL_PREFIXES = ("http://", "https://", "ftp://", "ftps://",
                            "file:", "\\\\", "//")
+_RELS_EXTERNAL_NORM_PREFIXES = ("\\\\", "http:\\", "https:\\", "ftp:\\", "ftps:\\", "file:")
 _RELS_MAX_BYTES = 4 * 1024 * 1024  # ein .rels ist winzig; Cap gegen Zip-Bomben
 _RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-Bomben
 
@@ -277,7 +310,11 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                     if el.attrib.get("Type", "").lower().endswith("/hyperlink"):
                         continue  # nicht beim Öffnen aufgelöst → erlaubt
                     target = el.attrib.get("Target", "").strip()
-                    if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
+                    # F-5: Windows treats "/" like "\\" — normalise before the prefix test
+                    # so "/\\h\\s", "http:\\\\h" etc. are caught too.
+                    norm = target.lower().replace("/", "\\")
+                    if (target.lower().startswith(_RELS_EXTERNAL_PREFIXES)
+                            or norm.startswith(_RELS_EXTERNAL_NORM_PREFIXES)):
                         return target
     except Exception:
         # ZIP, aber nicht prüfbar → fail CLOSED (sonst öffnet Word ungeprüft,

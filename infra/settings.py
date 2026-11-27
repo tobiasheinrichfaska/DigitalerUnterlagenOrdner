@@ -52,7 +52,10 @@ def _coerce(values: dict) -> dict:
             continue
         val = values[key]
         if isinstance(default, bool):
-            out[key] = bool(val)
+            # S-4: only a real JSON bool counts ("false" string must not become True; 0/1 still accepted)
+            out[key] = bool(val) if isinstance(val, (bool, int)) else default
+        elif key == "dms_base_url":
+            out[key] = val.strip() if isinstance(val, str) and val.strip().lower().startswith("https://") else None
         else:
             out[key] = val
     return out
@@ -67,7 +70,7 @@ def load_settings(path: str = None) -> dict:
         if not isinstance(data, dict):
             return dict(DEFAULTS)
         return _coerce(data)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, ValueError):  # ValueError ⊇ JSONDecodeError/UnicodeDecodeError (S-3)
         return dict(DEFAULTS)
     except OSError:
         logger.debug("settings load skipped", exc_info=True)
@@ -81,8 +84,10 @@ def save_settings(values: dict, path: str = None) -> dict:
     coerced = _coerce(values)
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
+        tmp = f"{p}.tmp-{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(coerced, f, indent=2)
+        os.replace(tmp, p)
     except OSError:
         logger.warning("settings save failed", exc_info=True)
     return coerced

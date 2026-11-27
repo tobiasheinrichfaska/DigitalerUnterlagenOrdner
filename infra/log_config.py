@@ -11,7 +11,15 @@ _log_dir = os.path.join(
     os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
     "PDF-Storage"
 )
-os.makedirs(_log_dir, exist_ok=True)
+try:
+    os.makedirs(_log_dir, exist_ok=True)
+except OSError:  # S-6: an unwritable/bogus LOCALAPPDATA must not break import
+    import tempfile
+    _log_dir = os.path.join(tempfile.gettempdir(), "PDF-Storage")
+    try:
+        os.makedirs(_log_dir, exist_ok=True)
+    except OSError:
+        pass
 LOGFILE = os.path.join(_log_dir, "pdf_tool.log")
 
 # LOGLEVEL is controlled via the env var PDF_TOOL_LOG_LEVEL.
@@ -31,7 +39,8 @@ def _parse_loglevel(raw: str | None) -> int:
     except ValueError:
         # Allow level names (DEBUG, INFO, ...) too.
         name = raw.upper()
-        return getattr(logging, name, _DEFAULT_LOGLEVEL)
+        lvl = getattr(logging, name, _DEFAULT_LOGLEVEL)
+        return lvl if isinstance(lvl, int) and not isinstance(lvl, bool) else _DEFAULT_LOGLEVEL
 
 
 LOGLEVEL = _parse_loglevel(os.environ.get("PDF_TOOL_LOG_LEVEL"))

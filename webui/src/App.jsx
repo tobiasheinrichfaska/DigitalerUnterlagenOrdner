@@ -39,6 +39,8 @@ function readAsDataURL(file) {
   })
 }
 
+const noop = () => {}
+
 export default function App() {
   const { t, lang, setLang } = useT()
   const [state, setState] = useState(null) // { session, tree, can_undo, can_redo }
@@ -233,11 +235,37 @@ export default function App() {
         // save → clean, I-6); older responses without the field keep the safe default
         setDirty(resp.dirty ?? true)
         setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
-        if (selected) setSelected(findNode(resp.tree, selected.id))
+        // functional update: a late response (e.g. a slow import) must refresh the CURRENT
+        // primary selection, not the one captured when the call started (W-3)
+        setSelected((cur) => (cur ? findNode(resp.tree, cur.id) : cur))
       }
     },
-    [apply, selected, setSelected, setSelectedIds],
+    [apply, setSelected, setSelectedIds],
   )
+
+  // W-1: another window (the PDF-Tool's save_node_back) can change THIS session behind our
+  // back. The organizer's React state only follows its own call responses, so re-read the
+  // session when the window regains focus and adopt it if it differs. A host without
+  // `get_state` (or any failure) is ignored.
+  const liveRef = useRef({ state: null, dirty: false, busy: 0 })
+  useEffect(() => { liveRef.current = { state, dirty, busy } })
+  useEffect(() => {
+    if (!session) return undefined
+    let inflight = false
+    const onFocus = () => {
+      if (inflight || liveRef.current.busy) return
+      inflight = true
+      core.getState(session).then((resp) => {
+        if (!resp?.ok || !resp.tree || liveRef.current.busy) return
+        const cur = liveRef.current
+        const same = JSON.stringify(resp.tree) === JSON.stringify(cur.state?.tree)
+        if (same && (resp.dirty ?? cur.dirty) === cur.dirty) return
+        afterChange(resp)
+      }).catch(() => {}).finally(() => { inflight = false })
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [session, afterChange])
 
   const dispatch = useCallback(
     (command) => run(core.dispatch(session, command)).then(afterChange),
@@ -452,7 +480,7 @@ export default function App() {
   const openInPdfTool = (node) => {
     if (!session || !node || node.is_folder) return
     run(core.openNodeInPdftool(session, node.id)).then((resp) => {
-      if (resp && resp.ok === false) setError(resp.error || 'PDF-Tool konnte nicht geöffnet werden.')
+      if (resp && resp.ok === false) setError(resp.error || t('PDF-Tool konnte nicht geöffnet werden.'))
     })
   }
 
@@ -539,15 +567,17 @@ export default function App() {
       setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht abgelegt.')); return
     }
     setDatevFileDialog({ open: true, loading: true, clients: [], placements: [], error: null })
+    // a late response must not reopen a dialog the user already cancelled/submitted (W-7)
+    const fill = (next) => setDatevFileDialog((prev) => (prev ? next : prev))
     Promise.all([core.datevClients(), core.datevPlacements()]).then(([c, p]) => {
       if (!c?.ok) {
-        setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+        fill({ open: true, loading: false, clients: [], placements: [],
           error: c?.error || t('Mandantenliste nicht verfügbar') })
         return
       }
-      setDatevFileDialog({ open: true, loading: false, clients: c.clients || [],
+      fill({ open: true, loading: false, clients: c.clients || [],
         placements: (p?.ok && p.folders) || [], error: null })
-    }).catch((e) => setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+    }).catch((e) => fill({ open: true, loading: false, clients: [], placements: [],
       error: String(e) }))
   }
   const submitDatevFile = (opts) => {
@@ -567,7 +597,10 @@ export default function App() {
     })
   }
 
-  const onSaved = (resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } }
+  const onSaved = (resp) => {
+    if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) }
+    else if (resp?.error && resp.error !== 'cancelled') setError(resp.error) // failed write must not be silent (W-2)
+  }
   const doSave = (mode, store) =>
     run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store)).then(onSaved)
   // Preflight: only ask about alternatives when there are some to embed; else save straight.
@@ -632,11 +665,14 @@ export default function App() {
   // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing,
   // and fully disabled while any modal dialog or context menu is open)
   useKeyboard({
-    enabled: !!session, reorderEnabled: !viewActive, tree: state?.tree, selected, selectedIds, grab, setGrab,
-    select, dispatch, moveMany: onMoveMany, setCollapsedFor, saveFile, openFile, exportPdf,
+    enabled: !!session, reorderEnabled: !viewActive, tree: viewActive ? treeForView : state?.tree, selected, selectedIds, grab, setGrab,
+    select, dispatch, moveMany: onMoveMany,
+    // synthetic group folders don't exist in the core → no collapse/expand there (W-8)
+    setCollapsedFor: viewActive && groupBy ? noop : setCollapsedFor, saveFile, openFile, exportPdf,
     newWindow: () => core.newWindow(), undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
     saveAskOpen: !!saveAsk, exportAskOpen: !!exportAsk, helpOpen, menuOpen: !!menu,
+    datevDialogOpen: !!datevFileDialog?.open,
   })
 
   if (!state && !error) {

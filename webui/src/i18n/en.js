@@ -299,4 +299,10 @@ export const en = {
   'Lizenz & Quelltext': 'Licence & source code',
   'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md':
     'Free software under AGPL-3.0-or-later; licences of the components: THIRD_PARTY_NOTICES.md',
+  'Dieser Knoten ist bereits im PDF-Tool geöffnet.': 'This node is already open in the PDF tool.',
+  'Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann nicht gleichzeitig geändert werden.':
+    'This node is currently being edited in the PDF tool and cannot be changed at the same time.',
+  'Ordner können nicht im PDF-Tool geöffnet werden.': 'Folders cannot be opened in the PDF tool.',
+  'Knoten hat keine PDF-Daten.': 'The node has no PDF data.',
+  'PDF-Tool konnte nicht geöffnet werden.': 'The PDF tool could not be opened.',
 }

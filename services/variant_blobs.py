@@ -67,6 +67,6 @@ def unpack(blob: bytes, max_total_bytes: int = MAX_TOTAL_BYTES,
                     return {}
                 total += len(data)
                 out.setdefault(dpi, {})[method] = data
-    except (zipfile.BadZipFile, OSError):
+    except Exception:  # S-5: corrupt payload (zlib.error, EOFError, …) → recompute, never raise
         return {}
     return out

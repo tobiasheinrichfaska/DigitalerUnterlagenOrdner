@@ -76,7 +76,9 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
       })
       .catch(() => { if (alive) setLoadError(true) })
     return () => { alive = false }
-  }, [session, nodeId])
+    // `node` (object) is a dep on purpose: rotate/replace keep the node id but change the
+    // page geometry, so an edit (new object) must refresh the cached count/dims (W-4)
+  }, [session, nodeId, node])
 
   // drop rendered images when the node OR variant changes (keyed by the node OBJECT
   // so an edit — new object — also refetches). The warm middleware cache makes the

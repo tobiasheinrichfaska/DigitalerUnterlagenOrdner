@@ -13,6 +13,7 @@ node dropped its source on save and IS its compressed result, so it needs none.
 from __future__ import annotations
 
 import io
+import os
 import zlib
 
 import pikepdf
@@ -109,12 +110,20 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
     blobs = _collect_variant_blobs(doc, engine, budget_bytes)
     if not blobs:
         return 0
+    tmp = f"{path}.tmp-{os.getpid()}"
     try:
-        with pikepdf.open(path, allow_overwriting_input=True) as pdf:
+        # S-2: never truncate the already-saved file in place — build in a temp
+        # sibling and swap it in atomically, so a failed save leaves the original intact.
+        with pikepdf.open(path) as pdf:
             _attach_blobs(pdf, blobs)
-            pdf.save(path)
+            pdf.save(tmp)
+        os.replace(tmp, path)
     except Exception as e:  # never let variant persistence break a save
         logger.warning("[variants] embed failed: %s", e)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         return 0
     return len(blobs)
 

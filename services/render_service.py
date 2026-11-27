@@ -202,6 +202,8 @@ class RenderService:
         if hit is not None:
             return hit
         rendered = self._render_page(data, page, dpi)
+        if not rendered:  # S-1: a failed render (b"") must never be cached as a blank page
+            return rendered
         self.cache.put(key, rendered, evict=True)  # foreground may evict to fit
         return rendered
 
@@ -238,6 +240,8 @@ class RenderService:
         nid, page = target
         version = next(ver for n, ver, _cnt in node_specs if n == nid)
         rendered = self._render_page(data_for(nid), page, dpi)
+        if not rendered:
+            return False  # S-1: never cache a failed render
         return self.cache.put((nid, version, page, dpi), rendered, evict=False)
 
     def _pool_exec(self):
@@ -301,6 +305,8 @@ class RenderService:
                 if self.generation != gen:    # a foreground request landed mid-batch
                     stop = True
                     break
+                if not rendered:              # S-1: failed render, don't cache
+                    continue
                 if not self.cache.put(key, rendered, evict=False):  # free space only
                     stop = True
                     break

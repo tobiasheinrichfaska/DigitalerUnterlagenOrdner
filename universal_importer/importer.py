@@ -74,7 +74,12 @@ class UniversalImporter:
         are left to their converters, which fail gracefully.
         """
         head = data[:16] if data else b""
+        # F-4: plain-text types may legitimately start with "MZ-…" / "#!"; only
+        # the unambiguous binary signatures apply there.
+        is_text = ext in cls.TEXT_EXTENSIONS or ext in cls.HTML_EXTENSIONS
         for sig, label in cls._DANGEROUS_SIGNATURES:
+            if is_text and sig in (b"MZ", b"#!"):
+                continue
             if head.startswith(sig):
                 raise ValueError(f"'{name}' sieht aus wie {label}, nicht wie {ext} – abgelehnt.")
 

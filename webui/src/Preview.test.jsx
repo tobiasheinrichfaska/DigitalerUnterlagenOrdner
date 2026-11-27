@@ -154,3 +154,28 @@ describe('Preview — render failures are visible (N-5, QS 2026-11-04)', () => {
     expect(document.body.textContent).not.toContain('Seite konnte nicht geladen werden')
   })
 })
+
+describe('Preview — W-4 geometry refreshes when the node object changes (rotate keeps the id)', () => {
+  it('re-reads page_dims for the same node id after an edit', async () => {
+    let dims = [[595, 842]]
+    window.pywebview = { api: new Proxy({}, { get(_, prop) {
+      if (prop === 'then') return undefined
+      return () => {
+        if (prop === 'page_count') return Promise.resolve({ ok: true, count: 1 })
+        if (prop === 'page_dims') return Promise.resolve({ ok: true, dims })
+        if (prop === 'render_window') return Promise.resolve({ ok: true, pages: [] })
+        return Promise.resolve({ ok: true })
+      }
+    } }) }
+    const n1 = { id: 'rot-node', is_folder: false, pdf_length: 1 }
+    const { container, rerender } = render(<Preview session="s1" node={n1} zoom={1} previewReq={null} onPage={null} />)
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)) })
+    const ratio = () => container.querySelector('.win-page')?.style.aspectRatio
+    const before = ratio()
+    expect(before).toBeTruthy()
+    dims = [[842, 595]]  // rotated 90°: same id, new object
+    rerender(<Preview session="s1" node={{ ...n1 }} zoom={1} previewReq={null} onPage={null} />)
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)) })
+    expect(ratio()).not.toBe(before)
+  })
+})

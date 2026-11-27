@@ -223,14 +223,21 @@ def _bind_close(win, api):
                 # session. (Save-back-on-close prompt is a deferred GUI item — see
                 # docs/pdf-tool.md; closing currently discards unsaved pdf-tool edits.)
                 api._core.close_pdftool(api._pdftool_session)
+        except Exception:
+            logger.exception("window close: close_pdftool failed")
+        try:
             if api._session:
                 api._core.release(api._session)  # free the file lock for this window
+        except Exception:
+            logger.exception("window close: release failed")
+        try:
+            if api._session:
                 # free the session itself (document bytes, undo log, caches, temp view)
                 api._core.close_session(api._session)
         except Exception:
             # still swallow — never block the window close — but TRACE it: a failed
-            # release/close_session silently leaks the whole session otherwise.
-            logger.exception("window close: release/close_session failed (session leaked)")
+            # close_session silently leaks the whole session otherwise.
+            logger.exception("window close: close_session failed (session leaked)")
         return True
     win.events.closing += _on_closing
 
@@ -505,7 +512,10 @@ class HostApi:
         result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
         if not result:
             return {"ok": False, "error": "cancelled"}
-        return self._core.open(session, result[0])
+        resp = self._core.open(session, result[0])
+        if resp.get("ok"):
+            self._session = resp.get("session")  # S-7: remember for close-time release
+        return resp
 
     def save_info(self, session):
         return self._core.save_info(session)

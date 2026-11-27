@@ -11,12 +11,12 @@ export function useKeyboard({
   moveMany, setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
   deleteSelection, canUndo, canRedo,
   // modal/menu flags: shortcuts must be OFF while any overlay is open
-  saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false,
+  saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false, datevDialogOpen = false,
 }) {
   useEffect(() => {
     // Disable all shortcuts while any modal dialog or context menu is open so that
     // e.g. pressing Delete or Ctrl+S inside a dialog does not trigger tree actions.
-    if (!enabled || saveAskOpen || exportAskOpen || helpOpen || menuOpen) return undefined
+    if (!enabled || saveAskOpen || exportAskOpen || helpOpen || menuOpen || datevDialogOpen) return undefined
     const onKey = (e) => {
       const tag = e.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return

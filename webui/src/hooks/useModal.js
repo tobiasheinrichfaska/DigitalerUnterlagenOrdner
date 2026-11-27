@@ -19,6 +19,10 @@ const FOCUSABLE = [
 export function useModal({ onClose }) {
   const dialogRef = useRef(null)
   const previousFocus = useRef(null)
+  // latest onClose without re-running the effect (callers pass fresh inline lambdas; a re-run
+  // would re-focus the first field mid-typing — W-6)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
 
   useEffect(() => {
     // Remember who had focus before the dialog opened so we can restore it on unmount.
@@ -35,7 +39,7 @@ export function useModal({ onClose }) {
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab') return
@@ -58,7 +62,7 @@ export function useModal({ onClose }) {
         previousFocus.current.focus()
       }
     }
-  }, [onClose])
+  }, [])
 
   return dialogRef
 }

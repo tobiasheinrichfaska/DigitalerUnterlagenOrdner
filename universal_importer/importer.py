@@ -124,7 +124,7 @@ class UniversalImporter:
             # degrading to an opaque "%PDF"-check failure later.
             try:
                 with open(path, "rb") as f:
-                    head = f.read(16)
+                    head = f.read(4096)  # Q-1: the R-12 NUL gate inspects up to 4 KB
             except OSError:
                 head = b""
             cls.verify_content_matches_extension(head, ext, os.path.basename(path))

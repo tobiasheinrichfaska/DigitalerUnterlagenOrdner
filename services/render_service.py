@@ -14,6 +14,7 @@ deterministically unit-testable with fakes — no real rendering, threads, or CP
 from __future__ import annotations
 
 import threading
+import time
 from collections import OrderedDict, defaultdict, deque
 from concurrent.futures import as_completed
 from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
@@ -146,7 +147,9 @@ class RenderService:
         self._prefetch = {"prefetch_active": False, "prefetch_warmed": 0}
         # R-11: bounded negative cache — key -> failed attempts. Foreground retries a
         # failing page a couple of times (explicit user request), background never.
-        self._failed: Dict[Key, int] = {}
+        # Q-2: entries expire after FAILURE_TTL so a transient failure is retried.
+        self._failed: Dict[Key, Tuple[int, float]] = {}
+        self._clock = time.monotonic
 
     # --- stats / config (for the UI status bar) ---------------------------
     def set_budget(self, budget_bytes: int) -> None:
@@ -206,7 +209,7 @@ class RenderService:
         hit = self.cache.get(key)
         if hit is not None:
             return hit
-        if self._failed.get(key, 0) >= self.MAX_FG_RETRIES:
+        if self._known_bad(key, self.MAX_FG_RETRIES):
             return b""  # R-11: known-bad page, don't re-open pdfium on every request
         rendered = self._render_page(data, page, dpi)
         if not rendered:  # S-1: a failed render (b"") must never be cached as a blank page
@@ -216,13 +219,24 @@ class RenderService:
         return rendered
 
     MAX_FG_RETRIES = 2
+    FAILURE_TTL = 30.0  # seconds a failure stays cached before a retry is allowed
+
+    def _known_bad(self, key: Key, threshold: int = 1) -> bool:
+        with self._lock:
+            ent = self._failed.get(key)
+            if ent is None:
+                return False
+            if self._clock() - ent[1] >= self.FAILURE_TTL:
+                del self._failed[key]
+                return False
+            return ent[0] >= threshold
     MAX_FAILED = 1024
 
     def _note_failure(self, key: Key) -> None:
         with self._lock:
             if len(self._failed) >= self.MAX_FAILED and key not in self._failed:
                 self._failed.pop(next(iter(self._failed)))
-            self._failed[key] = self._failed.get(key, 0) + 1
+            self._failed[key] = (self._failed.get(key, (0, 0.0))[0] + 1, self._clock())
 
     def _forget_failures(self, node_id: Optional[str] = None, live=None) -> None:
         with self._lock:
@@ -264,7 +278,7 @@ class RenderService:
             return False
         nid, page = target
         version = next(ver for n, ver, _cnt in node_specs if n == nid)
-        if (nid, version, page, dpi) in self._failed:
+        if self._known_bad((nid, version, page, dpi)):
             return False
         rendered = self._render_page(data_for(nid), page, dpi)
         if not rendered:
@@ -317,7 +331,7 @@ class RenderService:
                 nid, page = order[i]
                 i += 1
                 key = (nid, vmap[nid], page, dpi)
-                if key not in self.cache and key not in self._failed:  # warm / known-bad (R-11)
+                if key not in self.cache and not self._known_bad(key):  # warm / known-bad (R-11)
                     batch.append((key, nid, page))
             if not batch:
                 continue

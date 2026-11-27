@@ -49,7 +49,7 @@ their full history (`git filter-repo --subdirectory-filter`) into
 `requirements.txt` pins them as `name @ git+https://github.com/tobiasheinrichfaska/<name>.git@v0.1.0` (non-editable; build needs git + network).
 **Change flow:** edit + test in the package repo → tag → bump the tag in `requirements.txt` (and the CI job `raster-parity`) → re-run the
 full gate here. For a local dev loop: `pip install -e <clone>` into `.build_venv`, then reinstall the pinned tag before committing.
-The package CI jobs moved with them (none exists in the new repos yet — add one before the first change there). The host tests that
+Each package repo has its own CI (`.github/workflows/ci.yml`: ubuntu + windows, Python 3.13, pytest; green 2026-11-27). The host tests that
 read package metadata (`tests/test_no_agpl_pdf_deps.py`) now use the installed distribution's metadata; the CLA-copy test
 (`test_package_cla.py`) is gone — **the CLA exists in four `CONTRIBUTING.md` copies (this repo + the three packages); change them together by hand.**
 SPDX: `scripts/add_spdx_headers.py` only covers this repo now. The sections below describe the packages' design; file paths

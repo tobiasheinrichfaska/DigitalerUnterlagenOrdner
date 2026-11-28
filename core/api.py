@@ -383,9 +383,11 @@ class CoreApi:
         # the path — Ctrl+S would overwrite the still-rescuable original with the
         # degraded tree. Unbound, Speichern becomes Speichern-unter (host.save_file).
         degraded = bool(load_warnings)
+        replaced = None
         with self._lock:
             if session and session in self._sessions:
                 sid = session
+                replaced = self._sessions[sid]
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
                 # R-2: the old document's PDF-Tool node locks/bindings are meaningless for the
                 # new one and would make undo/redo refuse forever.
@@ -411,9 +413,13 @@ class CoreApi:
                 self._pending_view_dirs.discard(view_dir)
                 self._view_dirs[sid] = view_dir
                 self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
+            if replaced is not None:
+                self._prune_dead_ids_locked()  # CC-1/3: the replaced document's ids are gone
             resp = self._doc_response_locked(sid)
         if prev_lock is not None and prev_lock is not lock:
             prev_lock.release()
+        if replaced is not None:
+            self._prune_persisted_for(replaced)  # CC-3: free the old document's variants
         # uids persist in .belegtool: a node deleted (set token) in another window
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
@@ -541,10 +547,39 @@ class CoreApi:
         nodes' tokens set (their compress_options would return [] until the next
         successful edit)."""
         self._revive_cancel_tokens(session)
+        with self._lock:
+            # CC-1: free _pcount of removed nodes. Cancel tokens stay (a SET token of a just-
+            # removed id is part of the open/import revive contract); close/open free them.
+            self._prune_dead_ids_locked(tokens=False)
         if resp.get("ok"):
             self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
+
+    def _prune_dead_ids_locked(self, tokens=True):
+        """Caller holds self._lock. Drop _pcount entries and cancel tokens of node ids
+        that are in no open document (pure caches; a set token is already observed by
+        any in-flight compression through its own Event reference). Undo that brings an
+        id back simply recreates a fresh token on demand."""
+        live = set()
+        for other in self._sessions.values():
+            live.update(n.id for n in other.document.root.iter())
+        for key in [k for k in self._pcount if k[0] not in live]:
+            del self._pcount[key]
+        if not tokens:
+            return
+        for nid in [k for k in self._cancel_tokens if k not in live]:
+            ev = self._cancel_tokens.pop(nid)
+            ev.set()  # abort any in-flight compression of a vanished node
+
+    def _prune_persisted_for(self, old_session):
+        if not hasattr(self._engine, "prune_persisted"):
+            return
+        closed = [n.original_data for n in old_session.document.root.iter() if n.original_data]
+        with self._lock:
+            live = [n.original_data for other in self._sessions.values()
+                    for n in other.document.root.iter() if n.original_data]
+        self._engine.prune_persisted(closed, live)
 
     def _revive_cancel_tokens(self, session):
         """Drop SET cancel tokens of ids that are (back) in the document — a
@@ -838,8 +873,9 @@ class CoreApi:
             s = self._sessions.get(session)
             if s is not None:
                 s.mark_saved()
-            self._paths[session] = path  # bind the session to this file for in-place saves
-            self._degraded.discard(session)  # the rescue is saved — a normal session again
+            if s is not None:  # CC-2: a session closed meanwhile must not be re-bound
+                self._paths[session] = path  # bind the session to this file for in-place saves
+                self._degraded.discard(session)  # the rescue is saved — a normal session again
             view_dir = self._view_dirs.get(session)
         if view_dir:
             self._touch_view_dir(view_dir)  # saving through a view keeps it sweep-safe
@@ -904,19 +940,7 @@ class CoreApi:
             view_dir = self._view_dirs.pop(session, None)
             if view_dir is not None:
                 self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
-            if s is not None:
-                live = set()
-                for other in self._sessions.values():
-                    live.update(n.id for n in other.document.root.iter())
-                # node uids persist in .belegtool, so the same file open twice shares
-                # ids — only drop what no remaining session still uses.
-                gone = {n.id for n in s.document.root.iter()} - live
-                for key in [k for k in self._pcount if k[0] in gone]:
-                    del self._pcount[key]
-                for nid in gone:
-                    ev = self._cancel_tokens.pop(nid, None)
-                    if ev is not None:
-                        ev.set()  # abort any in-flight compression of a vanished node
+            self._prune_dead_ids_locked()  # CC-1: everything this session ever registered
             if self._last_seed and self._last_seed[0] == session:
                 self._last_seed = None  # never resume prefetch for a closed session
         if lock is not None:

@@ -163,10 +163,26 @@ class RealEngine:
         node is instant — no recompute. The layer is unbounded while its documents
         are open; ``prune_persisted`` frees it when they close."""
         digest = self._digest(pdf_bytes)
+        try:
+            src_pages = self.page_count(pdf_bytes)
+        except Exception:
+            src_pages = None  # unreadable source: nothing to compare against
+
+        def _ok(vb) -> bool:
+            # same guard as fresh candidates (SV-4): a variant whose page count
+            # differs from the source would shift every following node on reload
+            if src_pages is None:
+                return True
+            try:
+                return self.page_count(vb) == src_pages
+            except Exception:
+                return True  # unparseable: not a count mismatch (opaque/test blobs); Compress surfaces it
+
         for dpi, methods in (variants or {}).items():
-            if methods:
+            kept = {m: vb for m, vb in (methods or {}).items() if _ok(vb)}
+            if kept:
                 with self._mcache_lock:
-                    self._persisted[(digest, int(dpi))] = dict(methods)
+                    self._persisted[(digest, int(dpi))] = kept
 
     def prune_persisted(self, closed_sources, live_sources) -> None:
         """Drop the persisted variants of the CLOSED document's sources, keeping

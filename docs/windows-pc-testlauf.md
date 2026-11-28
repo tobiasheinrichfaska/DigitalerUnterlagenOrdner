@@ -68,9 +68,9 @@ cd webui ; npm ci ; npx playwright install chromium ; cd ..
 testlauf-out\venv\Scripts\python.exe -m pytest -q -rs
 ```
 
-Erwartung: Exitcode 0; CLAUDE.md nennt ~498 Tests (Richtwert, nicht zugesichert). Mit Office: Golden-Test nicht übersprungen. Fehlerbild: `FAILED …` → Testnamen + letzte Zeilen der Meldung; Auffällig viele Fehler in `test_file_lock*`/`test_host` → Windows-Eigenheit melden.
+Erwartung: Exitcode 0; CLAUDE.md nennt ~1170 gesammelte Tests (Richtwert, nicht zugesichert). Mit Office: Golden-Test nicht übersprungen. Fehlerbild: `FAILED …` → Testnamen + letzte Zeilen der Meldung; Auffällig viele Fehler in `test_file_lock*`/`test_host` → Windows-Eigenheit melden.
 
-**1b Pakete isoliert** (je `packages\datev-dokab`, `belegtool-archives`, `belegtool-compress`; eigenes frisches venv ohne Hauptrepo, wie in `ci.yml`).
+**1b Pakete isoliert** (je Paket-Repo `datev-dokab`, `belegtool-archives`, `belegtool-compress` - seit 2026-11-27 eigene Repos mit eigener CI, hier als lokaler Klon `packages\<name>` angenommen; eigenes frisches venv ohne Hauptrepo).
 
 ```powershell
 cd packages\datev-dokab
@@ -146,7 +146,7 @@ Start: `dist\BelegTool\BelegTool.exe` (aus Phase 2) oder aus dem Quelltext `test
 - [ ] **Doppelklick `.belegtool`:** im Explorer doppelklicken (Zuordnung nur bei Store-/MSIX-Installation vorhanden; sonst „Öffnen mit" → Exe). **Soll:** App startet mit der Datei, Baum sichtbar. **Fehler:** App startet leer → melden.
 - [ ] **Echte iPhone-HEIC** importieren (eigene Datei, nicht ins Repo/Meldung kopieren). **Soll:** 1 Seite, Bild in der Vorschau sichtbar. **Fehler:** Import-Meldung „nicht importierbar", 0 Seiten, schwarzes/leeres Bild → melden (HEIC-Variante: Live Photo? Format?). Besonders wichtig nach der pi-heif-Umstellung.
 - [ ] **Mail mit Anhang** (`.eml` und `.msg`) importieren. **Soll:** Ordner mit Mailtext + Anhang(en) im Baum; Anhang-PDF öffnet. **Fehler:** Anhang fehlt (bes. bei weitergeleiteter `.msg`) → melden. Nach dem MSG-Ersatz: dieselbe Mail gegen den Ist-Stand vergleichen (Phase 5).
-- [ ] **Echte Outlook-`.msg` (neuer eigener Leser, seit 2026-11-26)** - der Leser ist bisher **nur gegen synthetische Dateien** getestet (`packages\belegtool-archives\tests\msg_fixture.py`), **nicht** gegen echte Outlook-Mails. Deshalb mindestens diese **eigenen** Mails als `.msg` (Outlook: „Speichern unter → Outlook-Nachrichtenformat (Unicode)" bzw. auf den Desktop ziehen; nicht ins Repo und nicht in die Meldung kopieren) importieren und je Mail **Anzahl, Namen, Reihenfolge und Inhalt** der Knoten mit der Mail in Outlook vergleichen:
+- [ ] **Echte Outlook-`.msg` (neuer eigener Leser, seit 2026-11-26)** - der Leser ist bisher **nur gegen synthetische Dateien** getestet (`belegtool-archives\tests\msg_fixture.py (Paket-Repo)`), **nicht** gegen echte Outlook-Mails. Deshalb mindestens diese **eigenen** Mails als `.msg` (Outlook: „Speichern unter → Outlook-Nachrichtenformat (Unicode)" bzw. auf den Desktop ziehen; nicht ins Repo und nicht in die Meldung kopieren) importieren und je Mail **Anzahl, Namen, Reihenfolge und Inhalt** der Knoten mit der Mail in Outlook vergleichen:
   1. nur Text (Nur-Text-Format), mit Umlauten/€/ß in Betreff und Text;
   2. HTML-Mail mit Formatierung und Bild im Text (Logo/Signatur) - das Bild darf als eigener Anhang erscheinen, der Text muss lesbar sein;
   3. RTF-Mail (Nachrichtenformat „Rich-Text") ohne HTML - erscheint als `.rtf`/Text, nicht leer;
@@ -178,7 +178,7 @@ Der Austausch ist umgesetzt (pypdfium2 fürs Rastern, olefile-Eigenbau für `.ms
 | Schritt | Befehl (im Repo, Test-venv mit `requirements.txt` + `requirements-dev.txt`) | Erwartung | Melden, wenn |
 |---|---|---|---|
 | 5a Raster-Parität | `.\testlauf-out\venv\Scripts\python.exe scripts\raster_compare.py` (Dauer ca. 3-5 min; nur Teile: `--only dims,align,jpeg`) | Exit 0, „alle Schwellen erfüllt". Maße exakt gleich; `GRENZE` nur bei `cropbox` (50 DPI) und `cropbox_rot90` (300 DPI) erlaubt; Tempo-Median ≥ 0.7x; 8 Threads x 200 Seiten ohne Abweichung; Wachstum über 1000 Seiten < 30 MB | irgendein `FAIL:`, `STRUKTUR`, Absturz/Hänger bei „Thread-Sicherheit", Wachstum > 30 MB, Tempo-Median < 0.7x |
-| 5a-pytest | `.\testlauf-out\venv\Scripts\python.exe -m pytest packages\belegtool-compress\tests\test_raster_pdfium.py packages\belegtool-compress\tests\test_raster_parity.py -q` | alles grün (Phase 1b läuft das ohnehin mit) | rote Tests, besonders `test_*orientation*`, `*userunit*`, `*widget*` |
+| 5a-pytest | `.\testlauf-out\venv\Scripts\python.exe -m pytest <Klon belegtool-compress>\tests\test_raster_pdfium.py <Klon belegtool-compress>\tests\test_raster_parity.py -q` | alles grün (Phase 1b läuft das ohnehin mit) | rote Tests, besonders `test_*orientation*`, `*userunit*`, `*widget*` |
 | 5b Laufzeit ohne PyMuPDF | frisches venv nur mit `requirements.txt`, dann `python scripts\smoke_no_pymupdf.py` | `OK: Vorschau + Kompression laufen ohne PyMuPDF` | Fehlermeldung, „fitz ist installiert" |
 | 5c Bundle (Phase 2b) | prüft `pypdfium2`, `pypdfium2_raw`, `pdfium.dll` im Bundle und `fitz`/`pymupdf` **nicht** | grün | `pdfium.dll fehlt im Bundle` = PyInstaller sammelt die DLL nicht (dann `collect_dynamic_libs('pypdfium2_raw')` im Spec prüfen) |
 | 5d Exe von Hand | `.\dist\BelegTool\BelegTool.exe` starten, ein mehrseitiges PDF **und** einen Farbscan importieren | Vorschau zeigt Seiten (nicht leer/schwarz), Kompressions-Dropdown füllt sich, „Seite n / m" stimmt | leere Vorschau, „Keine Vorschau", Kompression bietet nichts an |

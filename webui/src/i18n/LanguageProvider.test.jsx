@@ -59,3 +59,18 @@ describe('LanguageProvider drives component language', () => {
     expect(localStorage.getItem('beleg.lang')).toBe('en-US')
   })
 })
+
+describe('R10-5: document.lang is a valid BCP-47 tag for every selectable language', () => {
+  it('maps every SUPPORTED code, and never leaves Vietnamese for Weanerisch', async () => {
+    const { SUPPORTED } = await import('./index')
+    const { htmlLang } = await import('./LanguageProvider')
+    const valid = /^(?:[a-z]{2,3}(?:-[A-Za-z]{2})?(?:-x-[a-z0-9]{1,8})?|x-[a-z0-9]{1,8}|en-(?:US|GB))$/
+    for (const code of SUPPORTED) {
+      const tag = htmlLang(code)
+      expect(tag, code).toMatch(valid)
+    }
+    expect(htmlLang('vie')).not.toBe('vie')
+    expect(htmlLang('vie').startsWith('de')).toBe(true)
+    expect(htmlLang('mnn')).toBe('x-mnn')
+  })
+})

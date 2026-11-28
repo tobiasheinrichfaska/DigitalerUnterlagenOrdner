@@ -11,12 +11,13 @@ import re
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Optional, Union
 
 import pikepdf
 import pythoncom
 import win32com.client
-from PIL import Image
+from PIL import Image, ImageOps
 from pi_heif import register_heif_opener
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -37,21 +38,75 @@ def passthrough(path: str) -> ConvertedPDF:
         return ConvertedPDF(name=os.path.basename(path), data=io.BytesIO(f.read()))
 
 
-def standard_image(path: str) -> ConvertedPDF:
-    img = Image.open(path).convert("RGB")
+def _to_rgb(img: Image.Image) -> Image.Image:
+    """Apply EXIF orientation and flatten transparency onto WHITE (a plain
+    convert("RGB") shows the colour stored under alpha=0, often black)."""
+    img = ImageOps.exif_transpose(img)
+    if img.mode.startswith("I"):
+        # 16/32-bit grey (scanner PNG/TIFF): a plain convert("RGB") clips every
+        # value > 255 to white -> scale the 16-bit range down to 8 bit first.
+        img = img.point(lambda v: v * (1 / 256)).convert("L")
+    if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
+        rgba = img.convert("RGBA")
+        bg = Image.new("RGB", rgba.size, (255, 255, 255))
+        bg.paste(rgba, mask=rgba.getchannel("A"))
+        return bg
+    return img.convert("RGB")
+
+
+_A4_W, _A4_H = 595.28, 841.89
+
+
+def _image_to_a4_pdf(path: str) -> io.BytesIO:
+    """One A4 page (portrait/landscape by image shape) with the image fitted
+    and centred, never distorted/cropped. Lossless sources stay Flate;
+    an un-rotated JPEG keeps its original DCT bytes (no re-encode)."""
+    import zlib
+
+    src = Image.open(path)  # Pillow's decompression-bomb guard applies here
+    orientation = src.getexif().get(0x0112, 1)
+    raw_jpeg = None
+    if src.format == "JPEG" and src.mode in ("RGB", "L") and orientation in (0, 1, None):
+        with open(path, "rb") as f:
+            raw_jpeg = f.read()
+    grey = src.mode in ("L", "1", "I;16", "I", "LA")
+    img = _to_rgb(src)
+    if grey:
+        img = img.convert("L")
+    w, h = img.size
+    pw, ph = (_A4_W, _A4_H) if h >= w else (_A4_H, _A4_W)
+    scale = min(pw / w, ph / h)
+    dw, dh = w * scale, h * scale
+    x, y = (pw - dw) / 2, (ph - dh) / 2
+
+    pdf = pikepdf.new()
+    if raw_jpeg is not None:
+        stream = pikepdf.Stream(pdf, raw_jpeg)
+        stream.Filter = pikepdf.Name.DCTDecode
+    else:
+        stream = pikepdf.Stream(pdf, zlib.compress(img.tobytes(), 6))
+        stream.Filter = pikepdf.Name.FlateDecode
+    stream.Type = pikepdf.Name.XObject
+    stream.Subtype = pikepdf.Name.Image
+    stream.Width, stream.Height = w, h
+    stream.ColorSpace = pikepdf.Name.DeviceGray if img.mode == "L" else pikepdf.Name.DeviceRGB
+    stream.BitsPerComponent = 8
+    page = pdf.add_blank_page(page_size=(pw, ph))
+    page.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=stream))
+    page.Contents = pikepdf.Stream(pdf, f"q {dw:.4f} 0 0 {dh:.4f} {x:.4f} {y:.4f} cm /Im0 Do Q".encode())
     buffer = io.BytesIO()
-    img.save(buffer, format="PDF")
+    pdf.save(buffer)
     buffer.seek(0)
-    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
+    return buffer
+
+
+def standard_image(path: str) -> ConvertedPDF:
+    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=_image_to_a4_pdf(path))
 
 
 def modern_image(path: str) -> ConvertedPDF:
     register_heif_opener()
-    img = Image.open(path).convert("RGB")
-    buffer = io.BytesIO()
-    img.save(buffer, format="PDF")
-    buffer.seek(0)
-    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
+    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=_image_to_a4_pdf(path))
 
 
 def _exceeds_byte_cap(data: Union[str, bytes]) -> bool:
@@ -66,6 +121,155 @@ def _exceeds_byte_cap(data: Union[str, bytes]) -> bool:
     return len(data) > BOMB_CAP_BYTES or len(data.encode("utf-8")) > BOMB_CAP_BYTES
 
 
+def _decode_text(data: bytes, html: bool = False) -> str:
+    """BOM sniff, strict UTF-8, then (HTML: declared charset, then) cp1252."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data.decode("utf-8-sig", errors="replace")
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if html:
+        m = re.search(rb"charset\s*=\s*[\"']?\s*([A-Za-z0-9_\-]+)", data[:4096], re.I)
+        if m:
+            try:
+                return data.decode(m.group(1).decode("ascii"))
+            except (LookupError, UnicodeDecodeError):
+                pass
+    return data.decode("cp1252", errors="replace")
+
+
+# Control / bidi-override / zero-width characters removed from imported text and names.
+# A translate table (not a regex range) keeps the intent explicit and is faster.
+_BIDI_AND_ZW = list(range(0x200B, 0x2010)) + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A)) + [0xFEFF]
+_CTRL_DELETE = dict.fromkeys(
+    [c for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)] + [0x7F] + _BIDI_AND_ZW)
+_NAME_CTRL_DELETE = dict.fromkeys(list(range(0x20)) + [0x7F] + _BIDI_AND_ZW)
+_TXT_MAX_CHARS = 1_000_000   # layout is O(n) per char in Python: ~3 s per MB
+_HTML_MAX_BYTES = 2 * 1024 * 1024
+_HTML_MAX_DEPTH = 200        # xhtml2pdf is quadratic in nesting depth / element count
+_HTML_MAX_TAGS = 50_000       # ~0.3 ms/tag in xhtml2pdf: worst case measured < ~25 s
+_HTML_VOID = frozenset("br hr img input meta link area base col embed param source track wbr".split())
+# R10-1: the payload alphabet can never contain markup ('<', '>', quotes, whitespace), so
+# stripping a data: payload can not swallow tags the converter would still see.
+_DATA_URI_RE = re.compile(r"data:[a-z0-9+/.;=_-]{0,100},[A-Za-z0-9+/=%._-]{64,}", re.I)
+_RAW_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9:_-]*)")
+# Implied end tags (HTML parsing model): a start tag of the key closes an open element of
+# the values (searched from the top of the stack, stopping at a scope barrier).
+_P_CLOSERS = frozenset(
+    "address article aside blockquote center details dir div dl fieldset figure footer form "
+    "h1 h2 h3 h4 h5 h6 header hr li main menu nav ol p pre section table ul dd dt".split())
+_IMPLIED = {
+    "li": ({"li"}, {"ul", "ol", "menu", "dir"}),
+    "dt": ({"dt", "dd"}, {"dl"}),
+    "dd": ({"dt", "dd"}, {"dl"}),
+    "tr": ({"tr", "td", "th"}, {"table", "thead", "tbody", "tfoot"}),
+    "td": ({"td", "th"}, {"table", "tr"}),
+    "th": ({"td", "th"}, {"table", "tr"}),
+    "thead": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "tbody": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "tfoot": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "caption": ({"colgroup", "caption"}, {"table"}),
+    "colgroup": ({"colgroup", "caption"}, {"table"}),
+    "option": ({"option"}, {"select"}),
+    "optgroup": ({"option", "optgroup"}, {"select"}),
+}
+
+
+class _DepthChecker(HTMLParser):
+    """Counts tags and the REAL nesting depth (optional end tags auto-close)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.stack = []
+        self.tags = 0
+
+    def _count(self):
+        self.tags += 1
+        if self.tags > _HTML_MAX_TAGS:
+            raise ValueError("HTML-Datei zu komplex (zu groß)")
+
+    def _pop_to(self, targets, barriers):
+        # Close down to the OUTERMOST matching open element inside the scope (a new <tr>
+        # closes the open <td> AND its <tr>), stopping at a scope barrier.
+        low = None
+        for i in range(len(self.stack) - 1, -1, -1):
+            t = self.stack[i]
+            if t in targets:
+                low = i
+            elif t in barriers:
+                break
+        if low is not None:
+            del self.stack[low:]
+
+    def handle_starttag(self, tag, attrs):
+        self._count()
+        if tag in _HTML_VOID:
+            return
+        if tag in _P_CLOSERS and self.stack and self.stack[-1] == "p":
+            self.stack.pop()
+        rule = _IMPLIED.get(tag)
+        if rule:
+            self._pop_to(*rule)
+        self.stack.append(tag)
+        if len(self.stack) > _HTML_MAX_DEPTH:
+            raise ValueError("HTML-Datei zu tief verschachtelt (zu groß)")
+
+    def handle_startendtag(self, tag, attrs):
+        self._count()
+
+    def handle_endtag(self, tag):
+        self._count()
+        if tag in self.stack:
+            while self.stack.pop() != tag:
+                pass
+
+
+def _strip_data_uris(html: str) -> str:
+    """Inline ``data:`` payloads (images in e-mail bodies) are neutralised by the link guard
+    and are not markup: exclude them from the size / complexity measurement."""
+    return _DATA_URI_RE.sub("data:,", html)
+
+
+def sanitize_node_name(name, strip_path: bool = True, max_len: int = 200) -> str:
+    """A safe display name: basename (both separators), no control/bidi chars, <=200 chars."""
+    n = str(name or "")
+    if strip_path:
+        n = n.replace("\\", "/").rsplit("/", 1)[-1]
+    n = n.translate(_NAME_CTRL_DELETE).strip()
+    if n in ("", ".", ".."):
+        return "Datei"
+    return n[:max_len]
+
+
+def _check_html_complexity(html: str) -> None:
+    checker = _DepthChecker()
+    checker.feed(html)
+    checker.close()
+    # R10-1: html.parser treats <script>/<style>/<textarea> as CDATA while html5lib (SVG
+    # foreign content) does not. Second, context-free pass over the raw markup — the
+    # stricter of both verdicts wins.
+    raw = _DepthChecker()
+    for m in _RAW_TAG_RE.finditer(html):
+        tag = m.group(2).lower()
+        if m.group(1):
+            raw.handle_endtag(tag)
+        else:
+            gt = html.find(">", m.end(), m.end() + 4096)
+            if gt > 0 and html[gt - 1] == "/":
+                raw.handle_startendtag(tag, ())
+            else:
+                raw.handle_starttag(tag, ())
+
+
+def _printable(text: str) -> str:
+    """Expand tabs and replace characters the built-in Helvetica (cp1252) cannot
+    draw with '?' (they would render as black boxes)."""
+    return text.expandtabs(4).encode("cp1252", errors="replace").decode("cp1252")
+
+
 def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     # Cap before decode/render: an oversized text file would otherwise pin the
     # worker (the wrap + per-page canvas work is linear but unbounded). Mirrors
@@ -73,7 +277,12 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
     if _exceeds_byte_cap(text):
         raise ValueError("Textdatei zu groß")
     if isinstance(text, bytes):
-        text = text.decode("utf-8", errors="replace")
+        text = _decode_text(bytes(text))
+    text = text.translate(_CTRL_DELETE)
+    truncated = len(text) > _TXT_MAX_CHARS
+    if truncated:
+        text = text[:_TXT_MAX_CHARS] + "\n\n[Text gekürzt: Datei zu groß für den Import]"
+    text = _printable(text)
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -153,12 +362,30 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
     if _exceeds_byte_cap(html):  # bound the parse/render like txt_to_pdf (byte-accurate)
         raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
-        html = html.decode("utf-8", errors="replace")
+        html = _decode_text(bytes(html), html=True)
 
-    buffer = io.BytesIO()
-    pisa_status = pisa.CreatePDF(src=html, dest=buffer, link_callback=block_remote_link)
+    html = html.translate(_CTRL_DELETE)
+    # R9-1: the size/complexity caps measure the MARKUP — inline data: payloads (e-mail
+    # images, already neutralised by the link guard) are excluded; they stay in the render.
+    probe = _strip_data_uris(html)
+    if len(probe.encode("utf-8", "replace")) > _HTML_MAX_BYTES:
+        raise ValueError("HTML-Datei zu groß")
+    _check_html_complexity(probe)
+    html = _printable(html)
 
-    if pisa_status.err:
+    def _render(src: str):
+        out = io.BytesIO()
+        try:
+            return pisa.CreatePDF(src=src, dest=out, link_callback=block_remote_link), out
+        except Exception:  # e.g. ZeroDivisionError on an empty SVG data-URI
+            return None, out
+
+    pisa_status, buffer = _render(html)
+    if pisa_status is None:  # retry once without the (SVG) data-URI images
+        stripped = re.sub(r"<img\b[^>]*data:image/svg[^>]*>", "", html, flags=re.I)
+        pisa_status, buffer = _render(stripped)
+
+    if pisa_status is None or pisa_status.err:
         # Fallback als leeres Dummy-PDF mit Hinweis
         fallback = io.BytesIO()
         c = canvas.Canvas(fallback, pagesize=A4)
@@ -192,6 +419,7 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
 # (AutomationSecurity=3, ReadOnly, UpdateLinks aus).
 _RELS_EXTERNAL_PREFIXES = ("http://", "https://", "ftp://", "ftps://",
                            "file:", "\\\\", "//")
+_RELS_EXTERNAL_NORM_PREFIXES = ("\\\\", "http:\\", "https:\\", "ftp:\\", "ftps:\\", "file:")
 _RELS_MAX_BYTES = 4 * 1024 * 1024  # ein .rels ist winzig; Cap gegen Zip-Bomben
 _RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-Bomben
 
@@ -199,6 +427,24 @@ _RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-
 # Aufrufer muss ABLEHNEN (fail closed). Words toleranter OPC-Parser könnte ein
 # externes Ziel auflösen, das unser zipfile nicht lesen konnte (Bypass).
 SCAN_UNREADABLE = "<.rels nicht prüfbar>"
+
+
+def _has_dtd_declaration(xml: bytes) -> bool:
+    """ST-1: DOCTYPE/ENTITY (entity expansion) — also in UTF-16 or other odd encodings."""
+    needles = ("<!doctype", "<!entity")
+    low = xml.lower()
+    for n in needles:
+        for enc in ("utf-8", "utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"):
+            if n.encode(enc) in low or n.encode(enc) in xml:
+                return True
+    for enc in ("utf-8", "utf-16", "utf-16-le", "utf-16-be", "latin-1"):
+        try:
+            text = xml.decode(enc).lower()
+        except Exception:
+            continue
+        if any(n in text for n in needles):
+            return True
+    return False
 
 
 def scan_ooxml_external_targets(path: str) -> Optional[str]:
@@ -245,6 +491,8 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                 # Präfix-Elementen (<r:Relationship>) umgehen — Word parst all das.
                 # Elemente namensraum-unabhängig über den LOKALEN Namen; nicht parsebares
                 # XML → fail CLOSED (Words toleranter Parser könnte es trotzdem auflösen).
+                if _has_dtd_declaration(xml):
+                    return SCAN_UNREADABLE  # ST-1: kein legitimes .rels hat eine DTD
                 try:
                     from xml.etree import ElementTree as ET
                     root_el = ET.fromstring(xml)
@@ -277,7 +525,11 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                     if el.attrib.get("Type", "").lower().endswith("/hyperlink"):
                         continue  # nicht beim Öffnen aufgelöst → erlaubt
                     target = el.attrib.get("Target", "").strip()
-                    if target.lower().startswith(_RELS_EXTERNAL_PREFIXES):
+                    # F-5: Windows treats "/" like "\\" — normalise before the prefix test
+                    # so "/\\h\\s", "http:\\\\h" etc. are caught too.
+                    norm = target.lower().replace("/", "\\")
+                    if (target.lower().startswith(_RELS_EXTERNAL_PREFIXES)
+                            or norm.startswith(_RELS_EXTERNAL_NORM_PREFIXES)):
                         return target
     except Exception:
         # ZIP, aber nicht prüfbar → fail CLOSED (sonst öffnet Word ungeprüft,

@@ -33,7 +33,6 @@ export const yi = {
   'Abbrechen': 'אָפּזאָגן',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'עקספּאָרטירן ווי PDF מיט אַן אינהאַלט (אויסקלײַב, אַניט דער גאַנצער דאָקומענט)',
-  'Auswahl': 'אויסקלײַב',
   'Ordner': 'פּאַפּקע',
   'Rückgängig': 'צוריקמאַכן',
   'Wiederholen': 'איבערחזרן',

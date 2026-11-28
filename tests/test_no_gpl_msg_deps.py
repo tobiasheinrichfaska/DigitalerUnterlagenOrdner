@@ -3,7 +3,7 @@
 """Licence guard: the Outlook .msg import must stay free of GPL/LGPL code (docs/licence-audit.md).
 
 extract-msg (GPLv3) and its dependency RTFDE (LGPLv3) were replaced on 2026-11-26 by the own reader in
-packages/belegtool-archives/belegtool_archives/msg_reader.py (olefile BSD-2 + compressed-rtf MIT). This test
+belegtool_archives/msg_reader.py (repo belegtool-archives) (olefile BSD-2 + compressed-rtf MIT). This test
 fails when one of them comes back: in requirements.txt, in any package metadata of the repo, as an import
 anywhere in the Python sources, or when the PyInstaller spec stops excluding them from the bundle.
 """
@@ -54,10 +54,32 @@ def test_requirements_pin_the_permissive_msg_readers():
 
 
 def test_package_metadata_does_not_depend_on_them():
-    for pyproject in (ROOT / "packages").glob("*/pyproject.toml"):
-        text = _norm(pyproject.read_text(encoding="utf-8"))
-        for f in FORBIDDEN:
-            assert f not in text, f"{pyproject} mentions {f}"
+    """The three separable packages live in their own repos; check the INSTALLED distributions' metadata."""
+    import importlib.metadata as md
+    import pytest
+    missing = []
+    for dist in ("datev-dokab", "belegtool-archives", "belegtool-compress"):
+        try:
+            reqs = md.requires(dist) or []
+        except md.PackageNotFoundError:
+            missing.append(dist)
+            continue
+        for r in reqs:
+            name = re.match(r"[A-Za-z0-9_.\-]+", r).group(0)
+            assert not _is_forbidden(name), f"{dist} requires {r}"
+    if len(missing) == 3:
+        pytest.skip(f"package distributions not installed: {missing}")
+
+
+def test_package_tag_pins_agree_between_requirements_and_ci():
+    """The v0.1.0 pin lives in requirements.txt AND in the ci.yml raster-parity install line: no drift."""
+    req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    pins = dict(re.findall(r"^(belegtool-compress)\s*@\s*git\+\S+?@(\S+)", req, re.M))
+    assert "belegtool-compress" in pins
+    ci_tags = re.findall(r"belegtool-compress\.git@([\w.\-]+)", ci)
+    assert ci_tags, "ci.yml has no belegtool-compress pin"
+    assert set(ci_tags) == {pins["belegtool-compress"]}, (ci_tags, pins)
 
 
 def test_no_python_source_imports_them():

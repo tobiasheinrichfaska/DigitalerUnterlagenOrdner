@@ -6,17 +6,20 @@ import { visibleOrder, navStep, moveTarget, applyMove, locate, moveManyDrop } fr
 // undoable Move), and Ctrl shortcuts (save/open/export/new-window/undo/redo/delete).
 // Ignored while typing in INPUT/TEXTAREA/SELECT. Re-binds each render to close over
 // current state/handlers.
+const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'])
+const OWN_KEYS_REGION = '[role="region"], [role="dialog"], [role="menu"], [role="listbox"], [role="textbox"], [contenteditable="true"]'
+
 export function useKeyboard({
   enabled, reorderEnabled = true, tree, selected, selectedIds, grab, setGrab, select, dispatch,
   moveMany, setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
   deleteSelection, canUndo, canRedo,
   // modal/menu flags: shortcuts must be OFF while any overlay is open
-  saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false,
+  saveAskOpen = false, exportAskOpen = false, helpOpen = false, menuOpen = false, datevDialogOpen = false,
 }) {
   useEffect(() => {
     // Disable all shortcuts while any modal dialog or context menu is open so that
     // e.g. pressing Delete or Ctrl+S inside a dialog does not trigger tree actions.
-    if (!enabled || saveAskOpen || exportAskOpen || helpOpen || menuOpen) return undefined
+    if (!enabled || saveAskOpen || exportAskOpen || helpOpen || menuOpen || datevDialogOpen) return undefined
     const onKey = (e) => {
       const tag = e.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -60,6 +63,9 @@ export function useKeyboard({
         return
       }
       // Navigation (not carrying)
+      // R10-3: scroll/navigation keys belong to a focused scroll region, dialog or menu
+      // (e.g. the preview) — never hijack them for tree selection.
+      if (NAV_KEYS.has(e.key) && e.target?.closest?.(OWN_KEYS_REGION)) return
       if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && tree) {
         e.preventDefault()
         const order = visibleOrder(tree)
@@ -83,7 +89,7 @@ export function useKeyboard({
         if (p && p.id !== tree.id) select(p)
         return
       }
-      if (mod && k === 's') { e.preventDefault(); saveFile() }
+      if (mod && k === 's') { e.preventDefault(); if (!e.repeat) saveFile() }
       else if (mod && k === 'o') { e.preventDefault(); openFile() }
       // Ctrl+E: mirrors the toolbar button — export the selection when present,
       // otherwise export the whole document (null). Keeps keyboard and mouse consistent.

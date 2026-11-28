@@ -60,3 +60,10 @@ export function uint8ToBase64(bytes) {
   }
   return btoa(bin)
 }
+
+// Failure text of a plain save result, or null when it really succeeded. save_pdf_bytes returns
+// ok:true even if the on-disk write failed (local_error set) — never claim success then.
+export function saveFailure(res) {
+  if (res && res.ok && !res.local_error) return null
+  return (res && (res.local_error || res.error)) || 'unbekannt'
+}

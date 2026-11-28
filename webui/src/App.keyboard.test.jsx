@@ -17,7 +17,7 @@ const TREE = {
   ],
 }
 
-function installApi() {
+function installApi(overrides = {}) {
   const calls = []
   const base = {
     config: () => ({ ok: true, dev: false, default_dpi: 150 }),
@@ -28,6 +28,7 @@ function installApi() {
     page_dims: () => ({ ok: true, dims: [] }),
     render_window: () => ({ ok: true, pages: [] }),
     render: () => ({ ok: true, pages: [] }),
+    ...overrides,
   }
   const api = new Proxy({ calls }, {
     get(t, prop) {
@@ -42,8 +43,8 @@ function installApi() {
 
 const lastDispatch = (calls) => [...calls].reverse().find((c) => c.method === 'dispatch')?.args?.[1]
 
-async function renderApp() {
-  const calls = installApi()
+async function renderApp(overrides) {
+  const calls = installApi(overrides)
   render(<App />)
   await screen.findByText(/Gruppe/) // wait for config+open to resolve and the tree to render
   return calls
@@ -81,6 +82,20 @@ describe('App keyboard — navigation', () => {
     await waitFor(() =>
       expect(document.querySelector('.row.primary')?.textContent).toMatch(/alpha/))
   })
+
+  it('R10-3: scroll keys inside the preview region are not hijacked by tree navigation', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByText(/Gruppe/))
+    const region = document.createElement('div')
+    region.setAttribute('role', 'region'); region.tabIndex = 0
+    document.body.appendChild(region)
+    for (const key of ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End']) {
+      const notPrevented = fireEvent.keyDown(region, { key })
+      expect(notPrevented, key).toBe(true)
+    }
+    expect(document.querySelector('.row.primary')?.textContent).toMatch(/Gruppe/)
+    region.remove()
+  })
 })
 
 describe('App keyboard — folder collapse via ←', () => {
@@ -113,5 +128,34 @@ describe('App keyboard — optical carry-move', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.keyDown(window, { key: 'Insert' }) // would re-grab, but no drop happened
     expect(lastDispatch(calls)).toBeUndefined()
+  })
+})
+
+describe('App keyboard — carry is cleared by whole-document changes (AP-1)', () => {
+  const TREE_B = {
+    id: 'rootB', name: 'DokB', is_folder: true, children: [
+      { id: 'G', name: 'gamma', is_folder: false, pdf_length: 1, has_source: true, children: [] },
+    ],
+  }
+
+  it('opening another file while carrying shows the NEW tree, not the stale grab snapshot', async () => {
+    await renderApp({ open_file: () => ({ ok: true, session: 's', tree: TREE_B, can_undo: false, can_redo: false }) })
+    fireEvent.click(screen.getByText(/beta/))
+    fireEvent.keyDown(window, { key: 'Insert' })
+    fireEvent.click(screen.getByRole('button', { name: 'Öffnen' }))
+    await screen.findByText(/gamma/)
+    expect(screen.queryByText(/alpha/)).toBeNull()
+  })
+
+  it('undo while carrying shows the new tree', async () => {
+    await renderApp({
+      open: () => ({ ok: true, session: 's', tree: TREE, can_undo: true, can_redo: false }),
+      undo: () => ({ ok: true, session: 's', tree: TREE_B, can_undo: false, can_redo: true }),
+    })
+    fireEvent.click(screen.getByText(/beta/))
+    fireEvent.keyDown(window, { key: 'Insert' })
+    fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
+    await screen.findByText(/gamma/)
+    expect(screen.queryByText(/alpha/)).toBeNull()
   })
 })

@@ -14,6 +14,7 @@ Run:
 
 import io
 import json
+import inspect
 import os
 import re
 import sys
@@ -200,6 +201,42 @@ def _entry_for_kind(kind):
     return f"{DEV_URL}/pdf-tool.html" if os.environ.get("BELEG_DEV") else PROD_PDFTOOL
 
 
+# uid -> HostApi of every bound window, so an organizer window can find (and close) the
+# node-bound PDF-Tool windows that belong to its session (audit x4 PT-5).
+_WINDOW_APIS = {}
+
+
+def _tool_apis_for(core, session):
+    """HostApis of the open PDF-Tool windows bound to a node of organizer ``session``."""
+    if not session:
+        return []
+    out = []
+    for a in list(_WINDOW_APIS.values()):
+        try:
+            if a._pdftool_session and core.pdftool_owner(a._pdftool_session) == session:
+                out.append(a)
+        except Exception:
+            logger.exception("tool window lookup failed")
+    return out
+
+
+def _close_tool_window(core, tool_api):
+    """Release a tool window's node binding and destroy the window (organizer is closing)."""
+    try:
+        if tool_api._pdftool_session:
+            core.close_pdftool(tool_api._pdftool_session)
+    except Exception:
+        logger.exception("close tool window: close_pdftool failed")
+    tool_api._pdftool_session = None
+    tool_api._dirty = False  # discarded on purpose: its own close guard must not ask again
+    try:
+        for w in list(webview.windows):
+            if w.uid == tool_api._uid:
+                w.destroy()
+    except Exception:
+        logger.exception("close tool window: destroy failed")
+
+
 def _bind_close(win, api):
     """Per-window close guard: confirm before discarding unsaved changes. Uses the
     Python-side dirty flag the React app pushes via set_dirty — NOT evaluate_js,
@@ -217,21 +254,47 @@ def _bind_close(win, api):
             logger.exception("Close-Bestätigung fehlgeschlagen — Fenster bleibt offen")
             if api._dirty:
                 return False
+        # PT-5: closing an organizer window closes (after asking if they hold unsaved edits)
+        # its open node-bound PDF-Tool windows — otherwise their later Save would fail and
+        # the edits be lost silently.
+        tools = _tool_apis_for(api._core, api._session)
+        if tools:
+            try:
+                if any(t._dirty for t in tools) and not win.create_confirmation_dialog(
+                        "Ungespeicherte Änderungen",
+                        "Ein geöffnetes PDF-Tool-Fenster hat ungespeicherte Änderungen. "
+                        "Alle Fenster schließen und die Änderungen verwerfen?"):
+                    return False
+            except Exception:
+                logger.exception("Close-Bestätigung (PDF-Tool) fehlgeschlagen — Fenster bleibt offen")
+                return False
+            for t in tools:
+                _close_tool_window(api._core, t)
+        _WINDOW_APIS.pop(getattr(win, "uid", None), None)
         try:
             if api._pdftool_session:
                 # node-bound PDF-Tool window: release the node lock + free the bound
-                # session. (Save-back-on-close prompt is a deferred GUI item — see
-                # docs/pdf-tool.md; closing currently discards unsaved pdf-tool edits.)
+                # session. Unsaved edits were confirmed above (the tool pushes set_dirty).
                 api._core.close_pdftool(api._pdftool_session)
+        except Exception:
+            logger.exception("window close: close_pdftool failed")
+        try:
             if api._session:
                 api._core.release(api._session)  # free the file lock for this window
+        except Exception:
+            logger.exception("window close: release failed")
+        try:
+            if api._session:
                 # free the session itself (document bytes, undo log, caches, temp view)
                 api._core.close_session(api._session)
         except Exception:
             # still swallow — never block the window close — but TRACE it: a failed
-            # release/close_session silently leaks the whole session otherwise.
-            logger.exception("window close: release/close_session failed (session leaked)")
+            # close_session silently leaks the whole session otherwise.
+            logger.exception("window close: close_session failed (session leaked)")
         return True
+    if api._uid is None:
+        api._uid = getattr(win, "uid", None)
+    _WINDOW_APIS[getattr(win, "uid", None)] = api
     win.events.closing += _on_closing
 
 
@@ -295,8 +358,9 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.4" (from version_info)
+        get_full_title(), _entry_for_kind(startup_kind), js_api=_NO_JS_API, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.4" (from version_info)
     api._uid = win.uid  # bind after creation (storing the window object recurses)
+    _expose_api(win, api)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
         # First-paint timing: the gap between 'webview.start' and this 'loaded' is the WebView2
@@ -308,6 +372,50 @@ def _open_window(core, startup_path=None, restore=False,
         win.events.loaded += _on_loaded
     _bind_close(win, api)
     return {"ok": True}
+
+
+class _NullJsApi:
+    """js_api stand-in with NO attributes at all. ``js_api=None`` is not enough:
+    pywebview's dispatcher does ``getattr(None, name, None)`` so ``__class__`` etc. would
+    still resolve (to NoneType). Every attribute lookup here fails -> 'does not exist'."""
+    __slots__ = ()
+
+    def __getattribute__(self, name):
+        raise AttributeError(name)
+
+    def __dir__(self):
+        return []
+
+
+_NO_JS_API = _NullJsApi()
+
+
+def _expose_api(win, api):
+    """SEC-1: hand pywebview ONLY plain closures for the public HostApi methods
+    (``win.expose`` + the attribute-less ``_NO_JS_API``). pywebview's dispatcher resolves a call name with
+    a bare ``getattr`` chain (no underscore filter), so a ``js_api`` object holding
+    ``_core`` would make every CoreApi method callable from page JS (``_core.save`` ...).
+    With the null js_api only exact keys of ``window._functions`` resolve; the closures
+    are looked up by exact name, never traversed by attribute."""
+    def make(name):
+        method = getattr(api, name)
+
+        def fn(*args, **kwargs):
+            return method(*args, **kwargs)
+        fn.__name__ = name
+        fn.__signature__ = inspect.signature(method)  # stub params for window.pywebview.api
+        return fn
+
+    names = [n for n in dir(HostApi)
+             if not n.startswith("_") and callable(getattr(HostApi, n))]
+    win.expose(*[make(n) for n in names])
+
+
+def _dialog_error(exc):
+    """A native dialog failed: report ONLY the exception class (never its text, which may
+    carry paths) as an error dict instead of raising into the bridge (audit aa4 HA-7)."""
+    logger.exception("native dialog failed")
+    return {"ok": False, "error": type(exc).__name__}
 
 
 class HostApi:
@@ -353,7 +461,16 @@ class HostApi:
             res = self._core.materialize_subset(session, node_ids, name)
             if not res.get("ok"):
                 return res
-            return _open_window(self._core, startup_path=res["path"])
+            view_dir = os.path.dirname(res["path"])
+            try:
+                out = _open_window(self._core, startup_path=res["path"])
+            except BaseException:
+                self._core.discard_view_dir(view_dir)  # HA-3: no orphaned temp view
+                raise
+            if not out.get("ok"):
+                self._core.discard_view_dir(view_dir)
+                return out
+            return {**out, "count": res.get("count")}  # HA-4: the notice shows the node count
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -380,7 +497,14 @@ class HostApi:
             res = self._core.open_node_in_pdftool(session, node_id)
             if not res.get("ok"):
                 return res
-            return _open_window(self._core, startup_kind="node", startup_session=res["session"])
+            try:
+                out = _open_window(self._core, startup_kind="node", startup_session=res["session"])
+            except BaseException:
+                self._core.close_pdftool(res["session"])  # HA-3: free the node lock + session
+                raise
+            if not out.get("ok"):
+                self._core.close_pdftool(res["session"])
+            return out
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -418,6 +542,8 @@ class HostApi:
         # in Python, never in page JS.
         if path is not None and not self._is_granted_path(path):
             return {"ok": False, "error": "Dieser Pfad darf nicht direkt geöffnet werden"}
+        if session is None:
+            session = self._session  # HA-2: a remount re-opens in place, never leaks the old session
         resp = self._core.open(session, path)
         if resp.get("ok"):
             self._session = resp.get("session")  # remember for the close-time lock release
@@ -431,6 +557,9 @@ class HostApi:
 
     def redo(self, session):
         return self._core.redo(session)
+
+    def get_state(self, session):
+        return self._core.get_state(session)
 
     # (render/render_compressed bridge wrappers removed 2026-06-12 — the React UI
     # only uses the windowed variants below; CoreApi.render stays for the IPC
@@ -467,20 +596,31 @@ class HostApi:
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
         name = (self._core.document_name(session) or "Export").strip() or "Export"
-        path = win.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename=f"{name}.pdf", file_types=("PDF (*.pdf)",))
+        try:
+            path = win.create_file_dialog(
+                webview.FileDialog.SAVE, save_filename=f"{name}.pdf", file_types=("PDF (*.pdf)",))
+        except Exception as e:
+            return _dialog_error(e)
         if not path:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
+        # SEC-2: "overwrite" is host-owned (set only after the native confirm below);
+        # a page-supplied flag would skip that confirmation.
+        if isinstance(options, dict):
+            options = {k: v for k, v in options.items() if k != "overwrite"}
         result = self._core.export(session, path, node_ids, options)
         # #13: a split would overwrite existing "_Teil_N" files (the native Save dialog
         # only confirmed the base name) — confirm the ACTUAL part files before clobbering.
         if not result.get("ok") and result.get("code") == "exists":
             names = "\n".join(os.path.basename(p) for p in result.get("existing", []))
-            if not win.create_confirmation_dialog(
+            try:
+                confirmed = win.create_confirmation_dialog(
                     "Dateien überschreiben?",
-                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names):
+                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names)
+            except Exception as e:
+                return _dialog_error(e)
+            if not confirmed:
                 return {"ok": False, "error": "cancelled"}
             opts = dict(options or {})
             opts["overwrite"] = True
@@ -491,8 +631,11 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        result = win.create_file_dialog(
-            webview.FileDialog.OPEN, allow_multiple=True, file_types=_import_file_types())
+        try:
+            result = win.create_file_dialog(
+                webview.FileDialog.OPEN, allow_multiple=True, file_types=_import_file_types())
+        except Exception as e:
+            return _dialog_error(e)
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.import_paths(session, list(result), parent_id)
@@ -502,10 +645,18 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        try:
+            result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        except Exception as e:
+            return _dialog_error(e)
         if not result:
             return {"ok": False, "error": "cancelled"}
-        return self._core.open(session, result[0])
+        if self._win() is None:  # HA-6: the window closed while the dialog was up — no orphan session
+            return {"ok": False, "error": "Fenster nicht gefunden"}
+        resp = self._core.open(session, result[0])
+        if resp.get("ok"):
+            self._session = resp.get("session")  # S-7: remember for close-time release
+        return resp
 
     def save_info(self, session):
         return self._core.save_info(session)
@@ -528,9 +679,12 @@ class HostApi:
         # and destroys the original after all. Suggest a rescue name instead.
         if self._core.session_degraded(session):
             name += " (wiederhergestellt)"
-        path = win.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
-            file_types=("BelegTool (*.belegtool)",))
+        try:
+            path = win.create_file_dialog(
+                webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
+                file_types=("BelegTool (*.belegtool)",))
+        except Exception as e:
+            return _dialog_error(e)
         if not path:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
@@ -551,13 +705,17 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        if not win.create_confirmation_dialog(
+        try:
+            confirmed = win.create_confirmation_dialog(
                 "In DATEV aktualisieren?",
                 "Ja:  Änderungen nach DATEV zurückschreiben (einchecken). DATEV "
                 "Dokumentenablage behält keine Revision — der alte Stand wird überschrieben; "
                 "eine lokale Sicherung wird vorher angelegt.\n\n"
                 "Nein:  nur die ausgecheckte Datei lokal speichern — Sie checken später in "
-                "DATEV ein."):
+                "DATEV ein.")
+        except Exception as e:
+            return _dialog_error(e)
+        if not confirmed:
             return {"ok": False, "verdict": "declined"}
         return self._core.datev_save_back(session, confirmed=True)
 

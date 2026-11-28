@@ -13,6 +13,7 @@ node dropped its source on save and IS its compressed result, so it needs none.
 from __future__ import annotations
 
 import io
+import os
 import zlib
 
 import pikepdf
@@ -27,6 +28,7 @@ MAX_ATTACHMENTS = 500  # bomb guard: cap variant_* attachments read from an untr
 # alone sit BELOW where a deflate bomb would detonate. Mirror unpack's magnitudes.
 MAX_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap per attachment
 MAX_TOTAL_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap across all attachments
+MAX_TOTAL_DECODED_BYTES = variant_blobs.MAX_TOTAL_BYTES  # SV-3: unpacked variants retained across ALL blobs
 
 
 def _read_attachment_capped(filespec, max_bytes: int):
@@ -109,14 +111,36 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
     blobs = _collect_variant_blobs(doc, engine, budget_bytes)
     if not blobs:
         return 0
+    from formats.pdf_storage import unique_tmp_name
+    tmp = unique_tmp_name(path)
     try:
-        with pikepdf.open(path, allow_overwriting_input=True) as pdf:
+        # S-2: never truncate the already-saved file in place — build in a temp
+        # sibling and swap it in atomically, so a failed save leaves the original intact.
+        with pikepdf.open(path) as pdf:
             _attach_blobs(pdf, blobs)
-            pdf.save(path)
-    except Exception as e:  # never let variant persistence break a save
+            pdf.save(tmp)
+        with pikepdf.open(tmp):  # verify the finished temp before it may replace anything
+            pass
+    except Exception as e:  # building the temp failed: file untouched, variants just not embedded
         logger.warning("[variants] embed failed: %s", e)
+        _cleanup(tmp)
         return 0
+    except BaseException:
+        _cleanup(tmp)
+        raise
+    # IO-2: the swap itself (os.replace, else the .bak-guarded in-place write) must NOT be
+    # swallowed — a failure here means the save did not complete, so it propagates (the
+    # original is restored by swap_file_in; save returns ok:false, dirty stays).
+    from formats.pdf_storage import swap_file_in
+    swap_file_in(tmp, path)
     return len(blobs)
+
+
+def _cleanup(tmp: str) -> None:
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
 
 
 def embed_variants_bytes(pdf_bytes: bytes, doc, engine,
@@ -180,12 +204,14 @@ def seed_variants_from_file(path, doc, engine) -> int:
         return 0
     by_id = {n.id: n for n in doc.root.iter() if not n.is_folder and n.original_data}
     seeded = 0
+    decoded_left = MAX_TOTAL_DECODED_BYTES
     for nid, blob in data_by_id.items():
         node = by_id.get(nid)
         if node is None:
             continue
-        variants = variant_blobs.unpack(blob)
+        variants = variant_blobs.unpack(blob, max_total_bytes=max(decoded_left, 0))
         if variants:
+            decoded_left -= sum(len(b) for m in variants.values() for b in m.values())
             engine.seed_variants(node.original_data, variants)
             seeded += 1
     return seeded

@@ -32,7 +32,6 @@ export const gd = {
   'Abbrechen': 'Sguir dheth',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Às-phortaich mar PDF le clàr-innse (an taghadh, no an sgrìobhainn gu lèir)',
-  'Auswahl': 'Taghadh',
   'Ordner': 'Pasgan',
   'Rückgängig': 'Neo-dhèan',
   'Wiederholen': 'Ath-dhèan',

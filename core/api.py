@@ -12,8 +12,10 @@ Every method returns a dict with ``ok: bool``; success carries ``session``,
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
+import shutil
 import threading
 import time
 import uuid
@@ -26,6 +28,7 @@ from core.bridge import load_belegtool
 from core.commands import (
     DEFAULT_COMPRESSION_DPI,
     CommandError,
+    Compress,
     command_from_dict,
 )
 from core.engine import RealEngine
@@ -41,14 +44,18 @@ def sweep_stale_view_dirs(root=None, max_age_s=24 * 3600, now=None):
     but a crash can strand them. Only dirs older than ``max_age_s`` are removed,
     so a concurrently running instance's live view is never touched. Returns the
     removed paths."""
-    import glob
     import shutil
     import tempfile
     import time
     root = root or tempfile.gettempdir()
     now = now if now is not None else time.time()
     removed = []
-    for d in glob.glob(os.path.join(root, "beleg_view_*")):
+    try:  # names only (no glob: a temp root like ``Max[1]`` would be read as a character class)
+        with os.scandir(root) as it:
+            found = sorted(os.path.join(root, e.name) for e in it if e.name.startswith("beleg_view_"))
+    except OSError:
+        return removed
+    for d in found:
         try:
             if os.path.isdir(d) and now - os.path.getmtime(d) > max_age_s:
                 shutil.rmtree(d, ignore_errors=True)
@@ -76,6 +83,8 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
         return f"{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert"
     if "passwort" in low or "password" in low or "encrypted" in low:
         return f"{name}: Datei ist passwortgeschützt"
+    if "keine lesbaren seiten" in low:  # IM-1: plain PDF without a readable page
+        return f"{name}: Datei enthält keine lesbaren Seiten"
     if name.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
         return f"{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg[:80]})"
     if "beschädigt – nicht importiert" in low:
@@ -87,13 +96,36 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
     return f"{name}: {msg}"
 
 
+# SEC-4: bounds for untrusted numeric bridge inputs (UI sends 50-300 DPI, <=~50 pages).
+MIN_DPI, MAX_DPI = 30, 600
+MAX_WINDOW_COUNT = 64
+MIN_BUDGET_MB, MAX_BUDGET_MB = 16, 4096
+
+
+def _clamp_int(value, lo, hi, default):
+    """int(value) clamped to [lo, hi]; non-numeric (or bool/NaN/inf) -> ``default``."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        v = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(lo, min(hi, v))
+
+
 class CoreApi:
     def __init__(self, engine=None):
         # Lock order (never invert): CoreApi._lock → engine._dcache_lock → engine._mcache_lock.
         self._engine = engine or RealEngine()
         self._sessions = {}
+        self._live_sizes = {}  # session -> (root node object, leaf-source bytes); skip re-walk when unchanged
         self._paths = {}  # session -> on-disk path (so Speichern saves in place, not Save-As)
         self._lock = threading.Lock()
+        # Per-session mutation locks (audit v2 A-4): the slow engine work of a command
+        # (split/compress/merge) runs under ITS session's lock only, never under the
+        # global self._lock. Lock order: _slock(session) → self._lock (never invert).
+        self._slocks = {}
+        self._slocks_guard = threading.Lock()
         self._untitled = 0  # counter for "Dokument N" names (process-wide)
         self._render_service = None  # lazy windowed render cache (shared across windows)
         self._pcount = {}  # (node_id, version) -> page count, to avoid re-opening the PDF
@@ -105,6 +137,8 @@ class CoreApi:
         # Single-writer file lock (off by default; opt-in via BELEG_FILE_LOCK). When on,
         # opening a .belegtool holds an exclusive handle for the session's lifetime.
         self._file_lock_enabled = os.environ.get("BELEG_FILE_LOCK", "").lower() not in ("", "0", "false", "no")
+        self._save_locks = {}  # normalised target path -> [Lock, refcount] (HA-1)
+        self._save_locks_guard = threading.Lock()
         self._locks = {}  # session -> FileLock (only while file-lock is enabled)
         self._view_dirs = {}  # session -> temp beleg_view_* dir of its materialized view (deleted on close)
         self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
@@ -342,15 +376,21 @@ class CoreApi:
     def open(self, session: str = None, path: str = None) -> dict:
         import dataclasses
         lock = None
+        reused_lock = False
         if self._should_lock(path):
             from infra import file_lock
             from infra.file_lock import FileInUseError
-            try:
-                lock = file_lock.acquire_lock(path)
-            except FileInUseError:
-                return {"ok": False, "code": "in_use",
-                        "error": "Diese Datei wird bereits bearbeitet und kann nur von "
-                                 "einer Person gleichzeitig geöffnet werden."}
+            with self._lock:
+                cur = self._locks.get(session) if session else None
+            if cur is not None and self._same_path(getattr(cur, "path", None), path):
+                lock, reused_lock = cur, True  # A-5: reopen of our OWN locked file — our handle would deny us
+            else:
+                try:
+                    lock = file_lock.acquire_lock(path)
+                except FileInUseError:
+                    return {"ok": False, "code": "in_use",
+                            "error": "Diese Datei wird bereits bearbeitet und kann nur von "
+                                     "einer Person gleichzeitig geöffnet werden."}
         load_warnings: list = []
         try:
             if path:
@@ -364,21 +404,42 @@ class CoreApi:
                     logger.warning("[variants] seed on open failed", exc_info=True)
             else:
                 document = Document.empty(self._next_untitled_name())  # "Dokument N"
-        except Exception:
-            if lock is not None:
-                lock.release()  # never leak the handle if the load fails
-            raise
+        except BaseException as e:
+            if lock is not None and not reused_lock:
+                lock.release()  # never leak the handle if the load fails (IO-7: KeyboardInterrupt too)
+            if not isinstance(e, Exception):
+                raise
+            # u4 BP-2: open never raises — the previous session stays untouched
+            logger.warning("open failed for %s", path, exc_info=True)
+            return {"ok": False, "error": _friendly_import_error(path or "", e)}
         # H-1 (QS 2026-11-04): a DEGRADED load (corrupt structure/pages) must never bind
         # the path — Ctrl+S would overwrite the still-rescuable original with the
         # degraded tree. Unbound, Speichern becomes Speichern-unter (host.save_file).
         degraded = bool(load_warnings)
-        with self._lock:
+        replaced = None
+        snap = None
+        try:
+          with self._lock:
             if session and session in self._sessions:
                 sid = session
+                replaced = self._sessions[sid]
+                # u4 BP-1: snapshot everything the swap touches so a failure while
+                # building the response rolls back to the previous session untouched.
+                snap = (replaced, self._paths.get(sid), sid in self._degraded,
+                        self._locks.get(sid), self._datev_baseline.get(sid),
+                        {k: v for k, v in self._node_locks.items() if k[0] == sid},
+                        {p: v for p, v in self._pdftool_bindings.items() if v[0] == sid})
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
+                # R-2: the old document's PDF-Tool node locks/bindings are meaningless for the
+                # new one and would make undo/redo refuse forever.
+                for key in [k for k in self._node_locks if k[0] == sid]:
+                    self._node_locks.pop(key, None)
+                for pt in [p for p, (own, _n) in self._pdftool_bindings.items() if own == sid]:
+                    self._pdftool_bindings.pop(pt, None)
             else:
                 sid = self._new_locked(document)
             prev_lock = self._locks.pop(sid, None)  # reopening in the same session → drop old lock
+            self._datev_baseline.pop(sid, None)  # A-5: the old file's write-back baseline must not leak to the new one
             self._paths[sid] = path if (path and not degraded) else None  # remember where it came from
             if degraded:
                 self._degraded.add(sid)
@@ -389,16 +450,57 @@ class CoreApi:
             # a materialized tag view opened in its new window → bind the temp dir to
             # this session so close_session can delete it with the window.
             view_dir = os.path.dirname(path) if path else None
+            bound_view, old_view = None, self._view_dirs.get(sid)
             if view_dir and view_dir in self._pending_view_dirs:
                 self._pending_view_dirs.discard(view_dir)
                 self._view_dirs[sid] = view_dir
+                bound_view = view_dir
                 self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
-            resp = self._doc_response_locked(sid)
-        if prev_lock is not None:
+            try:
+                resp = self._doc_response_locked(sid)
+            except Exception:
+                if bound_view is not None:  # R9-4: undo the view-dir binding + drop the temp dir
+                    if old_view is None:
+                        self._view_dirs.pop(sid, None)
+                    else:
+                        self._view_dirs[sid] = old_view
+                    shutil.rmtree(bound_view, ignore_errors=True)
+                if snap is not None:
+                    (self._sessions[sid], path0, deg0, lock0, base0, nl0, pb0) = snap
+                    for k in [k for k in self._node_locks if k[0] == sid]:
+                        self._node_locks.pop(k, None)
+                    self._node_locks.update(nl0)
+                    self._pdftool_bindings.update(pb0)
+                    for d, v in ((self._paths, path0), (self._locks, lock0),
+                                 (self._datev_baseline, base0)):
+                        if v is None:
+                            d.pop(sid, None)
+                        else:
+                            d[sid] = v
+                    (self._degraded.add if deg0 else self._degraded.discard)(sid)
+                else:
+                    self._sessions.pop(sid, None)
+                    self._paths.pop(sid, None)
+                    self._locks.pop(sid, None)
+                    self._degraded.discard(sid)
+                raise
+            if replaced is not None:
+                # CC-1/3: the replaced document's ids are gone. R9-4: only AFTER the swap
+                # committed — a failed open must not abort the surviving document's tokens.
+                self._prune_dead_ids_locked()
+        except Exception as e:
+            if lock is not None and not reused_lock:
+                lock.release()
+            logger.warning("open failed for %s", path, exc_info=True)
+            return {"ok": False, "error": _friendly_import_error(path or "", e)}
+        if prev_lock is not None and prev_lock is not lock:
             prev_lock.release()
+        if replaced is not None:
+            self._prune_persisted_for(replaced)  # CC-3: free the old document's variants
         # uids persist in .belegtool: a node deleted (set token) in another window
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
+        self._refresh_live_bytes()
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
         if degraded:
             resp["warning"] = "; ".join(load_warnings)
@@ -406,6 +508,21 @@ class CoreApi:
             # degraded content must never feed a DATEV write-back baseline
             resp = self._datev_capture_on_open(sid, path, resp)
         return resp
+
+    @staticmethod
+    def _same_path(a, b) -> bool:
+        """Whether two spellings (case, slashes, '..') name the same file."""
+        if not a or not b:
+            return False
+        if a == b:
+            return True
+        na, nb = os.path.normcase(os.path.abspath(a)), os.path.normcase(os.path.abspath(b))
+        if na == nb:
+            return True
+        try:
+            return os.path.samefile(a, b)
+        except OSError:
+            return False
 
     def document_path(self, session: str):
         """The on-disk path this session is bound to (None if never saved/opened)."""
@@ -478,6 +595,9 @@ class CoreApi:
             cmd = command_from_dict(command)
         except Exception as e:
             return {"ok": False, "error": f"Ungültiger Befehl: {e}"}
+        if isinstance(cmd, Compress):  # SEC-4: untrusted dpi
+            cmd = dataclasses.replace(
+                cmd, dpi=_clamp_int(cmd.dpi, MIN_DPI, MAX_DPI, DEFAULT_COMPRESSION_DPI))
         locked = self._locked_conflict(session, cmd)
         if locked is not None:
             return {"ok": False, "code": "node_locked", "node_id": locked,
@@ -508,10 +628,69 @@ class CoreApi:
         nodes' tokens set (their compress_options would return [] until the next
         successful edit)."""
         self._revive_cancel_tokens(session)
+        self._refresh_live_bytes()
+        with self._lock:
+            # CC-1: free _pcount of removed nodes. Cancel tokens stay (a SET token of a just-
+            # removed id is part of the open/import revive contract); close/open free them.
+            self._prune_dead_ids_locked(tokens=False)
         if resp.get("ok"):
             self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
+
+    def _refresh_live_bytes(self):
+        """Tell the engine how many leaf-source bytes all open sessions hold (sizes its
+        digest memo, PF-1). len() only, no hashing; a session whose root object is
+        unchanged is not re-walked. Never raises (a hint)."""
+        try:
+            set_hint = getattr(self._engine, "set_live_bytes", None)
+            if set_hint is None:
+                return
+            with self._lock:
+                total = 0
+                for sid in [k for k in self._live_sizes if k not in self._sessions]:
+                    del self._live_sizes[sid]
+                for sid, s in self._sessions.items():
+                    root = s.document.root
+                    ent = self._live_sizes.get(sid)
+                    if ent is None or ent[0] is not root:
+                        n = 0
+                        for node in root.iter():
+                            a, b = node.original_data, node.current_data
+                            if a is not None:
+                                n += len(a)
+                            if b is not None and b is not a:
+                                n += len(b)
+                        ent = self._live_sizes[sid] = (root, n)
+                    total += ent[1]
+            set_hint(total)
+        except Exception:
+            logger.exception("live-bytes hint failed")
+
+    def _prune_dead_ids_locked(self, tokens=True):
+        """Caller holds self._lock. Drop _pcount entries and cancel tokens of node ids
+        that are in no open document (pure caches; a set token is already observed by
+        any in-flight compression through its own Event reference). Undo that brings an
+        id back simply recreates a fresh token on demand."""
+        live = set()
+        for other in self._sessions.values():
+            live.update(n.id for n in other.document.root.iter())
+        for key in [k for k in self._pcount if k[0] not in live]:
+            del self._pcount[key]
+        if not tokens:
+            return
+        for nid in [k for k in self._cancel_tokens if k not in live]:
+            ev = self._cancel_tokens.pop(nid)
+            ev.set()  # abort any in-flight compression of a vanished node
+
+    def _prune_persisted_for(self, old_session):
+        if not hasattr(self._engine, "prune_persisted"):
+            return
+        closed = [n.original_data for n in old_session.document.root.iter() if n.original_data]
+        with self._lock:
+            live = [n.original_data for other in self._sessions.values()
+                    for n in other.document.root.iter() if n.original_data]
+        self._engine.prune_persisted(closed, live)
 
     def _revive_cancel_tokens(self, session):
         """Drop SET cancel tokens of ids that are (back) in the document — a
@@ -537,11 +716,38 @@ class CoreApi:
                     ids.add(n.id)
         return ids
 
+    def _history_locked(self, session):
+        """Undo/redo may reverse ANY earlier command (incl. content changes of a node the
+        PDF-Tool holds), so they are refused while this session has a node locked
+        (audit v2 A-2). Returns a node_locked error dict or None."""
+        with self._lock:
+            held = next((nid for (own, nid) in self._node_locks if own == session), None)
+        if held is None:
+            return None
+        return {"ok": False, "code": "node_locked", "node_id": held,
+                "error": "Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann "
+                         "nicht gleichzeitig geändert werden."}
+
     def undo(self, session: str) -> dict:
+        blocked = self._history_locked(session)
+        if blocked is not None:
+            return blocked
         return self._after_mutate(session, self._mutate(session, lambda s: s.undo()))
 
     def redo(self, session: str) -> dict:
+        blocked = self._history_locked(session)
+        if blocked is not None:
+            return blocked
         return self._after_mutate(session, self._mutate(session, lambda s: s.redo()))
+
+    def get_state(self, session: str) -> dict:
+        """Read-only current document state (same shape as a dispatch/undo response);
+        lets a window re-sync after e.g. another window/PDF-Tool changed the session."""
+        with self._slock(session):
+            with self._lock:
+                if session not in self._sessions:
+                    return {"ok": False, "error": "unknown session"}
+                return self._doc_response_locked(session)
 
     # ----------------------------------------------------------------------
     # Rendering: whole-doc (IPC/test-only) + windowed + render-cache stats
@@ -630,7 +836,10 @@ class CoreApi:
 
     def set_render_budget(self, mb: int) -> dict:
         """Set the render-cache budget (MB). Returns the refreshed stats."""
-        self._renderer().set_budget(max(0, int(mb)) * 1024 * 1024)
+        mb = _clamp_int(mb, MIN_BUDGET_MB, MAX_BUDGET_MB, None)
+        if mb is None:
+            return {"ok": False, "error": "ungültiger Wert"}
+        self._renderer().set_budget(mb * 1024 * 1024)
         seed = self._last_seed  # snapshot once — close_session may null it concurrently (cf. line 198)
         if seed:  # fill the new headroom right away
             self._kick_prewarm(seed[0])
@@ -658,6 +867,9 @@ class CoreApi:
                       count: int = 10, dpi: int = 100) -> dict:
         """Render only pages ``[first, first+count)`` of a leaf, cache-first via the
         shared RenderService. The windowed replacement for ``render`` (all pages)."""
+        first = _clamp_int(first, 0, 10**6, 0)
+        count = _clamp_int(count, 0, MAX_WINDOW_COUNT, 10)
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, 100)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -690,6 +902,9 @@ class CoreApi:
         instant and only the visible window renders. Never mutates the document.
         ``method`` None/"original" (or ``no_compression``) renders the original
         bytes, reusing the plain preview's cache."""
+        first = _clamp_int(first, 0, 10**6, 0)
+        count = _clamp_int(count, 0, MAX_WINDOW_COUNT, 10)
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, DEFAULT_COMPRESSION_DPI)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -739,6 +954,40 @@ class CoreApi:
         """Save the document to ``path``. When ``store_alternatives`` is False the
         computed compression variants are NOT embedded (smaller file; the options
         recompute on reopen) — the 'Original speichern' choice in the save dialog."""
+        if not isinstance(path, str) or not path.strip():  # IO-8: never write a file named "None"
+            return {"ok": False, "error": "Kein gültiger Speicherpfad."}
+        # HA-1: saves to one target run one after the other (key-repeat, two windows); the
+        # second reads the then-current document, so nothing is lost and no temp is shared.
+        with self._save_path_lock(path):
+            return self._save_locked(session, path, store_alternatives)
+
+    @contextmanager
+    def _save_path_lock(self, path):
+        try:
+            key = os.path.normcase(os.path.realpath(path))
+        except (OSError, ValueError):
+            key = path
+        with self._save_locks_guard:
+            ent = self._save_locks.get(key)
+            if ent is None:
+                ent = self._save_locks[key] = [threading.Lock(), 0]
+            ent[1] += 1
+        try:
+            with ent[0]:
+                yield
+        finally:
+            with self._save_locks_guard:
+                ent[1] -= 1
+                if ent[1] == 0:
+                    self._save_locks.pop(key, None)
+
+    def discard_view_dir(self, view_dir: str) -> None:
+        """Remove a materialized view temp dir whose window could not be opened (HA-3)."""
+        with self._lock:
+            self._pending_view_dirs.discard(view_dir)
+        shutil.rmtree(view_dir, ignore_errors=True)
+
+    def _save_locked(self, session: str, path: str, store_alternatives: bool) -> dict:
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -746,7 +995,18 @@ class CoreApi:
             document = s.document
         document = self._bake_no_gain(document)  # persist auto-confirmed no-gain leaves
         lock = self._locks.get(session)
-        in_place_locked = lock is not None and path == self._paths.get(session)
+        # DV-1: Save As (target differs from the bound file) breaks the DATEV link — the copy
+        # must not carry the provenance. In-place saves keep it.
+        bound = self._paths.get(session)
+        is_save_as = not (self._same_path(path, bound)
+                          or (lock is not None and self._same_path(path, getattr(lock, "path", None))))
+        drop_datev = is_save_as and document.root.datev is not None
+        if drop_datev:
+            import dataclasses
+            document = dataclasses.replace(document, root=dataclasses.replace(document.root, datev=None))
+        in_place_locked = lock is not None and (
+            self._same_path(path, self._paths.get(session))
+            or self._same_path(path, getattr(lock, "path", None)))  # degraded session: _paths is None
         try:
             if in_place_locked:
                 self._save_through_lock(lock, path, document, store_alternatives)
@@ -760,12 +1020,16 @@ class CoreApi:
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}
+        if drop_datev:
+            self._datev_set_provenance(session, None)
+            self._datev_baseline.pop(session, None)
         with self._lock:
             s = self._sessions.get(session)
             if s is not None:
                 s.mark_saved()
-            self._paths[session] = path  # bind the session to this file for in-place saves
-            self._degraded.discard(session)  # the rescue is saved — a normal session again
+            if s is not None:  # CC-2: a session closed meanwhile must not be re-bound
+                self._paths[session] = path  # bind the session to this file for in-place saves
+                self._degraded.discard(session)  # the rescue is saved — a normal session again
             view_dir = self._view_dirs.get(session)
         if view_dir:
             self._touch_view_dir(view_dir)  # saving through a view keeps it sweep-safe
@@ -818,22 +1082,19 @@ class CoreApi:
             self._degraded.discard(session)
             lock = self._locks.pop(session, None)
             self._datev_baseline.pop(session, None)  # free the DATEV write-back baseline
+            with self._slocks_guard:
+                self._slocks.pop(session, None)
+            # A-7: PDF-Tool sessions bound to nodes of this (organizer) window die with it
+            tool_sessions = [pt for pt, (own, _nid) in self._pdftool_bindings.items() if own == session]
+            for pt in tool_sessions:
+                binding = self._pdftool_bindings.pop(pt, None)
+                if binding is not None:
+                    self._node_locks.pop(binding, None)
+                self._sessions.pop(pt, None)
             view_dir = self._view_dirs.pop(session, None)
             if view_dir is not None:
                 self._view_touched.pop(view_dir, None)  # drop its keep-alive timestamp too
-            if s is not None:
-                live = set()
-                for other in self._sessions.values():
-                    live.update(n.id for n in other.document.root.iter())
-                # node uids persist in .belegtool, so the same file open twice shares
-                # ids — only drop what no remaining session still uses.
-                gone = {n.id for n in s.document.root.iter()} - live
-                for key in [k for k in self._pcount if k[0] in gone]:
-                    del self._pcount[key]
-                for nid in gone:
-                    ev = self._cancel_tokens.pop(nid, None)
-                    if ev is not None:
-                        ev.set()  # abort any in-flight compression of a vanished node
+            self._prune_dead_ids_locked()  # CC-1: everything this session ever registered
             if self._last_seed and self._last_seed[0] == session:
                 self._last_seed = None  # never resume prefetch for a closed session
         if lock is not None:
@@ -852,6 +1113,7 @@ class CoreApi:
                 live = [n.original_data for other in self._sessions.values()
                         for n in other.document.root.iter() if n.original_data]
             self._engine.prune_persisted(closed, live)
+        self._refresh_live_bytes()
         return {"ok": True}
 
     # ----------------------------------------------------------------------
@@ -892,6 +1154,8 @@ class CoreApi:
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
         skipped = empty_leaf_names(nodes)
+        if count_total_pages(nodes) == 0:  # AC-2: only empty folders / 0-page leaves
+            return {"ok": False, "error": "nichts zu exportieren"}
         # #13: split into several files when a page threshold is set and exceeded.
         opts = options or {}
         split_pages = opts.get("split_pages")
@@ -929,18 +1193,38 @@ class CoreApi:
     _RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
                        *(f"COM{i}" for i in range(1, 10)),
                        *(f"LPT{i}" for i in range(1, 10))}
+    _MAX_COMPONENT = 120
+    _MAX_PATH_BUDGET = 240
 
     @classmethod
-    def _safe_filename(cls, name, default):
+    def _is_reserved_name(cls, name):
+        """Windows device name test: case-insensitive, superscript digits (COM¹..³) mapped,
+        and trailing spaces/dots before the extension ignored ('NUL .pdf', 'nul.tar.gz')."""
+        head = str(name).split(".")[0].rstrip(" ").upper()
+        head = head.translate({0xB9: "1", 0xB2: "2", 0xB3: "3"})
+        return head in cls._RESERVED_NAMES
+
+    @classmethod
+    def _safe_filename(cls, name, default, dir_len=None, ext_len=0):
         """A filesystem-safe base name (no extension) from an arbitrary user/tag/document
-        string: strip illegal chars, trailing dots/spaces, and Windows-reserved device names.
-        Used wherever such a name becomes a real temp/disk path with no native dialog to vet it
-        (materialize_subset's view title, datev_export's part files)."""
+        string: strip illegal chars, control/bidi chars, trailing dots/spaces (also per dotted
+        component), and Windows-reserved device names (also superscript/space variants).
+        Capped at ``_MAX_COMPONENT`` chars; when the target directory length ``dir_len`` is known
+        the whole path (dir + sep + name + ``ext_len``) stays below ``_MAX_PATH_BUDGET``, else the
+        default is used. Used wherever such a name becomes a real temp/disk path with no native
+        dialog to vet it (materialize_subset's view title, datev_export's part files)."""
         import re as _re
-        safe = _re.sub(r'[<>:"/\\|?*]', "_", (name or default)).strip().rstrip(". ")
-        # Windows reserves device names even WITH an extension ("NUL.pdf", "COM1.foo"), so test
-        # the part before the first dot, not the whole string.
-        if not safe or safe.split(".")[0].upper() in cls._RESERVED_NAMES:
+        raw = _re.sub("[\x00-\x1f\x7f-\x9f\u200b\u202a-\u202e\u2066-\u2069\ufeff]", "",
+                      str(name or default))
+        safe = _re.sub(r'[<>:"/\\|?*]', "_", raw)
+        safe = safe.strip().rstrip(". ")  # ZWJ/ZWNJ/LRM/RLM kept (R13-2)
+        limit = cls._MAX_COMPONENT
+        if dir_len is not None:
+            limit = min(limit, cls._MAX_PATH_BUDGET - int(dir_len) - 1 - int(ext_len))
+        if limit < 1:
+            return default
+        safe = safe[:limit].rstrip(". ")
+        if not safe or cls._is_reserved_name(safe):
             return default
         return safe
 
@@ -975,14 +1259,17 @@ class CoreApi:
         # open() titles a document from its FILE NAME (stem), so encode the wanted name
         # there — in its own temp dir to avoid mkstemp's random suffix in the title.
         # The name flows from a tag string → window title: make it a safe base name.
-        safe = self._safe_filename(name, "Ansicht")
-        path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
+        view_dir = tempfile.mkdtemp(prefix="beleg_view_")
+        safe = self._safe_filename(name, "Ansicht", dir_len=len(view_dir), ext_len=len(".belegtool"))
+        path = os.path.join(view_dir, f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)
-        except Exception as e:
-            logger.exception("materialize_subset failed")
+        except BaseException as e:
             import shutil
-            shutil.rmtree(os.path.dirname(path), ignore_errors=True)  # don't orphan the empty temp dir
+            shutil.rmtree(os.path.dirname(path), ignore_errors=True)  # don't orphan the temp dir (IO-7)
+            if not isinstance(e, Exception):
+                raise
+            logger.exception("materialize_subset failed")
             return {"ok": False, "error": str(e)}
         with self._lock:  # remember the temp dir until its new window opens (then per-session)
             self._pending_view_dirs.add(os.path.dirname(path))
@@ -993,6 +1280,7 @@ class CoreApi:
     # ----------------------------------------------------------------------
     def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
         """Available compression methods for a leaf at ``dpi`` (smallest first)."""
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, 150)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -1016,20 +1304,24 @@ class CoreApi:
             # verdict so the red 'undecided' dot stays resolved across moves/reopen.
             # A cancelled run (token set) ALSO yields no options but wasn't evaluated,
             # so it is skipped. Silent: this is not a human edit (no undo, no dirty).
-            self._mark_no_gain(session, node_id)
+            self._mark_no_gain(session, node_id, data)
         return {"ok": True, "session": session, "node": node_id, "dpi": dpi,
                 "original_size": len(data), "options": options}
 
-    def _mark_no_gain(self, session: str, node_id: str) -> None:
+    def _mark_no_gain(self, session: str, node_id: str, data=None) -> None:
         """Record the derived 'nothing smaller found' verdict on a still-compressible
         leaf (no source dropped, not already applied/blocked/decided). Applied silently
         so it neither enters undo/redo nor marks the document dirty."""
         from core.commands import SetNoGain
-        with self._lock:
+        with self._slock(session), self._lock:
             s = self._sessions.get(session)
             if s is None:
                 return
             node = s.document.find(node_id)
+            # A-3: the verdict belongs to the bytes that were evaluated — a Rotate /
+            # SetNodeBytes during the (slow) evaluation makes it stale.
+            if data is not None and node is not None and node.original_data is not data:
+                return
             if (node is not None and not node.is_folder and node.original_data is not None
                     and not node.is_compressed and not node.no_compression
                     and not node.compression_no_gain):
@@ -1066,9 +1358,16 @@ class CoreApi:
     def _locked_conflict(self, session, cmd):
         """The locked node id a command would content-mutate, or None."""
         with self._lock:
+            s = self._sessions.get(session)
             for nid in self._content_mutated_ids(cmd):
                 if (session, nid) in self._node_locks:
                     return nid
+                # deleting/merging an ANCESTOR folder content-mutates every descendant
+                node = s.document.find(nid) if s is not None else None
+                if node is not None and node.is_folder:
+                    for d in node.iter():
+                        if (session, d.id) in self._node_locks:
+                            return d.id
         return None
 
     def node_locked(self, session: str, node_id: str) -> bool:
@@ -1112,6 +1411,11 @@ class CoreApi:
         from core.commands import SetNodeBytes
         with self._lock:
             binding = self._pdftool_bindings.get(pdftool_session)
+        if binding is None:
+            return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
+        owner_session, node_id = binding
+        with self._slock(owner_session), self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
             if binding is None:
                 return {"ok": False, "error": "kein an einen Knoten gebundenes PDF-Tool"}
             owner_session, node_id = binding
@@ -1121,22 +1425,31 @@ class CoreApi:
                 return {"ok": False, "error": "Sitzung nicht mehr vorhanden"}
             leaves = [n for n in t.document.root.iter() if not n.is_folder]
             data = (leaves[0].current_data or leaves[0].original_data) if leaves else None
-            if data_b64 is not None and leaves:
-                try:
-                    edited = base64.b64decode(data_b64)
-                except Exception:
-                    edited = None
-                if edited:
-                    # keep the tool session in sync (reopen shows + re-edits the additions)
-                    # AND write these edited bytes to the owner — the immutable document means
-                    # the post-dispatch leaf is a new object, so use `edited` directly here.
-                    t.dispatch(SetNodeBytes(leaves[0].id, edited))
-                    data = edited
-            if not data:
-                return {"ok": False, "error": "keine Daten zum Speichern"}
+            # A-8: validate the target BEFORE touching the tool session
             if owner.document.find(node_id) is None:
                 return {"ok": False, "error": "Zielknoten nicht mehr vorhanden"}
+            if data_b64 is not None and leaves:
+                edited, err = self._decode_pdf_b64(data_b64)
+                if err:
+                    return err
+                err = self._check_pdf_payload(edited, leaves[0].pdf_length)
+                if err:
+                    return err
+                # keep the tool session in sync (reopen shows + re-edits the additions)
+                # AND write these edited bytes to the owner — the immutable document means
+                # the post-dispatch leaf is a new object, so use `edited` directly here.
+                t.dispatch(SetNodeBytes(leaves[0].id, edited))
+                data = edited
+            if not data:
+                return {"ok": False, "error": "keine Daten zum Speichern"}
+            target = owner.document.find(node_id)
+            if target is not None and data == (target.current_data or target.original_data):
+                # PT-4 (audit x4): an unedited save must not replace the node's source (that
+                # would reset the compression decision and make the compressed bytes the
+                # "source"). Nothing changed → nothing to write.
+                return {"ok": True, "owner": owner_session, "node": node_id, "unchanged": True}
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
+        self._after_mutate(owner_session, {"ok": True})  # token revive / cache prune / prefetch kick
         return {"ok": True, "owner": owner_session, "node": node_id}
 
     @staticmethod
@@ -1146,21 +1459,42 @@ class CoreApi:
         if not data_b64:
             return None, {"ok": False, "error": "keine Daten zum Speichern"}
         try:
-            return base64.b64decode(data_b64), None
+            data = base64.b64decode(data_b64)
         except Exception:
             return None, {"ok": False, "error": "ungültige Daten"}
+        if not data:
+            return None, {"ok": False, "error": "ungültige Daten"}
+        return data, None
+
+    @staticmethod
+    def _check_pdf_payload(data, old_pages=None):
+        """T-4: ``None`` if ``data`` opens as a PDF with >= 1 page (0 pages only when the
+        node legitimately had 0), else an error dict. Nothing is changed by the caller then."""
+        import io
+        import pikepdf
+        try:
+            with pikepdf.open(io.BytesIO(data)) as pdf:
+                pages = len(pdf.pages)
+        except Exception:
+            return {"ok": False, "error": "ungültiges PDF"}
+        if pages < 1 and old_pages != 0:
+            return {"ok": False, "error": "ungültiges PDF"}
+        return None
 
     def _dispatch_pdf_bytes(self, session, data):
         """SESSION-ONLY: write ``data`` into a PDF-Tool **bridge** session's first leaf
         (``SetNodeBytes``). No disk write. Returns ``{ok}`` or an error dict."""
         from core.commands import SetNodeBytes  # CommandError is module-level (line 25)
-        with self._lock:
+        with self._slock(session), self._lock:  # R-1: serialise with the unlocked slow _mutate
             s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unbekannte Sitzung"}
             leaves = [n for n in s.document.root.iter() if not n.is_folder]
             if not leaves:
                 return {"ok": False, "error": "kein PDF im Dokument"}
+            err = self._check_pdf_payload(data, leaves[0].pdf_length)
+            if err:
+                return err
             try:
                 s.dispatch(SetNodeBytes(leaves[0].id, data))
             except CommandError as e:
@@ -1203,6 +1537,12 @@ class CoreApi:
             if pt is not None:
                 self._pdftool_bindings.pop(pt, None)
         return {"ok": True}
+
+    def pdftool_owner(self, pdftool_session: str):
+        """Organizer session a node-bound PDF-Tool session belongs to (None if unbound)."""
+        with self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
+        return binding[0] if binding else None
 
     def close_pdftool(self, pdftool_session: str) -> dict:
         """Close a PDF-Tool session: release its node lock and free the session."""
@@ -1310,7 +1650,11 @@ class CoreApi:
         service. Returns the refreshed status."""
         from infra.settings import update_settings
         on = bool(on)
-        update_settings(datev_mode=on)
+        try:
+            update_settings(datev_mode=on)
+        except OSError:  # IO-6: don't claim a mode that was not persisted; runtime state unchanged
+            logger.warning("set_datev_mode: settings not persisted", exc_info=True)
+            return {"ok": False, "error": "DATEV-Einstellung konnte nicht gespeichert werden."}
         with self._datev_lock:
             self._datev_mode = on
             self._datev_service = None  # rebuild on next use (or drop when off)
@@ -1358,13 +1702,14 @@ class CoreApi:
     def _datev_provenance(self, session):
         with self._lock:
             s = self._sessions.get(session)
-            return (s.document.root.datev if s else None)
+            prov = s.document.root.datev if s else None
+            return prov if isinstance(prov, dict) else None  # u4 BP-7: never a non-dict
 
     def _datev_set_provenance(self, session, provenance):
         """Set/clear the root's provenance SILENTLY (origin metadata, not a user edit;
         no undo/dirty), so a later save persists it."""
         from core.commands import SetDatev
-        with self._lock:
+        with self._slock(session), self._lock:  # R-1
             s = self._sessions.get(session)
             if s is not None:
                 s.apply_silent(SetDatev(provenance))
@@ -1386,7 +1731,11 @@ class CoreApi:
         Trade-off when still connecting: the up-front 'already checked out by someone else' hint
         surfaces as a LOCKED verdict at write-back instead of on open — still safe, just later."""
         from datev.provenance import parse_checkout_path
-        _parsed = parse_checkout_path(path)
+        try:
+            _parsed = parse_checkout_path(path)
+        except Exception:  # e.g. '²' stem: isdigit() but int() fails → just not a checkout
+            logger.warning("[datev] checkout path not parseable: %r", path, exc_info=True)
+            _parsed = {}
         is_checkout = bool(_parsed.get("doc_guid"))
         # breadcrumb (belegtool_diag.log next to the exe): whether this open was recognized as a
         # DATEV checkout. A "nicht verknüpft" write-back means is_checkout=False here.
@@ -1414,7 +1763,7 @@ class CoreApi:
         elif is_checkout:
             # connect still in flight → cheap, service-free capture so the file opens instantly
             # and write-back stays enabled; the server half is filled at write-back.
-            parsed = parse_checkout_path(path)
+            parsed = _parsed
             prov = {"doc_guid": parsed.get("doc_guid"), "file_id": parsed.get("file_id"),
                     "structure_item_id": None, "correspondence_partner_guid": None,
                     "source_name": os.path.basename(str(path)) or None}
@@ -1487,6 +1836,9 @@ class CoreApi:
             # "no local path" error.
             from core.commands import SetNodeBytes
             with self._lock:
+                _b = self._pdftool_bindings.get(session)
+            # R-1: owner's per-session lock first (order _slock -> _lock), then re-read.
+            with (self._slock(_b[0]) if _b else threading.RLock()), self._lock:
                 binding = self._pdftool_bindings.get(session)
                 owner = self._sessions.get(binding[0]) if binding else None
                 node_id = binding[1] if binding else None
@@ -1505,8 +1857,8 @@ class CoreApi:
                     "local_error": None if save_res.get("ok") else save_res.get("error"),
                     "local_kind": "belegtool"}
         try:
-            with open(local_path, "wb") as f:
-                f.write(edited or b"")
+            from formats.pdf_storage import write_file_atomic
+            write_file_atomic(local_path, edited or b"")  # IO-5: temp + replace, .bak-guarded fallback
             with self._lock:  # the on-disk file now matches the session — keep dirty coherent
                 s = self._sessions.get(session)
                 if s is not None:
@@ -1639,6 +1991,19 @@ class CoreApi:
                 return None, {"ok": False, "error": str(e)}
         return None, None
 
+    @staticmethod
+    def _datev_require_clients(svc):
+        """Backend twin of the filing dialog's rule: without a readable, non-empty client
+        list there is no safe target, so filing is refused (None = ok)."""
+        try:
+            clients = svc.list_clients()
+        except Exception:
+            logger.warning("[datev] list_clients failed", exc_info=True)
+            return {"ok": False, "error": "Mandantenliste nicht verfügbar"}
+        if not clients:
+            return {"ok": False, "error": "Keine Mandanten gefunden — DATEV-Ablage nicht möglich."}
+        return None
+
     def datev_clients(self) -> dict:
         """The DATEV client list for the filing dialog's searchable dropdown. Non-empty list ⇒
         DATEV filing is possible; an error/empty list ⇒ the UI DISABLES filing (no client data,
@@ -1675,6 +2040,9 @@ class CoreApi:
         svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        err = self._datev_require_clients(svc)  # AC-4: no client list => no DATEV write
+        if err:
+            return err
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
         if err:
             return err
@@ -1711,6 +2079,9 @@ class CoreApi:
         svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        err = self._datev_require_clients(svc)  # AC-4: no client list => no DATEV write
+        if err:
+            return err
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
         if err:
             return err
@@ -1725,13 +2096,19 @@ class CoreApi:
         # The document name becomes a real temp path here (no native dialog to vet it), so make
         # it a safe base name (path separators / illegal chars / reserved device names stripped)
         # — shared with materialize_subset via _safe_filename.
-        base_name = self._safe_filename(self.document_name(session), "Export")
         tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
+        # room for "_Teil_NN" + ".pdf" appended by the split export
+        base_name = self._safe_filename(self.document_name(session), "Export",
+                                        dir_len=len(tmpdir), ext_len=len("_Teil_99.pdf"))
         try:
             out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),
                               node_ids, options)
             if not out.get("ok"):
                 return out
+            if out.get("warning"):
+                # DV-2: incomplete export (failed page slices / skipped empty leaves) — DokAb has
+                # no revision/rollback, so never file truncated parts; surface the warning instead.
+                return {"ok": False, "error": out["warning"], "warning": out["warning"]}
             # defensive: an ok export must yield at least one path; never open(None).
             paths = [p for p in (out.get("paths") or [out.get("path")]) if p]
             if not paths:
@@ -1810,7 +2187,7 @@ class CoreApi:
             except Exception as e:
                 logger.exception("import failed: %s", path)
                 errors.append(_friendly_import_error(path, e))
-        with self._lock:
+        with self._slock(session), self._lock:
             s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unknown session"}
@@ -1826,10 +2203,36 @@ class CoreApi:
         # re-importing a persisted uid that was deleted elsewhere (set token) must
         # leave the node compressible — same revive as dispatch/undo/redo.
         self._revive_cancel_tokens(session)
+        self._refresh_live_bytes()
         self._kick_prewarm(session)  # warm the freshly imported pages without a click
         if errors:
             resp["warning"] = "; ".join(errors)
         return resp
+
+    @classmethod
+    def _safe_import_name(cls, name):
+        """A single, drive-/stream-free file name for the import temp dir (identical on every
+        platform: judged with ntpath rules). Keeps the extension."""
+        import ntpath
+        import re as _re
+        n = ntpath.splitdrive(str(name))[1]
+        n = _re.sub(r'[<>:"|?*/\\]', "_", n).lstrip(". ").rstrip(". ")
+        if not n:
+            return "Datei"
+        if cls._is_reserved_name(n):
+            n = "_" + n
+        return n
+
+    @staticmethod
+    def _inside_dir(path, directory):
+        import ntpath
+        if ntpath.splitdrive(os.path.basename(path))[0]:
+            return False
+        try:
+            rp, rd = os.path.realpath(path), os.path.realpath(directory)
+            return os.path.commonpath([rp, rd]) == rd and os.path.dirname(rp) == rd
+        except ValueError:
+            return False
 
     def import_bytes(self, session: str, name: str, data_b64: str, parent_id: str = None, index: int = None) -> dict:
         """Import a single dropped file given as base64 / data-URL — written to a
@@ -1841,12 +2244,22 @@ class CoreApi:
             data = base64.b64decode((data_b64 or "").split(",")[-1])
         except Exception as e:
             return {"ok": False, "error": f"ungültige Daten: {e}"}
+        from universal_importer.converters import sanitize_node_name
+        safe = self._safe_import_name(sanitize_node_name(name))
+        if len(safe) > 100:  # keep the temp path under MAX_PATH; keep the extension
+            stem, ext = os.path.splitext(safe)
+            safe = stem[:100 - len(ext[:20])] + ext[:20]
         tmpdir = tempfile.mkdtemp(prefix="beleg_import_")
-        path = os.path.join(tmpdir, os.path.basename(name) or "import.bin")
+        path = os.path.join(tmpdir, safe)
+        if not self._inside_dir(path, tmpdir):  # defence in depth; never write outside tmpdir
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return {"ok": False, "error": "Datei nicht importierbar: ungültiger Name"}
         try:
             with open(path, "wb") as f:
                 f.write(data)
             return self.import_paths(session, [path], parent_id, index)
+        except OSError as e:
+            return {"ok": False, "error": f"Datei nicht importierbar: {e}"}
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -1863,9 +2276,22 @@ class CoreApi:
         self._sessions[sid] = DocumentSession(document, engine=self._engine)
         return sid
 
+    def _slock(self, session):
+        """The mutation lock of one session (RLock; created lazily, only for live sessions)."""
+        with self._slocks_guard:
+            lk = self._slocks.get(session)
+            if lk is None:
+                lk = threading.RLock()
+                if session in self._sessions:
+                    self._slocks[session] = lk
+            return lk
+
     def _mutate(self, session: str, action) -> dict:
-        with self._lock:
-            s = self._sessions.get(session)
+        # The (possibly slow) action runs outside the global lock, serialised per
+        # session, so one window's split/compress/merge never stalls the others.
+        with self._slock(session):
+            with self._lock:
+                s = self._sessions.get(session)
             if s is None:
                 return {"ok": False, "error": "unknown session"}
             try:
@@ -1875,7 +2301,10 @@ class CoreApi:
             except Exception as e:  # defensive — never crash the host
                 logger.exception("CoreApi op failed")
                 return {"ok": False, "error": str(e)}
-            return self._doc_response_locked(session)
+            with self._lock:
+                if self._sessions.get(session) is not s:  # closed/reopened meanwhile
+                    return {"ok": False, "error": "unknown session"}
+                return self._doc_response_locked(session)
 
     def _compression_undecided(self, node) -> bool:
         """Red-dot signal: a leaf whose compression has NOT been confirmed — neither

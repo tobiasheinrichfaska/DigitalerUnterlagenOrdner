@@ -110,7 +110,9 @@ describe('Tree', () => {
     const selected = [...rows].filter((r) => r.getAttribute('aria-selected') === 'true')
     expect(selected.length).toBe(1)
     expect(selected[0].textContent).toContain('doc2')
-    expect(rows[0].getAttribute('tabindex')).toBe('-1')
+    // AX-12 roving tabindex: with no primary the first row is the single tab stop, the rest -1
+    expect(rows[0].getAttribute('tabindex')).toBe('0')
+    expect(rows[1].getAttribute('tabindex')).toBe('-1')
   })
 
   it('folder rows carry aria-expanded matching their collapse state; leaves omit it', () => {
@@ -156,5 +158,39 @@ describe('Tree', () => {
     expect(onContext).toHaveBeenCalledWith(
       expect.any(Number), expect.any(Number), expect.objectContaining({ id: 'L2' }),
     )
+  })
+  it('X-1: dropping a dragged row onto itself is a no-op (does not bubble to the root drop)', () => {
+    const { onMove, onMoveMany } = renderTree()
+    const row = screen.getByText(/doc1/).closest('.row')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', files: [], types: [] }
+    fireEvent.dragStart(row, { dataTransfer })
+    fireEvent.dragOver(row, { dataTransfer })
+    fireEvent.drop(row, { dataTransfer })
+    expect(onMove).not.toHaveBeenCalled()
+    expect(onMoveMany).not.toHaveBeenCalled()
+  })
+
+  it('X-1: dropping a folder onto itself is a no-op as well', () => {
+    const { onMove } = renderTree()
+    const row = screen.getByText(/Ordner/).closest('.row')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', files: [], types: [] }
+    fireEvent.dragStart(row, { dataTransfer })
+    fireEvent.dragOver(row, { dataTransfer })
+    fireEvent.drop(row, { dataTransfer })
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('R10-2: exactly one Tab stop even when the primary node is hidden in a collapsed folder', () => {
+    renderTree({ node: collapsedTree, selectedIds: ['L1'], primaryId: 'L1' })
+    const stops = screen.getAllByRole('treeitem').filter((el) => el.tabIndex === 0)
+    expect(stops).toHaveLength(1)
+    expect(stops[0].textContent).toMatch(/Ordner/) // nearest visible ancestor
+  })
+
+  it('R10-2: a visible primary stays the single Tab stop', () => {
+    renderTree({ selectedIds: ['L1'], primaryId: 'L1' })
+    const stops = screen.getAllByRole('treeitem').filter((el) => el.tabIndex === 0)
+    expect(stops).toHaveLength(1)
+    expect(stops[0].textContent).toMatch(/doc1/)
   })
 })

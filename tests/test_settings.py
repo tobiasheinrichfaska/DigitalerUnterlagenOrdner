@@ -59,3 +59,26 @@ def test_settings_path_lives_next_to_window_json(monkeypatch, tmp_path):
     p = settings_path()
     assert p.endswith("settings.json")
     assert "DigitalerUnterlagenOrdner" in p
+
+
+def test_failed_write_removes_tmp_and_raises(tmp_path, monkeypatch):
+    import builtins, errno, os, pytest
+    p = str(tmp_path / "settings.json")
+    orig = builtins.open
+
+    class W:
+        def __init__(w, f): w.f = f
+        def write(w, b): raise OSError(errno.ENOSPC, "full")
+        def __getattr__(w, k): return getattr(w.f, k)
+        def __enter__(w): w.f.__enter__(); return w
+        def __exit__(w, *a): return w.f.__exit__(*a)
+
+    def fopen(file, mode="r", *a, **k):
+        f = orig(file, mode, *a, **k)
+        return W(f) if "w" in mode and str(file).startswith(p) else f
+
+    monkeypatch.setattr(builtins, "open", fopen)
+    with pytest.raises(OSError):
+        save_settings({"datev_mode": True}, p)
+    monkeypatch.undo()
+    assert os.listdir(tmp_path) == []

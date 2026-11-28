@@ -32,7 +32,6 @@ export const la = {
   'Abbrechen': 'Abrumpere',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Ut PDF cum indice exportare (selectio, alioquin totum documentum)',
-  'Auswahl': 'Selectio',
   'Ordner': 'Scrinium',
   'Rückgängig': 'Revocare',
   'Wiederholen': 'Iterare',

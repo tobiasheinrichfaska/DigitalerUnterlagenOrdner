@@ -10,9 +10,10 @@ import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { DatevBar } from './DatevBar'
 import { DatevFileDialog } from './DatevFileDialog'
+import { displayName } from './lib/displayName'
 import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
-import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
+import { findNode, findParent, buildIndex, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
@@ -38,6 +39,8 @@ function readAsDataURL(file) {
     r.readAsDataURL(file)
   })
 }
+
+const noop = () => {}
 
 export default function App() {
   const { t, lang, setLang } = useT()
@@ -232,12 +235,39 @@ export default function App() {
         // the backend knows whether we are back at the saved state (undo to the last
         // save → clean, I-6); older responses without the field keep the safe default
         setDirty(resp.dirty ?? true)
-        setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
-        if (selected) setSelected(findNode(resp.tree, selected.id))
+        setGrab(null) // a whole-document change invalidates any keyboard-carry snapshot (AP-1)
+        setSelectedIds((ids) => { const ix = buildIndex(resp.tree); return ids.filter((id) => ix.has(id)) }) // drop vanished ids
+        // functional update: a late response (e.g. a slow import) must refresh the CURRENT
+        // primary selection, not the one captured when the call started (W-3)
+        setSelected((cur) => (cur ? findNode(resp.tree, cur.id) : cur))
       }
     },
-    [apply, selected, setSelected, setSelectedIds],
+    [apply, setSelected, setSelectedIds],
   )
+
+  // W-1: another window (the PDF-Tool's save_node_back) can change THIS session behind our
+  // back. The organizer's React state only follows its own call responses, so re-read the
+  // session when the window regains focus and adopt it if it differs. A host without
+  // `get_state` (or any failure) is ignored.
+  const liveRef = useRef({ state: null, dirty: false, busy: 0 })
+  useEffect(() => { liveRef.current = { state, dirty, busy } })
+  useEffect(() => {
+    if (!session) return undefined
+    let inflight = false
+    const onFocus = () => {
+      if (inflight || liveRef.current.busy) return
+      inflight = true
+      core.getState(session).then((resp) => {
+        if (!resp?.ok || !resp.tree || liveRef.current.busy) return
+        const cur = liveRef.current
+        const same = JSON.stringify(resp.tree) === JSON.stringify(cur.state?.tree)
+        if (same && (resp.dirty ?? cur.dirty) === cur.dirty) return
+        afterChange(resp)
+      }).catch(() => {}).finally(() => { inflight = false })
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [session, afterChange])
 
   const dispatch = useCallback(
     (command) => run(core.dispatch(session, command)).then(afterChange),
@@ -402,7 +432,13 @@ export default function App() {
     if (!toDelete || !toDelete.length) return
     // pick the next node to focus: first still-present row after the deletion, else before
     const order = visibleOrder(tree)
-    const gone = (id) => toDelete.includes(id) || toDelete.some((d) => isAncestorOf(tree, d, id))
+    const delSet = new Set(toDelete)
+    const treeIx = buildIndex(tree)
+    const gone = (id) => {
+      if (delSet.has(id)) return true
+      for (let p = treeIx.get(id)?.parent; p; p = treeIx.get(p.id)?.parent) if (delSet.has(p.id)) return true
+      return false
+    }
     const firstIdx = order.findIndex((e) => gone(e.id))
     const nextId = (order.slice(firstIdx + 1).find((e) => !gone(e.id))
       || order.slice(0, Math.max(0, firstIdx)).reverse().find((e) => !gone(e.id)))?.id || null
@@ -421,20 +457,25 @@ export default function App() {
 
   // 2+ selected sibling leaves → the ids that can be merged into one PDF, in
   // DOCUMENT order (else null) — pure logic in lib/selection.js (unit-tested there)
-  const mergeable = mergeableIds(state?.tree, selectedIds)
+  const treeIndex = useMemo(() => buildIndex(state?.tree), [state?.tree])
+  const mergeable = useMemo(() => mergeableIds(state?.tree, selectedIds, treeIndex), [state?.tree, selectedIds, treeIndex])
 
   // the selected node objects (for the multi-select tag editor, #7)
-  const selectedNodes = state?.tree ? selectedIds.map((id) => findNode(state.tree, id)).filter(Boolean) : []
+  const selectedNodes = useMemo(
+    () => (state?.tree ? selectedIds.map((id) => treeIndex.get(id)?.node).filter(Boolean) : []),
+    [state?.tree, selectedIds, treeIndex],
+  )
 
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
   // their common parent if they share one, else at the root (always safe).
-  const groupable = (() => {
-    if (selectedIds.length < 2 || !state?.tree) return null
-    if (selectedIds.some((id) => !findNode(state.tree, id))) return null
-    const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
-    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : state.tree.id
+  const docTree = state?.tree
+  const groupable = useMemo(() => {
+    if (selectedIds.length < 2 || !docTree) return null
+    if (selectedIds.some((id) => !treeIndex.has(id))) return null
+    const parents = selectedIds.map((id) => treeIndex.get(id).parent?.id)
+    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : docTree.id
     return { ids: selectedIds, parentId }
-  })()
+  }, [docTree, selectedIds, treeIndex])
 
   // group the selection into a new folder, resolving folder/child overlaps first
   const groupSelection = (name) => {
@@ -452,7 +493,7 @@ export default function App() {
   const openInPdfTool = (node) => {
     if (!session || !node || node.is_folder) return
     run(core.openNodeInPdftool(session, node.id)).then((resp) => {
-      if (resp && resp.ok === false) setError(resp.error || 'PDF-Tool konnte nicht geöffnet werden.')
+      if (resp && resp.ok === false) setError(resp.error || t('PDF-Tool konnte nicht geöffnet werden.'))
     })
   }
 
@@ -472,6 +513,7 @@ export default function App() {
     run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) {
+        setGrab(null)
         setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
         setDatevOpen(resp.datev || null) // refresh the DATEV badge/checked-out hint for the new file
         if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
@@ -488,8 +530,14 @@ export default function App() {
     setState((p) => (p?.tree ? { ...p, tree: { ...p.tree, datev: prov } } : p))
   // Flip mode; the [datevMode] poll effect then re-arms and tracks the (background) connection,
   // so a runtime enable shows „verbinde…" → connected instead of latching on the single response.
-  const toggleDatevMode = () =>
-    run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+  const datevToggling = useRef(false) // AP-2: ignore a second click while a toggle is in flight
+  const toggleDatevMode = () => {
+    if (datevToggling.current) return undefined
+    datevToggling.current = true
+    return run(core.setDatevMode(!datevMode))
+      .then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+      .finally(() => { datevToggling.current = false })
+  }
   const saveToDatev = () => {
     if (datevServiceConnected !== true) {  // never attempt a write-back without a connection
       setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.')); return undefined
@@ -539,15 +587,17 @@ export default function App() {
       setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht abgelegt.')); return
     }
     setDatevFileDialog({ open: true, loading: true, clients: [], placements: [], error: null })
+    // a late response must not reopen a dialog the user already cancelled/submitted (W-7)
+    const fill = (next) => setDatevFileDialog((prev) => (prev ? next : prev))
     Promise.all([core.datevClients(), core.datevPlacements()]).then(([c, p]) => {
       if (!c?.ok) {
-        setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+        fill({ open: true, loading: false, clients: [], placements: [],
           error: c?.error || t('Mandantenliste nicht verfügbar') })
         return
       }
-      setDatevFileDialog({ open: true, loading: false, clients: c.clients || [],
+      fill({ open: true, loading: false, clients: c.clients || [],
         placements: (p?.ok && p.folders) || [], error: null })
-    }).catch((e) => setDatevFileDialog({ open: true, loading: false, clients: [], placements: [],
+    }).catch((e) => fill({ open: true, loading: false, clients: [], placements: [],
       error: String(e) }))
   }
   const submitDatevFile = (opts) => {
@@ -567,15 +617,32 @@ export default function App() {
     })
   }
 
-  const onSaved = (resp) => { if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) } }
-  const doSave = (mode, store) =>
-    run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store)).then(onSaved)
+  const onSaved = (resp) => {
+    if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) }
+    else if (resp?.error && resp.error !== 'cancelled') setError(resp.error) // failed write must not be silent (W-2)
+  }
+  // In-flight guard (aa4 HA-1c): a double click / Ctrl+S key-repeat must not queue a flood of saves.
+  const savingRef = useRef(false)
+  const doSave = (mode, store) => {
+    savingRef.current = true
+    return run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store))
+      .then(onSaved)
+      .finally(() => { savingRef.current = false })
+  }
   // Preflight: only ask about alternatives when there are some to embed; else save straight.
-  const preflightSave = (mode) => run(core.saveInfo(session)).then((info) => {
-    if (info?.ok && info.has_alternatives) setSaveAsk({ mode, count: info.count })
-    else doSave(mode, true)
-  })
+  const preflightSave = (mode) => {
+    if (savingRef.current) return undefined
+    savingRef.current = true
+    return run(core.saveInfo(session)).then((info) => {
+      if (info?.ok && info.has_alternatives) { savingRef.current = false; setSaveAsk({ mode, count: info.count }) }
+      else doSave(mode, true)
+    }, (e) => { savingRef.current = false; throw e })
+  }
   const saveFile = () => preflightSave('in')
+  // HA-5: a failed new_window ({ok:false,error}) must be visible, not silently ignored
+  const newWindow = () => run(core.newWindow()).then((r) => {
+    if (r && r.ok === false && r.error && r.error !== 'cancelled') setError(r.error)
+  })
   const saveFileAs = () => preflightSave('as')
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
@@ -632,11 +699,14 @@ export default function App() {
   // keyboard shortcuts (nav + carry-move + Ctrl-shortcuts; ignored while typing,
   // and fully disabled while any modal dialog or context menu is open)
   useKeyboard({
-    enabled: !!session, reorderEnabled: !viewActive, tree: state?.tree, selected, selectedIds, grab, setGrab,
-    select, dispatch, moveMany: onMoveMany, setCollapsedFor, saveFile, openFile, exportPdf,
-    newWindow: () => core.newWindow(), undo, redo, deleteSelection,
+    enabled: !!session, reorderEnabled: !viewActive, tree: viewActive ? treeForView : state?.tree, selected, selectedIds, grab, setGrab,
+    select, dispatch, moveMany: onMoveMany,
+    // synthetic group folders don't exist in the core → no collapse/expand there (W-8)
+    setCollapsedFor: viewActive && groupBy ? noop : setCollapsedFor, saveFile, openFile, exportPdf,
+    newWindow, undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
     saveAskOpen: !!saveAsk, exportAskOpen: !!exportAsk, helpOpen, menuOpen: !!menu,
+    datevDialogOpen: !!datevFileDialog?.open,
   })
 
   if (!state && !error) {
@@ -651,10 +721,10 @@ export default function App() {
   return (
     <div className={`app${busy ? ' busy' : ''}${tagsOn ? '' : ' tags-off'}`}>
       <header>
-        <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
+        <h1 title={state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <Toolbar
           onOpen={openFile}
-          onNewWindow={() => core.newWindow()}
+          onNewWindow={newWindow}
           onImport={() => handleImport(core.importDialog(session, importTarget()))}
           onSave={saveFile}
           onSaveAs={saveFileAs}
@@ -760,7 +830,7 @@ export default function App() {
       {dropActive && (
         <div className="drop-overlay">
           <div className="drop-overlay-badge">
-            📥 {t('Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}', { target: selected?.is_folder ? selected.name : t('oberste Ebene') })}
+            📥 {t('Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}', { target: selected?.is_folder ? displayName(t, selected.name) : t('oberste Ebene') })}
           </div>
         </div>
       )}

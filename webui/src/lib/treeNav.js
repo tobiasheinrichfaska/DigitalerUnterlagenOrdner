@@ -106,6 +106,8 @@ function insertChild(node, parentId, child, index) {
 export function applyMove(root, nodeId, newParentId, index) {
   const node = find(root, nodeId)
   if (!node) return root
+  // never move a node into itself / its own subtree (it would be lost)
+  if (nodeId === newParentId || find(node, newParentId)) return root
   return insertChild(removeNode(root, nodeId), newParentId, node, index)
 }
 
@@ -132,6 +134,11 @@ export function moveManyDrop(originalTree, previewTree, ids, primaryId) {
   const from = locate(originalTree, primaryId)
   if (from && from.parentId === to.parentId && from.index === to.index) return null // unmoved
   const carried = new Set(ids)
+  // a drop into a carried node (or inside its subtree) is invalid — the core rejects it
+  for (const id of ids) {
+    const n = find(originalTree, id)
+    if (n && (n.id === to.parentId || find(n, to.parentId))) return null
+  }
   const previewParent = find(previewTree, to.parentId)
   let successor = null
   for (let i = to.index + 1; i < (previewParent?.children ?? []).length; i++) {

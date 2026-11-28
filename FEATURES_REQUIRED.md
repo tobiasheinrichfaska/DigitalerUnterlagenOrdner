@@ -61,7 +61,7 @@ notice reports the file count. (Split mode uses its own TOC, not the index/bookm
 - Re-opening a `.belegtool` restores the schema losslessly; a committed node returns
   coherently (`current_data` set, `original_data` None) and drop-source-on-save is unchanged.
 
-## 7. DATEV mode (v3.10.0 — off by default, opt-in per user)
+## 7. DATEV mode (v3.10.0 / v3.11.x — off by default, opt-in per user)
 Only when the per-user **DATEV mode** is on (header „DATEV" toggle); when off, the `datev`
 package is never imported and none of this is reachable.
 - **Status + toggle**: the bar reflects `datev_status` (mode on/off, connected/not); toggling
@@ -86,6 +86,20 @@ package is never imported and none of this is reachable.
   a `.belegtool` (organizer) keeps structure + provenance; a checkout `.pdf` (PDF-Tool) is
   overwritten with clean effective PDF bytes — and the success notice **names the saved file** so
   the user can tell which format landed (`local_kind`).
+- **Filing dialog (v3.11.0)**: „Nach DATEV ablegen" and the export-to-DATEV action open a filing
+  dialog (searchable Mandant, folder/register, Belegdatum, Veranlagungsjahr/-monat). A **Bezeichnung**
+  (the DATEV document name, prefilled) is required; filing without one is refused.
+- **No connection or no client list → no DATEV write**: with no live connection, or when the
+  master data (client list) cannot be read, filing and write-back are refused with a message and
+  nothing is sent.
+- **Checked-out document**: the „Nach DATEV zurückschreiben" button is hidden for a document that
+  is checked out; **💾 Speichern** writes the local working copy instead (check it in via DATEV). A
+  write-back that is invoked anyway reports `checked_out_self` and saves locally.
+- **Node binding in the PDF-Tool**: a node opened in the PDF-Tool always offers file-anew; filing it
+  creates a new DATEV document and pushes the baked bytes back to the owner node so the organizer
+  shows the edit.
+- **Non-blocking connect**: opening a checkout never waits on the SSO handshake; while the connect is
+  still running the UI reports `connecting`, and the write-back completes the baseline when it runs.
 - Acceptance: with mode **off**, a normal launch never touches DATEV and the badge/actions are
   absent. With mode **on** + a fake/real service, the verdicts above are honoured and a refused
   write-back never overwrites the server. (Live end-to-end = `manual_tests/10_datev.md`.)
@@ -99,3 +113,38 @@ package is never imported and none of this is reachable.
   the budget (shrink evicts immediately).
 - **Multiple windows**: a second window opens and starts cleanly (the bridge waits for each
   method to be callable, not just for the API object to exist).
+
+## 9. Tags & tag views (v3.8.0 / v3.9.0)
+- Tagging is **off by default** (toolbar 🏷️) and auto-enables when a loaded file already has tags.
+  Tags are persisted per node; multi-select applies or removes one tag across all selected nodes
+  as one undo step.
+- **Search** filters by tag only (never by name); a matching tag keeps the whole subtree.
+  **Group by tag** shows one synthetic folder per tag; nodes may appear under several tags.
+- Acceptance: while a search or group view is active, reorder, import, add-folder, delete, group,
+  merge and split are disabled; content edits stay available. „In neuem Fenster öffnen" on a tag
+  search writes a temp document with just the displayed nodes in normal tree order.
+
+## 10. PDF-Tool surface (v3.11.x)
+- A `.pdf` (or a node opened „in PDF-Tool") opens with a selectable text layer and interactive
+  AcroForm fields; „✎ Text" adds FreeText, and added text reopens as editable FreeText.
+- **💾 Speichern** on a node binding writes the bytes back to the owner node (undoable in the
+  organizer); external links open in the system browser, never in the app window.
+- Acceptance: a scanned PDF renders its pages (not blank); compression from this surface is not
+  wired (see `CLAUDE.md`, Known Limitations).
+
+## 11. Compression marker & no-gain verdict (v3.9.0)
+- A **red dot at the front** of a leaf row marks compression as **undecided** (not applied, not
+  marked „no compression", no persisted no-gain verdict). Folder rows show it if any descendant
+  leaf is undecided.
+- When evaluation finds nothing smaller, the verdict is **persisted** in the document
+  (`compression_no_gain`, silent, no undo) and survives save/reopen and moves; it is cleared on rotate.
+- Acceptance: a no-gain node shows no red dot after reopen; a cancelled evaluation is not flagged;
+  the cheap (≤5-page) undecided leaves resolve in the background after a load.
+
+## 12. File lock — single writer (v3.9.0, off by default)
+- Enabled only with the environment variable `BELEG_FILE_LOCK=1`. Opening a `.belegtool` takes an
+  exclusive lock for the window's lifetime; a second user gets an „in use" message instead.
+- Locked saves go through the lock handle with a `.bak` and a `.wip` marker; an interrupted save is
+  restored from `.bak` on the next open.
+- Acceptance: a second open of the same file reports „in use"; save-as re-locks the new file; closing
+  the window releases the lock. Not yet: a graphical toggle, autosave/recover, read-only fallback.

@@ -824,3 +824,23 @@ def test_close_session_prunes_persisted_variants_of_gone_documents():
     api.close_session(session)
     assert api._engine.variants_for(src) == {}, "Varianten der geschlossenen Mappe nicht geräumt"
     assert api._engine.variants_for(other), "Varianten einer NOCH OFFENEN Mappe wurden geräumt"
+
+
+def test_get_state_matches_dispatch_response_and_is_read_only():
+    api = CoreApi()
+    opened = api.open()
+    sid, root_id = opened["session"], opened["tree"]["id"]
+    after = api.dispatch(sid, {"type": "AddFolder", "parent_id": root_id,
+                               "name": "Neu", "index": None, "new_id": "f1"})
+    state = api.get_state(sid)
+    assert state == after
+    assert {"ok", "session", "tree", "can_undo", "can_redo", "dirty"} <= set(state)
+    assert api.get_state(sid) == state  # read-only: no undo step, no change
+
+
+def test_get_state_unknown_session():
+    assert api_unknown()["ok"] is False
+
+
+def api_unknown():
+    return CoreApi().get_state("nope")

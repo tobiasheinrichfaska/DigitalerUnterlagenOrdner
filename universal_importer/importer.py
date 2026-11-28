@@ -74,7 +74,13 @@ class UniversalImporter:
         are left to their converters, which fail gracefully.
         """
         head = data[:16] if data else b""
+        # F-4: plain-text types may legitimately start with "MZ-…" / "#!"; only
+        # the unambiguous binary signatures apply there.
+        is_text = ext in cls.TEXT_EXTENSIONS or ext in cls.HTML_EXTENSIONS
         for sig, label in cls._DANGEROUS_SIGNATURES:
+            # R-12: only when the content really is text (no NUL in the first 4 KB).
+            if is_text and sig in (b"MZ", b"#!") and b"\x00" not in data[:4096]:
+                continue
             if head.startswith(sig):
                 raise ValueError(f"'{name}' sieht aus wie {label}, nicht wie {ext} – abgelehnt.")
 
@@ -118,7 +124,7 @@ class UniversalImporter:
             # degrading to an opaque "%PDF"-check failure later.
             try:
                 with open(path, "rb") as f:
-                    head = f.read(16)
+                    head = f.read(4096)  # Q-1: the R-12 NUL gate inspects up to 4 KB
             except OSError:
                 head = b""
             cls.verify_content_matches_extension(head, ext, os.path.basename(path))

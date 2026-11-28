@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { findNode } from './lib/tree'
+import { displayName } from './lib/displayName'
 import { aggregateStatus, DOT_LABEL } from './lib/status'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
@@ -22,7 +23,7 @@ const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files'
 // import; stopPropagation keeps the parent list from accepting it instead.
 function PendingRow({ name, depth }) {
   return (
-    <li>
+    <li role="none">
       <div className="row pending" style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         onDragOver={(e) => e.stopPropagation()}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation() }}>
@@ -44,7 +45,7 @@ function dropZone(e, isFolder) {
   return y < r.height / 2 ? 'before' : 'after'
 }
 
-function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending, statusMap }) {
+function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId, primaryIdRef, grabbedId, forceExpand, reorderDisabled, editing, setEditing, onRename, renameTimerRef, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, drag, setDrag, dragLabel, dragIcon, onDropFiles, pending, statusMap, tabStopId }) {
   const [over, setOver] = useState(null) // { zone, target, depth, ghost } | null
   const rowRef = useRef(null)
   const { t } = useT()
@@ -94,9 +95,16 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   }
 
   const handleDrop = (e) => {
-    if (!over) { setOver(null); return }
+    if (!over) {
+      if (drag === node.id) { e.preventDefault(); e.stopPropagation() } // self-drop (see below)
+      setOver(null); return
+    }
     const isFile = over.files
-    if (!isFile && (!drag || drag === node.id)) { setOver(null); return }
+    if (!isFile && (!drag || drag === node.id)) {
+      // self-drop: swallow it, or it bubbles to the root drop and moves the row to the end of the root
+      if (drag) { e.preventDefault(); e.stopPropagation() }
+      setOver(null); return
+    }
     e.preventDefault()
     e.stopPropagation()
     const files = isFile ? Array.from(e.dataTransfer.files) : null
@@ -125,14 +133,15 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   const { dots, undecided } = statusMap.get(node.id) || { dots: [], undecided: false }
 
   return (
-    <li>
+    <li role="none">
       <div
         ref={rowRef}
         className={cls.join(' ')}
         role="treeitem"
         aria-selected={selectedIds.includes(node.id)}
         aria-expanded={node.is_folder ? (forceExpand || !node.collapsed) : undefined}
-        tabIndex={-1}
+        aria-level={depth + 1}
+        tabIndex={node.id === tabStopId ? 0 : -1}
         style={{ paddingLeft: `${depth * INDENT + 6}px` }}
         draggable={editing !== node.id && !reorderDisabled}
         onDragStart={(e) => { e.stopPropagation(); setDrag(node.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -180,12 +189,13 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         </span>
         {node.is_folder ? (
           <button className="tw-chevron" title={node.collapsed ? t('Aufklappen') : t('Zuklappen')}
+            aria-label={node.collapsed ? t('Aufklappen') : t('Zuklappen')}
             onClick={(e) => { e.stopPropagation(); onToggleCollapse(node.id) }}>
             {node.collapsed ? '▸' : '▾'}
           </button>
         ) : <span className="tw-chevron" />}
         {editing === node.id ? (
-          <input className="rename-input" defaultValue={node.name} autoFocus
+          <input className="rename-input" aria-label={t('Umbenennen')} defaultValue={node.name} autoFocus
             onFocus={(e) => e.target.select()}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -198,7 +208,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
           />
         ) : (
           <span className={node.is_folder ? 'name folder' : 'name leaf'}>
-            {node.is_folder ? '📁' : '📄'} {node.name}
+            {node.is_folder ? '📁' : '📄'} {displayName(t, node.name)}
           </span>
         )}
         {node.tags?.length > 0 && (
@@ -229,14 +239,14 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
         )}
       </div>
       {(forceExpand || !node.collapsed) && (node.children?.length > 0 || pending.some((p) => p.parentId === node.id)) && (
-        <ul>
+        <ul role="group">
           {node.children?.map((c, i, arr) => (
             <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={depth + 1} isLast={i === arr.length - 1}
               selectedIds={selectedIds} primaryId={primaryId} primaryIdRef={primaryIdRef} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
               editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
               onSelect={onSelect} onContext={onContext}
               onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} />
+              dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} tabStopId={tabStopId} />
           ))}
           {pending.filter((p) => p.parentId === node.id).map((p) => (
             <PendingRow key={p.key} name={p.name} depth={depth + 1} />
@@ -245,6 +255,23 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
       )}
     </li>
   )
+}
+
+// Deepest ROW on the path to `id` that is actually rendered (a collapsed folder hides its
+// subtree), else the first row — so the tree always has exactly one Tab stop.
+function visibleTabStop(root, id, forceExpand) {
+  const first = root.children?.[0]?.id
+  if (!id) return first
+  const path = (n) => { // ancestors-first list of nodes from n down to id, or null
+    if (n.id === id) return [n]
+    for (const c of n.children || []) { const r = path(c); if (r) return [n, ...r] }
+    return null
+  }
+  const p = path(root)
+  if (!p) return first
+  // outermost collapsed folder above the target hides it; that row is the visible stop
+  const hider = !forceExpand && p.slice(1, -1).find((n) => n.collapsed)
+  return hider ? hider.id : id
 }
 
 export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled = false, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
@@ -263,7 +290,9 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   // I-5: status dots for ALL rows in one bottom-up pass, recomputed only when the
   // (immutable) tree object changes — not per row, not per unrelated re-render.
   const statusMap = useMemo(() => aggregateStatus(node), [node])
-  const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
+  // AX-12: roving tabindex — the primary row (else the first row) is the tree's single Tab stop.
+  const tabStopId = visibleTabStop(node, primaryId, forceExpand)
+  const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : displayName(t, dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
   // F2 renames the primary-selected node inline (a content edit — allowed in views too).
@@ -289,14 +318,14 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
     setDrag(null)
   }
   return (
-    <ul className="tree" role="tree" onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
+    <ul className="tree" role="tree" aria-multiselectable="true" aria-label={t('Dokumentstruktur')} onDragOver={(e) => { if (drag || hasFiles(e)) e.preventDefault() }} onDrop={dropOnRoot}>
       {(node.children ?? []).map((c, i, arr) => (
         <TreeNode key={c.id} node={c} parentId={node.id} index={i} depth={0} isLast={i === arr.length - 1}
           selectedIds={selectedIds} primaryId={primaryId} primaryIdRef={primaryIdRef} grabbedId={grabbedId} forceExpand={forceExpand} reorderDisabled={reorderDisabled}
           editing={editing} setEditing={setEditing} onRename={onRename} renameTimerRef={renameTimerRef} onToggleCollapse={onToggleCollapse}
           onSelect={onSelect} onContext={onContext}
           onMove={onMove} onMoveMany={onMoveMany} levelsFor={levelsFor} drag={drag} setDrag={setDrag}
-          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} />
+          dragLabel={dragLabel} dragIcon={dragIcon} onDropFiles={onDropFiles} pending={pending} statusMap={statusMap} tabStopId={tabStopId} />
       ))}
       {pending.filter((p) => p.parentId === node.id).map((p) => (
         <PendingRow key={p.key} name={p.name} depth={0} />

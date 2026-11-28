@@ -44,8 +44,8 @@ export function StatusBar({ docPages = 0 }) {
             used: mb(stats.cache_used), total: mb(stats.cache_budget),
             pages: stats.cache_pages, doc: docPages,
           })}
-          <button className="sb-plus" title={t('Cache verkleinern (−50 MB)')} onClick={shrink}>−</button>
-          <button className="sb-plus" title={t('Cache vergrößern (+50 MB)')} onClick={enlarge}>＋</button>
+          <button className="sb-plus" title={t('Cache verkleinern (−50 MB)')} aria-label={t('Cache verkleinern (−50 MB)')} onClick={shrink}>−</button>
+          <button className="sb-plus" title={t('Cache vergrößern (+50 MB)')} aria-label={t('Cache vergrößern (+50 MB)')} onClick={enlarge}>＋</button>
         </span>
       )}
     </footer>

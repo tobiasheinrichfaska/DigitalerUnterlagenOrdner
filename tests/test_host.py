@@ -265,6 +265,8 @@ def test_hostapi_delegates_core_ops():
                                          "name": "X", "index": None, "new_id": "x"})
     assert [c["name"] for c in r["tree"]["children"]] == ["X"]
     assert api.undo(opened["session"])["tree"]["children"] == []
+    st = api.get_state(opened["session"])
+    assert st["ok"] and st["tree"]["children"] == [] and st["can_redo"] is True
 
 
 class _Hook:
@@ -276,6 +278,10 @@ class _Win:
     def __init__(self, uid):
         self.uid = uid
         self.events = type("E", (), {"closing": _Hook()})()
+        self.exposed = []
+
+    def expose(self, *fns):
+        self.exposed.extend(fns)
 
 
 def test_close_guard_frees_the_windows_session():
@@ -349,6 +355,8 @@ def test_main_logs_and_explains_clr_load_failure(monkeypatch):
     # A pythonnet load failure must be LOGGED (not only shown in the dialog) and
     # routed to the MotW explanation instead of a raw traceback.
     calls = {"warned": None, "logged": False}
+    # host.main only explains a CLR failure on Windows (the guard under test is platform-gated)
+    monkeypatch.setattr(host.sys, "platform", "win32")
 
     class _Log:
         def exception(self, *a, **k):

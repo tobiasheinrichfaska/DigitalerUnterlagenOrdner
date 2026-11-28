@@ -11,8 +11,9 @@ thing as a single bookmarked PDF with a table of contents.
 > Hrvatski, 한국어, Latina, the dialects **Boarisch, Plattdüütsch, Weanerisch**, and the
 > best-effort **ייִדיש (Yiddish), Gàidhlig (Scottish Gaelic), Gaeilge (Irish),
 > Cymraeg (Welsh)** — these last four are complete but **would genuinely benefit from
-> a native eye**. A few are partial just for fun (**Quenya** & **Sindarin** Elvish and
-> **tlhIngan Hol** / Klingon — these fall back to German — plus **Minionese** 🍌). If
+> a native eye**; the joke language **Minionese** 🍌 is complete too. A few are partial
+> just for fun (**Quenya** & **Sindarin** Elvish and
+> **tlhIngan Hol** / Klingon — these fall back to German). If
 > you speak one of the best-effort ones, please send corrections (see *Translations*
 > below). Feedback in German is always welcome. 🇩🇪
 
@@ -67,7 +68,7 @@ file these as bugs** — they're known limitations of the unsigned zip.
 
 ### Path B — From source
 1. Install **Python 3.12 or newer** (on PATH) and **Node.js**. *(3.13 and 3.14 work for
-   running from source; the official prebuilt `.exe` is currently built with 3.12.)*
+   running from source; the official prebuilt `.exe` is currently built with 3.13.)*
 2. In the project folder:
    ```powershell
    pip install -r requirements.txt
@@ -119,7 +120,7 @@ contents and bookmarks), and **save & reload** a `.belegtool` file.
    the option shows *"bereits komprimiert (keine Quelle)"*. This is by design.
 
 > Large exports now offer a split: the export dialog lets you split into multiple
-> PDFs by page count and break level (top node / any folder / mid-document), so a
+> PDFs by page count and break level (top-level folders / any folder boundary / mid-document), so a
 > big tree no longer has to be one giant file.
 
 ---

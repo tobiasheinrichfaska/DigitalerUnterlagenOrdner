@@ -104,3 +104,47 @@ def test_export_bookmarks_toggle(tmp_path):
         assert len(list(p.open_outline().root)) > 0
     with pikepdf.open(nobm) as p:
         assert len(list(p.open_outline().root)) == 0
+
+
+# --- audit regressions (EX-1, EX-3) -------------------------------------------
+
+def test_export_only_empty_folder_no_toc_with_bookmarks_does_not_crash(tmp_path):
+    """EX-1: zero content pages + toc off + bookmarks on used to raise
+    'Accessing nonexistent PDF page number' (dest clamped to -1)."""
+    out = tmp_path / "e.pdf"
+    export_pdf([_folder("F001", [])], str(out), {"toc": False})
+    with pikepdf.open(str(out)) as pdf:
+        assert len(pdf.pages) == 0
+
+
+def test_export_folder_with_only_zero_page_leaf_no_toc(tmp_path):
+    out = tmp_path / "e.pdf"
+    empty = PDFNode(name="L", pdf_data=b"")
+    empty.pdf_length = 0
+    export_pdf([_folder("F", [empty])], str(out),
+               {"toc": False, "bookmarks": True})
+    with pikepdf.open(str(out)) as pdf:
+        assert len(pdf.pages) == 0
+
+
+def test_index_tag_order_is_deterministic_for_case_variants():
+    """EX-3: tags differing only by case must sort by (casefold, original)."""
+    a = _build_index_items([_leaf("D", tags=["alpha", "Alpha", "ALPHA"])])
+    b = _build_index_items([_leaf("D", tags=["ALPHA", "Alpha", "alpha"])])
+    heads = lambda items: [i.text for i in items if i.is_header]
+    assert heads(a) == heads(b) == ["ALPHA", "Alpha", "alpha"]
+
+
+def test_index_tag_order_independent_of_hash_seed():
+    import os, subprocess, sys
+    code = ("from tests.test_export_index import _leaf\n"
+            "from formats.toc_export import _build_index_items\n"
+            "print([i.text for i in _build_index_items([_leaf('D', tags=['alpha','Alpha','ALPHA','Beta'])]) if i.is_header])")
+    outs = set()
+    for seed in ("0", "1", "2", "3", "4", "5"):
+        env = dict(os.environ, PYTHONHASHSEED=seed)
+        r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                           cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        assert r.returncode == 0, r.stderr
+        outs.add(r.stdout.strip())
+    assert len(outs) == 1

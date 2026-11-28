@@ -23,10 +23,10 @@ export function PreviewPane({
             if (!total) return null
             return <span className="page-info">{pageInfo ? t('Seite {page} / {total}', { page: pageInfo.page, total }) : t('{total} Seiten', { total })}</span>
           })()}
-          <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title={t('kleiner')}>−</button>
+          <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title={t('kleiner')} aria-label={t('kleiner')}>−</button>
           <span>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title={t('größer')}>＋</button>
-          <button onClick={() => setZoom(1)} title={t('zurücksetzen')}>100%</button>
+          <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title={t('größer')} aria-label={t('größer')}>＋</button>
+          <button onClick={() => setZoom(1)} title={t('zurücksetzen')} aria-label={`100% — ${t('zurücksetzen')}`}>100%</button>
         </div>
       )}
       {!selected && <p className="status">{t('Knoten auswählen für die Vorschau')}</p>}

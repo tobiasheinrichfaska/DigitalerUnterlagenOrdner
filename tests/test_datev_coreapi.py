@@ -4,6 +4,7 @@
 dispatch) — exercised with a FAKE DatevService injected into CoreApi (no live DATEV,
 no curl). The service's own logic is covered in test_datev_inapp.py."""
 
+import os
 import fitz
 import pytest
 
@@ -430,6 +431,7 @@ def test_save_back_checked_out_self_saves_local_working_copy(tmp_path, monkeypat
     assert working.read_bytes().startswith(b"%PDF")   # working copy overwritten with the edit
 
 
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores read-only chmod, so the file cannot be locked")
 def test_save_back_checked_out_self_locked_working_copy_reports_error(tmp_path, monkeypatch):
     # If the local working copy can't be written (locked), the checked-out save has nowhere to go →
     # ok False, verdict CHECKED_OUT_SELF, error set (no silent loss).
@@ -464,6 +466,7 @@ def test_save_back_checkout_pdf_local_write_failure_reports_error(tmp_path, monk
     assert res["local_kind"] == "pdf" and res["local_saved"] is None and res["local_error"]
 
 
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores read-only chmod, so the file cannot be locked")
 def test_save_back_checkout_pdf_locked_local_file_is_nonfatal(tmp_path, monkeypatch):
     # REGRESSION (2026-06-29): a DokOrg-Pro checkout .pdf is held LOCKED by DATEV, so after a
     # SUCCESSFUL write-back the in-sync local overwrite fails with PermissionError ([Errno 13]).
@@ -1136,3 +1139,53 @@ def test_datev_export_partial_failure_reports_how_many_landed(tmp_path):
     assert res["filed_ok"] == res["parts"] - 1                 # all but one landed
     assert "von" in res["error"]                               # "Nur X von Y …"
     assert any(f["ok"] for f in res["filed"]) and any(not f["ok"] for f in res["filed"])
+
+
+# --- DV-1: Save As breaks the DATEV link; in-place Save keeps it -------------
+_PROV = {"doc_guid": GUID, "file_id": 1, "structure_item_id": 2,
+         "correspondence_partner_guid": "client-x"}
+
+
+def test_save_as_clears_datev_provenance_and_baseline(tmp_path):
+    from core.bridge import load_belegtool
+    svc = FakeService(prov=_PROV)
+    core = _core_with_service(svc)
+    orig = _belegtool(tmp_path, "orig")
+    sid = core.open(path=orig)["session"]
+    assert core._datev_provenance(sid) is not None and sid in core._datev_baseline
+    copy = str(tmp_path / "copy.belegtool")
+    assert core.save(sid, copy)["ok"]
+    assert core._datev_provenance(sid) is None
+    assert sid not in core._datev_baseline
+    assert load_belegtool(copy).root.datev is None          # the copy carries no link
+    assert core.datev_save_back(sid).get("ok") is not True   # no write-back to the original doc
+
+
+def test_in_place_save_keeps_datev_provenance(tmp_path):
+    from core.bridge import load_belegtool
+    svc = FakeService(prov=_PROV)
+    core = _core_with_service(svc)
+    orig = _belegtool(tmp_path, "orig")
+    sid = core.open(path=orig)["session"]
+    assert core.save(sid, orig)["ok"]
+    assert core._datev_provenance(sid) is not None
+    assert sid in core._datev_baseline
+    assert load_belegtool(orig).root.datev is not None
+
+
+# --- DV-2: an export warning (incomplete pages) must stop the DATEV filing ---
+def test_datev_export_refuses_to_file_when_export_warns(tmp_path, monkeypatch):
+    svc = FakeService(prov=_PROV)
+    core = _core_with_service(svc)
+    sid = core.open(path=_belegtool(tmp_path))["session"]
+
+    def fake_export(session, path, node_ids=None, options=None):
+        with open(path, "wb") as f:
+            f.write(_pdf(1))
+        return {"ok": True, "path": path, "paths": [path],
+                "warning": "bad: Seiten fehlen im Export"}
+    monkeypatch.setattr(core, "export", fake_export)
+    res = core.datev_export(sid)
+    assert res["ok"] is False
+    assert "Seiten fehlen" in res["error"]
+    assert svc.filed == []

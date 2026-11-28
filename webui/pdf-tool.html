@@ -20,8 +20,9 @@
       #pdftoolbar button:disabled { opacity: 0.5; cursor: default; }
       #pdftoolbar button.on { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
       /* the two text spans absorb overflow (ellipsis) so the buttons keep their shape */
-      #datev-link { color: #047857; font-weight: 600; white-space: nowrap;
-        flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      #datev-link { color: #047857; font-weight: 600; line-height: 1.2;
+        flex: 0 1 auto; min-width: 0; overflow: hidden; display: -webkit-box;
+        -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
       #pdf-status { margin-left: auto; color: #4b5563; white-space: nowrap;
         flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       /* PDF.js PDFViewer requires an absolutely-positioned, scrollable container. */

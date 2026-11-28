@@ -19,7 +19,7 @@ def valid_geometry(g) -> bool:
         w, h = int(g["width"]), int(g["height"])
         int(g["x"])
         int(g["y"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return False
     return _MIN_W <= w <= _MAX_W and _MIN_H <= h <= _MAX_H
 

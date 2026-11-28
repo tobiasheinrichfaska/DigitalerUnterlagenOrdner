@@ -137,7 +137,7 @@ def test_applied_compression_offers_no_alternatives(tmp_path):
     api.import_paths(sid, [str(pdf_path)])
     leaf = next(n for n in api._sessions[sid].document.root.iter()
                 if not n.is_folder and n.original_data)
-    variant_pdf = _make_pdf(1)  # a real PDF so the applied bytes can be saved as a page
+    variant_pdf = _make_pdf(2)  # a real PDF (same page count as the source, SV-4) so the applied bytes can be saved as a page
     api._engine.seed_variants(leaf.original_data, {150: {"jpg": variant_pdf}})
 
     # uncommitted node with a computed alternative → the dialog IS offered

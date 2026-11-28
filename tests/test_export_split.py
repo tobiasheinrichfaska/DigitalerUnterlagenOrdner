@@ -237,3 +237,32 @@ def test_split_toc_leading_cross_refs_have_a_header(tmp_path):
     assert txt3.find("In anderen Dateien:") != -1
     assert txt3.find("In anderen Dateien:") < txt3.find("→ ")
     assert "In dieser Datei:" in txt3
+
+
+# ---------------------------------------------- audit v3 F-6 / F-7
+from formats.toc_export import _plan_groups, plan_split_paths  # noqa: E402
+
+
+def _flat_names(forest):
+    out = []
+    for n in forest:
+        out.append(n.name) if not n.is_folder else out.append((n.name, _flat_names(n.children)))
+    return out
+
+
+def test_f6_same_named_folders_stay_separate_and_ordered():
+    root = _folder("R", [_folder("Sonstiges", [_leaf("A")]), _folder("Bank", [_leaf("B")]),
+                         _folder("Sonstiges", [_leaf("C")])])
+    (part,) = _plan_groups([root], 100, 'folder')
+    assert _flat_names(part) == [("R", [("Sonstiges", ["A"]), ("Bank", ["B"]), ("Sonstiges", ["C"])])]
+
+
+def test_f7_planning_does_not_reparent_source_leaves():
+    leaf = _leaf("L")
+    folder = _folder("F", [leaf])
+    _plan_groups([folder], 100, 'folder')
+    assert leaf.parent is folder
+    # plan then export with ancestor + descendant both selected -> leaf exported once
+    plan_split_paths([folder, leaf], "x.pdf", 100, 'folder')
+    from formats.pdf_storage import PDFStorage
+    assert PDFStorage.filter_keep_ancestors([folder, leaf]) == [folder]

@@ -3,14 +3,16 @@
 // the bridge calls (datev_clients/datev_placements/datev_file) live in the caller — so it
 // renders deterministically in tests. No client data ⇒ filing is disabled (the user's rule:
 // without a connection / client list there is no safe DATEV target).
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
+import { localizeMessage } from './lib/messages'
 import { filterClients, registersFor, MONTHS, yearChoices, validateFiling, buildFileOpts, soleClientGuid } from './lib/datevFiling'
 
 export function DatevFileDialog({ clients, placements = [], loading, error, currentYear,
                                   defaultName = '', onSubmit, onCancel }) {
   const { t } = useT()
+  const titleId = useId()
   const dialogRef = useModal({ onClose: onCancel })
   const [query, setQuery] = useState('')
   const [clientGuid, setClientGuid] = useState('')
@@ -37,12 +39,12 @@ export function DatevFileDialog({ clients, placements = [], loading, error, curr
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div ref={dialogRef} className="modal datev-file-dialog" role="dialog" aria-modal="true"
+      <div ref={dialogRef} className="modal datev-file-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}>
-        <h2>{t('Nach DATEV ablegen')}</h2>
+        <h2 id={titleId}>{t('Nach DATEV ablegen')}</h2>
 
         {loading && <p className="status">{t('Mandanten werden geladen…')}</p>}
-        {error && <p className="error" role="alert">{t('Mandantenliste nicht verfügbar')}: {error}</p>}
+        {error && <p className="error" role="alert">{t('Mandantenliste nicht verfügbar')}: {localizeMessage(t, error)}</p>}
         {noClients && <p className="error" role="alert">{t('Keine Mandanten gefunden — DATEV-Ablage nicht möglich.')}</p>}
 
         {!loading && !error && !noClients && (
@@ -54,7 +56,7 @@ export function DatevFileDialog({ clients, placements = [], loading, error, curr
               <select className="datev-client-list" size={6} value={effectiveClientGuid}
                 onChange={(e) => setClientGuid(e.target.value)} aria-label={t('Mandant')}>
                 {filtered.map((c) => (
-                  <option key={c.guid} value={c.guid}>
+                  <option key={c.guid} value={c.guid} title={`${c.number ? `${c.number} — ` : ''}${c.name}`}>
                     {c.number ? `${c.number} — ` : ''}{c.name}
                   </option>
                 ))}

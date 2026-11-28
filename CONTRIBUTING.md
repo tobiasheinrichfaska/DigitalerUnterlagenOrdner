@@ -32,7 +32,7 @@ its own issue form (**New issue** → pick a template):
 BelegTool is **Windows 10/11 only** (it uses Edge WebView2 and, for Office import,
 MS Office via COM).
 
-**Prerequisites:** Python **3.12** on PATH, **Node.js**, and — for Word/Excel/
+**Prerequisites:** Python **3.12 or newer** on PATH (the build uses 3.13), **Node.js**, and — for Word/Excel/
 PowerPoint import — **Microsoft Office installed locally**.
 
 ```powershell
@@ -46,7 +46,7 @@ python host.py             # launch the app
 python host.py file.belegtool   # ...opening a file
 ```
 
-Dev mode (live React reload + the 🧪 Testmodus button):
+Dev mode (live React reload):
 `cd webui ; npm run dev` then `set BELEG_DEV=1 ; python host.py`.
 
 Build the prebuilt exe: `powershell -ExecutionPolicy Bypass -File build.ps1`
@@ -57,8 +57,10 @@ Build the prebuilt exe: `powershell -ExecutionPolicy Bypass -File build.ps1`
 ## Tests & fixtures
 
 ```powershell
-pytest               # Python logic/core tests
-cd webui ; npm test  # React/Vitest tests
+pytest                    # Python logic/core tests
+cd webui ; npm run lint   # eslint
+cd webui ; npm run test:all  # Vitest + Playwright e2e + CSP (first run: npx playwright install chromium)
+cd webui ; npm run build  # vite build must succeed
 ```
 
 PDF test fixtures live in **`tests/data/input/`** (e.g. `sample.pdf`,
@@ -66,7 +68,7 @@ PDF test fixtures live in **`tests/data/input/`** (e.g. `sample.pdf`,
 Regenerate them with `python tests/make_fixtures.py`.
 
 **Manual tests** (human tester, no coding): see
-[`manual_tests/`](manual_tests/README.md). All files **`01`–`08` describe the current
+[`manual_tests/`](manual_tests/README.md). All files **`00`–`10`** (German, 85 test cases) **describe the current
 React/pywebview UI** (toolbar + right-click menu; no menu bar).
 
 ---

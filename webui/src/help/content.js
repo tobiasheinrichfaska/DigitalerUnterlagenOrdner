@@ -15,12 +15,14 @@ const de = [
   ] },
   { t: 'Öffnen & Speichern', items: [
     '📂 Öffnen lädt eine .belegtool-Datei. Per Kommandozeile / Doppelklick geöffnete Dateien werden direkt geöffnet.',
-    '💾 Speichern sichert in dieselbe Datei zurück; 💾… speichert unter neuem Namen.',
+    '💾 Speichern sichert in dieselbe Datei zurück; der Pfeil ▾ daneben öffnet „Speichern unter…“ (neuer Name).',
     'Gibt es berechnete Komprimierungs-Alternativen, fragt das Speichern, ob sie in die Datei eingebettet werden (größer, sofort beim Öffnen da) oder nicht (kleiner).',
+    'DATEV-Modus (Schalter „DATEV“ oben): Dokumente aus der DATEV-Ablage zurückschreiben bzw. neu ablegen; ein ausgechecktes Dokument wird nur lokal gespeichert und in DATEV eingecheckt.',
   ] },
   { t: 'Importieren', items: [
     '📥 Importieren oder Dateien per Drag-and-drop in den Baum ziehen.',
-    'Unterstützt: PDF, Bilder (JPG/PNG/WEBP/HEIC), Office (Word/Excel/PowerPoint – benötigt installiertes Office), E-Mail (EML/MSG), Archive (ZIP/TAR).',
+    'Unterstützt: PDF, Bilder (JPG/PNG/BMP/TIFF/WEBP/HEIC – jedes Bild wird eine A4-Seite, verlustfrei bzw. mit den Original-JPEG-Daten; bei TIFF nur die erste Seite), Text/HTML (TXT/RTF/MD/HTML), Office (Word/Excel/PowerPoint inkl. ODT/ODS/ODP – benötigt installiertes Office), E-Mail (EML/MSG), Archive (ZIP/TAR/TGZ).',
+    'Unlesbare PDFs (0 Seiten), als Programm getarnte Dateien und zu große Dateien werden mit Begründung abgelehnt; die übrigen Dateien einer Auswahl werden trotzdem importiert.',
   ] },
   { t: 'Baum & Drag-and-drop', items: [
     'Klick wählt einen Knoten; Strg-Klick wählt mehrere, Umschalt-Klick einen Bereich.',
@@ -32,6 +34,7 @@ const de = [
     'Einfg „greift" den Knoten; mit Pfeilen optisch verschieben, Einfg lässt fallen (ein Schritt), Esc bricht ab.',
     'F2 benennt den gewählten Knoten um.',
     'Strg+S speichern, Strg+O öffnen, Strg+E exportieren, Strg+N neues Fenster, Strg+Z/Y rückgängig/wiederholen, Entf löschen.',
+    'Rückgängig/Wiederholen ist gesperrt, solange ein Knoten im PDF-Tool geöffnet ist (Rechtsklick → Im PDF-Tool öffnen) – erst das PDF-Tool schließen.',
   ] },
   { t: 'Status-Punkte', items: [
     'Neue Knoten haben keinen Status (kein Punkt). Rechtsklick → Status setzt: Gelb = Zu erfassen, Grün = Erfasst, Rot = Vorjahr, oder Kein Status.',
@@ -47,9 +50,11 @@ const de = [
   { t: 'Tags', items: [
     '🏷️ schaltet Tags ein. Knoten lassen sich frei beschriften.',
     'Damit nach Tags filtern oder gruppieren; eine Tag-Ansicht lässt sich in einem neuen Fenster als eigenes Dokument öffnen.',
+    'Solange eine Tag-Suche oder Gruppierung aktiv ist, sind Struktur-Änderungen (verschieben, importieren, löschen, gruppieren, zusammenführen, splitten) gesperrt.',
   ] },
   { t: 'Exportieren', items: [
-    '⬇ Export PDF erzeugt ein PDF mit Inhaltsverzeichnis, klickbaren Links und Lesezeichen; bei einer Auswahl nur diese.',
+    '⬇ Export PDF fragt zuerst die Optionen: Inhaltsverzeichnis (mit Links), Stichwortverzeichnis nach Tags, PDF-Lesezeichen und optional „In mehrere Dateien aufteilen“ (max. Seiten, Trennen bei: oberste Ordner / jeder Ordnergrenze / mitten im Dokument). Bei einer Auswahl wird nur diese exportiert, sonst das ganze Dokument.',
+    'Beim Aufteilen erhält jede Datei ein eigenes Inhaltsverzeichnis; Stichwortverzeichnis und Lesezeichen gelten nur für den Export in eine Datei.',
   ] },
   { t: 'Lizenz & Quelltext', items: [
     'BelegTool ist freie Software unter der AGPL-3.0-or-later. Quelltext: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
@@ -65,12 +70,14 @@ const en = [
   ] },
   { t: 'Open & Save', items: [
     '📂 Open loads a .belegtool file. Files opened via the command line / double-click open directly.',
-    '💾 Save writes back to the same file; 💾… saves under a new name.',
+    '💾 Save writes back to the same file; the ▾ arrow next to it opens "Save as…" (new name).',
     'If computed compression alternatives exist, saving asks whether to embed them in the file (larger, instantly available on reopen) or not (smaller).',
+    'DATEV mode (header toggle "DATEV"): write documents back to the DATEV filing or file them anew; a checked-out document is only saved locally and checked in via DATEV.',
   ] },
   { t: 'Import', items: [
     '📥 Import, or drag and drop files onto the tree.',
-    'Supported: PDF, images (JPG/PNG/WEBP/HEIC), Office (Word/Excel/PowerPoint – needs Office installed), e-mail (EML/MSG), archives (ZIP/TAR).',
+    'Supported: PDF, images (JPG/PNG/BMP/TIFF/WEBP/HEIC – each image becomes one A4 page, lossless / original JPEG data; TIFF: first page only), text/HTML (TXT/RTF/MD/HTML), Office (Word/Excel/PowerPoint incl. ODT/ODS/ODP – needs Office installed), e-mail (EML/MSG), archives (ZIP/TAR/TGZ).',
+    'Unreadable PDFs (0 pages), disguised executables and oversized files are refused with a reason; the other files of a selection are still imported.',
   ] },
   { t: 'Tree & drag-and-drop', items: [
     'Click selects a node; Ctrl-click selects several, Shift-click a range.',
@@ -82,6 +89,7 @@ const en = [
     'Insert "grabs" the node; move it optically with the arrows, Insert drops it (one step), Esc cancels.',
     'F2 renames the selected node.',
     'Ctrl+S save, Ctrl+O open, Ctrl+E export, Ctrl+N new window, Ctrl+Z/Y undo/redo, Del delete.',
+    'Undo/redo is blocked while a node is open in the PDF tool (right-click → Open in PDF tool) – close the PDF tool first.',
   ] },
   { t: 'Status dots', items: [
     'New nodes have no status (no dot). Right-click → Status sets: yellow = To record, green = Recorded, red = Prior year, or No status.',
@@ -90,20 +98,22 @@ const en = [
   ] },
   { t: 'Compression', items: [
     'A red dot at the front means: no compression decision has been made for this node yet.',
-    'In the preview, pick a method and apply "Lesbarkeit geprüft" (readability checked) – the red dot disappears.',
+    'In the preview, pick a method and apply “Readability checked” – the red dot disappears.',
     'If nothing smaller is found, that counts as decided (no red dot) and is not recomputed.',
     'Note: after saving a compressed node the original is gone – compression is final.',
   ] },
   { t: 'Tags', items: [
-    '🏷️ turns tags on. Nodes can be freely labelled.',
+    '🏷️ turns tags on. Nodes can be freely labeled.',
     'Filter or group by tag; a tag view can be opened in a new window as its own document.',
+    'While a tag search or group view is active, structure edits (move, import, delete, group, merge, split) are disabled.',
   ] },
   { t: 'Export', items: [
-    '⬇ Export PDF produces a PDF with a table of contents, clickable links and bookmarks; with a selection, only those.',
+    '⬇ Export PDF first asks for options: table of contents (with links), tag index, PDF bookmarks and optionally "Split into several files" (max. pages, break at: top folders / every folder boundary / mid-document). With a selection only that is exported, otherwise the whole document.',
+    'When splitting, each file gets its own table of contents; the tag index and bookmarks apply to single-file export only.',
   ] },
-  { t: 'Licence & source code', items: [
+  { t: 'License & source code', items: [
     'BelegTool is free software under the AGPL-3.0-or-later. Source code: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
-    'The licences of the bundled third-party components are listed in THIRD_PARTY_NOTICES.md and the licenses/ folder next to the program.',
+    'The licenses of the bundled third-party components are listed in THIRD_PARTY_NOTICES.md and the licenses/ folder next to the program.',
     'This project is not affiliated with DATEV eG; DATEV is a registered trademark of DATEV eG.',
   ] },
 ]

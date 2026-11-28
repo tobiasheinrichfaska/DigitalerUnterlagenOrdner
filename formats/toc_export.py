@@ -9,6 +9,7 @@ PDF-Export mit gedrucktem Inhaltsverzeichnis und optionaler Aufteilung.
 """
 import io
 import os
+import shutil
 from infra.log_config import logger
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
@@ -21,6 +22,28 @@ from reportlab.lib.units import cm
 
 from formats.pdf_node import PDFNode
 from formats.pdf_storage import PDFStorage
+
+def _pdf_safe(text: str) -> str:
+    """Y-4: the base-14 fonts only cover cp1252; anything else (and tabs/newlines)
+    rendered as black boxes. Expand tabs, fold accents where possible, else '?'."""
+    import unicodedata
+    out = []
+    for ch in str(text).replace("\t", "    ").replace("\r", " ").replace("\n", " "):
+        try:
+            ch.encode("cp1252")
+            out.append(ch)
+            continue
+        except UnicodeEncodeError:
+            pass
+        base = "".join(c for c in unicodedata.normalize("NFKD", ch)
+                       if not unicodedata.combining(c))
+        try:
+            base.encode("cp1252")
+            out.append(base or "?")
+        except UnicodeEncodeError:
+            out.append("?")
+    return "".join(out)
+
 
 # Seitenabmessungen A4 in Punkten
 _A4_W, _A4_H = A4
@@ -162,12 +185,12 @@ def _render_toc_pdf(items: List[_TocItem],
 
     # ── Titel ────────────────────────────────────────────────────────────────
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(_ML, y, title)
+    c.drawString(_ML, y, _pdf_safe(title))
     y -= 22
     if subtitle:
         c.setFont("Helvetica", 9)
         c.setFillColorRGB(0.4, 0.4, 0.4)
-        c.drawString(_ML, y, subtitle)
+        c.drawString(_ML, y, _pdf_safe(subtitle))
         c.setFillColorRGB(0, 0, 0)
         y -= 14
     c.setLineWidth(0.6)
@@ -197,6 +220,7 @@ def _render_toc_pdf(items: List[_TocItem],
 
         x = _ML + item.depth * _INDENT
         name = item.name if len(item.name) <= 74 else item.name[:72] + "…"
+        name = _pdf_safe(name)
 
         if item.other_file:
             # ── Querverweis auf andere Datei ─────────────────────────────────
@@ -210,7 +234,7 @@ def _render_toc_pdf(items: List[_TocItem],
             # TOC offset (parts do not share one TOC page count)
             off = (other_offsets or {}).get(item.other_file, toc_offset)
             ref = item.other_file if item.is_folder else f"{item.other_file}, S. {item.page_start + off}"
-            c.drawRightString(_A4_W - _MR, y, f"→ {ref}")
+            c.drawRightString(_A4_W - _MR, y, "→ " + _pdf_safe(ref))
 
         elif item.is_folder:
             # ── Ordner-Überschrift ────────────────────────────────────────────
@@ -305,7 +329,7 @@ def _build_index_items(nodes: List[PDFNode]) -> List[_IndexEntry]:
         for tag in tags:
             tag_map.setdefault(tag, []).append((name, page))
     items: List[_IndexEntry] = []
-    for tag in sorted(tag_map, key=lambda s: s.lower()):
+    for tag in sorted(tag_map, key=lambda s: (s.casefold(), s)):
         items.append(_IndexEntry(True, tag))
         for name, page in tag_map[tag]:
             items.append(_IndexEntry(False, name, page))
@@ -323,7 +347,7 @@ def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
     y = _A4_H - _MT
 
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(_ML, y, title)
+    c.drawString(_ML, y, _pdf_safe(title))
     y -= 22
     c.setLineWidth(0.6)
     c.line(_ML, y, _A4_W - _MR, y)
@@ -339,11 +363,12 @@ def _render_index_pdf(items: List[_IndexEntry], toc_offset: int,
             y -= 4
             c.setFont("Helvetica-Bold", 11)
             c.setFillColorRGB(0, 0, 0)
-            c.drawString(_ML, y, item.text)
+            c.drawString(_ML, y, _pdf_safe(item.text))
             y -= _ROW
             continue
 
         name = item.text if len(item.text) <= 74 else item.text[:72] + "…"
+        name = _pdf_safe(name)
         c.setFont("Helvetica", 10)
         page_text = f"S. {item.page + toc_offset}"
         nw = c.stringWidth(name, "Helvetica", 10)
@@ -398,16 +423,21 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
         with pikepdf.open(io.BytesIO(content_bytes)) as content_pdf:
             pdf.pages.extend(content_pdf.pages)
 
+        # PF-4: pikepdf's pdf.pages len()/index are O(pages) once the tree was mutated;
+        # snapshot the pages once so every lookup below is O(1).
+        pages = list(pdf.pages)
+        n_pages = len(pages)
+
         # 2. Link-Annotierungen auf Vorspann-Seiten (TOC + Index)
         for rec in link_records:
-            if rec.toc_page_idx >= len(pdf.pages):
+            if rec.toc_page_idx >= n_pages:
                 continue
             dest_page_abs = prepend_count + rec.content_page_0
-            if dest_page_abs >= len(pdf.pages):
+            if dest_page_abs >= n_pages:
                 continue
 
-            toc_page = pdf.pages[rec.toc_page_idx]
-            dest_page_obj = pdf.pages[dest_page_abs].obj
+            toc_page = pages[rec.toc_page_idx]
+            dest_page_obj = pages[dest_page_abs].obj
 
             # pikepdf >= 8 dropped pikepdf.Real — plain Python floats are coerced.
             rect = pikepdf.Array([
@@ -439,7 +469,12 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
                     return prepend_count + it.page_start - 1
             return prepend_count
 
-        if with_bookmarks and toc_items:
+        def _fit(i: int):
+            # same destination an int would resolve to ([page /Fit]) without the
+            # per-item O(pages) page lookup inside pikepdf.
+            return pikepdf.Array([pages[i].obj, pikepdf.Name.Fit])
+
+        if with_bookmarks and toc_items and n_pages > 0:
             with pdf.open_outline() as outline:
                 outline.root.clear()
                 depth_parents: dict = {-1: outline.root}
@@ -451,14 +486,14 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
 
                     if item.is_folder:
                         dest = _first_leaf_page(idx + 1, item.depth)
-                        dest = min(dest, len(pdf.pages) - 1)
-                        oi = pikepdf.OutlineItem(item.name, dest)
+                        dest = min(dest, n_pages - 1)
+                        oi = pikepdf.OutlineItem(item.name, _fit(dest))
                         parent.append(oi)
                         depth_parents[item.depth] = oi.children
                     else:
                         dest = prepend_count + item.page_start - 1
-                        if 0 <= dest < len(pdf.pages):
-                            oi = pikepdf.OutlineItem(item.name, dest)
+                        if 0 <= dest < n_pages:
+                            oi = pikepdf.OutlineItem(item.name, _fit(dest))
                             parent.append(oi)
 
         out = io.BytesIO()
@@ -477,6 +512,127 @@ DEFAULT_EXPORT_OPTIONS = {
     "index_links": True,  # clickable index entries
     "bookmarks": True,    # PDF sidebar bookmarks (outline)
 }
+
+
+def _stage_tmp(path: str, data: bytes) -> str:
+    """Write ``data`` to a sibling temp file (same dir), fsync; return the temp path.
+    Cleans the temp on any failure; the OSError names the target file (IO-3). When the
+    directory takes no new files but ``path`` is an existing file, the temp goes to the
+    temp dir instead and :func:`_commit_files` writes in place (R12-1)."""
+    import tempfile
+    from formats.pdf_storage import _is_denied
+    path = os.path.realpath(path)
+    tmp = f"{path}.tmp-{os.getpid()}"
+    try:
+        try:
+            f = open(tmp, "wb")
+        except OSError as e:
+            if not (_is_denied(e) and os.path.isfile(path)):
+                raise
+            fd, tmp = tempfile.mkstemp(prefix="belegtool-stage-")
+            f = os.fdopen(fd, "wb")
+        with f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        if isinstance(e, OSError):
+            raise OSError(e.errno, f"{e.strerror or e}: {path}", path) from e
+        raise
+    return tmp
+
+
+def _rm(path) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _make_backup(target: str) -> str:
+    """Copy ``target`` to ``<target>.bak-<pid>`` (temp dir when the directory is
+    read-only); a failed/partial copy is removed (R12-4)."""
+    import tempfile
+    from formats.pdf_storage import _is_denied
+    backup = f"{target}.bak-{os.getpid()}"
+    try:
+        shutil.copyfile(target, backup)
+        return backup
+    except BaseException as e:
+        _rm(backup)
+        if not (isinstance(e, OSError) and _is_denied(e)):
+            raise
+    fd, backup = tempfile.mkstemp(prefix="belegtool-bak-")
+    os.close(fd)
+    try:
+        shutil.copyfile(target, backup)
+    except BaseException:
+        _rm(backup)
+        raise
+    return backup
+
+
+def _restore_backup(backup: str, target: str) -> None:
+    try:
+        os.replace(backup, target)
+    except OSError:
+        with open(backup, "rb") as src:
+            old = src.read()
+        with open(target, "r+b") as f:
+            f.write(old)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+        _rm(backup)
+
+
+def _commit_files(staged: list) -> None:
+    """Atomically replace each ``(tmp, target)``; on a failure roll back every target
+    already replaced in THIS run (restore the previous version or remove a new file) and
+    drop the remaining temps, so the user never sees a mixed set (IO-3). A target in a
+    read-only directory (staged in the temp dir) is written in place (guarded, R12-1)."""
+    from formats.pdf_storage import swap_file_in
+    done = []  # (target, backup or None)
+    try:
+        for tmp, target in staged:
+            target = os.path.realpath(target)
+            backup = _make_backup(target) if os.path.exists(target) else None
+            try:
+                if os.path.dirname(os.path.abspath(tmp)) == os.path.dirname(target):
+                    os.replace(tmp, target)
+                else:  # staged in the temp dir: read-only directory -> guarded in place
+                    swap_file_in(tmp, target)
+            except BaseException as e:
+                if backup:
+                    _rm(backup)
+                if isinstance(e, OSError):
+                    raise OSError(e.errno, f"{e.strerror or e}: {target}", target) from e
+                raise
+            done.append((target, backup))
+    except BaseException:
+        for target, backup in reversed(done):
+            try:
+                if backup:
+                    _restore_backup(backup, target)
+                else:
+                    os.remove(target)
+            except OSError:
+                pass
+        raise
+    finally:
+        for tmp, _ in staged:
+            _rm(tmp)
+    for _, backup in done:
+        if backup:
+            _rm(backup)
+
+
+def _write_atomic(path: str, data: bytes) -> None:
+    _commit_files([(_stage_tmp(path, data), path)])
 
 
 def export_pdf(nodes: List[PDFNode], path: str, options: Optional[dict] = None) -> None:
@@ -522,8 +678,7 @@ def export_pdf(nodes: List[PDFNode], path: str, options: Optional[dict] = None) 
     content = _export_nodes_to_bytes(top)
     result = _assemble(prepend_pdfs, content, link_records, toc_items,
                        prepend_count, with_bookmarks=bool(opts["bookmarks"]))
-    with open(path, "wb") as f:
-        f.write(result)
+    _write_atomic(path, result)
 
 
 def export_pdf_with_toc(nodes: List[PDFNode], path: str) -> None:
@@ -571,12 +726,13 @@ def _pack_units(units, max_pages):
 
 
 def _leaves_with_path(nodes, _path=()):
-    """All non-empty leaves in document order, each paired with its folder-name path
-    (so a split part can be rebuilt with the document's folder structure)."""
+    """All non-empty leaves in document order, each paired with its folder path of
+    ``(folder identity, name)`` pairs (so a split part can be rebuilt with the
+    document's folder structure; two distinct same-named folders stay distinct, F-6)."""
     out = []
     for node in nodes:
         if node.is_folder:
-            out.extend(_leaves_with_path(node.children, _path + (node.name,)))
+            out.extend(_leaves_with_path(node.children, _path + ((id(node), node.name),)))
         elif count_node_pages(node) > 0:
             out.append((node, _path))
     return out
@@ -595,7 +751,7 @@ def _subtree_from_leaves(items):
         if path in index:
             return index[path]
         parent = ensure(path[:-1])
-        folder = PDFNode(name=path[-1], is_folder=True)
+        folder = PDFNode(name=path[-1][1], is_folder=True)
         index[path] = folder
         if parent is None:
             roots.append(folder)
@@ -610,6 +766,52 @@ def _subtree_from_leaves(items):
         else:
             parent.add_child(leaf)
     return roots
+
+
+def _drop_dead_links(data: bytes) -> bytes:
+    """CP-3: after a page-level cut, drop internal link annotations whose destination page is
+    not part of this file (pypdf nulls/orphans them); URI links stay."""
+    try:
+        import pikepdf
+        with pikepdf.open(io.BytesIO(data)) as pdf:
+            own = {pg.obj.objgen for pg in pdf.pages}
+            changed = False
+
+            def alive(d):
+                try:
+                    return d is not None and len(d) > 0 and d[0] is not None \
+                        and d[0].objgen in own
+                except Exception:
+                    return False
+
+            for pg in pdf.pages:
+                annots = pg.obj.get("/Annots")
+                if annots is None:
+                    continue
+                keep = pikepdf.Array()
+                for a in annots:
+                    dead = False
+                    if a.get("/Subtype") == pikepdf.Name.Link:
+                        if "/Dest" in a:
+                            dead = not alive(a["/Dest"])
+                        else:
+                            act = a.get("/A")
+                            if act is not None and act.get("/S") == pikepdf.Name.GoTo:
+                                dead = not alive(act.get("/D"))
+                    if dead:
+                        changed = True
+                    else:
+                        keep.append(a)
+                if len(keep) != len(annots):
+                    pg.obj["/Annots"] = keep
+            if not changed:
+                return data
+            buf = io.BytesIO()
+            pdf.save(buf)
+            return buf.getvalue()
+    except Exception as e:
+        logger.warning("Tote Links konnten nicht entfernt werden: %s", e)
+        return data
 
 
 def _slice_leaf(leaf, indices, problems=None):
@@ -634,8 +836,9 @@ def _slice_leaf(leaf, indices, problems=None):
                 f"{leaf.name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)")
     buf = io.BytesIO()
     writer.write(buf)
+    part_bytes = _drop_dead_links(buf.getvalue())
     part = PDFNode(name=f"{leaf.name} (S. {indices[0] + 1}–{indices[-1] + 1})",
-                   pdf_data=buf.getvalue())
+                   pdf_data=part_bytes)
     part.pdf_length = len(writer.pages)  # the REAL count, never the claim
     part.tags = list(getattr(leaf, "tags", []) or [])
     return part
@@ -659,6 +862,18 @@ def _subtree_from_pages(group, problems=None):
 
 
 def _plan_groups(nodes, max_pages, level, problems=None):
+    """Plan the parts WITHOUT leaving the source tree re-parented (F-7): building a
+    part's folders reparents the reused leaves, so restore parent/position afterwards."""
+    saved = [(leaf, leaf.parent, leaf.position) for leaf, _ in _leaves_with_path(nodes)]
+    try:
+        return _plan_groups_impl(nodes, max_pages, level, problems)
+    finally:
+        for leaf, parent, position in saved:
+            leaf.parent = parent
+            leaf.position = position
+
+
+def _plan_groups_impl(nodes, max_pages, level, problems=None):
     """Split the export forest into ordered parts of ``<= max_pages`` pages (#13).
 
     ``level``:
@@ -754,6 +969,21 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
         toc_counts.append(_get_pdf_page_count(draft))
     offsets = {file_names[i]: toc_counts[i] for i in range(len(groups))}
 
+    staged = []
+    try:
+        _render_split_parts(groups, full_lists, paths, toc_counts, offsets, staged)
+        _commit_files(staged)
+    except BaseException:
+        for tmp, _ in staged:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        raise
+    return paths
+
+
+def _render_split_parts(groups, full_lists, paths, toc_counts, offsets, staged):
     for idx, (group, full_items, path) in enumerate(zip(groups, full_lists, paths)):
         subtitle = f"Teil {idx + 1} von {len(groups)}"
         final_toc, link_records = _render_toc_pdf(
@@ -761,7 +991,4 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
         content = _export_nodes_to_bytes(group)
 
         result = _assemble_pdf(final_toc, content, link_records, full_items, toc_counts[idx])
-        with open(path, "wb") as f:
-            f.write(result)
-
-    return paths
+        staged.append((_stage_tmp(path, result), path))

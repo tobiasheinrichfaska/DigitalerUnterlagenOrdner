@@ -76,7 +76,9 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
       })
       .catch(() => { if (alive) setLoadError(true) })
     return () => { alive = false }
-  }, [session, nodeId])
+    // `node` (object) is a dep on purpose: rotate/replace keep the node id but change the
+    // page geometry, so an edit (new object) must refresh the cached count/dims (W-4)
+  }, [session, nodeId, node])
 
   // drop rendered images when the node OR variant changes (keyed by the node OBJECT
   // so an edit — new object — also refetches). The warm middleware cache makes the
@@ -239,7 +241,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
 
   const width = Math.round(560 * zoom)
   return (
-    <div className="win-preview" ref={scrollRef} onScroll={onScroll}>
+    <div className="win-preview" ref={scrollRef} onScroll={onScroll} tabIndex={0} role="region" aria-label={t('Seitenvorschau')}>
       {loadError && <p className="error" aria-live="polite">⚠ {t('Seite konnte nicht geladen werden')}</p>}
       {Array.from({ length: count }, (_, i) => {
         const [w, h] = dims[i] || [595, 842]

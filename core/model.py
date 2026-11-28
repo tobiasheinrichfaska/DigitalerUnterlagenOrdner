@@ -34,6 +34,18 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
+def scrub_surrogates(text):
+    """Replace lone UTF-16 surrogates (a JS half-emoji arrives as a JSON \\ud83d escape)
+    with U+FFFD: they cannot be UTF-8/UTF-16 encoded, which broke save/export (u4 BP-4)."""
+    if not isinstance(text, str):
+        return text
+    try:
+        text.encode("utf-8")
+        return text
+    except UnicodeEncodeError:
+        return "".join("\ufffd" if "\ud800" <= ch <= "\udfff" else ch for ch in text)
+
+
 @dataclass(frozen=True)
 class Node:
     """An immutable tree node (folder or leaf document)."""
@@ -66,6 +78,14 @@ class Node:
     original_data: Optional[bytes] = None
     current_data: Optional[bytes] = None
     compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data; None = none/auto
+
+    def __post_init__(self):
+        # model boundary: names/tags must always be encodable (u4 BP-4)
+        clean = scrub_surrogates(self.name)
+        if clean != self.name:
+            object.__setattr__(self, "name", clean)
+        if any(isinstance(t, str) and scrub_surrogates(t) != t for t in self.tags):
+            object.__setattr__(self, "tags", tuple(scrub_surrogates(t) for t in self.tags))
 
     # --- serialisation (structure only — no bytes) ------------------------
     def to_dict(self, position: Optional[int] = None) -> Dict[str, Any]:
@@ -161,6 +181,15 @@ class Document:
     def update_node(self, node_id: str, **changes) -> "Document":
         return Document(update_node(self.root, node_id, **changes))
 
+    def update_nodes(self, changes_by_id: Dict[str, Dict[str, Any]]) -> "Document":
+        return Document(update_nodes(self.root, changes_by_id))
+
+    def remove_nodes(self, node_ids) -> "Document":
+        return Document(remove_nodes(self.root, node_ids))
+
+    def insert_children(self, parent_id: str, children, index: Optional[int] = None) -> "Document":
+        return Document(insert_children(self.root, parent_id, children, index))
+
     def replace_node(self, node_id: str, new_node: Node) -> "Document":
         return Document(replace_node(self.root, node_id, new_node))
 
@@ -248,6 +277,85 @@ def remove_node(root: Node, node_id: str) -> Node:
             return n
         return replace(n, children=tuple(kept))
     return rec(root)
+
+
+def update_nodes(root: Node, changes_by_id: Dict[str, Dict[str, Any]]) -> Node:
+    """Batch ``update_node``: one bottom-up pass applying ``changes_by_id[id]`` (a
+    ``replace`` kwargs dict) to every listed node. Only paths that contain a target are
+    rebuilt (structural sharing), so k targets cost O(n), not O(k*n). Unknown ids are
+    ignored, like ``update_node``."""
+    if not changes_by_id:
+        return root
+
+    def rec(n: Node) -> Node:
+        kids = n.children
+        if kids:
+            new_kids = tuple(rec(c) for c in kids)
+            if all(nc is oc for nc, oc in zip(new_kids, kids)):
+                new_kids = kids
+        else:
+            new_kids = kids
+        ch = changes_by_id.get(n.id)
+        if ch is not None:
+            return replace(n, children=new_kids, **ch) if new_kids is not kids else replace(n, **ch)
+        if new_kids is kids:
+            return n
+        return replace(n, children=new_kids)
+    return rec(root)
+
+
+def remove_nodes(root: Node, node_ids) -> Node:
+    """Batch ``remove_node``: remove every id in ``node_ids`` in ONE pass (the root
+    itself cannot be removed). Children of a removed node go with it."""
+    ids = set(node_ids)
+    if root.id in ids:
+        raise ValueError("cannot remove the root node")
+    if not ids:
+        return root
+
+    def rec(n: Node) -> Node:
+        kept: List[Node] = []
+        changed = False
+        for c in n.children:
+            if c.id in ids:
+                changed = True
+                continue
+            nc = rec(c)
+            if nc is not c:
+                changed = True
+            kept.append(nc)
+        if not changed:
+            return n
+        return replace(n, children=tuple(kept))
+    return rec(root)
+
+
+def insert_children(root: Node, parent_id: str, children, index: Optional[int] = None) -> Node:
+    """Batch ``insert_child``: insert ``children`` in order, the i-th at ``index + i``
+    (each clamped like ``insert_child``; append when ``index`` is None), in ONE pass.
+    Raises ``KeyError`` when ``parent_id`` does not exist."""
+    children = list(children)
+    found = [False]
+
+    def rec(n: Node) -> Node:
+        if n.id == parent_id:
+            found[0] = True
+            kids = list(n.children)
+            for off, child in enumerate(children):
+                idx = None if index is None else index + off
+                at = len(kids) if idx is None else max(0, min(idx, len(kids)))
+                kids.insert(at, child)
+            return replace(n, children=tuple(kids))
+        if not n.children:
+            return n
+        new_children = tuple(rec(c) for c in n.children)
+        if all(nc is oc for nc, oc in zip(new_children, n.children)):
+            return n
+        return replace(n, children=new_children)
+    out = rec(root)
+    if not found[0]:
+        raise KeyError(parent_id)
+    return out
 
 
 def insert_child(root: Node, parent_id: str, child: Node, index: Optional[int] = None) -> Node:

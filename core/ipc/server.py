@@ -71,16 +71,41 @@ class CoreServer:
             threading.Thread(target=self._serve_connection, args=(conn,), daemon=True).start()
 
     def _serve_connection(self, conn: PipeConnection):
+        owned: set = set()  # sessions created through this connection
         try:
             while self._running:
                 req = conn.recv()
                 if req is None:
                     break  # client disconnected
-                conn.send(self._dispatch(req))
+                conn.send(self._safe_dispatch(req, owned))
         except Exception as e:
             logger.warning("Verbindung beendet: %s", e)
         finally:
+            self._cleanup_sessions(owned)
             conn.close()
+
+    def _safe_dispatch(self, req, owned: set) -> dict:
+        """``_dispatch`` that never raises: an exception becomes an ``ok: False`` reply
+        (instead of a silently dropped connection) and sessions handed out are tracked."""
+        try:
+            resp = self._dispatch(req)
+        except Exception as e:
+            logger.exception("IPC op failed")
+            return {"ok": False, "error": str(e)}
+        if isinstance(resp, dict) and resp.get("ok") and req.get("op") in ("hello", "open") \
+                and resp.get("session"):
+            owned.add(resp["session"])
+        return resp
+
+    def _cleanup_sessions(self, owned: set) -> None:
+        """Free the sessions (and file locks) of a disconnected client."""
+        for sid in list(owned):
+            try:
+                self.api.release(sid)
+                self.api.close_session(sid)
+            except Exception:
+                logger.warning("Sitzung %s konnte nicht freigegeben werden", sid, exc_info=True)
+        owned.clear()
 
     # --- dispatch (maps pipe ops onto the shared CoreApi) ------------------
     def _dispatch(self, req: dict) -> dict:

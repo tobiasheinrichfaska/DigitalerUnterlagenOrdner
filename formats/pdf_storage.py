@@ -6,6 +6,7 @@ import datetime
 from typing import Optional, List, Union
 from pypdf import PdfReader, PdfWriter
 from formats.pdf_node import PDFNode
+from core.model import STATUSES
 import os
 # NOTE: universal_importer is imported lazily inside the archive/e-mail branches
 # below — it pulls in win32com/COM, pi-heif, the .msg reader (~2.6 s) which a plain
@@ -52,6 +53,266 @@ def create_wrapper_node(storage: 'PDFStorage', filename: str) -> PDFNode:
     for child in wrapper.children:
         child.parent = wrapper
     return wrapper
+
+def _carry_acroform(writer: PdfWriter, sources) -> None:
+    """Y-6: pypdf copies pages (widgets survive) but never the catalog /AcroForm.
+    Rebuild it from the widgets on the writer's pages; /DR /DA /NeedAppearances come
+    from the first source form. ``sources`` = readers whose /AcroForm may be carried."""
+    try:
+        from pypdf.generic import (ArrayObject, BooleanObject, DictionaryObject,
+                                   NameObject, TextStringObject)
+        base = None
+        for r in sources:
+            af = r.trailer["/Root"].get("/AcroForm")
+            if af is not None:
+                base = af.get_object()
+                break
+        if base is None:
+            return
+        fields, seen = [], set()
+        claimed, own, cur = set(), set(), None  # names of earlier nodes / of the current node
+        # page -> source node (readers are appended in page order; fallback: all one node)
+        bounds, acc = [], 0
+        for r in sources:
+            acc += len(r.pages)
+            bounds.append(acc)
+        if acc != len(writer.pages):
+            bounds = [len(writer.pages)]
+        for pi, page in enumerate(writer.pages):
+            node_idx = next((i for i, b in enumerate(bounds) if pi < b), 0)
+            if node_idx != cur:
+                claimed |= own
+                own, cur = set(), node_idx
+            for a in page.get("/Annots") or []:
+                w = a.get_object()
+                if w.get("/Subtype") != "/Widget":
+                    continue
+                top = a
+                for _hop in range(64):  # R13-1: bounded against a cyclic /Parent chain
+                    if "/Parent" not in top.get_object():
+                        break
+                    top = top.get_object()["/Parent"]
+                key = top.idnum if hasattr(top, "idnum") and top.idnum else id(top)
+                if key not in seen:
+                    seen.add(key)
+                    fields.append(top)
+                    # Z-1: fully-qualified names must be unique across nodes, else
+                    # viewers treat colliding top-level fields as ONE field.
+                    tobj = top.get_object()
+                    if "/T" in tobj:
+                        t = str(tobj["/T"])
+                        if t in claimed:
+                            n = 2
+                            while f"{t}_{n}" in claimed or f"{t}_{n}" in own:
+                                n += 1
+                            t = f"{t}_{n}"
+                            tobj[NameObject("/T")] = TextStringObject(t)
+                        own.add(t)
+        if not fields:
+            return
+        form = DictionaryObject()
+        form[NameObject("/Fields")] = ArrayObject(fields)
+        for k in ("/DR", "/DA", "/Q", "/NeedAppearances"):
+            if k in base:
+                v = base[k]
+                form[NameObject(k)] = v.clone(writer) if hasattr(v, "clone") and not isinstance(v, BooleanObject) else v
+        writer._root_object[NameObject("/AcroForm")] = writer._add_object(form)
+    except Exception as e:  # never fail a save over form metadata
+        logger.warning("[save] AcroForm konnte nicht übernommen werden: %s", e)
+
+
+
+
+def _guard_alt_paths(target: str):
+    """Deterministic (bak, marker) names in the temp dir, used when the target's directory
+    takes no new files (so a retry finds them again)."""
+    import hashlib
+    import tempfile
+    h = hashlib.sha1(os.path.abspath(target).encode("utf-8", "surrogatepass")).hexdigest()[:20]
+    base = os.path.join(tempfile.gettempdir(), f"belegtool-{h}")
+    return base + ".bak", base + ".swapwip"
+
+
+def _is_denied(e: BaseException) -> bool:
+    import errno
+    return isinstance(e, PermissionError) or (
+        isinstance(e, OSError) and e.errno in (errno.EACCES, errno.EPERM, errno.EROFS))
+
+
+def _overwrite_in_place(path: str, data: bytes) -> None:
+    with open(path, "r+b") as f:
+        f.write(data)
+        f.truncate()
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _recover_interrupted(target: str) -> None:
+    """R12-3: a marker left by an in-place write that failed means the target may be a
+    hybrid. Restore the (good) ``.bak`` BEFORE anything may refresh it from the target;
+    when that is impossible refuse, leaving the ``.bak`` untouched."""
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        if not os.path.exists(wip):
+            continue
+        if not os.path.exists(bak):
+            _quiet_remove(wip)  # nothing to protect
+            continue
+        # A marker means an in-place write never finished cleanly; whether the target
+        # still happens to parse is no proof (a hybrid can), so the .bak always wins.
+        try:
+            with open(bak, "rb") as src:
+                old = src.read()
+            _overwrite_in_place(target, old)
+        except Exception as e:
+            raise OSError(getattr(e, "errno", None),
+                          f"{e} (vorherige Fassung: {bak})") from e
+        _quiet_remove(wip)
+        _quiet_remove(bak)
+
+
+def _clear_stale_guard(target: str) -> None:
+    """R13-3: the target was just replaced completely, so a marker (+ its ``.bak``) left by
+    an earlier failed in-place write is obsolete and must never be restored over this
+    newer state. A ``.bak`` WITHOUT a marker is not ours and stays."""
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        if os.path.exists(wip):
+            _quiet_remove(wip)
+            _quiet_remove(bak)
+
+
+def _make_guard(target: str):
+    """Create the backup copy + in-flight marker: next to the target, else (read-only
+    directory) in the temp dir. Returns (bak, wip); leaves nothing behind on failure."""
+    last = None
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        try:
+            with open(target, "rb") as src, open(bak, "wb") as dst:
+                dst.write(src.read())
+                dst.flush()
+                os.fsync(dst.fileno())
+            with open(wip, "wb") as m:
+                m.write(b"1")
+            return bak, wip
+        except BaseException as e:
+            _quiet_remove(bak)
+            _quiet_remove(wip)
+            if not _is_denied(e):
+                raise  # e.g. ENOSPC: a full disk is no reason to switch location
+            last = last or e
+    raise last
+
+
+def swap_file_in(tmp: str, target: str) -> None:
+    """Make the finished, verified ``tmp`` become ``target`` WITHOUT ever leaving the
+    previous ``target`` truncated (audit y4 IO-1/2/5). ``os.replace`` first; when that is
+    refused (target held open elsewhere / read-only directory) fall back to an in-place
+    write that is guarded by a ``.bak`` of the previous bytes plus an in-flight marker:
+    on ANY failure (BaseException included) the original is restored and the error
+    re-raised. A symlink target is resolved first. ``tmp`` is removed on success and after
+    a clean restore; only if even the restore fails are ``tmp`` AND ``.bak`` kept (both
+    hold a complete copy) and the raised error names the ``.bak``. A retry never refreshes
+    the ``.bak`` from a possibly damaged target (marker, R12-3)."""
+    target = os.path.realpath(target)
+    try:
+        os.replace(tmp, target)  # atomic on the same NTFS volume
+        _clear_stale_guard(target)  # R13-3
+        return
+    except (KeyboardInterrupt, SystemExit, GeneratorExit):
+        _quiet_remove(tmp)
+        raise
+    except OSError:
+        logger.warning("[save] atomic replace refused for %s – guarded in-place fallback", target)
+    try:
+        _recover_interrupted(target)
+        with open(tmp, "rb") as f:
+            data = f.read()
+        had_original = os.path.exists(target)
+        bak = wip = None
+        if had_original:
+            bak, wip = _make_guard(target)
+        try:
+            f = open(target, "r+b" if had_original else "wb")
+        except BaseException:
+            # nothing was touched: the original is intact
+            if had_original:
+                _quiet_remove(bak)
+                _quiet_remove(wip)
+            raise
+    except BaseException:
+        _quiet_remove(tmp)
+        raise
+    try:
+        with f:
+            f.write(data)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException as e:
+        restored = not had_original
+        if had_original:
+            try:
+                with open(bak, "rb") as src:
+                    old = src.read()
+                _overwrite_in_place(target, old)
+                restored = True
+            except BaseException:
+                logger.error("[save] restore failed; previous version kept in %s, new in %s", bak, tmp)
+        if restored:
+            _quiet_remove(bak) if bak else None
+            _quiet_remove(wip) if wip else None
+            _quiet_remove(tmp)
+            if not had_original:
+                _quiet_remove(target)
+        elif isinstance(e, Exception):
+            raise OSError(getattr(e, "errno", None),
+                          f"{e} (vorherige Fassung: {bak})") from e
+        raise
+    if bak:
+        _quiet_remove(bak)
+        _quiet_remove(wip)
+    _quiet_remove(tmp)
+
+
+def unique_tmp_name(target: str) -> str:
+    """A temp sibling name unique per CALL (pid + thread + uuid4), so concurrent saves of
+    one target can never share or delete each other's temp file (audit aa4 HA-1)."""
+    import threading
+    import uuid
+    return f"{target}.tmp-{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex}"
+
+
+def write_file_atomic(target: str, data: bytes) -> None:
+    """Write ``data`` to ``target`` via a fsync'd sibling temp + :func:`swap_file_in`.
+    A symlink is resolved first; when no sibling temp can be created (read-only directory)
+    but ``target`` is an existing file, the data is staged in the temp dir and written in
+    place under the same guarded protocol (R12-1)."""
+    target = os.path.realpath(target)
+    tmp = unique_tmp_name(target)
+    try:
+        f = open(tmp, "wb")
+    except OSError as e:
+        if not (_is_denied(e) and os.path.isfile(target)):
+            raise
+        import tempfile
+        fd, tmp = tempfile.mkstemp(prefix="belegtool-stage-")
+        f = os.fdopen(fd, "wb")
+    try:
+        with f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException:
+        _quiet_remove(tmp)
+        raise
+    swap_file_in(tmp, target)  # owns tmp from here (kept only if a restore failed)
+
+
+def _quiet_remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
 
 class PDFStorage:
     def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):
@@ -180,6 +441,31 @@ class PDFStorage:
             # when the file already reads cleanly, so .belegtool/structured PDFs
             # (handled above) never reach this and valid plain PDFs are untouched.
             data = sanitize_pdf(data)
+            # IM-1: a plain PDF must yield >=1 readable page, else it would become an
+            # unrenderable 0-page ghost leaf (truncated / bit-flipped / cyclic tree).
+            try:
+                with pikepdf.open(io.BytesIO(data), suppress_warnings=True) as _pk:
+                    _pages = len(_pk.pages)
+            except pikepdf.PasswordError:
+                raise ValueError("Datei ist passwortgeschützt")
+            except Exception:
+                _pages = 0
+            if _pages < 1:
+                # R9-5: a tolerant reader (pdfium) may still read pages pikepdf can't
+                # (e.g. /Root /Pages pointing straight at a /Page) → accept those.
+                try:
+                    from belegtool_compress import raster
+                    _doc = raster.open_pdf(data)
+                    try:
+                        _pages = _doc.page_count
+                        if _pages >= 1:
+                            _doc.page_size(0)  # a cyclic tree counts a page that never loads
+                    finally:
+                        _doc.close()
+                except Exception:
+                    _pages = 0
+            if _pages < 1:
+                raise ValueError("Datei enthält keine lesbaren Seiten")
             self.root = PDFNode(name="root", is_folder=True)
             name = os.path.splitext(os.path.basename(self.filename))[0] if self.filename else "importiert"
             node = PDFNode(name=name)
@@ -193,6 +479,8 @@ class PDFStorage:
             self.root.add_child(node)
 
         except Exception as e:
+            if "passwortgeschützt" in str(e) or "keine lesbaren Seiten" in str(e):
+                raise ValueError(str(e))
             raise ValueError(f"Fehler beim Laden des PDFs: {e}")
 
 
@@ -202,12 +490,20 @@ class PDFStorage:
 
     def _parse_json_structure(self, structure, data):
         self.root = PDFNode(name="root", is_folder=True)
-        if structure.get("uid"):
+        self._seen_uids = set()
+        self._coerced = False
+        if isinstance(structure.get("uid"), str) and structure["uid"]:
             self.root.uid = structure["uid"]  # restore the root's id too (not just children)
+            self._seen_uids.add(structure["uid"])
+        elif structure.get("uid"):
+            self._coerced = True
         if structure.get("collapsed"):
-            self.root.collapsed = bool(structure["collapsed"])
+            self.root.collapsed = self._bool(structure["collapsed"])
         if structure.get("datev"):
-            self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
+            if isinstance(structure["datev"], dict):
+                self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
+            else:  # u4 BP-7: a non-dict provenance would crash every DATEV consumer
+                self.load_warnings.append("Ungültige DATEV-Verknüpfung ignoriert")
         current_start = [0]  # mutable Seitenzähler
 
         reader = None
@@ -276,6 +572,8 @@ class PDFStorage:
             extra = total_pages - current_start[0]
             self.load_warnings.append(
                 f"{extra} Seiten mehr als die Struktur beschreibt – nicht zugeordnet")
+        if self._coerced:  # u4 BP-3: invalid field values were replaced by safe defaults
+            self.load_warnings.append("Ungültige Felder in der Dokumentstruktur – korrigiert")
 
     def _append_pages_with_outline(
         self,
@@ -303,6 +601,9 @@ class PDFStorage:
 
             for page in reader.pages:
                 writer.add_page(page)
+            if not hasattr(writer, '_beleg_forms'):
+                writer._beleg_forms = []
+            writer._beleg_forms.append(reader)
 
             # Lesezeichen für Dokument
             outline_entry = writer.add_outline_item(
@@ -340,6 +641,7 @@ class PDFStorage:
         buffer = io.BytesIO()
         writer = PdfWriter()
         self._append_pages_with_outline(writer, self.root)
+        _carry_acroform(writer, getattr(writer, '_beleg_forms', []))
         writer.add_metadata({"/JSONStructure": structure_json})
         writer.write(buffer)
         raw_pdf = buffer.getvalue()
@@ -377,26 +679,7 @@ class PDFStorage:
         target = path or self.filename
         if not target:
             raise ValueError("No path specified and no original filename stored.")
-        tmp = f"{target}.tmp-{os.getpid()}"
-        try:
-            with open(tmp, 'wb') as f:
-                f.write(final_pdf)
-                f.flush()
-                os.fsync(f.fileno())
-            try:
-                os.replace(tmp, target)  # atomic on the same NTFS volume
-            except OSError:
-                # target held open elsewhere → legacy in-place write (non-atomic, but
-                # the save must not start failing where it used to succeed)
-                logger.warning("[save] atomic replace refused for %s – in-place fallback", target)
-                with open(target, 'wb') as f:
-                    f.write(final_pdf)
-        finally:
-            if os.path.exists(tmp):
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    logger.warning("[save] temp file could not be removed: %s", tmp)
+        write_file_atomic(target, final_pdf)
 
         self.clear_dirty()
         if path:
@@ -433,6 +716,44 @@ class PDFStorage:
             return False
         return walk(structure.get("children", []) or [])
 
+    def _bool(self, value):
+        """Real bool from persisted JSON; anything else is coerced + flagged (u4 BP-3)."""
+        if isinstance(value, bool):
+            return value
+        self._coerced = True
+        return bool(value) if isinstance(value, (int, float)) else False
+
+    def _dpi(self, value):
+        if value is None or (isinstance(value, int) and not isinstance(value, bool)):
+            return value
+        self._coerced = True
+        return None
+
+    def _common_fields(self, node, node_data):
+        """Validated uid/status/tags shared by folders and leaves. Anything invalid is
+        replaced by a safe default and flagged once (``_coerced``)."""
+        uid = node_data.get("uid")
+        if isinstance(uid, str) and uid and uid not in self._seen_uids:
+            node.uid = uid  # restore persisted id
+        elif uid not in (None, "", False, 0):  # truthy garbage / duplicate -> fresh uuid
+            self._coerced = True
+        self._seen_uids.add(node.uid)
+        status = node_data.get("status", "")
+        if isinstance(status, str) and status in STATUSES:
+            node.status = status
+        else:
+            node.status = ""
+            if status is not None:
+                self._coerced = True
+        tags = node_data.get("tags")
+        if tags is None:
+            tags = []
+        if isinstance(tags, list) and all(isinstance(t, str) for t in tags):
+            node.tags = list(tags)
+        else:
+            self._coerced = True
+            node.tags = [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else []
+
     @staticmethod
     def _vz(value):
         """Veranlagungszeitraum field from persisted JSON: int or None. Hand-edited/
@@ -456,6 +777,7 @@ class PDFStorage:
         for i in range(start, end + 1):
             if 0 <= i < len(reader.pages):
                 writer.add_page(reader.pages[i])
+        _carry_acroform(writer, [reader])
         buf = io.BytesIO()
         writer.write(buf)
         return buf.getvalue()
@@ -464,17 +786,17 @@ class PDFStorage:
         if depth > _MAX_TREE_DEPTH:
             raise StructureTooDeep(f"Baumtiefe überschreitet das Limit von {_MAX_TREE_DEPTH} Ebenen.")
         name = node_data.get("name", "unnamed")
-        is_folder = node_data.get("is_folder", False)
+        if not isinstance(name, str):
+            self._coerced = True
+            name = "unnamed" if name is None or isinstance(name, (list, dict)) else str(name)
+        is_folder = self._bool(node_data.get("is_folder", False))
 
         if is_folder:
             node = PDFNode(name=name, is_folder=True)
-            if node_data.get("uid"):
-                node.uid = node_data["uid"]  # restore persisted id
-            node.status = node_data.get("status", "")  # default: no status
+            self._common_fields(node, node_data)
             node.vz_start = self._vz(node_data.get("vz_start"))
             node.vz_end = self._vz(node_data.get("vz_end"))
-            node.collapsed = bool(node_data.get("collapsed", False))
-            node.tags = list(node_data.get("tags") or [])
+            node.collapsed = self._bool(node_data.get("collapsed", False))
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages, depth + 1)
                 if child_node:
@@ -509,21 +831,20 @@ class PDFStorage:
 
 
         node = PDFNode(name=name)
-        if node_data.get("uid"):
-            node.uid = node_data["uid"]  # restore persisted id
-        node.status = node_data.get("status", "")  # default: no status
+        self._common_fields(node, node_data)
         node.vz_start = self._vz(node_data.get("vz_start"))  # Veranlagungszeitraum (was dropped on reload)
         node.vz_end = self._vz(node_data.get("vz_end"))
-        node.tags = list(node_data.get("tags") or [])
-        node.compression_no_gain = bool(node_data.get("compression_no_gain", False))
-        is_compressed = bool(node_data.get("is_compressed", False))
+        node.compression_no_gain = self._bool(node_data.get("compression_no_gain", False))
+        is_compressed = self._bool(node_data.get("is_compressed", False))
+        dpi_o = self._dpi(node_data.get("dpi_original"))
+        dpi_c = self._dpi(node_data.get("dpi_current"))
 
         node.set_original_and_current_data(
             original_data=pages,
             current_data=None,
-            dpi_original=node_data.get("dpi_original"),
-            dpi_current=node_data.get("dpi_current"),
-            no_compression=node_data.get("no_compression", False),
+            dpi_original=dpi_o,
+            dpi_current=dpi_c,
+            no_compression=self._bool(node_data.get("no_compression", False)),
         )
         # Restore the persisted is_compressed flag instead of unconditionally resetting it.
         # set_original_and_current_data only sets is_compressed=True when current_data is
@@ -531,8 +852,8 @@ class PDFStorage:
         # flag back from the serialised structure explicitly.
         node.is_compressed = is_compressed
         node.compression_method = node_data.get("compression_method")
-        node.dpi_current = node_data.get("dpi_current")    # was lost when current_data=None
-        node.dpi_original = node_data.get("dpi_original")
+        node.dpi_current = dpi_c    # was lost when current_data=None
+        node.dpi_original = dpi_o
 
         # Reload coherence: a committed ("Lesbarkeit geprüft") node's persisted
         # pages ARE the chosen compression — its source was dropped on save.

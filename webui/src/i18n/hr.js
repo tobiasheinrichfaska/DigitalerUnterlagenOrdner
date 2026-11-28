@@ -31,7 +31,6 @@ export const hr = {
   'Abbrechen': 'Odustani',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Izvezi kao PDF sa sadržajem (odabir, inače cijeli dokument)',
-  'Auswahl': 'Odabir',
   'Ordner': 'Mapa',
   'Rückgängig': 'Poništi',
   'Wiederholen': 'Ponovi',

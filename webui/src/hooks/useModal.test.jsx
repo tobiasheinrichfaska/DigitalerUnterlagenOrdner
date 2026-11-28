@@ -83,3 +83,21 @@ describe('ExportDialog — uses useModal (smoke)', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 })
+
+describe('useModal — W-6 stable across onClose identity changes', () => {
+  it('does not re-focus the first element when the parent re-renders with a new onClose', () => {
+    const { rerender } = render(<TestDialog onClose={() => {}} />)
+    screen.getByTestId('btn2').focus()
+    rerender(<TestDialog onClose={() => {}} />)
+    expect(document.activeElement).toBe(screen.getByTestId('btn2'))
+  })
+
+  it('Escape calls the LATEST onClose', () => {
+    const a = vi.fn(); const b = vi.fn()
+    const { rerender } = render(<TestDialog onClose={a} />)
+    rerender(<TestDialog onClose={b} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(a).not.toHaveBeenCalled()
+    expect(b).toHaveBeenCalledTimes(1)
+  })
+})

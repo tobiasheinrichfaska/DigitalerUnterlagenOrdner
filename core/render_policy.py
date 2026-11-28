@@ -35,7 +35,10 @@ def _direction(history: Sequence[int], jump_threshold: int) -> int:
     re-centres on the new focus instead of biasing wildly."""
     if len(history) < 2:
         return 0
-    delta = history[-1] - history[-2]
+    # repeated requests for the same page (delta 0) must not erase the travel
+    # direction — compare against the last DIFFERENT page (C-8)
+    prev = next((h for h in reversed(history[:-1]) if h != history[-1]), history[-2])
+    delta = history[-1] - prev
     if abs(delta) > jump_threshold:
         return 0
     return 1 if delta > 0 else (-1 if delta < 0 else 0)
@@ -56,7 +59,8 @@ def predict_window(
     ``ahead`` pages after focus and ``behind`` before; backward mirrors it).
 
     Order: focus first, then outward by distance, ties broken toward the travel
-    direction. Small documents return all their pages. Jumps band around the new
+    direction. Windows are bounded (``ahead``+``behind``+1 pages around the focus), so a
+    document larger than that is only partly returned. Jumps band around the new
     focus only (no gap fill). Empty history ⇒ focus at page 0 (top-of-document).
     """
     if total <= 0:

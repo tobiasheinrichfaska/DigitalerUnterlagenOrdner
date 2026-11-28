@@ -31,7 +31,6 @@ export const ko = {
   'Abbrechen': '취소',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     '목차가 있는 PDF로 내보내기 (선택 항목, 없으면 전체 문서)',
-  'Auswahl': '선택',
   'Ordner': '폴더',
   'Rückgängig': '실행 취소',
   'Wiederholen': '다시 실행',

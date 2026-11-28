@@ -14,6 +14,7 @@ deterministically unit-testable with fakes — no real rendering, threads, or CP
 from __future__ import annotations
 
 import threading
+import time
 from collections import OrderedDict, defaultdict, deque
 from concurrent.futures import as_completed
 from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
@@ -144,6 +145,11 @@ class RenderService:
         self._executor = None           # lazy single seed-dispatcher worker
         self._pool = None               # lazy N-worker render pool
         self._prefetch = {"prefetch_active": False, "prefetch_warmed": 0}
+        # R-11: bounded negative cache — key -> failed attempts. Foreground retries a
+        # failing page a couple of times (explicit user request), background never.
+        # Q-2: entries expire after FAILURE_TTL so a transient failure is retried.
+        self._failed: Dict[Key, Tuple[int, float]] = {}
+        self._clock = time.monotonic
 
     # --- stats / config (for the UI status bar) ---------------------------
     def set_budget(self, budget_bytes: int) -> None:
@@ -152,7 +158,11 @@ class RenderService:
 
     def prune(self, live_node_ids) -> None:
         """Drop cached pages of nodes that no longer exist."""
-        self.cache.keep_only(set(live_node_ids))
+        live = set(live_node_ids)
+        with self._lock:
+            self._gen += 1  # SV-6: abandon in-flight background fills
+        self.cache.keep_only(live)
+        self._forget_failures(live=live)
 
     def stats(self) -> dict:
         """Cache occupancy + whether a background prefetch is currently running."""
@@ -201,11 +211,46 @@ class RenderService:
         hit = self.cache.get(key)
         if hit is not None:
             return hit
+        if self._known_bad(key, self.MAX_FG_RETRIES):
+            return b""  # R-11: known-bad page, don't re-open pdfium on every request
         rendered = self._render_page(data, page, dpi)
+        if not rendered:  # S-1: a failed render (b"") must never be cached as a blank page
+            self._note_failure(key)
+            return rendered
         self.cache.put(key, rendered, evict=True)  # foreground may evict to fit
         return rendered
 
+    MAX_FG_RETRIES = 2
+    FAILURE_TTL = 30.0  # seconds a failure stays cached before a retry is allowed
+
+    def _known_bad(self, key: Key, threshold: int = 1) -> bool:
+        with self._lock:
+            ent = self._failed.get(key)
+            if ent is None:
+                return False
+            if self._clock() - ent[1] >= self.FAILURE_TTL:
+                del self._failed[key]
+                return False
+            return ent[0] >= threshold
+    MAX_FAILED = 1024
+
+    def _note_failure(self, key: Key) -> None:
+        with self._lock:
+            if len(self._failed) >= self.MAX_FAILED and key not in self._failed:
+                self._failed.pop(next(iter(self._failed)))
+            self._failed[key] = (self._failed.get(key, (0, 0.0))[0] + 1, self._clock())
+
+    def _forget_failures(self, node_id: Optional[str] = None, live=None) -> None:
+        with self._lock:
+            for k in [k for k in self._failed
+                      if (node_id is not None and k[0] == node_id)
+                      or (live is not None and k[0] not in live)]:
+                del self._failed[k]
+
     def invalidate(self, node_id: str) -> None:
+        with self._lock:
+            self._gen += 1  # SV-6: abandon in-flight background fills
+        self._forget_failures(node_id)
         self.cache.invalidate_node(node_id)
 
     # --- background filler ------------------------------------------------
@@ -237,7 +282,12 @@ class RenderService:
             return False
         nid, page = target
         version = next(ver for n, ver, _cnt in node_specs if n == nid)
+        if self._known_bad((nid, version, page, dpi)):
+            return False
         rendered = self._render_page(data_for(nid), page, dpi)
+        if not rendered:
+            self._note_failure((nid, version, page, dpi))
+            return False  # S-1: never cache a failed render
         return self.cache.put((nid, version, page, dpi), rendered, evict=False)
 
     def _pool_exec(self):
@@ -285,7 +335,7 @@ class RenderService:
                 nid, page = order[i]
                 i += 1
                 key = (nid, vmap[nid], page, dpi)
-                if key not in self.cache:     # already warm (e.g. the foreground page)
+                if key not in self.cache and not self._known_bad(key):  # warm / known-bad (R-11)
                     batch.append((key, nid, page))
             if not batch:
                 continue
@@ -297,10 +347,14 @@ class RenderService:
                 try:
                     rendered = fut.result()
                 except Exception:             # background; a bad page never crashes the fill
+                    self._note_failure(key)
                     continue
                 if self.generation != gen:    # a foreground request landed mid-batch
                     stop = True
                     break
+                if not rendered:              # S-1: failed render, don't cache
+                    self._note_failure(key)
+                    continue
                 if not self.cache.put(key, rendered, evict=False):  # free space only
                     stop = True
                     break

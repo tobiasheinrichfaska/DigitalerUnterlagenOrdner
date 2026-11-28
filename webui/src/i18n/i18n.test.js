@@ -61,9 +61,9 @@ describe('translate (source-string keys)', () => {
     // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206,
     // PLUS the 12 load/export integrity warnings (QS 2026-11-04: degraded .belegtool open/import,
     // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
-    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220.
+    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226, PLUS the 2 load-validation warnings (u4 BP-3/BP-7) = 228, PLUS the IM-1 unreadable-PDF refusal = 229, PLUS the 3 accessibility names (W4 AX-1/2/5: Dokumentstruktur, Kompressionsmethode, Seitenvorschau) = 232.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(220)
+    expect(Object.keys(en).length).toBe(277)
   })
 })
 
@@ -78,13 +78,68 @@ describe('full-coverage languages', () => {
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
   const PENDING_TRANSLATIONS = new Set([
+    'DATEV-Einstellung konnte nicht gespeichert werden.', // IO-6 (set_datev_mode write failure)
+    // TX-1..4 (audit x2) — de + en only, batch-translated later
+    '{name}: Textdatei zu groß',
+    '{name}: HTML-Datei zu groß',
+    '{name}: HTML-Datei zu komplex (zu groß)',
+    '{name}: HTML-Datei zu tief verschachtelt (zu groß)',
+    '{name}: Fehler beim Laden des PDFs: {error}',
+    '{name}: Baumtiefe überschreitet das Limit von {n} Ebenen.',
+    'Baumtiefe überschreitet das Limit von {n} Ebenen.',
+    '{name}: Unerwarteter Inhalt für \'{file}\': die Datei beginnt nicht wie ein {ext}.',
+    '{name}: \'{file}\' sieht aus wie {label}, nicht wie {ext} – abgelehnt.',
+    'Windows-Programm (EXE/DLL)',
+    'ELF-Binärdatei',
+    'Mach-O-/Java-Binärdatei',
+    'Skript (Shebang)',
+    '{name}: Ungültige PDF-Daten erzeugt für: {file}',
+    '{name}: Ungültige PDF-Daten erzeugt aus Datei: {file}',
+    'DATEV-Modus ist aus.',
+    'Dieses Dokument ist nicht (gültig) mit DATEV verknüpft.',
+    'Keine Daten zum Zurückschreiben.',
+    'Keine Daten zum Ablegen.',
+    'Kein Mandant angegeben.',
+    'Keine Verbindung zur DATEV-Schnittstelle.',
+    'Export lieferte keine Datei.',
+    'Kein lokaler Speicherort gebunden.',
+    'Ausgecheckte Datei ist nicht beschreibbar.',
+    'Nur {done} von {total} Teil(en) nach DATEV abgelegt — die bereits abgelegten bleiben in DATEV.',
+    'Keine Daten zum Speichern.',
+    'Ungültiger Befehl: {error}',
+    'Datei nicht importierbar: {error}',
+    'Dieser Pfad darf nicht direkt geöffnet werden',
+    'ungültiger Wert',
+    'Unvollständig geschrieben: {written} von {n} Bytes',
+    'Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}',
+    '{name} – nicht importierbar',
+    '{name} – nicht importierbar ({reason})',
+    'zu groß',
+    'Limit überschritten',
+    'zu tief verschachtelt',
+    'Weitere Einträge',
+    'Weitere Anhänge',
+    'Weitere Teile',
+    '{name}: Datei enthält keine lesbaren Seiten', // IM-1
     'Im PDF-Tool öffnen',
+    'ungültiges PDF', // T-4 save payload refusal
+    // PDF-Tool open/lock errors (W-9, audit v4) — de + en only, batch-translated later
+    'Dieser Knoten ist bereits im PDF-Tool geöffnet.',
+    'Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann nicht gleichzeitig geändert werden.',
+    'Ordner können nicht im PDF-Tool geöffnet werden.', 'Knoten hat keine PDF-Daten.',
+    'PDF-Tool konnte nicht geöffnet werden.',
     // AGPL §13 licence & source footer of the Help modal — de + en only, batch-translated later
     'Lizenz & Quelltext',
+    // accessibility names (W4 AX-1/2/5) — de + en only, batch-translated later
+    'Dokumentstruktur', 'Kompressionsmethode', 'Seitenvorschau',
+    // PDF-Tool password prompt + unedited save (audit x4) — de + en only, batch-translated later
+    'Passwort erforderlich', 'Dieses PDF ist passwortgeschützt. Bitte Passwort eingeben.',
+    'Falsches Passwort. Bitte erneut versuchen.', 'Passwort',
+    'Passwort-Eingabe abgebrochen – das Dokument wurde nicht geöffnet.', 'Keine Änderungen zu speichern.',
     'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md',
     // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
     'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',
-    'Nach DATEV zurückschreiben', 'Nach DATEV ablegen', 'Mandantennummer für die DATEV-Ablage',
+    'Nach DATEV zurückschreiben', 'Nach DATEV ablegen',
     'Nach DATEV zurückgeschrieben', 'Nach DATEV zurückgeschrieben, aber lokal nicht gespeichert.',
     'In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken',
     'In DATEV abgelegt', 'In DATEV abgelegt, aber lokal nicht gespeichert.',
@@ -122,6 +177,8 @@ describe('full-coverage languages', () => {
     'Seitenbaum repariert – bitte als neue Datei speichern',
     '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet',
     'Seite konnte nicht geladen werden',
+    'Ungültige Felder in der Dokumentstruktur – korrigiert',
+    'Ungültige DATEV-Verknüpfung ignoriert',
   ])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {

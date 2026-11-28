@@ -2,7 +2,7 @@
 
 > **Status: built in v3.10.0.** This design is now implemented — settings gate
 > ([`infra/settings.py`](../infra/settings.py)), lazy service
-> ([`datev/inapp.py`](../packages/datev-dokab/datev/inapp.py)), provenance round-trip (`Node.datev` + `SetDatev`),
+> ([`datev/inapp.py`](https://github.com/tobiasheinrichfaska/datev-dokab/blob/main/datev/inapp.py)), provenance round-trip (`Node.datev` + `SetDatev`),
 > and the `CoreApi.datev_*` / `HostApi` ops wired to [`DatevBar.jsx`](../webui/src/DatevBar.jsx)
 > and the export dialog. See the **In-app DATEV integration** section of the project
 > [`CLAUDE.md`](../CLAUDE.md). The text below is the authoritative spec it was built to.
@@ -16,7 +16,7 @@ Mechanics it builds on: [`datev-dokumentenablage-recipe.md`](datev-dokumentenabl
 `…\<doc-guid>\<document-file-id>`). DokAb keeps **no revision** → a write is a permanent
 overwrite, so the save-back is guarded.
 
-**Two surfaces (added v3.10.0).** A DATEV checkout is a **`.pdf`**, which the host routes to the
+**Two surfaces (added v3.10.0).** A DATEV checkout comes back as the file type it was filed as: a **`.pdf`** goes to the
 **PDF-Tool** surface ([`webui/src/pdftool/main.js`](../webui/pdf-tool.html)); a linked
 **`.belegtool`** opens in the **organizer**. **Both** run through `CoreApi.open` (so provenance
 is captured either way), and **both** offer DATEV write-back — the organizer via

@@ -31,7 +31,6 @@ export const uk = {
   'Abbrechen': 'Скасувати',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Експортувати у PDF зі змістом (вибір, інакше весь документ)',
-  'Auswahl': 'Вибір',
   'Ordner': 'Папка',
   'Rückgängig': 'Скасувати дію',
   'Wiederholen': 'Повторити',

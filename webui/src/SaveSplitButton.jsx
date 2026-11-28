@@ -12,6 +12,7 @@ export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
   const itemRef = useRef(null)
+  const caretRef = useRef(null)
 
   // Shared close-on-Escape / outside-click (#10).
   useMenuDismiss(wrapRef, open, () => setOpen(false))
@@ -26,11 +27,15 @@ export function SaveSplitButton({ onSave, onSaveAs, dirty = false }) {
       <button className="save-main tb-btn" onClick={onSave} title={t('Speichern')} aria-label={t('Speichern')}>
         💾{dirty ? <span className="dirty-dot" aria-hidden="true">•</span> : ''}
       </button>
-      <button className="save-caret" aria-haspopup="menu" aria-expanded={open}
+      <button ref={caretRef} className="save-caret" aria-haspopup="menu" aria-expanded={open}
         title={t('Weitere Speicheroptionen')} aria-label={t('Weitere Speicheroptionen')}
         onClick={() => setOpen((o) => !o)}>▾</button>
       {open && (
-        <div className="save-menu" role="menu" onKeyDown={(e) => rovingFocusKeydown(e.currentTarget, e)}>
+        <div className="save-menu" role="menu" onKeyDown={(e) => {
+          // AX-10: Escape returns focus to the caret (the menu unmounts, focus would drop to <body>)
+          if (e.key === 'Escape') caretRef.current?.focus()
+          else rovingFocusKeydown(e.currentTarget, e)
+        }}>
           <button ref={itemRef} role="menuitem" className="save-menu-item" onClick={chooseSaveAs}>
             {t('Speichern unter…')}
           </button>

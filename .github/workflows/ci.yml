@@ -3,7 +3,7 @@
 #
 # - Keine Secrets, kein pull_request_target; Token nur lesend.
 # - Actions sind auf feste Hauptversionen gepinnt (Commit-SHAs waren beim Anlegen nicht belastbar
-#   abrufbar). TODO: per Dependabot (ecosystem github-actions) auf SHAs umstellen.
+#   abrufbar). Dependabot (.github/dependabot.yml, woechentlich, github-actions) schlaegt Updates vor; SHA-Pinning bleibt offen.
 name: CI
 
 on:
@@ -137,6 +137,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npm run test:csp # CSP-Guard (Production-Build + vite preview, Port 5179)
       - name: Playwright-Spuren hochladen (bei Fehlern)
         if: failure()
         uses: actions/upload-artifact@v4 # feste Hauptversion

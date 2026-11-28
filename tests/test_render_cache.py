@@ -217,3 +217,16 @@ def test_fill_until_idle_aborts_on_new_request():
     svc._render_page = renderer
     warmed = svc.fill_until_idle(specs, "a", 0, lambda nid: nid.encode(), 100)
     assert warmed < 50  # aborted early, did not warm all 50 pages
+
+
+def test_failed_render_is_not_cached_audit_s1():
+    calls = []
+
+    def flaky(data, page, dpi):
+        calls.append(page)
+        return b"" if len(calls) == 1 else b"png"
+
+    svc = RenderService(flaky, budget_bytes=10**7)
+    assert svc.render_window("a", 1, b"d", 0, 1, 100) == [b""]
+    assert svc.render_window("a", 1, b"d", 0, 1, 100) == [b"png"]
+    assert len(calls) == 2

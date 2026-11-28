@@ -2,12 +2,13 @@
 // (+clickable links), tag index (+links — only offered when the document has tags),
 // PDF sidebar bookmarks, and (#13) optional splitting into several files at a page
 // threshold + a chosen break level. Returns the chosen options to the caller.
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
 
 export function ExportDialog({ hasTags, datevAvailable = false, onChoose, onCancel }) {
   const { t } = useT()
+  const titleId = useId()
   const [toc, setToc] = useState(true)
   const [tocLinks, setTocLinks] = useState(true)
   const [index, setIndex] = useState(hasTags)
@@ -34,8 +35,8 @@ export function ExportDialog({ hasTags, datevAvailable = false, onChoose, onCanc
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <h2>{t('PDF exportieren')}</h2>
+      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
+        <h2 id={titleId}>{t('PDF exportieren')}</h2>
 
         <label className="exp-row">
           <input type="checkbox" checked={toc} onChange={(e) => setToc(e.target.checked)} />

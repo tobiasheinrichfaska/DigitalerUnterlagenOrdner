@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import threading
 from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
@@ -44,13 +45,16 @@ class Engine(Protocol):
         """Concatenate PDFs page-by-page (used in D3b)."""
 
 
+_log = logging.getLogger(__name__)
+
+
 def _cut_page_cross_references(pdf) -> None:
     """Prepare the (private, in-memory) parse of the source for copying single pages out of it.
     qpdf nulls references to other source pages on copy, which would leave DEAD internal links
     (GoTo/Dest -> null) in every part; drop those annotations. Also cut what would drag the
     siblings' structures along: an annotation's ``/P`` and (non-popup) ``/Parent`` (form-field
     trees reach the widgets of every other page) and article beads ``/B``."""
-    for page in pdf.pages:
+    for page_idx, page in enumerate(pdf.pages):
         obj = page.obj
         try:
             if "/B" in obj:
@@ -70,11 +74,13 @@ def _cut_page_cross_references(pdf) -> None:
                         del a["/P"]
                     if "/Parent" in a and a.get("/Subtype") != pikepdf.Name.Popup:
                         del a["/Parent"]
-                except Exception:
+                except Exception as exc:
+                    _log.warning("annotation skipped on page %d: %r", page_idx, exc)
                     continue
                 keep.append(a)
             obj["/Annots"] = keep
-        except Exception:
+        except Exception as exc:
+            _log.warning("annotation cleanup failed on page %d: %r", page_idx, exc)
             continue
 
 
@@ -91,11 +97,17 @@ class RealEngine:
         self._mcache: "OrderedDict[tuple, dict]" = OrderedDict()
         self._mcache_max = 16
         self._mcache_lock = threading.Lock()
+        # in-flight compress_all_methods per key, so concurrent callers share one run (C-7)
+        self._inflight: dict = {}
         # variants loaded from a .belegtool (persisted): NOT LRU-bounded, so every
         # node's saved variants stay available after reopening. Keyed like _mcache.
         # Guarded by _mcache_lock too — seed_variants writes it during open() while
         # variants_for/evaluated iterate it on other pywebview threads.
         self._persisted: dict = {}
+        # PF-2: digest -> {dpi: True} index over _persisted (ordered), so variants_for /
+        # evaluated are O(1) per leaf instead of scanning every persisted entry.
+        # Guarded by _mcache_lock like _persisted itself.
+        self._pidx: dict = {}
         # identity-memoised sha1 (the model's bytes are immutable, so a given bytes
         # object hashes once) — _doc_response_locked calls variants_for/evaluated per
         # leaf on EVERY edit while holding the CoreApi lock; without the memo each
@@ -108,18 +120,54 @@ class RealEngine:
         self._dcache_bytes = 0
         self._dcache_max_entries = 256
         self._dcache_budget = 64 * 1024 * 1024
+        # PF-1: identity memo WITHOUT a count/byte cap. The documents' own leaf bytes
+        # are alive anyway, so the memo adds no copies; what it must not do is pin
+        # bytes nobody else holds (closed sessions). Entries whose only remaining
+        # referrers are the memo itself are evicted LRU under a byte budget (no refcount
+        # tricks; see set_live_bytes / _evict_dlive). The
+        # small budgeted LRU above stays as the second layer (unchanged semantics).
+        self._dlive: "OrderedDict[int, tuple]" = OrderedDict()
+        # R10-4: pinned BYTES are bounded too — a sweep also runs once the memo pins more
+        # than max(64 MiB, 2x the bytes that were still live after the last sweep).
+        self._dlive_bytes = 0
+        self._dlive_budget = 64 * 1024 * 1024
+
+    def set_live_bytes(self, nbytes: int) -> None:
+        """Hint from the caller: total bytes of the leaf sources of all open documents.
+        The identity memo keeps up to max(64 MiB, 2x this) pinned (LRU by last use), so a
+        large open document is never re-hashed. No refcount semantics involved."""
+        with self._dcache_lock:
+            self._dlive_budget = max(64 * 1024 * 1024, 2 * max(0, int(nbytes)))
+            self._evict_dlive()
+
+    def _evict_dlive(self) -> None:
+        """Caller holds _dcache_lock. LRU eviction (least recently used first)."""
+        while self._dlive and self._dlive_bytes > self._dlive_budget:
+            _k, (old, _d) = self._dlive.popitem(last=False)
+            self._dlive_bytes -= len(old)
 
     def _digest(self, pdf_bytes: bytes) -> bytes:
         key = id(pdf_bytes)
         with self._dcache_lock:
+            ent = self._dlive.get(key)
+            if ent is not None and ent[0] is pdf_bytes:
+                self._dlive.move_to_end(key)
+                return ent[1]
             ent = self._dcache.get(key)
             if ent is not None and ent[0] is pdf_bytes:
                 self._dcache.move_to_end(key)
                 return ent[1]
         d = hashlib.sha1(pdf_bytes).digest()
+        with self._dcache_lock:
+            old = self._dlive.pop(key, None)
+            if old is not None:
+                self._dlive_bytes -= len(old[0])
+            self._dlive[key] = (pdf_bytes, d)
+            self._dlive_bytes += len(pdf_bytes)
+            self._evict_dlive()
         if len(pdf_bytes) > self._dcache_budget:
-            # a single object larger than the whole budget can't stay cached — caching
-            # it would just drain every other entry, then evict itself. Skip the insert.
+            # a single object larger than the whole budget can't stay in the LRU layer —
+            # caching it would just drain every other entry, then evict itself.
             return d
         with self._dcache_lock:
             # the cache holds the bytes, so a live id can't be reused for other bytes
@@ -140,10 +188,15 @@ class RealEngine:
         digest = self._digest(pdf_bytes)
         out: dict = {}
         with self._mcache_lock:
-            items = list(self._mcache.items()) + list(self._persisted.items())
-        for (d, dpi), result in items:
-            if d == digest and result:
-                out.setdefault(dpi, {}).update(result)
+            # _mcache is capped at _mcache_max (16) entries: a scan is O(1). The
+            # persisted layer is unbounded → looked up through the digest index (PF-2).
+            for (d, dpi), result in self._mcache.items():
+                if d == digest and result:
+                    out.setdefault(dpi, {}).update(result)
+            for dpi in self._pidx.get(digest, ()):
+                result = self._persisted.get((digest, dpi))
+                if result:
+                    out.setdefault(dpi, {}).update(result)
         return out
 
     def evaluated(self, pdf_bytes: bytes) -> bool:
@@ -154,17 +207,34 @@ class RealEngine:
         digest = self._digest(pdf_bytes)
         with self._mcache_lock:
             return (any(d == digest for (d, _dpi) in self._mcache)
-                    or any(d == digest for (d, _dpi) in self._persisted))
+                    or bool(self._pidx.get(digest)))
 
     def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
         """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
         node is instant — no recompute. The layer is unbounded while its documents
         are open; ``prune_persisted`` frees it when they close."""
         digest = self._digest(pdf_bytes)
+        try:
+            src_pages = self.page_count(pdf_bytes)
+        except Exception:
+            src_pages = None  # unreadable source: nothing to compare against
+
+        def _ok(vb) -> bool:
+            # same guard as fresh candidates (SV-4): a variant whose page count
+            # differs from the source would shift every following node on reload
+            if src_pages is None:
+                return True
+            try:
+                return self.page_count(vb) == src_pages
+            except Exception:
+                return True  # unparseable: not a count mismatch (opaque/test blobs); Compress surfaces it
+
         for dpi, methods in (variants or {}).items():
-            if methods:
+            kept = {m: vb for m, vb in (methods or {}).items() if _ok(vb)}
+            if kept:
                 with self._mcache_lock:
-                    self._persisted[(digest, int(dpi))] = dict(methods)
+                    self._persisted[(digest, int(dpi))] = kept
+                    self._pidx.setdefault(digest, {})[int(dpi)] = True
 
     def prune_persisted(self, closed_sources, live_sources) -> None:
         """Drop the persisted variants of the CLOSED document's sources, keeping
@@ -178,8 +248,9 @@ class RealEngine:
         if not drop:
             return
         with self._mcache_lock:
-            for key in [k for k in self._persisted if k[0] in drop]:
-                del self._persisted[key]
+            for dg in drop:
+                for dpi in self._pidx.pop(dg, ()):
+                    self._persisted.pop((dg, dpi), None)
 
     def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
         key = (self._digest(pdf_bytes), dpi)
@@ -192,16 +263,33 @@ class RealEngine:
             if hit is not None:
                 self._mcache.move_to_end(key)
                 return hit
-        from formats.compress_pdf_bytes import compress_all_methods, CompressionCancelled
-        try:
-            result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
-        except CompressionCancelled:
-            return {}  # node was removed mid-compress → don't memoise a partial/empty result
         with self._mcache_lock:
-            self._mcache[key] = result
-            if len(self._mcache) > self._mcache_max:
-                self._mcache.popitem(last=False)  # evict the least-recently-used
-        return result
+            waiter = self._inflight.get(key)
+            if waiter is None:
+                self._inflight[key] = threading.Event()
+        if waiter is not None:
+            waiter.wait()  # another thread computes the same key — reuse its result
+            with self._mcache_lock:
+                hit = self._mcache.get(key) or self._persisted.get(key)
+            if hit is not None:
+                return hit
+            return self._all_methods(pdf_bytes, dpi, cancel)  # it was cancelled/failed: retry
+        try:
+            from formats.compress_pdf_bytes import compress_all_methods, CompressionCancelled
+            try:
+                result = compress_all_methods(pdf_bytes, dpi=dpi, cancel=cancel)  # smaller-than-original
+            except CompressionCancelled:
+                return {}  # node was removed mid-compress → don't memoise a partial/empty result
+            with self._mcache_lock:
+                self._mcache[key] = result
+                if len(self._mcache) > self._mcache_max:
+                    self._mcache.popitem(last=False)  # evict the least-recently-used
+            return result
+        finally:
+            with self._mcache_lock:
+                ev = self._inflight.pop(key, None)
+            if ev is not None:
+                ev.set()
 
     def page_count(self, pdf_bytes: bytes) -> int:
         return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
@@ -218,14 +306,33 @@ class RealEngine:
         return {m: len(b) for m, b in self._all_methods(pdf_bytes, dpi, cancel).items()}
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        writer = PdfWriter()
-        for page in reader.pages:
-            page.rotate(angle)
-            writer.add_page(page)
-        buf = io.BytesIO()
-        writer.write(buf)
-        return buf.getvalue()
+        # pikepdf (like split_chunks): keeps the whole catalog (/AcroForm survives, C-6) and
+        # does not depend on a trailer /Size (a qpdf-repaired file has none — CP-1).
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            # never carry document-level active content (OpenAction / additional actions / JS names)
+            root = pdf.Root
+            for key in ("/OpenAction", "/AA"):
+                if key in root:
+                    del root[key]
+            names = root.get("/Names")
+            if names is not None and "/JavaScript" in names:
+                del names["/JavaScript"]
+            for page in pdf.pages:
+                # /Rotate may be inherited from the page tree; read the effective value
+                node, cur = page.obj, 0
+                seen = set()  # R13-1: a cyclic /Parent chain must not hang
+                for _ in range(64):
+                    if node is None or id(node) in seen:
+                        break
+                    seen.add(id(node))
+                    if "/Rotate" in node:
+                        cur = int(node["/Rotate"])
+                        break
+                    node = node.get("/Parent")
+                page.obj["/Rotate"] = (cur + int(angle)) % 360
+            buf = io.BytesIO()
+            pdf.save(buf)
+            return buf.getvalue()
 
     def split(self, pdf_bytes: bytes) -> List[bytes]:
         reader = PdfReader(io.BytesIO(pdf_bytes))

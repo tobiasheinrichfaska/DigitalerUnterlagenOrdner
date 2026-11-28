@@ -151,7 +151,9 @@ def restore_from_bak(path: str) -> None:
             shutil.copyfile(bak, path)
             logger.warning("[lock] restored %s from .bak after an interrupted save", path)
         except Exception:
+            # SV-5: keep the only good copy and the in-flight marker for a later retry
             logger.exception("[lock] .bak restore failed")
+            return
     try:
         os.remove(bak)
     except OSError:

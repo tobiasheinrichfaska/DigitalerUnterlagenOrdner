@@ -6,7 +6,7 @@
 // Several selected (#7) → dispatches TagMany (add/remove ONE tag across all selected
 // as one undo step); chips show the UNION of their tags, a tag not on every node is
 // "partial" (te-chip-partial) and adding it completes it across the selection.
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { tagSelectionState, tagsOnAll } from './lib/tags'
 
@@ -18,6 +18,19 @@ export function TagEditor({ node, nodes = null, docTags = [], dispatch }) {
   const { t } = useT()
   const [input, setInput] = useState('')
   const [favs, setFavs] = useState(loadFavs)
+
+  // AP-3: latest tag set we dispatched for the single node; valid until the prop refreshes
+  // (new array identity / other node), so rapid successive edits accumulate.
+  const pending = useRef({ id: null, base: null, tags: [] })
+  const currentTags = () => {
+    const base = node.tags || []
+    const p = pending.current
+    return p.id === node.id && p.base === node.tags ? p.tags : base
+  }
+  const setTagsFor = (tags) => {
+    pending.current = { id: node.id, base: node.tags, tags }
+    dispatch({ type: 'SetTags', node_id: node.id, tags })
+  }
 
   const selected = (nodes && nodes.length ? nodes : (node ? [node] : [])).filter(Boolean)
   const multi = selected.length > 1
@@ -36,11 +49,11 @@ export function TagEditor({ node, nodes = null, docTags = [], dispatch }) {
     setInput('')
     if (!v) return
     if (multi) dispatch({ type: 'TagMany', node_ids: ids, tag: v, add: true })
-    else if (!(node.tags || []).includes(v)) dispatch({ type: 'SetTags', node_id: node.id, tags: [...(node.tags || []), v] })
+    else if (!currentTags().includes(v)) setTagsFor([...currentTags(), v])
   }
   const remove = (tg) => {
     if (multi) dispatch({ type: 'TagMany', node_ids: ids, tag: tg, add: false })
-    else dispatch({ type: 'SetTags', node_id: node.id, tags: (node.tags || []).filter((x) => x !== tg) })
+    else setTagsFor(currentTags().filter((x) => x !== tg))
   }
   const toggleFav = (tg) => {
     const next = favs.includes(tg) ? favs.filter((x) => x !== tg) : [...favs, tg]
@@ -59,8 +72,9 @@ export function TagEditor({ node, nodes = null, docTags = [], dispatch }) {
           title={onAll ? undefined : t('nur auf einigen markiert')}>
           {tag}
           <button className="te-star" title={favs.includes(tag) ? t('Aus Favoriten entfernen') : t('Zu Favoriten')}
+            aria-label={`${favs.includes(tag) ? t('Aus Favoriten entfernen') : t('Zu Favoriten')}: ${tag}`}
             onClick={() => toggleFav(tag)}>{favs.includes(tag) ? '★' : '☆'}</button>
-          <button className="te-x" title={t('Tag entfernen')} onClick={() => remove(tag)}>×</button>
+          <button className="te-x" title={t('Tag entfernen')} aria-label={`${t('Tag entfernen')}: ${tag}`} onClick={() => remove(tag)}>×</button>
         </span>
       ))}
       <input className="te-input" list="te-suggest" value={input} placeholder={t('+ Tag')}

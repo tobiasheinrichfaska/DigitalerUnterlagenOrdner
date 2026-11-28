@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 test.use({ locale: 'de-DE' })
 const HERE = path.dirname(fileURLToPath(import.meta.url))
+const RADIO8 = fs.readFileSync(path.join(HERE, 'fixtures', 'radio8.pdf'))
 const ENC_B64 = fs.readFileSync(path.join(HERE, 'fixtures', 'enc-form.pdf')).toString('base64')
 
 function installBridge(page, { enc = false, loadFails = false, saveDelay = 0, pdf = '/spike-form.pdf', saveResults = null } = {}) {
@@ -97,6 +98,27 @@ test.describe('PDF-Tool dirty tracking + save', () => {
     await page.locator('#btn-save').click()
     await expect(page.locator('#pdf-status')).toHaveText(/Keine Änderungen/)
     // a real radio change afterwards still counts
+    await page.locator('.annotationLayer input[type=radio]').nth(1).check({ force: true })
+    await expect.poll(() => page.evaluate(() => window.__belegDirty)).toBe(true)
+  })
+
+  test('R12-5: navigation keys + scrolling to a radio page stay clean; a radio click is dirty', async ({ page }) => {
+    await page.route('**/spike-radio8.pdf', (r) => r.fulfill({ body: RADIO8, contentType: 'application/pdf' }))
+    await installBridge(page, { pdf: '/spike-radio8.pdf' })
+    await page.goto('/pdf-tool.html')
+    await expect(page.locator('#btn-save')).toBeEnabled({ timeout: 20000 })
+    await page.mouse.move(400, 300)
+    for (const k of ['PageDown', 'ArrowDown', 'ArrowDown', 'PageDown', 'Tab']) await page.keyboard.press(k)
+    await page.evaluate(() => {
+      const c = document.getElementById('viewerContainer') || document.scrollingElement
+      c.scrollTop = 1e7
+    })
+    await expect(page.locator('.annotationLayer input[type=radio]').first()).toBeVisible({ timeout: 20000 })
+    await page.waitForTimeout(800)
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(false)
+    expect(await names(page, 'set_dirty')).toEqual([])
+    await page.locator('#btn-save').click()
+    await expect(page.locator('#pdf-status')).toHaveText(/Keine Änderungen/)
     await page.locator('.annotationLayer input[type=radio]').nth(1).check({ force: true })
     await expect.poll(() => page.evaluate(() => window.__belegDirty)).toBe(true)
   })

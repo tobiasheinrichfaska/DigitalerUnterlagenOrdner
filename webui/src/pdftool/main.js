@@ -134,13 +134,15 @@ function markSaved(tok) {
   if (editVersion !== tok.v || storageHash() !== tok.h) setDirty(true)
   else setDirty(false)
 }
-document.addEventListener('input', () => { userTouched = true }, true)
-document.addEventListener('change', () => { userTouched = true }, true)
-document.addEventListener('keydown', () => { userTouched = true }, true)
-document.addEventListener('pointerdown', (e) => {
-  const el = e.target && e.target.closest ? e.target.closest('.annotationLayer, .annotationEditorLayer') : null
-  if (el || textOn) userTouched = true
-}, true)
+// R12-5: only REAL edit interactions arm userTouched: events targeting a form widget / an editor-layer
+// element. Navigation keys (PageDown/arrows/Tab on the page) and scrolling never count.
+const EDIT_TARGET = '.annotationLayer, .annotationEditorLayer, .freeTextEditor, [data-annotation-id], [contenteditable]'
+const inEditTarget = (e) => !!(e.target && e.target.closest && e.target.closest(EDIT_TARGET))
+const touch = (e) => { if (inEditTarget(e)) userTouched = true }
+document.addEventListener('input', touch, true)
+document.addEventListener('change', touch, true)
+document.addEventListener('keydown', touch, true)
+document.addEventListener('pointerdown', (e) => { if (inEditTarget(e) || textOn) userTouched = true }, true)
 eventBus.on('annotationlayerrendered', () => { if (pdfDoc && !userTouched) baseline = storageHash() })
 
 function hasBinding() {

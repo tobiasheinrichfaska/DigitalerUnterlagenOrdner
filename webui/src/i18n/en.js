@@ -310,4 +310,8 @@ export const en = {
   'Knoten hat keine PDF-Daten.': 'The node has no PDF data.',
   'PDF-Tool konnte nicht geöffnet werden.': 'The PDF tool could not be opened.',
   'ungültiges PDF': 'invalid PDF',
+  // accessibility names (W4 AX-1/2/5)
+  'Dokumentstruktur': 'Document structure',
+  'Kompressionsmethode': 'Compression method',
+  'Seitenvorschau': 'Page preview',
 }

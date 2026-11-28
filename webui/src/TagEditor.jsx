@@ -72,8 +72,9 @@ export function TagEditor({ node, nodes = null, docTags = [], dispatch }) {
           title={onAll ? undefined : t('nur auf einigen markiert')}>
           {tag}
           <button className="te-star" title={favs.includes(tag) ? t('Aus Favoriten entfernen') : t('Zu Favoriten')}
+            aria-label={`${favs.includes(tag) ? t('Aus Favoriten entfernen') : t('Zu Favoriten')}: ${tag}`}
             onClick={() => toggleFav(tag)}>{favs.includes(tag) ? '★' : '☆'}</button>
-          <button className="te-x" title={t('Tag entfernen')} onClick={() => remove(tag)}>×</button>
+          <button className="te-x" title={t('Tag entfernen')} aria-label={`${t('Tag entfernen')}: ${tag}`} onClick={() => remove(tag)}>×</button>
         </span>
       ))}
       <input className="te-input" list="te-suggest" value={input} placeholder={t('+ Tag')}

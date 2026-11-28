@@ -39,7 +39,7 @@ export function HelpModal({ lang, onClose }) {
           <button className="help-close" onClick={onClose} aria-label={t('Schließen')}>✕</button>
         </div>
 
-        <div className="help-body">
+        <div className="help-body" tabIndex={0} role="region" aria-label={t('Hilfe')}>
           {sections.map((s) => (
             <section key={s.t}>
               <h3>{s.t}</h3>

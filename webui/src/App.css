@@ -91,7 +91,7 @@ header h1 { font-size: 19px; margin: 0; }
   padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px;
   background: transparent; color: var(--muted, #667); cursor: pointer;
 }
-.datev-toggle.active { color: #fff; background: #2b8a3e; border-color: #2b8a3e; }
+.datev-toggle.active { color: #fff; background: #267a38; border-color: #267a38; }
 .datev-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted, #556); }
 .datev-state.connected { color: #2b6cb0; }
 .datev-state .datev-warn { color: #b54708; font-style: italic; }
@@ -163,13 +163,22 @@ ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 0; }
 /* status dots (trailing, small, right-aligned) + compression-undecided dot (leading) */
 .alt-slot { width: 12px; flex: 0 0 12px; display: inline-flex; align-items: center; }
 .alt-dot { width: 9px; height: 9px; border-radius: 50%; background: #e3342f;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset; }
-.status-dots { margin-left: auto; display: inline-flex; gap: 3px; padding-left: 8px; flex: 0 0 auto; }
-.sdot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset; }
+  box-shadow: 0 0 0 1px #555; }
+.status-dots { margin-left: auto; display: inline-flex; gap: 4px; padding: 0 1px 0 8px; flex: 0 0 auto; }
+/* 1px dark ring (non-text contrast >= 3:1) + inner mark so status is not colour-only:
+   red = solid, yellow = dark centre dot, green = light centre dot, black = solid dark */
+.sdot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1px #555; }
 .sdot.red { background: #e3342f; }
-.sdot.yellow { background: #f4c430; }
-.sdot.green { background: #38a169; }
+.sdot.yellow { background: radial-gradient(circle, #333 0 1.2px, #f4c430 1.6px); }
+.sdot.green { background: radial-gradient(circle, #fff 0 1.2px, #2f8f5b 1.6px); }
 .sdot.black { background: #222; }
+@media (forced-colors: active) {
+  .sdot, .alt-dot { forced-color-adjust: none; box-shadow: none; border: 1px solid CanvasText; box-sizing: border-box; }
+  .sdot.red, .alt-dot { background: Highlight; }
+  .sdot.yellow { background: radial-gradient(circle, CanvasText 0 1.2px, Mark 1.6px); }
+  .sdot.green { background: radial-gradient(circle, Canvas 0 1.2px, LinkText 1.6px); }
+  .sdot.black { background: CanvasText; }
+}
 /* drag-drop move indicators */
 .row[draggable="true"] { cursor: grab; }
 .row.drop-into { background: #d7ebff; outline: 2px solid var(--accent); outline-offset: -2px; }

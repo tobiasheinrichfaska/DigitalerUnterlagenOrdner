@@ -13,13 +13,21 @@ export function ContextMenu({ menu, dispatch, onClose, mergeIds, group, onExport
   const { t } = useT()
   const [splitOpen, setSplitOpen] = useState(false)
   const menuRef = useRef(null)
+  const returnFocusRef = useRef(null) // AX-10: who had focus when the menu opened
   const [pos, setPos] = useState(null)  // null until measured → render at cursor first
   const { x, y, node } = menu ?? {}
   // clamp the menu into the viewport so a right-click near the bottom/right edge
   // isn't cut off (flip up / pull left to fit). useLayoutEffect runs pre-paint.
   useLayoutEffect(() => {
     const el = menuRef.current
-    if (!el) { setPos(null); return }
+    if (!el) {
+      setPos(null)
+      const back = returnFocusRef.current
+      returnFocusRef.current = null
+      if (back && back.isConnected && typeof back.focus === 'function') back.focus()
+      return
+    }
+    if (!returnFocusRef.current) returnFocusRef.current = document.activeElement
     const { width, height } = el.getBoundingClientRect()
     setPos({
       left: Math.max(4, Math.min(x, window.innerWidth - width - 4)),

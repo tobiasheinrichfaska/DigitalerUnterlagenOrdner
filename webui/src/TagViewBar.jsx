@@ -15,7 +15,7 @@ export function TagViewBar({ search, setSearch, grouped, setGrouped, active, onR
         🔍
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder={t('Tags suchen…')} aria-label={t('Tags suchen…')} />
-        {search && <button className="tvb-clear" title={t('Suche löschen')} onClick={() => setSearch('')}>×</button>}
+        {search && <button className="tvb-clear" title={t('Suche löschen')} aria-label={t('Suche löschen')} onClick={() => setSearch('')}>×</button>}
       </span>
       <label className="tvb-group" title={t('Belege nach Tag gruppieren (nur Ansicht)')}>
         <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />

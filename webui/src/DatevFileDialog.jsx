@@ -3,7 +3,7 @@
 // the bridge calls (datev_clients/datev_placements/datev_file) live in the caller — so it
 // renders deterministically in tests. No client data ⇒ filing is disabled (the user's rule:
 // without a connection / client list there is no safe DATEV target).
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
 import { filterClients, registersFor, MONTHS, yearChoices, validateFiling, buildFileOpts, soleClientGuid } from './lib/datevFiling'
@@ -11,6 +11,7 @@ import { filterClients, registersFor, MONTHS, yearChoices, validateFiling, build
 export function DatevFileDialog({ clients, placements = [], loading, error, currentYear,
                                   defaultName = '', onSubmit, onCancel }) {
   const { t } = useT()
+  const titleId = useId()
   const dialogRef = useModal({ onClose: onCancel })
   const [query, setQuery] = useState('')
   const [clientGuid, setClientGuid] = useState('')
@@ -37,9 +38,9 @@ export function DatevFileDialog({ clients, placements = [], loading, error, curr
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div ref={dialogRef} className="modal datev-file-dialog" role="dialog" aria-modal="true"
+      <div ref={dialogRef} className="modal datev-file-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}>
-        <h2>{t('Nach DATEV ablegen')}</h2>
+        <h2 id={titleId}>{t('Nach DATEV ablegen')}</h2>
 
         {loading && <p className="status">{t('Mandanten werden geladen…')}</p>}
         {error && <p className="error" role="alert">{t('Mandantenliste nicht verfügbar')}: {error}</p>}

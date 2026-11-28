@@ -110,7 +110,9 @@ describe('Tree', () => {
     const selected = [...rows].filter((r) => r.getAttribute('aria-selected') === 'true')
     expect(selected.length).toBe(1)
     expect(selected[0].textContent).toContain('doc2')
-    expect(rows[0].getAttribute('tabindex')).toBe('-1')
+    // AX-12 roving tabindex: with no primary the first row is the single tab stop, the rest -1
+    expect(rows[0].getAttribute('tabindex')).toBe('0')
+    expect(rows[1].getAttribute('tabindex')).toBe('-1')
   })
 
   it('folder rows carry aria-expanded matching their collapse state; leaves omit it', () => {

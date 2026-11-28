@@ -6,10 +6,13 @@
 // useT() hook. The context DEFAULT is a working German `t`, so components rendered
 // without a provider (e.g. in unit tests) still translate (to the default language)
 // instead of crashing — that keeps the existing German-string tests green.
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { DEFAULT_LANG, resolveInitialLang, translate } from './index'
 
 const STORAGE_KEY = 'beleg.lang'
+
+// AX-11: internal codes that are not valid BCP-47 language subtags → private-use tags.
+const HTML_LANG = { mnn: 'x-mnn' }
 
 const I18nContext = createContext({
   lang: DEFAULT_LANG,
@@ -29,6 +32,8 @@ export function LanguageProvider({ children }) {
     setLangState(next)
     try { localStorage.setItem(STORAGE_KEY, next) } catch { /* ignore */ }
   }, [])
+
+  useEffect(() => { document.documentElement.lang = HTML_LANG[lang] ?? lang }, [lang])
 
   const t = useCallback((key, vars) => translate(lang, key, vars), [lang])
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t])

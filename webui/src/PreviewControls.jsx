@@ -140,7 +140,7 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
         />
       </label>
 
-      <select className="compress-select" value={method} disabled={off}
+      <select className="compress-select" aria-label={t('Kompressionsmethode')} value={method} disabled={off}
         onMouseDown={() => { if (!options) loadOptions(dpi) }}
         onFocus={() => { if (!options) loadOptions(dpi) }}
         onChange={(e) => onMethod(e.target.value)}>
@@ -170,8 +170,8 @@ export function PreviewControls({ node, session, dispatch, onPreview, defaultDpi
       </button>
       <span className="sep" />
       {/* left-then-right reads naturally (v3.10.0, planned item #4) */}
-      <button title={t('links drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'left' })}>↺</button>
-      <button title={t('rechts drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
+      <button title={t('links drehen')} aria-label={t('links drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'left' })}>↺</button>
+      <button title={t('rechts drehen')} aria-label={t('rechts drehen')} onClick={() => dispatch({ type: 'Rotate', node_id: node.id, direction: 'right' })}>↻</button>
     </div>
   )
 }

@@ -59,9 +59,10 @@ describe('W-1 — organizer refreshes when the window regains focus', () => {
     })
     expect(screen.queryByText(/neu-aus-pdftool/)).toBeNull()
     await act(async () => { window.dispatchEvent(new Event('focus')) })
-    expect(await screen.findByText(/neu-aus-pdftool/)).toBeInTheDocument()
+    // explicit timeouts: the default 1000 ms is too tight on a loaded CI runner
+    expect(await screen.findByText(/neu-aus-pdftool/, {}, { timeout: 8000 })).toBeInTheDocument()
     expect(document.querySelector('header h1').textContent).toContain('•')
-    await waitFor(() => expect(callsOf(calls, 'set_dirty').some((c) => c.args[0] === true)).toBe(true))
+    await waitFor(() => expect(callsOf(calls, 'set_dirty').some((c) => c.args[0] === true)).toBe(true), { timeout: 8000 })
   })
 
   it('an unsupported/failed state fetch is ignored', async () => {

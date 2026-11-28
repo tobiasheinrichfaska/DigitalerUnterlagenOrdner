@@ -241,7 +241,7 @@ export function Preview({ session, node, zoom = 1, previewReq = null, onPage = n
 
   const width = Math.round(560 * zoom)
   return (
-    <div className="win-preview" ref={scrollRef} onScroll={onScroll}>
+    <div className="win-preview" ref={scrollRef} onScroll={onScroll} tabIndex={0} role="region" aria-label={t('Seitenvorschau')}>
       {loadError && <p className="error" aria-live="polite">⚠ {t('Seite konnte nicht geladen werden')}</p>}
       {Array.from({ length: count }, (_, i) => {
         const [w, h] = dims[i] || [595, 842]

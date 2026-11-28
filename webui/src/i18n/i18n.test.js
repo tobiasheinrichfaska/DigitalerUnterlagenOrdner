@@ -61,9 +61,9 @@ describe('translate (source-string keys)', () => {
     // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206,
     // PLUS the 12 load/export integrity warnings (QS 2026-11-04: degraded .belegtool open/import,
     // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
-    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226, PLUS the 2 load-validation warnings (u4 BP-3/BP-7) = 228, PLUS the IM-1 unreadable-PDF refusal = 229.
+    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226, PLUS the 2 load-validation warnings (u4 BP-3/BP-7) = 228, PLUS the IM-1 unreadable-PDF refusal = 229, PLUS the 3 accessibility names (W4 AX-1/2/5: Dokumentstruktur, Kompressionsmethode, Seitenvorschau) = 232.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(229)
+    expect(Object.keys(en).length).toBe(232)
   })
 })
 
@@ -88,6 +88,8 @@ describe('full-coverage languages', () => {
     'PDF-Tool konnte nicht geöffnet werden.',
     // AGPL §13 licence & source footer of the Help modal — de + en only, batch-translated later
     'Lizenz & Quelltext',
+    // accessibility names (W4 AX-1/2/5) — de + en only, batch-translated later
+    'Dokumentstruktur', 'Kompressionsmethode', 'Seitenvorschau',
     'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md',
     // DATEV mode (v3.10.0) — de + en only for now, batch-translated later
     'DATEV-Modus ein-/ausschalten', 'Mit DATEV verknüpft', 'in DATEV ausgecheckt',

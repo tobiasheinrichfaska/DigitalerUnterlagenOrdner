@@ -137,6 +137,8 @@ class CoreApi:
         # Single-writer file lock (off by default; opt-in via BELEG_FILE_LOCK). When on,
         # opening a .belegtool holds an exclusive handle for the session's lifetime.
         self._file_lock_enabled = os.environ.get("BELEG_FILE_LOCK", "").lower() not in ("", "0", "false", "no")
+        self._save_locks = {}  # normalised target path -> [Lock, refcount] (HA-1)
+        self._save_locks_guard = threading.Lock()
         self._locks = {}  # session -> FileLock (only while file-lock is enabled)
         self._view_dirs = {}  # session -> temp beleg_view_* dir of its materialized view (deleted on close)
         self._pending_view_dirs = set()  # materialized view dirs not yet bound to their (new) session
@@ -954,6 +956,38 @@ class CoreApi:
         recompute on reopen) — the 'Original speichern' choice in the save dialog."""
         if not isinstance(path, str) or not path.strip():  # IO-8: never write a file named "None"
             return {"ok": False, "error": "Kein gültiger Speicherpfad."}
+        # HA-1: saves to one target run one after the other (key-repeat, two windows); the
+        # second reads the then-current document, so nothing is lost and no temp is shared.
+        with self._save_path_lock(path):
+            return self._save_locked(session, path, store_alternatives)
+
+    @contextmanager
+    def _save_path_lock(self, path):
+        try:
+            key = os.path.normcase(os.path.realpath(path))
+        except (OSError, ValueError):
+            key = path
+        with self._save_locks_guard:
+            ent = self._save_locks.get(key)
+            if ent is None:
+                ent = self._save_locks[key] = [threading.Lock(), 0]
+            ent[1] += 1
+        try:
+            with ent[0]:
+                yield
+        finally:
+            with self._save_locks_guard:
+                ent[1] -= 1
+                if ent[1] == 0:
+                    self._save_locks.pop(key, None)
+
+    def discard_view_dir(self, view_dir: str) -> None:
+        """Remove a materialized view temp dir whose window could not be opened (HA-3)."""
+        with self._lock:
+            self._pending_view_dirs.discard(view_dir)
+        shutil.rmtree(view_dir, ignore_errors=True)
+
+    def _save_locked(self, session: str, path: str, store_alternatives: bool) -> dict:
         with self._lock:
             s = self._sessions.get(session)
             if s is None:

@@ -411,6 +411,13 @@ def _expose_api(win, api):
     win.expose(*[make(n) for n in names])
 
 
+def _dialog_error(exc):
+    """A native dialog failed: report ONLY the exception class (never its text, which may
+    carry paths) as an error dict instead of raising into the bridge (audit aa4 HA-7)."""
+    logger.exception("native dialog failed")
+    return {"ok": False, "error": type(exc).__name__}
+
+
 class HostApi:
     """JS-facing API for one window: shared CoreApi ops + native dialogs on *this*
     window. One HostApi per window; it stores only the window's uid (storing the
@@ -454,7 +461,16 @@ class HostApi:
             res = self._core.materialize_subset(session, node_ids, name)
             if not res.get("ok"):
                 return res
-            return _open_window(self._core, startup_path=res["path"])
+            view_dir = os.path.dirname(res["path"])
+            try:
+                out = _open_window(self._core, startup_path=res["path"])
+            except BaseException:
+                self._core.discard_view_dir(view_dir)  # HA-3: no orphaned temp view
+                raise
+            if not out.get("ok"):
+                self._core.discard_view_dir(view_dir)
+                return out
+            return {**out, "count": res.get("count")}  # HA-4: the notice shows the node count
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -481,7 +497,14 @@ class HostApi:
             res = self._core.open_node_in_pdftool(session, node_id)
             if not res.get("ok"):
                 return res
-            return _open_window(self._core, startup_kind="node", startup_session=res["session"])
+            try:
+                out = _open_window(self._core, startup_kind="node", startup_session=res["session"])
+            except BaseException:
+                self._core.close_pdftool(res["session"])  # HA-3: free the node lock + session
+                raise
+            if not out.get("ok"):
+                self._core.close_pdftool(res["session"])
+            return out
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -519,6 +542,8 @@ class HostApi:
         # in Python, never in page JS.
         if path is not None and not self._is_granted_path(path):
             return {"ok": False, "error": "Dieser Pfad darf nicht direkt geöffnet werden"}
+        if session is None:
+            session = self._session  # HA-2: a remount re-opens in place, never leaks the old session
         resp = self._core.open(session, path)
         if resp.get("ok"):
             self._session = resp.get("session")  # remember for the close-time lock release
@@ -571,8 +596,11 @@ class HostApi:
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
         name = (self._core.document_name(session) or "Export").strip() or "Export"
-        path = win.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename=f"{name}.pdf", file_types=("PDF (*.pdf)",))
+        try:
+            path = win.create_file_dialog(
+                webview.FileDialog.SAVE, save_filename=f"{name}.pdf", file_types=("PDF (*.pdf)",))
+        except Exception as e:
+            return _dialog_error(e)
         if not path:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
@@ -586,9 +614,13 @@ class HostApi:
         # only confirmed the base name) — confirm the ACTUAL part files before clobbering.
         if not result.get("ok") and result.get("code") == "exists":
             names = "\n".join(os.path.basename(p) for p in result.get("existing", []))
-            if not win.create_confirmation_dialog(
+            try:
+                confirmed = win.create_confirmation_dialog(
                     "Dateien überschreiben?",
-                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names):
+                    "Diese Dateien existieren bereits und werden überschrieben:\n" + names)
+            except Exception as e:
+                return _dialog_error(e)
+            if not confirmed:
                 return {"ok": False, "error": "cancelled"}
             opts = dict(options or {})
             opts["overwrite"] = True
@@ -599,8 +631,11 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        result = win.create_file_dialog(
-            webview.FileDialog.OPEN, allow_multiple=True, file_types=_import_file_types())
+        try:
+            result = win.create_file_dialog(
+                webview.FileDialog.OPEN, allow_multiple=True, file_types=_import_file_types())
+        except Exception as e:
+            return _dialog_error(e)
         if not result:
             return {"ok": False, "error": "cancelled"}
         return self._core.import_paths(session, list(result), parent_id)
@@ -610,9 +645,14 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        try:
+            result = win.create_file_dialog(webview.FileDialog.OPEN, file_types=FILE_TYPES)
+        except Exception as e:
+            return _dialog_error(e)
         if not result:
             return {"ok": False, "error": "cancelled"}
+        if self._win() is None:  # HA-6: the window closed while the dialog was up — no orphan session
+            return {"ok": False, "error": "Fenster nicht gefunden"}
         resp = self._core.open(session, result[0])
         if resp.get("ok"):
             self._session = resp.get("session")  # S-7: remember for close-time release
@@ -639,9 +679,12 @@ class HostApi:
         # and destroys the original after all. Suggest a rescue name instead.
         if self._core.session_degraded(session):
             name += " (wiederhergestellt)"
-        path = win.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
-            file_types=("BelegTool (*.belegtool)",))
+        try:
+            path = win.create_file_dialog(
+                webview.FileDialog.SAVE, save_filename=f"{name}.belegtool",
+                file_types=("BelegTool (*.belegtool)",))
+        except Exception as e:
+            return _dialog_error(e)
         if not path:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
@@ -662,13 +705,17 @@ class HostApi:
         win = self._win()
         if win is None:
             return {"ok": False, "error": "Fenster nicht gefunden"}
-        if not win.create_confirmation_dialog(
+        try:
+            confirmed = win.create_confirmation_dialog(
                 "In DATEV aktualisieren?",
                 "Ja:  Änderungen nach DATEV zurückschreiben (einchecken). DATEV "
                 "Dokumentenablage behält keine Revision — der alte Stand wird überschrieben; "
                 "eine lokale Sicherung wird vorher angelegt.\n\n"
                 "Nein:  nur die ausgecheckte Datei lokal speichern — Sie checken später in "
-                "DATEV ein."):
+                "DATEV ein.")
+        except Exception as e:
+            return _dialog_error(e)
+        if not confirmed:
             return {"ok": False, "verdict": "declined"}
         return self._core.datev_save_back(session, confirmed=True)
 

@@ -621,14 +621,28 @@ export default function App() {
     if (resp?.ok) { setDirty(false); setNotice(t('Gespeichert')) }
     else if (resp?.error && resp.error !== 'cancelled') setError(resp.error) // failed write must not be silent (W-2)
   }
-  const doSave = (mode, store) =>
-    run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store)).then(onSaved)
+  // In-flight guard (aa4 HA-1c): a double click / Ctrl+S key-repeat must not queue a flood of saves.
+  const savingRef = useRef(false)
+  const doSave = (mode, store) => {
+    savingRef.current = true
+    return run(mode === 'as' ? core.saveFileAs(session, store) : core.saveFile(session, store))
+      .then(onSaved)
+      .finally(() => { savingRef.current = false })
+  }
   // Preflight: only ask about alternatives when there are some to embed; else save straight.
-  const preflightSave = (mode) => run(core.saveInfo(session)).then((info) => {
-    if (info?.ok && info.has_alternatives) setSaveAsk({ mode, count: info.count })
-    else doSave(mode, true)
-  })
+  const preflightSave = (mode) => {
+    if (savingRef.current) return undefined
+    savingRef.current = true
+    return run(core.saveInfo(session)).then((info) => {
+      if (info?.ok && info.has_alternatives) { savingRef.current = false; setSaveAsk({ mode, count: info.count }) }
+      else doSave(mode, true)
+    }, (e) => { savingRef.current = false; throw e })
+  }
   const saveFile = () => preflightSave('in')
+  // HA-5: a failed new_window ({ok:false,error}) must be visible, not silently ignored
+  const newWindow = () => run(core.newWindow()).then((r) => {
+    if (r && r.ok === false && r.error && r.error !== 'cancelled') setError(r.error)
+  })
   const saveFileAs = () => preflightSave('as')
 
   // export to a TOC PDF. nodeIds = null → the WHOLE document (toolbar button);
@@ -689,7 +703,7 @@ export default function App() {
     select, dispatch, moveMany: onMoveMany,
     // synthetic group folders don't exist in the core → no collapse/expand there (W-8)
     setCollapsedFor: viewActive && groupBy ? noop : setCollapsedFor, saveFile, openFile, exportPdf,
-    newWindow: () => core.newWindow(), undo, redo, deleteSelection,
+    newWindow, undo, redo, deleteSelection,
     canUndo: state?.can_undo, canRedo: state?.can_redo,
     saveAskOpen: !!saveAsk, exportAskOpen: !!exportAsk, helpOpen, menuOpen: !!menu,
     datevDialogOpen: !!datevFileDialog?.open,
@@ -710,7 +724,7 @@ export default function App() {
         <h1 title={state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <Toolbar
           onOpen={openFile}
-          onNewWindow={() => core.newWindow()}
+          onNewWindow={newWindow}
           onImport={() => handleImport(core.importDialog(session, importTarget()))}
           onSave={saveFile}
           onSaveAs={saveFileAs}

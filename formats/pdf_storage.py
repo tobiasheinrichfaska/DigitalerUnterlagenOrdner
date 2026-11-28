@@ -260,13 +260,21 @@ def swap_file_in(tmp: str, target: str) -> None:
     _quiet_remove(tmp)
 
 
+def unique_tmp_name(target: str) -> str:
+    """A temp sibling name unique per CALL (pid + thread + uuid4), so concurrent saves of
+    one target can never share or delete each other's temp file (audit aa4 HA-1)."""
+    import threading
+    import uuid
+    return f"{target}.tmp-{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex}"
+
+
 def write_file_atomic(target: str, data: bytes) -> None:
     """Write ``data`` to ``target`` via a fsync'd sibling temp + :func:`swap_file_in`.
     A symlink is resolved first; when no sibling temp can be created (read-only directory)
     but ``target`` is an existing file, the data is staged in the temp dir and written in
     place under the same guarded protocol (R12-1)."""
     target = os.path.realpath(target)
-    tmp = f"{target}.tmp-{os.getpid()}"
+    tmp = unique_tmp_name(target)
     try:
         f = open(tmp, "wb")
     except OSError as e:

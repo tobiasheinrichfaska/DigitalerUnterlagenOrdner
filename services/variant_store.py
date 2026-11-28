@@ -111,7 +111,8 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
     blobs = _collect_variant_blobs(doc, engine, budget_bytes)
     if not blobs:
         return 0
-    tmp = f"{path}.tmp-{os.getpid()}"
+    from formats.pdf_storage import unique_tmp_name
+    tmp = unique_tmp_name(path)
     try:
         # S-2: never truncate the already-saved file in place — build in a temp
         # sibling and swap it in atomically, so a failed save leaves the original intact.

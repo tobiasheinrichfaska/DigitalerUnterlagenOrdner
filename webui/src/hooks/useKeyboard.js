@@ -89,7 +89,7 @@ export function useKeyboard({
         if (p && p.id !== tree.id) select(p)
         return
       }
-      if (mod && k === 's') { e.preventDefault(); saveFile() }
+      if (mod && k === 's') { e.preventDefault(); if (!e.repeat) saveFile() }
       else if (mod && k === 'o') { e.preventDefault(); openFile() }
       // Ctrl+E: mirrors the toolbar button — export the selection when present,
       // otherwise export the whole document (null). Keeps keyboard and mouse consistent.

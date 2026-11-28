@@ -643,9 +643,9 @@ is a **separate** npm script (`test:e2e`, NOT part of `npm test`), so it is easy
 the drag-drop + preview-virtualization layer can regress unseen. Run every one:
 
 ```powershell
-.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~747 collected 2026-11-27, Linux)
+.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~1000 collected 2026-11-28, Linux: 961 passed, 34 skipped, 1 xfailed)
 cd webui ; npm run lint                            # eslint — 0 errors
-cd webui ; npm run test:all                        # vitest jsdom (~441) + Playwright REAL Chromium e2e (24 + 3 CSP)
+cd webui ; npm run test:all                        # vitest jsdom (~462) + Playwright REAL Chromium e2e (21 + 4 CSP)
 cd webui ; npm run build                           # vite build must succeed
 ```
 
@@ -1500,11 +1500,11 @@ embedded version). Low effort; do it on the next build bump.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**220 keys** —
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**226 keys** —
 the v3.9 base of 163 strings plus the DATEV v3.10/v3.11 additions: mode toggle, no-connection guard,
 filing dialog, Bezeichnung, checked-out-self notice, the 12 load/export integrity warnings, and the 2
 AGPL §13 licence/source-offer strings of the Help modal; the exact count is asserted by `i18n.test.js`
-(`Object.keys(en).length === 220`), which also asserts every full-coverage language's
+(`Object.keys(en).length === 226`), which also asserts every full-coverage language's
 key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker

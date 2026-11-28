@@ -422,16 +422,21 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
         with pikepdf.open(io.BytesIO(content_bytes)) as content_pdf:
             pdf.pages.extend(content_pdf.pages)
 
+        # PF-4: pikepdf's pdf.pages len()/index are O(pages) once the tree was mutated;
+        # snapshot the pages once so every lookup below is O(1).
+        pages = list(pdf.pages)
+        n_pages = len(pages)
+
         # 2. Link-Annotierungen auf Vorspann-Seiten (TOC + Index)
         for rec in link_records:
-            if rec.toc_page_idx >= len(pdf.pages):
+            if rec.toc_page_idx >= n_pages:
                 continue
             dest_page_abs = prepend_count + rec.content_page_0
-            if dest_page_abs >= len(pdf.pages):
+            if dest_page_abs >= n_pages:
                 continue
 
-            toc_page = pdf.pages[rec.toc_page_idx]
-            dest_page_obj = pdf.pages[dest_page_abs].obj
+            toc_page = pages[rec.toc_page_idx]
+            dest_page_obj = pages[dest_page_abs].obj
 
             # pikepdf >= 8 dropped pikepdf.Real — plain Python floats are coerced.
             rect = pikepdf.Array([
@@ -463,7 +468,12 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
                     return prepend_count + it.page_start - 1
             return prepend_count
 
-        if with_bookmarks and toc_items and len(pdf.pages) > 0:
+        def _fit(i: int):
+            # same destination an int would resolve to ([page /Fit]) without the
+            # per-item O(pages) page lookup inside pikepdf.
+            return pikepdf.Array([pages[i].obj, pikepdf.Name.Fit])
+
+        if with_bookmarks and toc_items and n_pages > 0:
             with pdf.open_outline() as outline:
                 outline.root.clear()
                 depth_parents: dict = {-1: outline.root}
@@ -475,14 +485,14 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
 
                     if item.is_folder:
                         dest = _first_leaf_page(idx + 1, item.depth)
-                        dest = min(dest, len(pdf.pages) - 1)
-                        oi = pikepdf.OutlineItem(item.name, dest)
+                        dest = min(dest, n_pages - 1)
+                        oi = pikepdf.OutlineItem(item.name, _fit(dest))
                         parent.append(oi)
                         depth_parents[item.depth] = oi.children
                     else:
                         dest = prepend_count + item.page_start - 1
-                        if 0 <= dest < len(pdf.pages):
-                            oi = pikepdf.OutlineItem(item.name, dest)
+                        if 0 <= dest < n_pages:
+                            oi = pikepdf.OutlineItem(item.name, _fit(dest))
                             parent.append(oi)
 
         out = io.BytesIO()

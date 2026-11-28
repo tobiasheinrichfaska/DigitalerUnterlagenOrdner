@@ -11,6 +11,7 @@ import re
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Optional, Union
 
 import pikepdf
@@ -148,10 +149,81 @@ _CTRL_DELETE = dict.fromkeys(
 _NAME_CTRL_DELETE = dict.fromkeys(list(range(0x20)) + [0x7F] + _BIDI_AND_ZW)
 _TXT_MAX_CHARS = 1_000_000   # layout is O(n) per char in Python: ~3 s per MB
 _HTML_MAX_BYTES = 2 * 1024 * 1024
-_HTML_MAX_DEPTH = 100        # xhtml2pdf is quadratic in nesting depth / element count
-_HTML_MAX_TAGS = 10_000
+_HTML_MAX_DEPTH = 200        # xhtml2pdf is quadratic in nesting depth / element count
+_HTML_MAX_TAGS = 50_000       # ~0.3 ms/tag in xhtml2pdf: worst case measured < ~25 s
 _HTML_VOID = frozenset("br hr img input meta link area base col embed param source track wbr".split())
-_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9]*)[^>]*?(/?)>")
+_DATA_URI_RE = re.compile(r"data:[^\"'\s)>]{64,}", re.I)
+# Implied end tags (HTML parsing model): a start tag of the key closes an open element of
+# the values (searched from the top of the stack, stopping at a scope barrier).
+_P_CLOSERS = frozenset(
+    "address article aside blockquote center details dir div dl fieldset figure footer form "
+    "h1 h2 h3 h4 h5 h6 header hr li main menu nav ol p pre section table ul dd dt".split())
+_IMPLIED = {
+    "li": ({"li"}, {"ul", "ol", "menu", "dir"}),
+    "dt": ({"dt", "dd"}, {"dl"}),
+    "dd": ({"dt", "dd"}, {"dl"}),
+    "tr": ({"tr", "td", "th"}, {"table", "thead", "tbody", "tfoot"}),
+    "td": ({"td", "th"}, {"table", "tr"}),
+    "th": ({"td", "th"}, {"table", "tr"}),
+    "thead": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "tbody": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "tfoot": ({"thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup"}, {"table"}),
+    "caption": ({"colgroup", "caption"}, {"table"}),
+    "colgroup": ({"colgroup", "caption"}, {"table"}),
+    "option": ({"option"}, {"select"}),
+    "optgroup": ({"option", "optgroup"}, {"select"}),
+}
+
+
+class _DepthChecker(HTMLParser):
+    """Counts tags and the REAL nesting depth (optional end tags auto-close)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.stack = []
+        self.tags = 0
+
+    def _count(self):
+        self.tags += 1
+        if self.tags > _HTML_MAX_TAGS:
+            raise ValueError("HTML-Datei zu komplex (zu groß)")
+
+    def _pop_to(self, targets, barriers):
+        for i in range(len(self.stack) - 1, -1, -1):
+            t = self.stack[i]
+            if t in targets:
+                del self.stack[i:]
+                return
+            if t in barriers:
+                return
+
+    def handle_starttag(self, tag, attrs):
+        self._count()
+        if tag in _HTML_VOID:
+            return
+        if tag in _P_CLOSERS and self.stack and self.stack[-1] == "p":
+            self.stack.pop()
+        rule = _IMPLIED.get(tag)
+        if rule:
+            self._pop_to(*rule)
+        self.stack.append(tag)
+        if len(self.stack) > _HTML_MAX_DEPTH:
+            raise ValueError("HTML-Datei zu tief verschachtelt (zu groß)")
+
+    def handle_startendtag(self, tag, attrs):
+        self._count()
+
+    def handle_endtag(self, tag):
+        self._count()
+        if tag in self.stack:
+            while self.stack.pop() != tag:
+                pass
+
+
+def _strip_data_uris(html: str) -> str:
+    """Inline ``data:`` payloads (images in e-mail bodies) are neutralised by the link guard
+    and are not markup: exclude them from the size / complexity measurement."""
+    return _DATA_URI_RE.sub("data:,", html)
 
 
 def sanitize_node_name(name, strip_path: bool = True, max_len: int = 200) -> str:
@@ -166,19 +238,9 @@ def sanitize_node_name(name, strip_path: bool = True, max_len: int = 200) -> str
 
 
 def _check_html_complexity(html: str) -> None:
-    depth = maxd = tags = 0
-    for m in _TAG_RE.finditer(html):
-        tags += 1
-        if tags > _HTML_MAX_TAGS:
-            raise ValueError("HTML-Datei zu komplex (zu groß)")
-        tag = m.group(2).lower()
-        if m.group(1):
-            depth = max(0, depth - 1)
-        elif not m.group(3) and tag not in _HTML_VOID:
-            depth += 1
-            maxd = max(maxd, depth)
-            if maxd > _HTML_MAX_DEPTH:
-                raise ValueError("HTML-Datei zu tief verschachtelt (zu groß)")
+    checker = _DepthChecker()
+    checker.feed(html)
+    checker.close()
 
 
 def _printable(text: str) -> str:
@@ -278,13 +340,16 @@ def block_remote_link(uri: str, rel: str):
 def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:
     if _exceeds_byte_cap(html):  # bound the parse/render like txt_to_pdf (byte-accurate)
         raise ValueError("HTML-Datei zu groß")
-    if (len(html) if isinstance(html, bytes) else len(html.encode("utf-8", "replace"))) > _HTML_MAX_BYTES:
-        raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
         html = _decode_text(bytes(html), html=True)
 
     html = html.translate(_CTRL_DELETE)
-    _check_html_complexity(html)
+    # R9-1: the size/complexity caps measure the MARKUP — inline data: payloads (e-mail
+    # images, already neutralised by the link guard) are excluded; they stay in the render.
+    probe = _strip_data_uris(html)
+    if len(probe.encode("utf-8", "replace")) > _HTML_MAX_BYTES:
+        raise ValueError("HTML-Datei zu groß")
+    _check_html_complexity(probe)
     html = _printable(html)
 
     def _render(src: str):

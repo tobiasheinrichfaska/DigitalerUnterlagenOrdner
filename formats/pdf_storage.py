@@ -257,6 +257,20 @@ class PDFStorage:
             except Exception:
                 _pages = 0
             if _pages < 1:
+                # R9-5: a tolerant reader (pdfium) may still read pages pikepdf can't
+                # (e.g. /Root /Pages pointing straight at a /Page) → accept those.
+                try:
+                    from belegtool_compress import raster
+                    _doc = raster.open_pdf(data)
+                    try:
+                        _pages = _doc.page_count
+                        if _pages >= 1:
+                            _doc.page_size(0)  # a cyclic tree counts a page that never loads
+                    finally:
+                        _doc.close()
+                except Exception:
+                    _pages = 0
+            if _pages < 1:
                 raise ValueError("Datei enthält keine lesbaren Seiten")
             self.root = PDFNode(name="root", is_folder=True)
             name = os.path.splitext(os.path.basename(self.filename))[0] if self.filename else "importiert"

@@ -15,6 +15,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import os
+import shutil
 import threading
 import time
 import uuid
@@ -440,15 +441,21 @@ class CoreApi:
             # a materialized tag view opened in its new window → bind the temp dir to
             # this session so close_session can delete it with the window.
             view_dir = os.path.dirname(path) if path else None
+            bound_view, old_view = None, self._view_dirs.get(sid)
             if view_dir and view_dir in self._pending_view_dirs:
                 self._pending_view_dirs.discard(view_dir)
                 self._view_dirs[sid] = view_dir
+                bound_view = view_dir
                 self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
-            if replaced is not None:
-                self._prune_dead_ids_locked()  # CC-1/3: the replaced document's ids are gone
             try:
                 resp = self._doc_response_locked(sid)
             except Exception:
+                if bound_view is not None:  # R9-4: undo the view-dir binding + drop the temp dir
+                    if old_view is None:
+                        self._view_dirs.pop(sid, None)
+                    else:
+                        self._view_dirs[sid] = old_view
+                    shutil.rmtree(bound_view, ignore_errors=True)
                 if snap is not None:
                     (self._sessions[sid], path0, deg0, lock0, base0, nl0, pb0) = snap
                     for k in [k for k in self._node_locks if k[0] == sid]:
@@ -468,6 +475,10 @@ class CoreApi:
                     self._locks.pop(sid, None)
                     self._degraded.discard(sid)
                 raise
+            if replaced is not None:
+                # CC-1/3: the replaced document's ids are gone. R9-4: only AFTER the swap
+                # committed — a failed open must not abort the surviving document's tokens.
+                self._prune_dead_ids_locked()
         except Exception as e:
             if lock is not None and not reused_lock:
                 lock.release()

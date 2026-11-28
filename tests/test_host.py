@@ -278,6 +278,10 @@ class _Win:
     def __init__(self, uid):
         self.uid = uid
         self.events = type("E", (), {"closing": _Hook()})()
+        self.exposed = []
+
+    def expose(self, *fns):
+        self.exposed.extend(fns)
 
 
 def test_close_guard_frees_the_windows_session():

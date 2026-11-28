@@ -14,6 +14,7 @@ Run:
 
 import io
 import json
+import inspect
 import os
 import re
 import sys
@@ -302,8 +303,9 @@ def _open_window(core, startup_path=None, restore=False,
         kwargs.update(width=int(geom["width"]), height=int(geom["height"]),
                       x=int(geom["x"]), y=int(geom["y"]))
     win = webview.create_window(
-        get_full_title(), _entry_for_kind(startup_kind), js_api=api, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.4" (from version_info)
+        get_full_title(), _entry_for_kind(startup_kind), js_api=_NO_JS_API, **kwargs)  # title: e.g. "DigitalerUnterlagenOrdner 3.11.4" (from version_info)
     api._uid = win.uid  # bind after creation (storing the window object recurses)
+    _expose_api(win, api)
     if restore:
         win.events.closing += lambda: _save_geometry(win)   # remember geometry on close
         # First-paint timing: the gap between 'webview.start' and this 'loaded' is the WebView2
@@ -315,6 +317,43 @@ def _open_window(core, startup_path=None, restore=False,
         win.events.loaded += _on_loaded
     _bind_close(win, api)
     return {"ok": True}
+
+
+class _NullJsApi:
+    """js_api stand-in with NO attributes at all. ``js_api=None`` is not enough:
+    pywebview's dispatcher does ``getattr(None, name, None)`` so ``__class__`` etc. would
+    still resolve (to NoneType). Every attribute lookup here fails -> 'does not exist'."""
+    __slots__ = ()
+
+    def __getattribute__(self, name):
+        raise AttributeError(name)
+
+    def __dir__(self):
+        return []
+
+
+_NO_JS_API = _NullJsApi()
+
+
+def _expose_api(win, api):
+    """SEC-1: hand pywebview ONLY plain closures for the public HostApi methods
+    (``win.expose`` + the attribute-less ``_NO_JS_API``). pywebview's dispatcher resolves a call name with
+    a bare ``getattr`` chain (no underscore filter), so a ``js_api`` object holding
+    ``_core`` would make every CoreApi method callable from page JS (``_core.save`` ...).
+    With the null js_api only exact keys of ``window._functions`` resolve; the closures
+    are looked up by exact name, never traversed by attribute."""
+    def make(name):
+        method = getattr(api, name)
+
+        def fn(*args, **kwargs):
+            return method(*args, **kwargs)
+        fn.__name__ = name
+        fn.__signature__ = inspect.signature(method)  # stub params for window.pywebview.api
+        return fn
+
+    names = [n for n in dir(HostApi)
+             if not n.startswith("_") and callable(getattr(HostApi, n))]
+    win.expose(*[make(n) for n in names])
 
 
 class HostApi:
@@ -483,6 +522,10 @@ class HostApi:
             return {"ok": False, "error": "cancelled"}
         if isinstance(path, (tuple, list)):
             path = path[0]
+        # SEC-2: "overwrite" is host-owned (set only after the native confirm below);
+        # a page-supplied flag would skip that confirmation.
+        if isinstance(options, dict):
+            options = {k: v for k, v in options.items() if k != "overwrite"}
         result = self._core.export(session, path, node_ids, options)
         # #13: a split would overwrite existing "_Teil_N" files (the native Save dialog
         # only confirmed the base name) — confirm the ACTUAL part files before clobbering.

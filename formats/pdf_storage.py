@@ -121,14 +121,86 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
 
 
 
+def _guard_alt_paths(target: str):
+    """Deterministic (bak, marker) names in the temp dir, used when the target's directory
+    takes no new files (so a retry finds them again)."""
+    import hashlib
+    import tempfile
+    h = hashlib.sha1(os.path.abspath(target).encode("utf-8", "surrogatepass")).hexdigest()[:20]
+    base = os.path.join(tempfile.gettempdir(), f"belegtool-{h}")
+    return base + ".bak", base + ".swapwip"
+
+
+def _is_denied(e: BaseException) -> bool:
+    import errno
+    return isinstance(e, PermissionError) or (
+        isinstance(e, OSError) and e.errno in (errno.EACCES, errno.EPERM, errno.EROFS))
+
+
+def _overwrite_in_place(path: str, data: bytes) -> None:
+    with open(path, "r+b") as f:
+        f.write(data)
+        f.truncate()
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _recover_interrupted(target: str) -> None:
+    """R12-3: a marker left by an in-place write that failed means the target may be a
+    hybrid. Restore the (good) ``.bak`` BEFORE anything may refresh it from the target;
+    when that is impossible refuse, leaving the ``.bak`` untouched."""
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        if not os.path.exists(wip):
+            continue
+        if not os.path.exists(bak):
+            _quiet_remove(wip)  # nothing to protect
+            continue
+        # A marker means an in-place write never finished cleanly; whether the target
+        # still happens to parse is no proof (a hybrid can), so the .bak always wins.
+        try:
+            with open(bak, "rb") as src:
+                old = src.read()
+            _overwrite_in_place(target, old)
+        except Exception as e:
+            raise OSError(getattr(e, "errno", None),
+                          f"{e} (vorherige Fassung: {bak})") from e
+        _quiet_remove(wip)
+        _quiet_remove(bak)
+
+
+def _make_guard(target: str):
+    """Create the backup copy + in-flight marker: next to the target, else (read-only
+    directory) in the temp dir. Returns (bak, wip); leaves nothing behind on failure."""
+    last = None
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        try:
+            with open(target, "rb") as src, open(bak, "wb") as dst:
+                dst.write(src.read())
+                dst.flush()
+                os.fsync(dst.fileno())
+            with open(wip, "wb") as m:
+                m.write(b"1")
+            return bak, wip
+        except BaseException as e:
+            _quiet_remove(bak)
+            _quiet_remove(wip)
+            if not _is_denied(e):
+                raise  # e.g. ENOSPC: a full disk is no reason to switch location
+            last = last or e
+    raise last
+
+
 def swap_file_in(tmp: str, target: str) -> None:
     """Make the finished, verified ``tmp`` become ``target`` WITHOUT ever leaving the
     previous ``target`` truncated (audit y4 IO-1/2/5). ``os.replace`` first; when that is
-    refused (target held open elsewhere) fall back to an in-place write that is guarded
-    by a sibling ``.bak`` of the previous bytes: on ANY failure (BaseException included)
-    the original is restored and the error re-raised. ``tmp`` is removed on success and
-    after a clean restore; if even the restore fails, ``tmp`` AND ``.bak`` are kept (both
-    hold a complete copy) and the raised error names the ``.bak``."""
+    refused (target held open elsewhere / read-only directory) fall back to an in-place
+    write that is guarded by a ``.bak`` of the previous bytes plus an in-flight marker:
+    on ANY failure (BaseException included) the original is restored and the error
+    re-raised. A symlink target is resolved first. ``tmp`` is removed on success and after
+    a clean restore; only if even the restore fails are ``tmp`` AND ``.bak`` kept (both
+    hold a complete copy) and the raised error names the ``.bak``. A retry never refreshes
+    the ``.bak`` from a possibly damaged target (marker, R12-3)."""
+    target = os.path.realpath(target)
     try:
         os.replace(tmp, target)  # atomic on the same NTFS volume
         return
@@ -137,22 +209,27 @@ def swap_file_in(tmp: str, target: str) -> None:
         raise
     except OSError:
         logger.warning("[save] atomic replace refused for %s – guarded in-place fallback", target)
-    bak = f"{target}.bak"
-    with open(tmp, "rb") as f:
-        data = f.read()
-    had_original = os.path.exists(target)
-    if had_original:
-        try:
-            with open(target, "rb") as src, open(bak, "wb") as dst:
-                dst.write(src.read())
-                dst.flush()
-                os.fsync(dst.fileno())
-        except BaseException:
-            _quiet_remove(bak)  # nothing was touched yet: the original is intact
-            _quiet_remove(tmp)
-            raise
     try:
-        with open(target, "r+b" if had_original else "wb") as f:
+        _recover_interrupted(target)
+        with open(tmp, "rb") as f:
+            data = f.read()
+        had_original = os.path.exists(target)
+        bak = wip = None
+        if had_original:
+            bak, wip = _make_guard(target)
+        try:
+            f = open(target, "r+b" if had_original else "wb")
+        except BaseException:
+            # nothing was touched: the original is intact
+            if had_original:
+                _quiet_remove(bak)
+                _quiet_remove(wip)
+            raise
+    except BaseException:
+        _quiet_remove(tmp)
+        raise
+    try:
+        with f:
             f.write(data)
             f.truncate()
             f.flush()
@@ -163,16 +240,13 @@ def swap_file_in(tmp: str, target: str) -> None:
             try:
                 with open(bak, "rb") as src:
                     old = src.read()
-                with open(target, "r+b") as f:
-                    f.write(old)
-                    f.truncate()
-                    f.flush()
-                    os.fsync(f.fileno())
+                _overwrite_in_place(target, old)
                 restored = True
             except BaseException:
                 logger.error("[save] restore failed; previous version kept in %s, new in %s", bak, tmp)
         if restored:
-            _quiet_remove(bak)
+            _quiet_remove(bak) if bak else None
+            _quiet_remove(wip) if wip else None
             _quiet_remove(tmp)
             if not had_original:
                 _quiet_remove(target)
@@ -180,15 +254,29 @@ def swap_file_in(tmp: str, target: str) -> None:
             raise OSError(getattr(e, "errno", None),
                           f"{e} (vorherige Fassung: {bak})") from e
         raise
-    _quiet_remove(bak)
+    if bak:
+        _quiet_remove(bak)
+        _quiet_remove(wip)
     _quiet_remove(tmp)
 
 
 def write_file_atomic(target: str, data: bytes) -> None:
-    """Write ``data`` to ``target`` via a fsync'd sibling temp + :func:`swap_file_in`."""
+    """Write ``data`` to ``target`` via a fsync'd sibling temp + :func:`swap_file_in`.
+    A symlink is resolved first; when no sibling temp can be created (read-only directory)
+    but ``target`` is an existing file, the data is staged in the temp dir and written in
+    place under the same guarded protocol (R12-1)."""
+    target = os.path.realpath(target)
     tmp = f"{target}.tmp-{os.getpid()}"
     try:
-        with open(tmp, "wb") as f:
+        f = open(tmp, "wb")
+    except OSError as e:
+        if not (_is_denied(e) and os.path.isfile(target)):
+            raise
+        import tempfile
+        fd, tmp = tempfile.mkstemp(prefix="belegtool-stage-")
+        f = os.fdopen(fd, "wb")
+    try:
+        with f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())

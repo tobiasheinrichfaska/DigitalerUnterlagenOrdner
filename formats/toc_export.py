@@ -516,10 +516,22 @@ DEFAULT_EXPORT_OPTIONS = {
 
 def _stage_tmp(path: str, data: bytes) -> str:
     """Write ``data`` to a sibling temp file (same dir), fsync; return the temp path.
-    Cleans the temp on any failure; the OSError names the target file (IO-3)."""
+    Cleans the temp on any failure; the OSError names the target file (IO-3). When the
+    directory takes no new files but ``path`` is an existing file, the temp goes to the
+    temp dir instead and :func:`_commit_files` writes in place (R12-1)."""
+    import tempfile
+    from formats.pdf_storage import _is_denied
+    path = os.path.realpath(path)
     tmp = f"{path}.tmp-{os.getpid()}"
     try:
-        with open(tmp, "wb") as f:
+        try:
+            f = open(tmp, "wb")
+        except OSError as e:
+            if not (_is_denied(e) and os.path.isfile(path)):
+                raise
+            fd, tmp = tempfile.mkstemp(prefix="belegtool-stage-")
+            f = os.fdopen(fd, "wb")
+        with f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
@@ -534,25 +546,69 @@ def _stage_tmp(path: str, data: bytes) -> str:
     return tmp
 
 
+def _rm(path) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _make_backup(target: str) -> str:
+    """Copy ``target`` to ``<target>.bak-<pid>`` (temp dir when the directory is
+    read-only); a failed/partial copy is removed (R12-4)."""
+    import tempfile
+    from formats.pdf_storage import _is_denied
+    backup = f"{target}.bak-{os.getpid()}"
+    try:
+        shutil.copyfile(target, backup)
+        return backup
+    except BaseException as e:
+        _rm(backup)
+        if not (isinstance(e, OSError) and _is_denied(e)):
+            raise
+    fd, backup = tempfile.mkstemp(prefix="belegtool-bak-")
+    os.close(fd)
+    try:
+        shutil.copyfile(target, backup)
+    except BaseException:
+        _rm(backup)
+        raise
+    return backup
+
+
+def _restore_backup(backup: str, target: str) -> None:
+    try:
+        os.replace(backup, target)
+    except OSError:
+        with open(backup, "rb") as src:
+            old = src.read()
+        with open(target, "r+b") as f:
+            f.write(old)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+        _rm(backup)
+
+
 def _commit_files(staged: list) -> None:
     """Atomically replace each ``(tmp, target)``; on a failure roll back every target
     already replaced in THIS run (restore the previous version or remove a new file) and
-    drop the remaining temps, so the user never sees a mixed set (IO-3)."""
+    drop the remaining temps, so the user never sees a mixed set (IO-3). A target in a
+    read-only directory (staged in the temp dir) is written in place (guarded, R12-1)."""
+    from formats.pdf_storage import swap_file_in
     done = []  # (target, backup or None)
     try:
         for tmp, target in staged:
-            backup = None
-            if os.path.exists(target):
-                backup = f"{target}.bak-{os.getpid()}"
-                shutil.copyfile(target, backup)
+            target = os.path.realpath(target)
+            backup = _make_backup(target) if os.path.exists(target) else None
             try:
-                os.replace(tmp, target)
+                if os.path.dirname(os.path.abspath(tmp)) == os.path.dirname(target):
+                    os.replace(tmp, target)
+                else:  # staged in the temp dir: read-only directory -> guarded in place
+                    swap_file_in(tmp, target)
             except BaseException as e:
                 if backup:
-                    try:
-                        os.remove(backup)
-                    except OSError:
-                        pass
+                    _rm(backup)
                 if isinstance(e, OSError):
                     raise OSError(e.errno, f"{e.strerror or e}: {target}", target) from e
                 raise
@@ -561,7 +617,7 @@ def _commit_files(staged: list) -> None:
         for target, backup in reversed(done):
             try:
                 if backup:
-                    os.replace(backup, target)
+                    _restore_backup(backup, target)
                 else:
                     os.remove(target)
             except OSError:
@@ -569,16 +625,10 @@ def _commit_files(staged: list) -> None:
         raise
     finally:
         for tmp, _ in staged:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+            _rm(tmp)
     for _, backup in done:
         if backup:
-            try:
-                os.remove(backup)
-            except OSError:
-                pass
+            _rm(backup)
 
 
 def _write_atomic(path: str, data: bytes) -> None:

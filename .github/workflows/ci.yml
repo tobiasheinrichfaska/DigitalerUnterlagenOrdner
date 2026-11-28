@@ -3,7 +3,7 @@
 #
 # - Keine Secrets, kein pull_request_target; Token nur lesend.
 # - Actions sind auf feste Hauptversionen gepinnt (Commit-SHAs waren beim Anlegen nicht belastbar
-#   abrufbar). TODO: per Dependabot (ecosystem github-actions) auf SHAs umstellen.
+#   abrufbar). Dependabot (.github/dependabot.yml, woechentlich, github-actions) schlaegt Updates vor; SHA-Pinning bleibt offen.
 name: CI
 
 on:

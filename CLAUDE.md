@@ -268,7 +268,7 @@ render/compress path at startup.
 
 ### Import pipeline
 - **PDF / .belegtool** → loaded directly as nodes
-- **Images** (jpg, png, webp, heic) → converted to PDF
+- **Images** (jpg, png, webp, heic) → converted to PDF: placed on **A4 pages** (portrait/landscape by image orientation, fit, aspect kept); lossless sources stay lossless (owner decision 2026-11-28; implementation by another agent)
 - **Office** (Word/Excel/PPT **+ OpenDocument .odt/.ods/.odp**) → Win32-COM → PDF
   (ODF opens through the matching app — Word/Excel/PowerPoint; **verified end-to-end on a
   real Office machine** by the golden round-trip test, [`tests/test_office_golden.py`](tests/test_office_golden.py))
@@ -556,6 +556,10 @@ and [`docs/datev-provenance.md`](docs/datev-provenance.md).
   unused value to strip.
 
 ### Persistence / save policy (v3.6.0)
+**Root node metadata is intentionally NOT persisted** (owner decision 2026-11-28): the ROOT node's own
+name/tags/status are not stored in the `.belegtool`; the document name comes from the file name and only
+descendants carry name/tags/status. Don't "fix" this as a round-trip gap.
+
 The file stores **only `current_pdf_data` per node** — never a separate original.
 So a **committed** node ("Lesbarkeit geprüft" = a `Compress` was applied) saves only
 its compressed result; its source is **dropped on save** (the file is never 2×).
@@ -856,6 +860,12 @@ no-client-list ⇒ no DATEV write** guard.
 ---
 
 ## Known Limitations
+
+- **Pending until the next Windows session (owner decision 2026-11-28):** apply
+  `docs/OFFEN_manual_tests_2026-11-27.patch` (MT-50, MT-03b wording) AND the image-import wording changes
+  (images now become A4 pages, lossless sources stay lossless) to `manual_tests/`, then rebuild the tester kit with
+  `scripts/build_testkit.py` on Windows (needs Edge). Until then `test_kit_on_disk_matches_the_sources` must stay
+  green, so do NOT apply them earlier.
 
 Current accepted shortcomings and non-obvious behaviours (lift into release notes as needed).
 Deferred *features* and the full rationale live under **Open / deferred items** below.

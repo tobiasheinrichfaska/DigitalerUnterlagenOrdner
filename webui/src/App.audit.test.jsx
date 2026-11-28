@@ -58,7 +58,12 @@ describe('W-1 — organizer refreshes when the window regains focus', () => {
       get_state: () => ({ ok: true, session: 's', tree: changed, can_undo: true, can_redo: false, dirty: true }),
     })
     expect(screen.queryByText(/neu-aus-pdftool/)).toBeNull()
-    await act(async () => { window.dispatchEvent(new Event('focus')) })
+    // The handler deliberately ignores focus while the app is busy (an initial operation may still
+    // be running on a slow runner): re-fire focus until get_state was actually requested.
+    await waitFor(() => {
+      act(() => { window.dispatchEvent(new Event('focus')) })
+      expect(callsOf(calls, 'get_state').length).toBeGreaterThan(0)
+    }, { timeout: 8000 })
     // explicit timeouts: the default 1000 ms is too tight on a loaded CI runner
     expect(await screen.findByText(/neu-aus-pdftool/, {}, { timeout: 8000 })).toBeInTheDocument()
     expect(document.querySelector('header h1').textContent).toContain('•')

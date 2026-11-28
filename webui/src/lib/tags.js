@@ -53,7 +53,7 @@ export function filterTree(root, query) {
   return { ...root, children: kids }
 }
 
-const GROUP_PREFIX = '__tag__' // synthetic group-folder id marker (not a real node)
+export const GROUP_PREFIX = '__tag__' // synthetic group-folder id marker (not a real node)
 /** True for the synthetic folders groupByTag produces (so the UI can skip ops on them). */
 export const isGroupNode = (id) => typeof id === 'string' && id.startsWith(GROUP_PREFIX)
 
@@ -92,15 +92,35 @@ export function groupByTag(root, { untaggedLabel = 'Ohne Tags' } = {}) {
   const collect = (n) => { for (const tg of n.tags || []) ownTags.add(tg); (n.children || []).forEach(collect) }
   ;(root.children || []).forEach(collect)
 
-  // paths to nodes whose OWN tags include `tag`; a tagged node keeps its whole subtree
-  const subtreeFor = (tag) => {
-    const walk = (n) => {
-      if ((n.tags || []).includes(tag)) return n // tagged → keep node + whole subtree
-      const kept = (n.children || []).map(walk).filter(Boolean)
-      return kept.length ? { ...n, children: kept } : null // else keep only as a container
+  // One DFS distributes every node to its tags (instead of a full-tree pass per tag).
+  // A node joins tag t's forest unless an ancestor already carries t (that ancestor is
+  // kept whole); containers on the path are created lazily, in document order.
+  const forests = new Map() // tag -> { roots, cont: Map(origNode -> copy) }
+  const activeTags = new Map() // tag -> number of ancestors carrying it
+  const chain = [] // ancestors of the current node below the root
+  const visit = (n) => {
+    const own = [...new Set(n.tags || [])]
+    for (const tg of own) {
+      if (activeTags.get(tg)) continue
+      let f = forests.get(tg)
+      if (!f) { f = { roots: [], cont: new Map() }; forests.set(tg, f) }
+      let list = f.roots
+      for (const a of chain) {
+        let c = f.cont.get(a)
+        if (!c) { c = { ...a, children: [] }; f.cont.set(a, c); list.push(c) }
+        list = c.children
+      }
+      list.push(n)
     }
-    return (root.children || []).map(walk).filter(Boolean)
+    const fresh = own.filter((tg) => !activeTags.get(tg))
+    fresh.forEach((tg) => activeTags.set(tg, 1))
+    chain.push(n)
+    for (const c of n.children || []) visit(c)
+    chain.pop()
+    fresh.forEach((tg) => activeTags.set(tg, 0))
   }
+  for (const c of root.children || []) visit(c)
+  const subtreeFor = (tag) => forests.get(tag)?.roots ?? []
   // paths entirely free of tags (the leftover documents)
   const untaggedWalk = (n) => {
     if ((n.tags || []).length) return null // a tagged node belongs to a tag group, not here

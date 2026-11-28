@@ -12,7 +12,7 @@ import { DatevBar } from './DatevBar'
 import { DatevFileDialog } from './DatevFileDialog'
 import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
-import { findNode, findParent, isAncestorOf, afterLevels, newFolderTarget } from './lib/tree'
+import { findNode, findParent, buildIndex, afterLevels, newFolderTarget } from './lib/tree'
 import { sweepCandidates } from './lib/status'
 import { useResizablePane } from './hooks/useResizablePane'
 import { useOsFileDrop } from './hooks/useOsFileDrop'
@@ -235,7 +235,7 @@ export default function App() {
         // save → clean, I-6); older responses without the field keep the safe default
         setDirty(resp.dirty ?? true)
         setGrab(null) // a whole-document change invalidates any keyboard-carry snapshot (AP-1)
-        setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
+        setSelectedIds((ids) => { const ix = buildIndex(resp.tree); return ids.filter((id) => ix.has(id)) }) // drop vanished ids
         // functional update: a late response (e.g. a slow import) must refresh the CURRENT
         // primary selection, not the one captured when the call started (W-3)
         setSelected((cur) => (cur ? findNode(resp.tree, cur.id) : cur))
@@ -431,7 +431,13 @@ export default function App() {
     if (!toDelete || !toDelete.length) return
     // pick the next node to focus: first still-present row after the deletion, else before
     const order = visibleOrder(tree)
-    const gone = (id) => toDelete.includes(id) || toDelete.some((d) => isAncestorOf(tree, d, id))
+    const delSet = new Set(toDelete)
+    const treeIx = buildIndex(tree)
+    const gone = (id) => {
+      if (delSet.has(id)) return true
+      for (let p = treeIx.get(id)?.parent; p; p = treeIx.get(p.id)?.parent) if (delSet.has(p.id)) return true
+      return false
+    }
     const firstIdx = order.findIndex((e) => gone(e.id))
     const nextId = (order.slice(firstIdx + 1).find((e) => !gone(e.id))
       || order.slice(0, Math.max(0, firstIdx)).reverse().find((e) => !gone(e.id)))?.id || null
@@ -450,20 +456,25 @@ export default function App() {
 
   // 2+ selected sibling leaves → the ids that can be merged into one PDF, in
   // DOCUMENT order (else null) — pure logic in lib/selection.js (unit-tested there)
-  const mergeable = mergeableIds(state?.tree, selectedIds)
+  const treeIndex = useMemo(() => buildIndex(state?.tree), [state?.tree])
+  const mergeable = useMemo(() => mergeableIds(state?.tree, selectedIds, treeIndex), [state?.tree, selectedIds, treeIndex])
 
   // the selected node objects (for the multi-select tag editor, #7)
-  const selectedNodes = state?.tree ? selectedIds.map((id) => findNode(state.tree, id)).filter(Boolean) : []
+  const selectedNodes = useMemo(
+    () => (state?.tree ? selectedIds.map((id) => treeIndex.get(id)?.node).filter(Boolean) : []),
+    [state?.tree, selectedIds, treeIndex],
+  )
 
   // 2+ selected nodes (any depth) → group into a new folder. The folder goes in
   // their common parent if they share one, else at the root (always safe).
-  const groupable = (() => {
-    if (selectedIds.length < 2 || !state?.tree) return null
-    if (selectedIds.some((id) => !findNode(state.tree, id))) return null
-    const parents = selectedIds.map((id) => findParent(state.tree, id)?.id)
-    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : state.tree.id
+  const docTree = state?.tree
+  const groupable = useMemo(() => {
+    if (selectedIds.length < 2 || !docTree) return null
+    if (selectedIds.some((id) => !treeIndex.has(id))) return null
+    const parents = selectedIds.map((id) => treeIndex.get(id).parent?.id)
+    const parentId = new Set(parents).size === 1 && parents[0] != null ? parents[0] : docTree.id
     return { ids: selectedIds, parentId }
-  })()
+  }, [docTree, selectedIds, treeIndex])
 
   // group the selection into a new folder, resolving folder/child overlaps first
   const groupSelection = (name) => {

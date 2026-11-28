@@ -11,6 +11,18 @@ export function findNode(node, id) {
   return null
 }
 
+/** One O(n) pass: id -> { node, parent } (parent null for the root). First occurrence
+ *  wins on a duplicate id, exactly like findNode/findParent (preorder DFS). */
+export function buildIndex(root) {
+  const ix = new Map()
+  const walk = (n, parent) => {
+    if (!ix.has(n.id)) ix.set(n.id, { node: n, parent })
+    for (const c of n.children ?? []) walk(c, n)
+  }
+  if (root) walk(root, null)
+  return ix
+}
+
 export function findParent(node, id, parent = null) {
   if (node.id === id) return parent
   for (const c of node.children ?? []) {

@@ -68,6 +68,16 @@ describe('App — DATEV mode', () => {
     expect(called(calls, 'set_datev_mode')[0].args[0]).toBe(false)
   })
 
+  it('a quick double-click on the toggle does not send the same value twice (AP-2)', async () => {
+    const calls = await renderApp({ set_datev_mode: (v) => new Promise((r) => setTimeout(() => r({ ok: true, datev_mode: v }), 30)) })
+    const btn = screen.getByTitle('DATEV-Modus ein-/ausschalten')
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    await waitFor(() => expect(called(calls, 'set_datev_mode').length).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 80))
+    expect(called(calls, 'set_datev_mode').map((c) => c.args[0])).toEqual([false])
+  })
+
   it('enabling DATEV mode at runtime re-polls and reflects the connection (not stuck offline)', async () => {
     // REGRESSION (audit): the status poll effect re-runs on the [datevMode] dep, so toggling DATEV
     // on mid-session resumes polling and the bar reaches connected — it used to latch on the single

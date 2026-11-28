@@ -234,6 +234,7 @@ export default function App() {
         // the backend knows whether we are back at the saved state (undo to the last
         // save → clean, I-6); older responses without the field keep the safe default
         setDirty(resp.dirty ?? true)
+        setGrab(null) // a whole-document change invalidates any keyboard-carry snapshot (AP-1)
         setSelectedIds((ids) => ids.filter((id) => findNode(resp.tree, id))) // drop vanished ids
         // functional update: a late response (e.g. a slow import) must refresh the CURRENT
         // primary selection, not the one captured when the call started (W-3)
@@ -500,6 +501,7 @@ export default function App() {
     run(core.openFile(session)).then((resp) => {
       apply(resp)
       if (resp?.ok) {
+        setGrab(null)
         setSelected(null); setSelectedIds([]); setPages(null); setPreviewReq(null); setDirty(false)
         setDatevOpen(resp.datev || null) // refresh the DATEV badge/checked-out hint for the new file
         if (allTags(resp.tree).length > 0) setTagsOn(true) // a tagged file auto-enables tagging
@@ -516,8 +518,14 @@ export default function App() {
     setState((p) => (p?.tree ? { ...p, tree: { ...p.tree, datev: prov } } : p))
   // Flip mode; the [datevMode] poll effect then re-arms and tracks the (background) connection,
   // so a runtime enable shows „verbinde…" → connected instead of latching on the single response.
-  const toggleDatevMode = () =>
-    run(core.setDatevMode(!datevMode)).then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+  const datevToggling = useRef(false) // AP-2: ignore a second click while a toggle is in flight
+  const toggleDatevMode = () => {
+    if (datevToggling.current) return undefined
+    datevToggling.current = true
+    return run(core.setDatevMode(!datevMode))
+      .then((s) => { if (s?.ok) setDatevMode(!!s.datev_mode) })
+      .finally(() => { datevToggling.current = false })
+  }
   const saveToDatev = () => {
     if (datevServiceConnected !== true) {  // never attempt a write-back without a connection
       setError(t('Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.')); return undefined

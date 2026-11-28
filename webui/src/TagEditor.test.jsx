@@ -20,6 +20,18 @@ const renderEditor = ({ tags = [], docTags = [] } = {}) => {
 
 const lastTags = (dispatch) => dispatch.mock.calls.at(-1)[0].tags
 
+describe('TagEditor — rapid adds (AP-3)', () => {
+  it('two quick adds before the node prop refreshes accumulate', () => {
+    const { dispatch } = renderEditor({ tags: [] })
+    const input = screen.getByPlaceholderText('+ Tag')
+    fireEvent.change(input, { target: { value: 'a' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: 'b' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(lastTags(dispatch)).toEqual(['a', 'b'])
+  })
+})
+
 describe('TagEditor — adding', () => {
   it('Enter adds the typed tag via a SetTags dispatch', () => {
     const { dispatch } = renderEditor({ tags: ['a'] })

@@ -806,6 +806,15 @@ class CoreApi:
             document = s.document
         document = self._bake_no_gain(document)  # persist auto-confirmed no-gain leaves
         lock = self._locks.get(session)
+        # DV-1: Save As (target differs from the bound file) breaks the DATEV link — the copy
+        # must not carry the provenance. In-place saves keep it.
+        bound = self._paths.get(session)
+        is_save_as = not (self._same_path(path, bound)
+                          or (lock is not None and self._same_path(path, getattr(lock, "path", None))))
+        drop_datev = is_save_as and document.root.datev is not None
+        if drop_datev:
+            import dataclasses
+            document = dataclasses.replace(document, root=dataclasses.replace(document.root, datev=None))
         in_place_locked = lock is not None and (
             self._same_path(path, self._paths.get(session))
             or self._same_path(path, getattr(lock, "path", None)))  # degraded session: _paths is None
@@ -822,6 +831,9 @@ class CoreApi:
         except Exception as e:
             logger.exception("save failed")
             return {"ok": False, "error": str(e)}
+        if drop_datev:
+            self._datev_set_provenance(session, None)
+            self._datev_baseline.pop(session, None)
         with self._lock:
             s = self._sessions.get(session)
             if s is not None:
@@ -1846,6 +1858,10 @@ class CoreApi:
                               node_ids, options)
             if not out.get("ok"):
                 return out
+            if out.get("warning"):
+                # DV-2: incomplete export (failed page slices / skipped empty leaves) — DokAb has
+                # no revision/rollback, so never file truncated parts; surface the warning instead.
+                return {"ok": False, "error": out["warning"], "warning": out["warning"]}
             # defensive: an ok export must yield at least one path; never open(None).
             paths = [p for p in (out.get("paths") or [out.get("path")]) if p]
             if not paths:

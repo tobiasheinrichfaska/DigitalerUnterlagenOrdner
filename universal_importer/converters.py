@@ -343,6 +343,24 @@ _RELS_MAX_ENTRIES = 10_000  # ein .docx hat Dutzende Einträge; Cap gegen Entry-
 SCAN_UNREADABLE = "<.rels nicht prüfbar>"
 
 
+def _has_dtd_declaration(xml: bytes) -> bool:
+    """ST-1: DOCTYPE/ENTITY (entity expansion) — also in UTF-16 or other odd encodings."""
+    needles = ("<!doctype", "<!entity")
+    low = xml.lower()
+    for n in needles:
+        for enc in ("utf-8", "utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"):
+            if n.encode(enc) in low or n.encode(enc) in xml:
+                return True
+    for enc in ("utf-8", "utf-16", "utf-16-le", "utf-16-be", "latin-1"):
+        try:
+            text = xml.decode(enc).lower()
+        except Exception:
+            continue
+        if any(n in text for n in needles):
+            return True
+    return False
+
+
 def scan_ooxml_external_targets(path: str) -> Optional[str]:
     """Erstes verdächtiges externes Ziel in den ``*.rels`` einer OOXML-Datei
     (sonst ``None``). Nur ``TargetMode="External"``-Beziehungen, Hyperlinks
@@ -387,6 +405,8 @@ def scan_ooxml_external_targets(path: str) -> Optional[str]:
                 # Präfix-Elementen (<r:Relationship>) umgehen — Word parst all das.
                 # Elemente namensraum-unabhängig über den LOKALEN Namen; nicht parsebares
                 # XML → fail CLOSED (Words toleranter Parser könnte es trotzdem auflösen).
+                if _has_dtd_declaration(xml):
+                    return SCAN_UNREADABLE  # ST-1: kein legitimes .rels hat eine DTD
                 try:
                     from xml.etree import ElementTree as ET
                     root_el = ET.fromstring(xml)

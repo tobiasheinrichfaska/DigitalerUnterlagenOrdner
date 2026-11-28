@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import threading
 from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
@@ -44,13 +45,16 @@ class Engine(Protocol):
         """Concatenate PDFs page-by-page (used in D3b)."""
 
 
+_log = logging.getLogger(__name__)
+
+
 def _cut_page_cross_references(pdf) -> None:
     """Prepare the (private, in-memory) parse of the source for copying single pages out of it.
     qpdf nulls references to other source pages on copy, which would leave DEAD internal links
     (GoTo/Dest -> null) in every part; drop those annotations. Also cut what would drag the
     siblings' structures along: an annotation's ``/P`` and (non-popup) ``/Parent`` (form-field
     trees reach the widgets of every other page) and article beads ``/B``."""
-    for page in pdf.pages:
+    for page_idx, page in enumerate(pdf.pages):
         obj = page.obj
         try:
             if "/B" in obj:
@@ -70,11 +74,13 @@ def _cut_page_cross_references(pdf) -> None:
                         del a["/P"]
                     if "/Parent" in a and a.get("/Subtype") != pikepdf.Name.Popup:
                         del a["/Parent"]
-                except Exception:
+                except Exception as exc:
+                    _log.warning("annotation skipped on page %d: %r", page_idx, exc)
                     continue
                 keep.append(a)
             obj["/Annots"] = keep
-        except Exception:
+        except Exception as exc:
+            _log.warning("annotation cleanup failed on page %d: %r", page_idx, exc)
             continue
 
 

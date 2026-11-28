@@ -577,8 +577,11 @@ class TestPreview:
         a = w.leaf(tmp_path, "doc", 6)
         b = w.leaf(tmp_path, "nachbar", 6)
         w.api.render_window(w.sid, a, 0, 1, 60)
-        # the middleware keeps filling: the OTHER node warms without being requested
-        assert _wait(lambda: w.api.render_stats()["cache_pages"] >= 12)
+        # the middleware keeps filling: the OTHER node warms without being requested. Node `a` has
+        # only 6 pages, so more than 6 cached pages means pages of `b` were warmed in the
+        # background. (The filler backs off under system load by design — the Windows CI runner is
+        # slow — so assert the property, not full warm-up, with a generous timeout.)
+        assert _wait(lambda: w.api.render_stats()["cache_pages"] > 6, timeout=40.0)
         assert b in _flat(w.tree)
 
     def test_render_budget_grow_and_shrink_evicts_immediately(self, tmp_path):

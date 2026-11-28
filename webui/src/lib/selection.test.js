@@ -109,3 +109,18 @@ describe('mergeableIds', () => {
     expect(mergeableIds(tree, ['a', 'missing'])).toBeNull()
   })
 })
+
+describe('resolveSelection — order independence (FZ-1)', () => {
+  const nested = {
+    id: 'root', is_folder: true, name: 'root', children: [
+      { id: 'F', is_folder: true, name: 'F', children: [
+        { id: 'G', is_folder: true, name: 'G', children: [{ id: 'L', is_folder: false, name: 'L' }] },
+      ] },
+    ],
+  }
+  for (const order of [['G', 'F', 'L'], ['L', 'G', 'F'], ['F', 'G', 'L']]) {
+    it(`fully selected nested folders never prompt (${order.join(',')})`, () => {
+      expect(resolveSelection(nested, order, never)).toEqual(['F'])
+    })
+  }
+})

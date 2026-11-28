@@ -63,13 +63,14 @@ function findParentNode(node, id, parent = null) {
 
 export function resolveSelection(root, ids, ask, { warnNone = false } = {}) {
   const set = new Set(ids)
+  const orig = new Set(ids) // snapshot: counts must not depend on processing order
   const folders = ids.filter((id) => { const n = find(root, id); return n && n.is_folder })
   for (const fid of folders) {
     if (!set.has(fid)) continue
     const node = find(root, fid)
     const desc = descendantIds(node)
     if (desc.length === 0) continue // empty folder — nothing to reconcile
-    const sel = desc.filter((d) => set.has(d))
+    const sel = desc.filter((d) => orig.has(d))
     if (sel.length === 0) {
       // a folder whose contents aren't individually selected. For destructive ops
       // (delete) warn that they'll be affected; for move/group/export just include

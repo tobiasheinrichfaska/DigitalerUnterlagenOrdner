@@ -149,3 +149,29 @@ describe('rangeIds (shift-range over VISIBLE rows)', () => {
     expect(rangeIds(tree, 'nope', 'C')).toBeNull()
   })
 })
+
+describe('FZ-2/FZ-3 safety', () => {
+  it('moveManyDrop refuses a drop into a carried folder', () => {
+    const t = { id: 'root', is_folder: true, children: [
+      { id: 'A', is_folder: true, children: [] },
+      { id: 'B', is_folder: false, children: [] },
+    ] }
+    const preview = applyMove(t, 'B', 'A', null)
+    expect(moveManyDrop(t, preview, ['A', 'B'], 'B')).toBeNull()
+  })
+  it('moveManyDrop refuses a drop into a carried folder\'s descendant', () => {
+    const t = { id: 'root', is_folder: true, children: [
+      { id: 'A', is_folder: true, children: [{ id: 'S', is_folder: true, children: [] }] },
+      { id: 'B', is_folder: false, children: [] },
+    ] }
+    const preview = applyMove(t, 'B', 'S', null)
+    expect(moveManyDrop(t, preview, ['A', 'B'], 'B')).toBeNull()
+  })
+  it('applyMove into its own subtree is a no-op', () => {
+    const t = { id: 'root', is_folder: true, children: [
+      { id: 'A', is_folder: true, children: [{ id: 'S', is_folder: true, children: [] }] },
+    ] }
+    expect(applyMove(t, 'A', 'S', null)).toBe(t)
+    expect(applyMove(t, 'A', 'A', null)).toBe(t)
+  })
+})

@@ -44,14 +44,18 @@ def sweep_stale_view_dirs(root=None, max_age_s=24 * 3600, now=None):
     but a crash can strand them. Only dirs older than ``max_age_s`` are removed,
     so a concurrently running instance's live view is never touched. Returns the
     removed paths."""
-    import glob
     import shutil
     import tempfile
     import time
     root = root or tempfile.gettempdir()
     now = now if now is not None else time.time()
     removed = []
-    for d in glob.glob(os.path.join(root, "beleg_view_*")):
+    try:  # names only (no glob: a temp root like ``Max[1]`` would be read as a character class)
+        with os.scandir(root) as it:
+            found = sorted(os.path.join(root, e.name) for e in it if e.name.startswith("beleg_view_"))
+    except OSError:
+        return removed
+    for d in found:
         try:
             if os.path.isdir(d) and now - os.path.getmtime(d) > max_age_s:
                 shutil.rmtree(d, ignore_errors=True)
@@ -1155,18 +1159,38 @@ class CoreApi:
     _RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
                        *(f"COM{i}" for i in range(1, 10)),
                        *(f"LPT{i}" for i in range(1, 10))}
+    _MAX_COMPONENT = 120
+    _MAX_PATH_BUDGET = 240
 
     @classmethod
-    def _safe_filename(cls, name, default):
+    def _is_reserved_name(cls, name):
+        """Windows device name test: case-insensitive, superscript digits (COM¹..³) mapped,
+        and trailing spaces/dots before the extension ignored ('NUL .pdf', 'nul.tar.gz')."""
+        head = str(name).split(".")[0].rstrip(" ").upper()
+        head = head.translate({0xB9: "1", 0xB2: "2", 0xB3: "3"})
+        return head in cls._RESERVED_NAMES
+
+    @classmethod
+    def _safe_filename(cls, name, default, dir_len=None, ext_len=0):
         """A filesystem-safe base name (no extension) from an arbitrary user/tag/document
-        string: strip illegal chars, trailing dots/spaces, and Windows-reserved device names.
-        Used wherever such a name becomes a real temp/disk path with no native dialog to vet it
-        (materialize_subset's view title, datev_export's part files)."""
+        string: strip illegal chars, control/bidi chars, trailing dots/spaces (also per dotted
+        component), and Windows-reserved device names (also superscript/space variants).
+        Capped at ``_MAX_COMPONENT`` chars; when the target directory length ``dir_len`` is known
+        the whole path (dir + sep + name + ``ext_len``) stays below ``_MAX_PATH_BUDGET``, else the
+        default is used. Used wherever such a name becomes a real temp/disk path with no native
+        dialog to vet it (materialize_subset's view title, datev_export's part files)."""
         import re as _re
-        safe = _re.sub(r'[<>:"/\\|?*]', "_", (name or default)).strip().rstrip(". ")
-        # Windows reserves device names even WITH an extension ("NUL.pdf", "COM1.foo"), so test
-        # the part before the first dot, not the whole string.
-        if not safe or safe.split(".")[0].upper() in cls._RESERVED_NAMES:
+        raw = _re.sub("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]", "",
+                      str(name or default))
+        safe = _re.sub(r'[<>:"/\\|?*]', "_", raw)
+        safe = ".".join(p.rstrip(" ") for p in safe.split(".")).strip().rstrip(". ")
+        limit = cls._MAX_COMPONENT
+        if dir_len is not None:
+            limit = min(limit, cls._MAX_PATH_BUDGET - int(dir_len) - 1 - int(ext_len))
+        if limit < 1:
+            return default
+        safe = safe[:limit].rstrip(". ")
+        if not safe or cls._is_reserved_name(safe):
             return default
         return safe
 
@@ -1201,8 +1225,9 @@ class CoreApi:
         # open() titles a document from its FILE NAME (stem), so encode the wanted name
         # there — in its own temp dir to avoid mkstemp's random suffix in the title.
         # The name flows from a tag string → window title: make it a safe base name.
-        safe = self._safe_filename(name, "Ansicht")
-        path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
+        view_dir = tempfile.mkdtemp(prefix="beleg_view_")
+        safe = self._safe_filename(name, "Ansicht", dir_len=len(view_dir), ext_len=len(".belegtool"))
+        path = os.path.join(view_dir, f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)
         except BaseException as e:
@@ -1672,7 +1697,11 @@ class CoreApi:
         Trade-off when still connecting: the up-front 'already checked out by someone else' hint
         surfaces as a LOCKED verdict at write-back instead of on open — still safe, just later."""
         from datev.provenance import parse_checkout_path
-        _parsed = parse_checkout_path(path)
+        try:
+            _parsed = parse_checkout_path(path)
+        except Exception:  # e.g. '²' stem: isdigit() but int() fails → just not a checkout
+            logger.warning("[datev] checkout path not parseable: %r", path, exc_info=True)
+            _parsed = {}
         is_checkout = bool(_parsed.get("doc_guid"))
         # breadcrumb (belegtool_diag.log next to the exe): whether this open was recognized as a
         # DATEV checkout. A "nicht verknüpft" write-back means is_checkout=False here.
@@ -1700,7 +1729,7 @@ class CoreApi:
         elif is_checkout:
             # connect still in flight → cheap, service-free capture so the file opens instantly
             # and write-back stays enabled; the server half is filled at write-back.
-            parsed = parse_checkout_path(path)
+            parsed = _parsed
             prov = {"doc_guid": parsed.get("doc_guid"), "file_id": parsed.get("file_id"),
                     "structure_item_id": None, "correspondence_partner_guid": None,
                     "source_name": os.path.basename(str(path)) or None}
@@ -2033,8 +2062,10 @@ class CoreApi:
         # The document name becomes a real temp path here (no native dialog to vet it), so make
         # it a safe base name (path separators / illegal chars / reserved device names stripped)
         # — shared with materialize_subset via _safe_filename.
-        base_name = self._safe_filename(self.document_name(session), "Export")
         tmpdir = tempfile.mkdtemp(prefix="beleg_datev_export_")
+        # room for "_Teil_NN" + ".pdf" appended by the split export
+        base_name = self._safe_filename(self.document_name(session), "Export",
+                                        dir_len=len(tmpdir), ext_len=len("_Teil_99.pdf"))
         try:
             out = self.export(session, os.path.join(tmpdir, f"{base_name}.pdf"),
                               node_ids, options)
@@ -2144,6 +2175,31 @@ class CoreApi:
             resp["warning"] = "; ".join(errors)
         return resp
 
+    @classmethod
+    def _safe_import_name(cls, name):
+        """A single, drive-/stream-free file name for the import temp dir (identical on every
+        platform: judged with ntpath rules). Keeps the extension."""
+        import ntpath
+        import re as _re
+        n = ntpath.splitdrive(str(name))[1]
+        n = _re.sub(r'[<>:"|?*/\\]', "_", n).lstrip(". ").rstrip(". ")
+        if not n:
+            return "Datei"
+        if cls._is_reserved_name(n):
+            n = "_" + n
+        return n
+
+    @staticmethod
+    def _inside_dir(path, directory):
+        import ntpath
+        if ntpath.splitdrive(os.path.basename(path))[0]:
+            return False
+        try:
+            rp, rd = os.path.realpath(path), os.path.realpath(directory)
+            return os.path.commonpath([rp, rd]) == rd and os.path.dirname(rp) == rd
+        except ValueError:
+            return False
+
     def import_bytes(self, session: str, name: str, data_b64: str, parent_id: str = None, index: int = None) -> dict:
         """Import a single dropped file given as base64 / data-URL — written to a
         temp file (keeping its name) so the path pipeline (and COM) handle it."""
@@ -2155,12 +2211,15 @@ class CoreApi:
         except Exception as e:
             return {"ok": False, "error": f"ungültige Daten: {e}"}
         from universal_importer.converters import sanitize_node_name
-        safe = sanitize_node_name(name)
+        safe = self._safe_import_name(sanitize_node_name(name))
         if len(safe) > 100:  # keep the temp path under MAX_PATH; keep the extension
             stem, ext = os.path.splitext(safe)
             safe = stem[:100 - len(ext[:20])] + ext[:20]
         tmpdir = tempfile.mkdtemp(prefix="beleg_import_")
         path = os.path.join(tmpdir, safe)
+        if not self._inside_dir(path, tmpdir):  # defence in depth; never write outside tmpdir
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return {"ok": False, "error": "Datei nicht importierbar: ungültiger Name"}
         try:
             with open(path, "wb") as f:
                 f.write(data)

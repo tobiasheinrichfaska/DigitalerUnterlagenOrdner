@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { findNode } from './lib/tree'
+import { displayName } from './lib/displayName'
 import { aggregateStatus, DOT_LABEL } from './lib/status'
 
 const INDENT = 18 // px per nesting level (matches ul padding-left)
@@ -207,7 +208,7 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
           />
         ) : (
           <span className={node.is_folder ? 'name folder' : 'name leaf'}>
-            {node.is_folder ? '📁' : '📄'} {node.name}
+            {node.is_folder ? '📁' : '📄'} {displayName(t, node.name)}
           </span>
         )}
         {node.tags?.length > 0 && (
@@ -291,7 +292,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   const statusMap = useMemo(() => aggregateStatus(node), [node])
   // AX-12: roving tabindex — the primary row (else the first row) is the tree's single Tab stop.
   const tabStopId = visibleTabStop(node, primaryId, forceExpand)
-  const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
+  const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : displayName(t, dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 
   // F2 renames the primary-selected node inline (a content edit — allowed in views too).

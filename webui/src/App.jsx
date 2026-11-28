@@ -10,6 +10,7 @@ import { TagViewBar } from './TagViewBar'
 import { StatusBar } from './StatusBar'
 import { DatevBar } from './DatevBar'
 import { DatevFileDialog } from './DatevFileDialog'
+import { displayName } from './lib/displayName'
 import { isDatevConnected, datevVerdictKey, datevSavedNotice } from './lib/datev'
 import { allTags, filterTree, groupByTag, isGroupNode, displayedNodeIds, realSelectionIds } from './lib/tags'
 import { findNode, findParent, buildIndex, afterLevels, newFolderTarget } from './lib/tree'
@@ -815,7 +816,7 @@ export default function App() {
       {dropActive && (
         <div className="drop-overlay">
           <div className="drop-overlay-badge">
-            📥 {t('Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}', { target: selected?.is_folder ? selected.name : t('oberste Ebene') })}
+            📥 {t('Dateien ablegen — auf eine Position im Baum (rein/zwischen) für ein genaues Ziel, sonst in {target}', { target: selected?.is_folder ? displayName(t, selected.name) : t('oberste Ebene') })}
           </div>
         </div>
       )}

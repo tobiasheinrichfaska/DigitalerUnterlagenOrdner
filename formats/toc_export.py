@@ -328,7 +328,7 @@ def _build_index_items(nodes: List[PDFNode]) -> List[_IndexEntry]:
         for tag in tags:
             tag_map.setdefault(tag, []).append((name, page))
     items: List[_IndexEntry] = []
-    for tag in sorted(tag_map, key=lambda s: s.lower()):
+    for tag in sorted(tag_map, key=lambda s: (s.casefold(), s)):
         items.append(_IndexEntry(True, tag))
         for name, page in tag_map[tag]:
             items.append(_IndexEntry(False, name, page))
@@ -463,7 +463,7 @@ def _assemble(prepend_pdfs: List[bytes], content_bytes: bytes,
                     return prepend_count + it.page_start - 1
             return prepend_count
 
-        if with_bookmarks and toc_items:
+        if with_bookmarks and toc_items and len(pdf.pages) > 0:
             with pdf.open_outline() as outline:
                 outline.root.clear()
                 depth_parents: dict = {-1: outline.root}

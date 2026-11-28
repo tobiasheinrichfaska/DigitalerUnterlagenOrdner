@@ -768,6 +768,52 @@ def _subtree_from_leaves(items):
     return roots
 
 
+def _drop_dead_links(data: bytes) -> bytes:
+    """CP-3: after a page-level cut, drop internal link annotations whose destination page is
+    not part of this file (pypdf nulls/orphans them); URI links stay."""
+    try:
+        import pikepdf
+        with pikepdf.open(io.BytesIO(data)) as pdf:
+            own = {pg.obj.objgen for pg in pdf.pages}
+            changed = False
+
+            def alive(d):
+                try:
+                    return d is not None and len(d) > 0 and d[0] is not None \
+                        and d[0].objgen in own
+                except Exception:
+                    return False
+
+            for pg in pdf.pages:
+                annots = pg.obj.get("/Annots")
+                if annots is None:
+                    continue
+                keep = pikepdf.Array()
+                for a in annots:
+                    dead = False
+                    if a.get("/Subtype") == pikepdf.Name.Link:
+                        if "/Dest" in a:
+                            dead = not alive(a["/Dest"])
+                        else:
+                            act = a.get("/A")
+                            if act is not None and act.get("/S") == pikepdf.Name.GoTo:
+                                dead = not alive(act.get("/D"))
+                    if dead:
+                        changed = True
+                    else:
+                        keep.append(a)
+                if len(keep) != len(annots):
+                    pg.obj["/Annots"] = keep
+            if not changed:
+                return data
+            buf = io.BytesIO()
+            pdf.save(buf)
+            return buf.getvalue()
+    except Exception as e:
+        logger.warning("Tote Links konnten nicht entfernt werden: %s", e)
+        return data
+
+
 def _slice_leaf(leaf, indices, problems=None):
     """A new leaf holding only ``indices`` (0-based) of ``leaf``'s pages — for the
     page-level split, where a document is cut across files. The name carries the
@@ -790,8 +836,9 @@ def _slice_leaf(leaf, indices, problems=None):
                 f"{leaf.name}: Seiten fehlen im Export (Quelldaten beschädigt oder Seitenzahl falsch)")
     buf = io.BytesIO()
     writer.write(buf)
+    part_bytes = _drop_dead_links(buf.getvalue())
     part = PDFNode(name=f"{leaf.name} (S. {indices[0] + 1}–{indices[-1] + 1})",
-                   pdf_data=buf.getvalue())
+                   pdf_data=part_bytes)
     part.pdf_length = len(writer.pages)  # the REAL count, never the claim
     part.tags = list(getattr(leaf, "tags", []) or [])
     return part

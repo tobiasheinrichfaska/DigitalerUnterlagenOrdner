@@ -28,7 +28,11 @@ def sanitize_pdf(data: bytes) -> bytes:
     try:
         # Versuch: Original ist bereits lesbar
         PdfReader(io.BytesIO(data))
-        return data  # Kein Problem, unverändert zurückgeben
+        # CP-2: pdfium only finds "%PDF-" within the first 1024 bytes; pypdf/pikepdf accept more
+        # junk, so such a file would import fine but render blank -> normalise it.
+        if data.find(b"%PDF-") <= 1024:
+            return data  # Kein Problem, unverändert zurückgeben
+        logger.info("sanitize_pdf: Vorspann vor %%PDF- > 1024 Bytes – normalisiere via pikepdf.")
 
     except PdfReadError as read_error:
         logger.warning("sanitize_pdf: PDF unlesbar – versuche Reparatur: %s", read_error)

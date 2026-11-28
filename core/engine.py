@@ -306,26 +306,29 @@ class RealEngine:
         return {m: len(b) for m, b in self._all_methods(pdf_bytes, dpi, cancel).items()}
 
     def rotate(self, pdf_bytes: bytes, angle: int) -> bytes:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        # clone the whole document (not page-by-page) so the catalog survives — notably
-        # /AcroForm; add_page alone dropped it and left orphaned widgets (C-6)
-        writer = PdfWriter(clone_from=reader)
-        # the old page-by-page path dropped the catalog; keep /AcroForm but never carry
-        # document-level active content (OpenAction / additional actions / JS name tree)
-        root = writer._root_object
-        for key in ("/OpenAction", "/AA"):
-            if key in root:
-                del root[key]
-        names = root.get("/Names")
-        if names is not None:
-            names = names.get_object()
-            if "/JavaScript" in names:
+        # pikepdf (like split_chunks): keeps the whole catalog (/AcroForm survives, C-6) and
+        # does not depend on a trailer /Size (a qpdf-repaired file has none — CP-1).
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            # never carry document-level active content (OpenAction / additional actions / JS names)
+            root = pdf.Root
+            for key in ("/OpenAction", "/AA"):
+                if key in root:
+                    del root[key]
+            names = root.get("/Names")
+            if names is not None and "/JavaScript" in names:
                 del names["/JavaScript"]
-        for page in writer.pages:
-            page.rotate(angle)
-        buf = io.BytesIO()
-        writer.write(buf)
-        return buf.getvalue()
+            for page in pdf.pages:
+                # /Rotate may be inherited from the page tree; read the effective value
+                node, cur = page.obj, 0
+                while node is not None:
+                    if "/Rotate" in node:
+                        cur = int(node["/Rotate"])
+                        break
+                    node = node.get("/Parent")
+                page.obj["/Rotate"] = (cur + int(angle)) % 360
+            buf = io.BytesIO()
+            pdf.save(buf)
+            return buf.getvalue()
 
     def split(self, pdf_bytes: bytes) -> List[bytes]:
         reader = PdfReader(io.BytesIO(pdf_bytes))

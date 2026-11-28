@@ -140,8 +140,12 @@ def _decode_text(data: bytes, html: bool = False) -> str:
     return data.decode("cp1252", errors="replace")
 
 
-_CTRL_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
-_NAME_CTRL_RE = re.compile("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+# Control / bidi-override / zero-width characters removed from imported text and names.
+# A translate table (not a regex range) keeps the intent explicit and is faster.
+_BIDI_AND_ZW = list(range(0x200B, 0x2010)) + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A)) + [0xFEFF]
+_CTRL_DELETE = dict.fromkeys(
+    [c for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)] + [0x7F] + _BIDI_AND_ZW)
+_NAME_CTRL_DELETE = dict.fromkeys(list(range(0x20)) + [0x7F] + _BIDI_AND_ZW)
 _TXT_MAX_CHARS = 1_000_000   # layout is O(n) per char in Python: ~3 s per MB
 _HTML_MAX_BYTES = 2 * 1024 * 1024
 _HTML_MAX_DEPTH = 100        # xhtml2pdf is quadratic in nesting depth / element count
@@ -155,7 +159,7 @@ def sanitize_node_name(name, strip_path: bool = True, max_len: int = 200) -> str
     n = str(name or "")
     if strip_path:
         n = n.replace("\\", "/").rsplit("/", 1)[-1]
-    n = _NAME_CTRL_RE.sub("", n).strip()
+    n = n.translate(_NAME_CTRL_DELETE).strip()
     if n in ("", ".", ".."):
         return "Datei"
     return n[:max_len]
@@ -191,7 +195,7 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
         raise ValueError("Textdatei zu groß")
     if isinstance(text, bytes):
         text = _decode_text(bytes(text))
-    text = _CTRL_RE.sub("", text)
+    text = text.translate(_CTRL_DELETE)
     truncated = len(text) > _TXT_MAX_CHARS
     if truncated:
         text = text[:_TXT_MAX_CHARS] + "\n\n[Text gekürzt: Datei zu groß für den Import]"
@@ -279,7 +283,7 @@ def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF
     if isinstance(html, bytes):
         html = _decode_text(bytes(html), html=True)
 
-    html = _CTRL_RE.sub("", html)
+    html = html.translate(_CTRL_DELETE)
     _check_html_complexity(html)
     html = _printable(html)
 

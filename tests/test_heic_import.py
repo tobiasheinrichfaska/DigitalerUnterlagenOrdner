@@ -27,11 +27,12 @@ def _check(result):
     assert doc.page_count == 1
     pix = doc[0].get_pixmap(dpi=72)
     assert pix.width > 0 and pix.height > 0
-    # Page aspect ratio follows the image (96x64 = 3:2).
-    assert abs(pix.width / pix.height - W / H) < 0.05
+    # Image is fitted onto a landscape A4 page (Y-1), not sized by pixels.
+    assert (pix.width, pix.height) == (842, 596)
     # Pixels plausible: top half is the blue/red gradient, bottom-left the orange box.
     def px(x, y):
-        return pix.pixel(int(x * pix.width / W), int(y * pix.height / H))
+        k = min(pix.width / W, pix.height / H)  # fit scale
+        return pix.pixel(int(pix.width / 2 + (x - W / 2) * k), int(pix.height / 2 + (y - H / 2) * k))
     r, g, b = px(5, 10)
     assert b > r + 100  # left edge of gradient: blue-ish
     r, g, b = px(90, 10)

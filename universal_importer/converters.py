@@ -53,21 +53,59 @@ def _to_rgb(img: Image.Image) -> Image.Image:
     return img.convert("RGB")
 
 
-def standard_image(path: str) -> ConvertedPDF:
-    img = _to_rgb(Image.open(path))
+_A4_W, _A4_H = 595.28, 841.89
+
+
+def _image_to_a4_pdf(path: str) -> io.BytesIO:
+    """One A4 page (portrait/landscape by image shape) with the image fitted
+    and centred, never distorted/cropped. Lossless sources stay Flate;
+    an un-rotated JPEG keeps its original DCT bytes (no re-encode)."""
+    import zlib
+
+    src = Image.open(path)  # Pillow's decompression-bomb guard applies here
+    orientation = src.getexif().get(0x0112, 1)
+    raw_jpeg = None
+    if src.format == "JPEG" and src.mode in ("RGB", "L") and orientation in (0, 1, None):
+        with open(path, "rb") as f:
+            raw_jpeg = f.read()
+    grey = src.mode in ("L", "1", "I;16", "I", "LA")
+    img = _to_rgb(src)
+    if grey:
+        img = img.convert("L")
+    w, h = img.size
+    pw, ph = (_A4_W, _A4_H) if h >= w else (_A4_H, _A4_W)
+    scale = min(pw / w, ph / h)
+    dw, dh = w * scale, h * scale
+    x, y = (pw - dw) / 2, (ph - dh) / 2
+
+    pdf = pikepdf.new()
+    if raw_jpeg is not None:
+        stream = pikepdf.Stream(pdf, raw_jpeg)
+        stream.Filter = pikepdf.Name.DCTDecode
+    else:
+        stream = pikepdf.Stream(pdf, zlib.compress(img.tobytes(), 6))
+        stream.Filter = pikepdf.Name.FlateDecode
+    stream.Type = pikepdf.Name.XObject
+    stream.Subtype = pikepdf.Name.Image
+    stream.Width, stream.Height = w, h
+    stream.ColorSpace = pikepdf.Name.DeviceGray if img.mode == "L" else pikepdf.Name.DeviceRGB
+    stream.BitsPerComponent = 8
+    page = pdf.add_blank_page(page_size=(pw, ph))
+    page.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=stream))
+    page.Contents = pikepdf.Stream(pdf, f"q {dw:.4f} 0 0 {dh:.4f} {x:.4f} {y:.4f} cm /Im0 Do Q".encode())
     buffer = io.BytesIO()
-    img.save(buffer, format="PDF")
+    pdf.save(buffer)
     buffer.seek(0)
-    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
+    return buffer
+
+
+def standard_image(path: str) -> ConvertedPDF:
+    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=_image_to_a4_pdf(path))
 
 
 def modern_image(path: str) -> ConvertedPDF:
     register_heif_opener()
-    img = _to_rgb(Image.open(path))
-    buffer = io.BytesIO()
-    img.save(buffer, format="PDF")
-    buffer.seek(0)
-    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=buffer)
+    return ConvertedPDF(name=os.path.basename(path) + ".pdf", data=_image_to_a4_pdf(path))
 
 
 def _exceeds_byte_cap(data: Union[str, bytes]) -> bool:

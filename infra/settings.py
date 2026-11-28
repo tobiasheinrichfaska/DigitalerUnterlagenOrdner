@@ -70,7 +70,7 @@ def load_settings(path: str = None) -> dict:
         if not isinstance(data, dict):
             return dict(DEFAULTS)
         return _coerce(data)
-    except (FileNotFoundError, ValueError):  # ValueError ⊇ JSONDecodeError/UnicodeDecodeError (S-3)
+    except (FileNotFoundError, ValueError, RecursionError):  # ValueError ⊇ JSONDecodeError/UnicodeDecodeError (S-3)
         return dict(DEFAULTS)
     except OSError:
         logger.debug("settings load skipped", exc_info=True)

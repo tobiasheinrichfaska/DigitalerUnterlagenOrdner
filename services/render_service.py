@@ -159,6 +159,8 @@ class RenderService:
     def prune(self, live_node_ids) -> None:
         """Drop cached pages of nodes that no longer exist."""
         live = set(live_node_ids)
+        with self._lock:
+            self._gen += 1  # SV-6: abandon in-flight background fills
         self.cache.keep_only(live)
         self._forget_failures(live=live)
 
@@ -246,6 +248,8 @@ class RenderService:
                 del self._failed[k]
 
     def invalidate(self, node_id: str) -> None:
+        with self._lock:
+            self._gen += 1  # SV-6: abandon in-flight background fills
         self._forget_failures(node_id)
         self.cache.invalidate_node(node_id)
 

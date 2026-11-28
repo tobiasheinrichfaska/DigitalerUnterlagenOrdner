@@ -28,6 +28,7 @@ MAX_ATTACHMENTS = 500  # bomb guard: cap variant_* attachments read from an untr
 # alone sit BELOW where a deflate bomb would detonate. Mirror unpack's magnitudes.
 MAX_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap per attachment
 MAX_TOTAL_ATTACHMENT_BYTES = variant_blobs.MAX_TOTAL_BYTES  # decoded cap across all attachments
+MAX_TOTAL_DECODED_BYTES = variant_blobs.MAX_TOTAL_BYTES  # SV-3: unpacked variants retained across ALL blobs
 
 
 def _read_attachment_capped(filespec, max_bytes: int):
@@ -205,12 +206,14 @@ def seed_variants_from_file(path, doc, engine) -> int:
         return 0
     by_id = {n.id: n for n in doc.root.iter() if not n.is_folder and n.original_data}
     seeded = 0
+    decoded_left = MAX_TOTAL_DECODED_BYTES
     for nid, blob in data_by_id.items():
         node = by_id.get(nid)
         if node is None:
             continue
-        variants = variant_blobs.unpack(blob)
+        variants = variant_blobs.unpack(blob, max_total_bytes=max(decoded_left, 0))
         if variants:
+            decoded_left -= sum(len(b) for m in variants.values() for b in m.values())
             engine.seed_variants(node.original_data, variants)
             seeded += 1
     return seeded

@@ -12,6 +12,7 @@ Every method returns a dict with ``ok: bool``; success carries ``session``,
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 import threading
@@ -26,6 +27,7 @@ from core.bridge import load_belegtool
 from core.commands import (
     DEFAULT_COMPRESSION_DPI,
     CommandError,
+    Compress,
     command_from_dict,
 )
 from core.engine import RealEngine
@@ -85,6 +87,23 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
     if "kein gültiges pdf" in low or "not a pdf" in low or "eof marker" in low or "startxref" in low:
         return f"{name}: beschädigte oder ungültige Datei"
     return f"{name}: {msg}"
+
+
+# SEC-4: bounds for untrusted numeric bridge inputs (UI sends 50-300 DPI, <=~50 pages).
+MIN_DPI, MAX_DPI = 30, 600
+MAX_WINDOW_COUNT = 64
+MIN_BUDGET_MB, MAX_BUDGET_MB = 16, 4096
+
+
+def _clamp_int(value, lo, hi, default):
+    """int(value) clamped to [lo, hi]; non-numeric (or bool/NaN/inf) -> ``default``."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        v = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(lo, min(hi, v))
 
 
 class CoreApi:
@@ -517,6 +536,9 @@ class CoreApi:
             cmd = command_from_dict(command)
         except Exception as e:
             return {"ok": False, "error": f"Ungültiger Befehl: {e}"}
+        if isinstance(cmd, Compress):  # SEC-4: untrusted dpi
+            cmd = dataclasses.replace(
+                cmd, dpi=_clamp_int(cmd.dpi, MIN_DPI, MAX_DPI, DEFAULT_COMPRESSION_DPI))
         locked = self._locked_conflict(session, cmd)
         if locked is not None:
             return {"ok": False, "code": "node_locked", "node_id": locked,
@@ -725,7 +747,10 @@ class CoreApi:
 
     def set_render_budget(self, mb: int) -> dict:
         """Set the render-cache budget (MB). Returns the refreshed stats."""
-        self._renderer().set_budget(max(0, int(mb)) * 1024 * 1024)
+        mb = _clamp_int(mb, MIN_BUDGET_MB, MAX_BUDGET_MB, None)
+        if mb is None:
+            return {"ok": False, "error": "ungültiger Wert"}
+        self._renderer().set_budget(mb * 1024 * 1024)
         seed = self._last_seed  # snapshot once — close_session may null it concurrently (cf. line 198)
         if seed:  # fill the new headroom right away
             self._kick_prewarm(seed[0])
@@ -753,6 +778,9 @@ class CoreApi:
                       count: int = 10, dpi: int = 100) -> dict:
         """Render only pages ``[first, first+count)`` of a leaf, cache-first via the
         shared RenderService. The windowed replacement for ``render`` (all pages)."""
+        first = _clamp_int(first, 0, 10**6, 0)
+        count = _clamp_int(count, 0, MAX_WINDOW_COUNT, 10)
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, 100)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -785,6 +813,9 @@ class CoreApi:
         instant and only the visible window renders. Never mutates the document.
         ``method`` None/"original" (or ``no_compression``) renders the original
         bytes, reusing the plain preview's cache."""
+        first = _clamp_int(first, 0, 10**6, 0)
+        count = _clamp_int(count, 0, MAX_WINDOW_COUNT, 10)
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, DEFAULT_COMPRESSION_DPI)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -1100,6 +1131,7 @@ class CoreApi:
     # ----------------------------------------------------------------------
     def compress_options(self, session: str, node_id: str, dpi: int = 150) -> dict:
         """Available compression methods for a leaf at ``dpi`` (smallest first)."""
+        dpi = _clamp_int(dpi, MIN_DPI, MAX_DPI, 150)
         with self._lock:
             s = self._sessions.get(session)
             if s is None:

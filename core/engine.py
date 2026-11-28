@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import sys
 import threading
 from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
@@ -104,6 +105,10 @@ class RealEngine:
         # Guarded by _mcache_lock too — seed_variants writes it during open() while
         # variants_for/evaluated iterate it on other pywebview threads.
         self._persisted: dict = {}
+        # PF-2: digest -> {dpi: True} index over _persisted (ordered), so variants_for /
+        # evaluated are O(1) per leaf instead of scanning every persisted entry.
+        # Guarded by _mcache_lock like _persisted itself.
+        self._pidx: dict = {}
         # identity-memoised sha1 (the model's bytes are immutable, so a given bytes
         # object hashes once) — _doc_response_locked calls variants_for/evaluated per
         # leaf on EVERY edit while holding the CoreApi lock; without the memo each
@@ -116,18 +121,43 @@ class RealEngine:
         self._dcache_bytes = 0
         self._dcache_max_entries = 256
         self._dcache_budget = 64 * 1024 * 1024
+        # PF-1: identity memo WITHOUT a count/byte cap. The documents' own leaf bytes
+        # are alive anyway, so the memo adds no copies; what it must not do is pin
+        # bytes nobody else holds (closed sessions). Entries whose only remaining
+        # referrers are the memo itself are swept, amortised (see _sweep_dlive). The
+        # small budgeted LRU above stays as the second layer (unchanged semantics).
+        self._dlive: dict = {}
+        self._dlive_sweep_at = 512
+
+    def _sweep_dlive(self) -> None:
+        """Drop identity-memo entries whose bytes nothing else references any more.
+        Caller holds _dcache_lock. Baseline refs of an otherwise-unreferenced entry:
+        the _dlive tuple, (the _dcache tuple if present) and getrefcount's argument."""
+        for key, ent in list(self._dlive.items()):
+            b = ent[0]
+            base = 2 + (1 if (key in self._dcache and self._dcache[key][0] is b) else 0)
+            if sys.getrefcount(b) <= base + 1:  # +1: the local ``b``
+                del self._dlive[key]
+        self._dlive_sweep_at = max(512, 2 * len(self._dlive))
 
     def _digest(self, pdf_bytes: bytes) -> bytes:
         key = id(pdf_bytes)
         with self._dcache_lock:
+            ent = self._dlive.get(key)
+            if ent is not None and ent[0] is pdf_bytes:
+                return ent[1]
             ent = self._dcache.get(key)
             if ent is not None and ent[0] is pdf_bytes:
                 self._dcache.move_to_end(key)
                 return ent[1]
         d = hashlib.sha1(pdf_bytes).digest()
+        with self._dcache_lock:
+            if len(self._dlive) >= self._dlive_sweep_at:
+                self._sweep_dlive()
+            self._dlive[key] = (pdf_bytes, d)
         if len(pdf_bytes) > self._dcache_budget:
-            # a single object larger than the whole budget can't stay cached — caching
-            # it would just drain every other entry, then evict itself. Skip the insert.
+            # a single object larger than the whole budget can't stay in the LRU layer —
+            # caching it would just drain every other entry, then evict itself.
             return d
         with self._dcache_lock:
             # the cache holds the bytes, so a live id can't be reused for other bytes
@@ -148,10 +178,15 @@ class RealEngine:
         digest = self._digest(pdf_bytes)
         out: dict = {}
         with self._mcache_lock:
-            items = list(self._mcache.items()) + list(self._persisted.items())
-        for (d, dpi), result in items:
-            if d == digest and result:
-                out.setdefault(dpi, {}).update(result)
+            # _mcache is capped at _mcache_max (16) entries: a scan is O(1). The
+            # persisted layer is unbounded → looked up through the digest index (PF-2).
+            for (d, dpi), result in self._mcache.items():
+                if d == digest and result:
+                    out.setdefault(dpi, {}).update(result)
+            for dpi in self._pidx.get(digest, ()):
+                result = self._persisted.get((digest, dpi))
+                if result:
+                    out.setdefault(dpi, {}).update(result)
         return out
 
     def evaluated(self, pdf_bytes: bytes) -> bool:
@@ -162,7 +197,7 @@ class RealEngine:
         digest = self._digest(pdf_bytes)
         with self._mcache_lock:
             return (any(d == digest for (d, _dpi) in self._mcache)
-                    or any(d == digest for (d, _dpi) in self._persisted))
+                    or bool(self._pidx.get(digest)))
 
     def seed_variants(self, pdf_bytes: bytes, variants: dict) -> None:
         """Load persisted variants (``{dpi: {method: bytes}}``) so re-selecting the
@@ -189,6 +224,7 @@ class RealEngine:
             if kept:
                 with self._mcache_lock:
                     self._persisted[(digest, int(dpi))] = kept
+                    self._pidx.setdefault(digest, {})[int(dpi)] = True
 
     def prune_persisted(self, closed_sources, live_sources) -> None:
         """Drop the persisted variants of the CLOSED document's sources, keeping
@@ -202,8 +238,9 @@ class RealEngine:
         if not drop:
             return
         with self._mcache_lock:
-            for key in [k for k in self._persisted if k[0] in drop]:
-                del self._persisted[key]
+            for dg in drop:
+                for dpi in self._pidx.pop(dg, ()):
+                    self._persisted.pop((dg, dpi), None)
 
     def _all_methods(self, pdf_bytes: bytes, dpi: int, cancel=None) -> dict:
         key = (self._digest(pdf_bytes), dpi)

@@ -402,10 +402,21 @@ def _set_status_many(doc: Document, cmd: SetStatusMany, engine=None) -> Document
         raise CommandError(f"invalid status: {cmd.status!r}")
     # de-dupe; skip ids already gone (e.g. stale selection). One undoable step; a folder
     # in the selection cascades to its contents.
+    # PF-3: ONE tree pass (was one full rebuild per id). Sequential semantics are
+    # preserved: a folder cascades to its descendant leaves, a leaf id sets itself.
+    index = _node_index(doc)
+    targets: dict = {}
     for nid in dict.fromkeys(cmd.node_ids):
-        if doc.find(nid) is not None:
-            doc = _apply_status(doc, nid, cmd.status)
-    return doc
+        node = index.get(nid)
+        if node is None:
+            continue
+        if node.is_folder:
+            for d in node.iter():
+                if not d.is_folder and d.status != cmd.status:
+                    targets[d.id] = {"status": cmd.status}
+        else:
+            targets[nid] = {"status": cmd.status}
+    return doc.update_nodes(targets) if targets else doc
 
 
 @_handler(SetCollapsed)
@@ -455,17 +466,19 @@ def _tag_many(doc: Document, cmd: TagMany, engine=None) -> Document:
     tag = (cmd.tag or "").strip()
     if not tag:
         return doc
+    index = _node_index(doc)  # PF-3: one tree pass for all ids
+    targets: dict = {}
     for nid in dict.fromkeys(cmd.node_ids):
-        node = doc.find(nid)
+        node = index.get(nid)
         if node is None:
             continue
         cur = tuple(node.tags or ())
         if cmd.add:
             if tag not in cur:
-                doc = doc.update_node(nid, tags=cur + (tag,))
+                targets[nid] = {"tags": cur + (tag,)}
         elif tag in cur:
-            doc = doc.update_node(nid, tags=tuple(t for t in cur if t != tag))
-    return doc
+            targets[nid] = {"tags": tuple(t for t in cur if t != tag)}
+    return doc.update_nodes(targets) if targets else doc
 
 
 @_handler(SetNodeBytes)
@@ -499,11 +512,13 @@ def _set_no_gain(doc: Document, cmd: SetNoGain, engine=None) -> Document:
     """Flag each existing LEAF as compression_no_gain=True (folders / missing ids are
     skipped, not errors — the verdict is applied opportunistically from background
     evaluation against a possibly-stale id set). Idempotent."""
+    index = _node_index(doc)  # PF-3: one tree pass
+    targets = {}
     for nid in dict.fromkeys(cmd.node_ids):
-        node = doc.find(nid)
+        node = index.get(nid)
         if node is not None and not node.is_folder and not node.compression_no_gain:
-            doc = doc.update_node(nid, compression_no_gain=True)
-    return doc
+            targets[nid] = {"compression_no_gain": True}
+    return doc.update_nodes(targets) if targets else doc
 
 
 @_handler(SetDatev)
@@ -521,23 +536,20 @@ def _delete(doc: Document, cmd: Delete, engine=None) -> Document:
 
 @_handler(DeleteMany)
 def _delete_many(doc: Document, cmd: DeleteMany, engine=None) -> Document:
-    ids = [i for i in dict.fromkeys(cmd.node_ids)
-           if doc.find(i) is not None and doc.parent_of(i) is not None]
+    pmap = _parent_id_map(doc.root)  # PF-3: one map instead of find+parent_of per id
+    ids = [i for i in dict.fromkeys(cmd.node_ids) if i in pmap]
     # The UI must resolve parent/child overlaps to a clean set first; a "mixed"
     # selection (a folder AND an item inside it) is rejected, never guessed.
     # One parent map instead of pairwise parent_of chains: the old check was
     # O(k²·depth·n) and ran under the CoreApi lock (audit 2026-11-03, L4).
     id_set = set(ids)
-    pmap = _parent_id_map(doc.root)
     for i in ids:
         pid = pmap.get(i)
         while pid is not None:
             if pid in id_set:  # an ancestor of i is selected too
                 raise CommandError("Gemischte Auswahl: ein Ordner und ein darin liegendes Element sind beide ausgewählt.")
             pid = pmap.get(pid)
-    for i in ids:
-        doc = doc.remove_node(i)
-    return doc
+    return doc.remove_nodes(ids) if ids else doc
 
 
 @_handler(Move)
@@ -548,6 +560,11 @@ def _move(doc: Document, cmd: Move, engine=None) -> Document:
     if node.find(cmd.new_parent_id) is not None:
         raise CommandError("Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.")
     return doc.move_node(cmd.node_id, cmd.new_parent_id, cmd.index)
+
+
+def _node_index(doc: Document) -> dict:
+    """One-pass id → Node map (replaces a ``doc.find`` tree walk per id)."""
+    return {n.id: n for n in doc.root.iter()}
 
 
 def _parent_id_map(root: Node) -> dict:
@@ -584,8 +601,11 @@ def _top_level_ids(doc: Document, ids):
 
 def _validate_move_targets(doc: Document, ids, parent_id: str):
     nodes = []
+    index = _node_index(doc)  # PF-3: one pass instead of a find per id
     for nid in ids:
-        node = _require(doc, nid)
+        node = index.get(nid)
+        if node is None:
+            raise CommandError(f"node not found: {nid}")
         _reject_root(doc, nid, "move")
         if node.find(parent_id) is not None:
             raise CommandError("Ein Knoten kann nicht in sich selbst oder seinen eigenen Teilbaum verschoben werden.")
@@ -608,11 +628,7 @@ def _move_many(doc: Document, cmd: MoveMany, engine=None) -> Document:
     moved = set(ids)
     before = sum(1 for i, c in enumerate(parent.children) if c.id in moved and i < raw)
     at = raw - before
-    for nid in ids:
-        doc = doc.remove_node(nid)
-    for offset, node in enumerate(nodes):
-        doc = doc.insert_child(cmd.new_parent_id, node, at + offset)
-    return doc
+    return doc.remove_nodes(ids).insert_children(cmd.new_parent_id, nodes, at)
 
 
 def _reid_colliding(node: Node, taken: set) -> Node:
@@ -657,14 +673,12 @@ def _group_into_folder(doc: Document, cmd: GroupIntoFolder, engine=None) -> Docu
     ids = _top_level_ids(doc, list(cmd.node_ids))
     if not ids:
         raise CommandError("Nichts zu gruppieren.")
-    _validate_move_targets(doc, ids, cmd.parent_id)
+    nodes = _validate_move_targets(doc, ids, cmd.parent_id)
     folder = Node(name=cmd.name or "Neue Gruppe", is_folder=True,
                   **({"id": cmd.new_id} if cmd.new_id else {}))
     fid = folder.id
     doc = doc.insert_child(cmd.parent_id, folder, cmd.index)
-    for nid in ids:
-        doc = doc.move_node(nid, fid, None)
-    return doc
+    return doc.remove_nodes(ids).insert_children(fid, nodes, None)
 
 
 # --- engine-backed handlers ------------------------------------------------

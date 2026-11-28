@@ -32,7 +32,6 @@ export const bar = {
   'Abbrechen': 'Obrecha',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Ois PDF mit Inhoitsvazeichnis rausgebm (Auswoi, sunst s ganze Dokument)',
-  'Auswahl': 'Auswoi',
   'Ordner': 'Ordna',
   'Rückgängig': 'Zruck',
   'Wiederholen': 'Nomoi',

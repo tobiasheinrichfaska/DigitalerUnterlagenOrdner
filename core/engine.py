@@ -128,6 +128,10 @@ class RealEngine:
         # small budgeted LRU above stays as the second layer (unchanged semantics).
         self._dlive: dict = {}
         self._dlive_sweep_at = 512
+        # R10-4: pinned BYTES are bounded too — a sweep also runs once the memo pins more
+        # than max(64 MiB, 2x the bytes that were still live after the last sweep).
+        self._dlive_bytes = 0
+        self._dlive_sweep_bytes = 64 * 1024 * 1024
 
     def _sweep_dlive(self) -> None:
         """Drop identity-memo entries whose bytes nothing else references any more.
@@ -139,6 +143,8 @@ class RealEngine:
             if sys.getrefcount(b) <= base + 1:  # +1: the local ``b``
                 del self._dlive[key]
         self._dlive_sweep_at = max(512, 2 * len(self._dlive))
+        self._dlive_bytes = sum(len(e[0]) for e in self._dlive.values())
+        self._dlive_sweep_bytes = max(64 * 1024 * 1024, 2 * self._dlive_bytes)
 
     def _digest(self, pdf_bytes: bytes) -> bytes:
         key = id(pdf_bytes)
@@ -152,8 +158,11 @@ class RealEngine:
                 return ent[1]
         d = hashlib.sha1(pdf_bytes).digest()
         with self._dcache_lock:
-            if len(self._dlive) >= self._dlive_sweep_at:
+            if (len(self._dlive) >= self._dlive_sweep_at
+                    or self._dlive_bytes + len(pdf_bytes) > self._dlive_sweep_bytes):
                 self._sweep_dlive()
+            if key not in self._dlive:
+                self._dlive_bytes += len(pdf_bytes)
             self._dlive[key] = (pdf_bytes, d)
         if len(pdf_bytes) > self._dcache_budget:
             # a single object larger than the whole budget can't stay in the LRU layer —

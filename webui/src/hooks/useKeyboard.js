@@ -6,6 +6,9 @@ import { visibleOrder, navStep, moveTarget, applyMove, locate, moveManyDrop } fr
 // undoable Move), and Ctrl shortcuts (save/open/export/new-window/undo/redo/delete).
 // Ignored while typing in INPUT/TEXTAREA/SELECT. Re-binds each render to close over
 // current state/handlers.
+const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'])
+const OWN_KEYS_REGION = '[role="region"], [role="dialog"], [role="menu"], [role="listbox"], [role="textbox"], [contenteditable="true"]'
+
 export function useKeyboard({
   enabled, reorderEnabled = true, tree, selected, selectedIds, grab, setGrab, select, dispatch,
   moveMany, setCollapsedFor, saveFile, openFile, exportPdf, newWindow, undo, redo,
@@ -60,6 +63,9 @@ export function useKeyboard({
         return
       }
       // Navigation (not carrying)
+      // R10-3: scroll/navigation keys belong to a focused scroll region, dialog or menu
+      // (e.g. the preview) — never hijack them for tree selection.
+      if (NAV_KEYS.has(e.key) && e.target?.closest?.(OWN_KEYS_REGION)) return
       if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && tree) {
         e.preventDefault()
         const order = visibleOrder(tree)

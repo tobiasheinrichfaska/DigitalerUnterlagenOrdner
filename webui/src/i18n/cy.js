@@ -32,7 +32,6 @@ export const cy = {
   'Abbrechen': 'Canslo',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Allforio fel PDF gyda thabl cynnwys (y dewis, neu’r ddogfen gyfan)',
-  'Auswahl': 'Dewis',
   'Ordner': 'Ffolder',
   'Rückgängig': 'Dadwneud',
   'Wiederholen': 'Ailwneud',

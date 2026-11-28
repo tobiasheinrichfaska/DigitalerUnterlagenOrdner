@@ -33,6 +33,25 @@ export const MESSAGE_TEMPLATES = [
   { tpl: '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})' },
   { tpl: '{name}: beschädigte oder ungültige Datei' },
   { tpl: '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert' },
+  // TX-1..4 (audit x2): import/load/DATEV/archive messages with dynamic parts
+  { tpl: '{name}: Textdatei zu groß' },
+  { tpl: '{name}: HTML-Datei zu groß' },
+  { tpl: '{name}: HTML-Datei zu komplex (zu groß)' },
+  { tpl: '{name}: HTML-Datei zu tief verschachtelt (zu groß)' },
+  { tpl: '{name}: Fehler beim Laden des PDFs: {error}' },
+  { tpl: '{name}: Baumtiefe überschreitet das Limit von {n} Ebenen.' },
+  { tpl: 'Baumtiefe überschreitet das Limit von {n} Ebenen.' },
+  { tpl: "{name}: Unerwarteter Inhalt für '{file}': die Datei beginnt nicht wie ein {ext}." },
+  { tpl: "{name}: '{file}' sieht aus wie {label}, nicht wie {ext} – abgelehnt.", nested: ['label'] },
+  { tpl: '{name}: Ungültige PDF-Daten erzeugt für: {file}' },
+  { tpl: '{name}: Ungültige PDF-Daten erzeugt aus Datei: {file}' },
+  { tpl: 'Nur {done} von {total} Teil(en) nach DATEV abgelegt — die bereits abgelegten bleiben in DATEV.' },
+  { tpl: 'Ungültiger Befehl: {error}', whole: true },
+  { tpl: 'Datei nicht importierbar: {error}', whole: true },
+  { tpl: 'Unvollständig geschrieben: {written} von {n} Bytes' },
+  { tpl: 'Konnte die vorhandene Datei vor dem Speichern nicht sichern: {path}', whole: true },
+  { tpl: '{name} – nicht importierbar ({reason})', nested: ['name', 'reason'] },
+  { tpl: '{name} – nicht importierbar', nested: ['name'] },
 ]
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

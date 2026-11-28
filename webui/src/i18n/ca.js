@@ -31,7 +31,6 @@ export const ca = {
   'Abbrechen': 'Cancel·la',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Exporta a PDF amb taula de continguts (selecció; si no, tot el document)',
-  'Auswahl': 'Selecció',
   'Ordner': 'Carpeta',
   'Rückgängig': 'Desfés',
   'Wiederholen': 'Refés',

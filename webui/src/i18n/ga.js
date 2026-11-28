@@ -32,7 +32,6 @@ export const ga = {
   'Abbrechen': 'Cuir ar Ceal',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Easpórtáil mar PDF le clár ábhair (an rogha, nó an cháipéis iomlán)',
-  'Auswahl': 'Rogha',
   'Ordner': 'Fillteán',
   'Rückgängig': 'Cealaigh',
   'Wiederholen': 'Athdhéan',

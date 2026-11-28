@@ -68,7 +68,7 @@ cd webui ; npm ci ; npx playwright install chromium ; cd ..
 testlauf-out\venv\Scripts\python.exe -m pytest -q -rs
 ```
 
-Erwartung: Exitcode 0; CLAUDE.md nennt ~498 Tests (Richtwert, nicht zugesichert). Mit Office: Golden-Test nicht übersprungen. Fehlerbild: `FAILED …` → Testnamen + letzte Zeilen der Meldung; Auffällig viele Fehler in `test_file_lock*`/`test_host` → Windows-Eigenheit melden.
+Erwartung: Exitcode 0; CLAUDE.md nennt ~1170 gesammelte Tests (Richtwert, nicht zugesichert). Mit Office: Golden-Test nicht übersprungen. Fehlerbild: `FAILED …` → Testnamen + letzte Zeilen der Meldung; Auffällig viele Fehler in `test_file_lock*`/`test_host` → Windows-Eigenheit melden.
 
 **1b Pakete isoliert** (je Paket-Repo `datev-dokab`, `belegtool-archives`, `belegtool-compress` - seit 2026-11-27 eigene Repos mit eigener CI, hier als lokaler Klon `packages\<name>` angenommen; eigenes frisches venv ohne Hauptrepo).
 

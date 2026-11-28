@@ -82,6 +82,20 @@ describe('App keyboard — navigation', () => {
     await waitFor(() =>
       expect(document.querySelector('.row.primary')?.textContent).toMatch(/alpha/))
   })
+
+  it('R10-3: scroll keys inside the preview region are not hijacked by tree navigation', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByText(/Gruppe/))
+    const region = document.createElement('div')
+    region.setAttribute('role', 'region'); region.tabIndex = 0
+    document.body.appendChild(region)
+    for (const key of ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End']) {
+      const notPrevented = fireEvent.keyDown(region, { key })
+      expect(notPrevented, key).toBe(true)
+    }
+    expect(document.querySelector('.row.primary')?.textContent).toMatch(/Gruppe/)
+    region.remove()
+  })
 })
 
 describe('App keyboard — folder collapse via ←', () => {

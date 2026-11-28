@@ -31,7 +31,6 @@ export const fr = {
   'Abbrechen': 'Annuler',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Exporter en PDF avec table des matières (sélection, sinon tout le document)',
-  'Auswahl': 'Sélection',
   'Ordner': 'Dossier',
   'Rückgängig': 'Défaire',
   'Wiederholen': 'Rétablir',

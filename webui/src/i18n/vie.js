@@ -32,7 +32,6 @@ export const vie = {
   'Abbrechen': 'Obrechn',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Ois PDF mitm Inhoitsvazeichnis aussagebn (Auswoi, sunst s gaunze Dokument)',
-  'Auswahl': 'Auswoi',
   'Ordner': 'Ordna',
   'Rückgängig': 'Zruck',
   'Wiederholen': 'Nuamoi',

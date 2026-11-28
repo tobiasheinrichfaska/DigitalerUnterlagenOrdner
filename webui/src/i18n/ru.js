@@ -31,7 +31,6 @@ export const ru = {
   'Abbrechen': 'Отмена',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Экспортировать в PDF с оглавлением (выделение, иначе весь документ)',
-  'Auswahl': 'Выделение',
   'Ordner': 'Папка',
   'Rückgängig': 'Отменить',
   'Wiederholen': 'Повторить',

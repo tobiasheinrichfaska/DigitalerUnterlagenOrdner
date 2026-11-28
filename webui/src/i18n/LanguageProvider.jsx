@@ -12,7 +12,9 @@ import { DEFAULT_LANG, resolveInitialLang, translate } from './index'
 const STORAGE_KEY = 'beleg.lang'
 
 // AX-11: internal codes that are not valid BCP-47 language subtags → private-use tags.
-const HTML_LANG = { mnn: 'x-mnn' }
+// `vie` (Weanerisch) is ISO 639-3 for Vietnamese — it must be Austrian German with a private-use subtag.
+const HTML_LANG = { mnn: 'x-mnn', vie: 'de-AT-x-vie' }
+export const htmlLang = (lang) => HTML_LANG[lang] ?? lang
 
 const I18nContext = createContext({
   lang: DEFAULT_LANG,
@@ -33,7 +35,7 @@ export function LanguageProvider({ children }) {
     try { localStorage.setItem(STORAGE_KEY, next) } catch { /* ignore */ }
   }, [])
 
-  useEffect(() => { document.documentElement.lang = HTML_LANG[lang] ?? lang }, [lang])
+  useEffect(() => { document.documentElement.lang = htmlLang(lang) }, [lang])
 
   const t = useCallback((key, vars) => translate(lang, key, vars), [lang])
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t])

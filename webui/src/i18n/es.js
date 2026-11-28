@@ -31,7 +31,6 @@ export const es = {
   'Abbrechen': 'Cancelar',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Exportar como PDF con índice (selección; si no, todo el documento)',
-  'Auswahl': 'Selección',
   'Ordner': 'Carpeta',
   'Rückgängig': 'Deshacer',
   'Wiederholen': 'Rehacer',

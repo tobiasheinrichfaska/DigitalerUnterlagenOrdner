@@ -647,9 +647,9 @@ is a **separate** npm script (`test:e2e`, NOT part of `npm test`), so it is easy
 the drag-drop + preview-virtualization layer can regress unseen. Run every one:
 
 ```powershell
-.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~1000 collected 2026-11-28, Linux: 961 passed, 34 skipped, 1 xfailed)
+.build_venv\Scripts\python.exe -m pytest          # Python suite (incl. office golden; ~1170 collected 2026-11-28, Linux: 1137 passed, 34 skipped, 1 xfailed)
 cd webui ; npm run lint                            # eslint — 0 errors
-cd webui ; npm run test:all                        # vitest jsdom (~462) + Playwright REAL Chromium e2e (21 + 4 CSP)
+cd webui ; npm run test:all                        # vitest jsdom (~533) + Playwright REAL Chromium e2e (21 + 4 CSP)
 cd webui ; npm run build                           # vite build must succeed
 ```
 
@@ -1025,6 +1025,9 @@ Deferred *features* and the full rationale live under **Open / deferred items** 
   Offen aus dem Review (Medium/Low, nicht behoben): PIL ohne `formats=`-Allowlist, `.belegtool`-Seitenvervielfachung/Knotenlimit, DATEV-Backup nicht zwingend vor Write-back, mkstemp-Handles in `datev/transport.py`, Named-Pipe ohne FIRST_PIPE_INSTANCE, COM-Härtung (DisplayAlerts/TOCTOU/DDE).
 
 - **Licence hygiene (2026-11-26):** `scripts/gen_third_party_notices.py` (stdlib only, offline, reproducible) collects name/version/licence/licence files of every `requirements.txt` distribution + recursive installed deps (pdfium/Skia `BUILD_LICENSES` from the pypdfium2 wheel) + npm runtime packages into `licenses/<dist>/` (**generated, git-ignored, bundled by `belegtool.spec`**, copied next to the exe by `build_msix.ps1`, run by `build.ps1` before PyInstaller) and refreshes the generated table in `THIRD_PARTY_NOTICES.md`; a distribution without licence text is an ERROR (exception list with reason: only `proxy_tools`). `tests/test_third_party_notices.py` (distributions missing in the test venv are SKIPPED with a message, not green). svglib/bidi are collected as `.py` via `module_collection_mode` (LGPL exchangeability, `docs/licence-audit.md` 5a; Windows unverified). SPDX headers (`# SPDX-License-Identifier: AGPL-3.0-or-later` + copyright line from `/LICENSE`) in the main repo's Python sources (`core/ services/ formats/ infra/ universal_importer/ tools/ scripts/ tests/ host.py version_info.py datev_probe.py`, released by the owner and done 2026-11-26; the package repos carry their own headers): `python scripts/add_spdx_headers.py [--check]`, guard `tests/test_spdx_headers.py` (also checks that every git-tracked `.py` is inside that scope). JS/JSX in `webui/src/` has **no** SPDX headers yet (separate script needed). Each package has its own `CONTRIBUTING.md` with the CLA copied **verbatim** from the main one (change all four together by hand). Help modal has „Lizenz & Quelltext“ (AGPL §13 source offer); DATEV non-affiliation sentence in README, store listing and help.
+
+- **Audit-branch behaviour changes (2026-11-28) a maintainer must know:**
+  *Import:* images become ONE A4 page each (portrait/landscape by shape, fitted + centred, never cropped), lossless (JPEG keeps its DCT bytes, others Flate); a plain-PDF import refuses unreadable / 0-page / encrypted files with a reason. *Open:* transactional with field validation — invalid fields give the warning „Ungültige Felder…“ and the path stays UNBOUND (Save-As only). *JS bridge:* a facade exposed via `win.expose` (no attribute path to `CoreApi`; the page cannot set the export `overwrite` flag). *Clamps:* page count 0..64, dpi 30..600, render budget 16..4096 MB. *Sessions:* undo/redo are refused while a PDF-Tool lock is held on a node; Save As clears DATEV provenance; `datev_export` refuses when the export produced warnings. *DoS caps:* HTML/text import — 2 MB markup after stripping `data:` payloads, 50k tags, depth 200, text 1M chars; variants — a total decoded cap across blobs; seeded variants are dropped when their page count differs from the node. *a11y:* the tree has ARIA roles with a single tab stop (roving focus); status dots carry a ring and survive forced-colors mode.
 
 - **Open findings from 2026-10-10 (tester-kit build ran every sample through `CoreApi`; none
   fixed yet — triage pending):**
@@ -1510,11 +1513,11 @@ embedded version). Low effort; do it on the next build bump.
 ### Internationalization (i18n)
 
 Source-string i18n in [`webui/src/i18n/`](webui/src/i18n/): German is the source (the literal
-`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**226 keys** —
+`t('…')` key), [`en.js`](webui/src/i18n/en.js) is the **canonical full key set** (**276 keys** —
 the v3.9 base of 163 strings plus the DATEV v3.10/v3.11 additions: mode toggle, no-connection guard,
 filing dialog, Bezeichnung, checked-out-self notice, the 12 load/export integrity warnings, and the 2
 AGPL §13 licence/source-offer strings of the Help modal; the exact count is asserted by `i18n.test.js`
-(`Object.keys(en).length === 226`), which also asserts every full-coverage language's
+(`Object.keys(en).length === 276`), which also asserts every full-coverage language's
 key set == `en`'s), every other
 language maps German→target and **falls back to the German source** for any missing key.
 `translate()`/`resolveInitialLang()` in [`index.js`](webui/src/i18n/index.js); the picker

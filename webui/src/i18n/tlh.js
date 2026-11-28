@@ -17,7 +17,6 @@ export const tlh = {
   'Exportieren': "lel",
   'PDF exportieren': "PDF lel",
   'Abbrechen': "mev",
-  'Auswahl': "wIv",
   'Ordner': "ngaSwI'",
   'Gespeichert': "choqlu'pu'",
 

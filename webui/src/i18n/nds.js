@@ -32,7 +32,6 @@ export const nds = {
   'Abbrechen': 'Afbreken',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'As PDF mit Inhoolt rutgeven (Utwahl, sünst dat hele Dokument)',
-  'Auswahl': 'Utwahl',
   'Ordner': 'Mapp',
   'Rückgängig': 'Torüch',
   'Wiederholen': 'Nochmal',

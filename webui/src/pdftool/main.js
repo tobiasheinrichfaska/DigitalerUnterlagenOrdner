@@ -12,6 +12,8 @@ import { chooseSource, readyBridge, base64ToUint8, uint8ToBase64, datevAction, s
 import { openFileDialog } from './fileDialog.js'
 import { datevSavedNotice, datevVerdictKey } from '../lib/datev.js'
 import { installDropGuard } from '../lib/dropGuard.js'
+import { openPasswordDialog } from './passwordDialog.js'
+import { toolT } from './lang.js'
 
 // A file/link dropped on this window must never navigate it: pywebview would re-inject the JS
 // bridge into the dropped page (security review 2026-11-25, H-3).
@@ -85,6 +87,25 @@ textBtn?.addEventListener('click', () => {
   }
 })
 
+// Unsaved-edit tracking (PT-2): PDF.js flags its annotationStorage as modified on every added /
+// changed / removed FreeText and every changed form value. The state is pushed to the host
+// (HostApi.set_dirty → the window close guard asks before discarding) and mirrored on
+// window.__belegDirty like the organizer.
+let dirty = false
+let saving = false
+window.__belegDirty = false
+function setDirty(v) {
+  if (dirty === v) return
+  dirty = v
+  window.__belegDirty = v
+  if (saveBtn) saveBtn.classList.toggle('dirty', v)
+  try { Promise.resolve(bridge && bridge.set_dirty && bridge.set_dirty(v)).catch(() => {}) } catch { /* ignore */ }
+}
+function markSaved() {
+  try { pdfDoc && pdfDoc.annotationStorage.resetModified() } catch { /* ignore */ }
+  setDirty(false)
+}
+
 function hasBinding() {
   return !!(bridge && boundSession && pdfDoc)
 }
@@ -111,14 +132,24 @@ async function bakeForDatev() {
 }
 
 async function saveBack() {
+  if (saving) return  // PT-7: no concurrent saves
   if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
+  // PT-4: nothing edited → nothing to write (a save would replace the node's source and reset
+  // its compression decision for byte-identical content).
+  if (!dirty) { setStatus(toolT('Keine Änderungen zu speichern.')); return }
+  saving = true
+  saveBtn.disabled = true
   setStatus('Speichern…')
   try {
     const res = await bakeEdits()
     const fail = saveFailure(res)
+    if (fail === null) markSaved()
     setStatus(fail === null ? datevSavedNotice('Gespeichert ✓', res) : `Fehler: ${fail}`)
   } catch (e) {
     setStatus(`Fehler: ${e}`)
+  } finally {
+    saving = false
+    saveBtn.disabled = !hasBinding()
   }
 }
 saveBtn?.addEventListener('click', saveBack)
@@ -142,6 +173,7 @@ async function datevWriteBack() {
       const msg = res.verdict === 'checked_out_self'
         ? '📥 In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken'
         : 'Nach DATEV zurückgeschrieben ✓'
+      markSaved()
       setStatus(datevSavedNotice(msg, res) + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
     } else if (res && res.verdict === 'checked_out_self') {
       // checked out by me, but the local working copy could not be written (locked) → nothing more
@@ -208,6 +240,7 @@ async function datevFileNew() {
     // .pdf wasn't updated → now stale). Surface res.local_error too, never a bare "✓" — mirrors
     // App.jsx fileToDatev and datevWriteBack's ok-path so the user knows to re-save locally.
     if (res && res.ok) {
+      markSaved()
       setStatus(datevSavedNotice('In DATEV abgelegt ✓', res)
         + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
     } else setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
@@ -338,10 +371,31 @@ async function resolveDocumentArgs() {
   return { url: urlFallback }  // host present but nothing bound (shouldn't happen)
 }
 
+// PT-1: an encrypted PDF asks for its password. The password only flows dialog → PDF.js
+// updatePassword; it is never logged or stored. Cancel aborts the load with a clear message.
+class PasswordCancelled extends Error {}
+function loadDocument(args) {
+  const task = pdfjsLib.getDocument({ ...args, ...PDFJS_ASSET_OPTS })
+  const cancelled = new Promise((_, reject) => {
+    task.onPassword = async (updatePassword, reason) => {
+      const pw = await openPasswordDialog({ wrong: reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD })
+      if (pw === null) {
+        reject(new PasswordCancelled(toolT('Passwort-Eingabe abgebrochen – das Dokument wurde nicht geöffnet.')))
+        try { task.destroy() } catch { /* ignore */ }
+        return
+      }
+      updatePassword(pw)
+    }
+  })
+  return Promise.race([task.promise, cancelled])
+}
+
 resolveDocumentArgs()
-  .then((args) => pdfjsLib.getDocument({ ...args, ...PDFJS_ASSET_OPTS }).promise)
+  .then(loadDocument)
   .then((pdfDocument) => {
     pdfDoc = pdfDocument
+    pdfDocument.annotationStorage.onSetModified = () => setDirty(true)
+    pdfDocument.annotationStorage.onResetModified = () => setDirty(false)
     linkService.setDocument(pdfDocument, null)
     pdfViewer.setDocument(pdfDocument)
     window.__viewerDocReady = true
@@ -351,6 +405,7 @@ resolveDocumentArgs()
   })
   .catch((err) => {
     window.__viewerError = String(err)
+    if (textBtn) textBtn.disabled = true  // PT-7: nothing to edit after a failed load
     console.error('pdf-tool load failed', err)
     // Show the real reason in the status bar instead of a blank window.
     setStatus(`Fehler: ${(err && err.message) || err}`)

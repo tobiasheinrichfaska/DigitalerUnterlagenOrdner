@@ -84,10 +84,63 @@ describe('localizeMessage (host-level backend messages)', () => {
       + readFileSync(resolve(here, '..', '..', '..', 'formats', 'pdf_storage.py'), 'utf8')
       + readFileSync(resolve(here, '..', '..', '..', 'formats', 'toc_export.py'), 'utf8')
       + readFileSync(resolve(here, '..', 'App.jsx'), 'utf8')
+      + readFileSync(resolve(here, '..', '..', '..', 'universal_importer', 'converters.py'), 'utf8')
+      + readFileSync(resolve(here, '..', '..', '..', 'universal_importer', 'importer.py'), 'utf8')
+      + readFileSync(resolve(here, '..', '..', '..', 'infra', 'file_lock.py'), 'utf8')
+    const joined = src.replace(/"\s*\n\s*(f?)"/g, '')  // implicit Python string concatenation
     for (const { tpl } of MESSAGE_TEMPLATES) {
-      for (const frag of tpl.split(/\{\w+\}/).filter((f) => f.trim().length > 3)) {
-        expect(src.includes(frag), `${tpl} :: missing fragment "${frag}"`).toBe(true)
+      // produced by the separate belegtool-archives package (not in this repo's sources)
+      if (tpl.startsWith('{name} – nicht importierbar')) continue
+      for (const frag of tpl.split(/\{\w+\}/).filter((f) => f.trim().length > 3).map((f) => f.replace(/^: /, ''))) {
+        expect(joined.includes(frag) || src.includes(frag), `${tpl} :: missing fragment "${frag}"`).toBe(true)
       }
     }
   })
+})
+
+describe('TX-1..4: previously uncovered backend messages localize', () => {
+  const CASES = [
+    ['a.txt: Textdatei zu groß', 'a.txt: text file too large'],
+    ['a.html: HTML-Datei zu groß', 'a.html: HTML file too large'],
+    ['a.html: HTML-Datei zu komplex (zu groß)', 'a.html: HTML file too complex (too large)'],
+    ['a.html: HTML-Datei zu tief verschachtelt (zu groß)', 'a.html: HTML file nested too deeply (too large)'],
+    ['a.pdf: Fehler beim Laden des PDFs: boom', 'a.pdf: error loading the PDF: boom'],
+    ['a.belegtool: Baumtiefe überschreitet das Limit von 200 Ebenen.', 'a.belegtool: tree depth exceeds the limit of 200 levels.'],
+    ['Baumtiefe überschreitet das Limit von 200 Ebenen.', 'Tree depth exceeds the limit of 200 levels.'],
+    ["a.docx: Unerwarteter Inhalt für 'a.docx': die Datei beginnt nicht wie ein .docx.",
+      "a.docx: unexpected content for 'a.docx': the file does not start like a .docx."],
+    ["a.pdf: 'a.pdf' sieht aus wie ELF-Binärdatei, nicht wie .pdf – abgelehnt.",
+      "a.pdf: 'a.pdf' looks like ELF binary, not like .pdf – rejected."],
+    ['a.png: Ungültige PDF-Daten erzeugt für: a.png', 'a.png: invalid PDF data produced for: a.png'],
+    ['a.png: Ungültige PDF-Daten erzeugt aus Datei: C:\\x\\a.png', 'a.png: invalid PDF data produced from file: C:\\x\\a.png'],
+    ['DATEV-Modus ist aus.', 'DATEV mode is off.'],
+    ['Dieses Dokument ist nicht (gültig) mit DATEV verknüpft.', 'This document is not (validly) linked to DATEV.'],
+    ['Keine Daten zum Zurückschreiben.', 'No data to write back.'],
+    ['Keine Daten zum Ablegen.', 'No data to file.'],
+    ['Kein Mandant angegeben.', 'No client specified.'],
+    ['Keine Verbindung zur DATEV-Schnittstelle.', 'No connection to the DATEV interface.'],
+    ['Export lieferte keine Datei.', 'The export produced no file.'],
+    ['Kein lokaler Speicherort gebunden.', 'No local save location bound.'],
+    ['Ausgecheckte Datei ist nicht beschreibbar.', 'The checked-out file is not writable.'],
+    ['Nur 1 von 3 Teil(en) nach DATEV abgelegt — die bereits abgelegten bleiben in DATEV.',
+      'Only 1 of 3 part(s) filed to DATEV — those already filed remain in DATEV.'],
+    ['Keine Daten zum Speichern.', 'No data to save.'],
+    ['Ungültiger Befehl: x; y', 'Invalid command: x; y'],
+    ['Datei nicht importierbar: kaputt', 'File cannot be imported: kaputt'],
+    ['Dieser Pfad darf nicht direkt geöffnet werden', 'This path cannot be opened directly'],
+    ['ungültiger Wert', 'invalid value'],
+    ['Unvollständig geschrieben: 5 von 9 Bytes', 'Incompletely written: 5 of 9 bytes'],
+    ['Konnte die vorhandene Datei vor dem Speichern nicht sichern: C:\\a.belegtool',
+      'Could not back up the existing file before saving: C:\\a.belegtool'],
+    ['x.pdf – nicht importierbar', 'x.pdf – not importable'],
+    ['x.pdf – nicht importierbar (zu groß)', 'x.pdf – not importable (too large)'],
+    ['x.pdf – nicht importierbar (Limit überschritten)', 'x.pdf – not importable (limit exceeded)'],
+    ['x.zip – nicht importierbar (zu tief verschachtelt)', 'x.zip – not importable (nested too deeply)'],
+    ['Weitere Einträge – nicht importierbar (Limit überschritten)', 'More entries – not importable (limit exceeded)'],
+    ['Weitere Anhänge – nicht importierbar (Limit überschritten)', 'More attachments – not importable (limit exceeded)'],
+    ['Weitere Teile – nicht importierbar (Limit überschritten)', 'More parts – not importable (limit exceeded)'],
+  ]
+  for (const [de, enText] of CASES) {
+    it(de, () => { expect(localizeMessage(t, de)).toBe(enText) })
+  }
 })

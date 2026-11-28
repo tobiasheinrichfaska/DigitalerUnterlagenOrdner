@@ -33,7 +33,6 @@ export const mnn = {
   'Abbrechen': 'No no no',
   'Als PDF mit Inhaltsverzeichnis exportieren (Auswahl, sonst das ganze Dokument)':
     'Outa PDF con lista (pika, o todo papar)',
-  'Auswahl': 'Pika',
   'Ordner': 'Box',
   'Rückgängig': 'Undo-o',
   'Wiederholen': 'Redo-o',

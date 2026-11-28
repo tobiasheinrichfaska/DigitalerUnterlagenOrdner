@@ -119,15 +119,24 @@ def test_export_structure_equals_oracle(tmp_path):
 
 
 def test_export_scales_linearly(tmp_path):
+    # Ratio-based and noise-robust: the minimum of 3 repetitions per size (interleaved, so a
+    # load burst hits both sizes) filters CPU-load spikes; a ~linear algorithm gives
+    # time(2n)/time(n) ~ 2, a quadratic one ~ 4.
+    pdf = _pdf(1, "x")
+
     def run(n):
-        nodes = [PDFNode(name=f"d{i}", pdf_data=_pdf(1, str(i))) for i in range(n)]
+        nodes = [PDFNode(name=f"d{i}", pdf_data=pdf) for i in range(n)]
         for x in nodes:
             x.pdf_length = 1
         t = time.perf_counter()
         export_pdf(nodes, str(tmp_path / f"b{n}.pdf"))
         return time.perf_counter() - t
+
     run(100)
-    t1, t2 = run(500), run(2000)
-    assert t2 < 4.0  # generous absolute bound (CI jitter)
-    import math
-    assert math.log(t2 / t1) / math.log(4) < 1.2
+    n = 1000
+    a, b = [], []
+    for _ in range(3):
+        a.append(run(n))
+        b.append(run(2 * n))
+    t1, t2 = min(a), min(b)
+    assert t2 / t1 < 3.2, f"super-linear export: t({n})={t1:.3f}s t({2 * n})={t2:.3f}s"

@@ -152,7 +152,10 @@ _HTML_MAX_BYTES = 2 * 1024 * 1024
 _HTML_MAX_DEPTH = 200        # xhtml2pdf is quadratic in nesting depth / element count
 _HTML_MAX_TAGS = 50_000       # ~0.3 ms/tag in xhtml2pdf: worst case measured < ~25 s
 _HTML_VOID = frozenset("br hr img input meta link area base col embed param source track wbr".split())
-_DATA_URI_RE = re.compile(r"data:[^\"'\s)>]{64,}", re.I)
+# R10-1: the payload alphabet can never contain markup ('<', '>', quotes, whitespace), so
+# stripping a data: payload can not swallow tags the converter would still see.
+_DATA_URI_RE = re.compile(r"data:[a-z0-9+/.;=_-]{0,100},[A-Za-z0-9+/=%._-]{64,}", re.I)
+_RAW_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9:_-]*)")
 # Implied end tags (HTML parsing model): a start tag of the key closes an open element of
 # the values (searched from the top of the stack, stopping at a scope barrier).
 _P_CLOSERS = frozenset(
@@ -189,13 +192,17 @@ class _DepthChecker(HTMLParser):
             raise ValueError("HTML-Datei zu komplex (zu groß)")
 
     def _pop_to(self, targets, barriers):
+        # Close down to the OUTERMOST matching open element inside the scope (a new <tr>
+        # closes the open <td> AND its <tr>), stopping at a scope barrier.
+        low = None
         for i in range(len(self.stack) - 1, -1, -1):
             t = self.stack[i]
             if t in targets:
-                del self.stack[i:]
-                return
-            if t in barriers:
-                return
+                low = i
+            elif t in barriers:
+                break
+        if low is not None:
+            del self.stack[low:]
 
     def handle_starttag(self, tag, attrs):
         self._count()
@@ -241,6 +248,20 @@ def _check_html_complexity(html: str) -> None:
     checker = _DepthChecker()
     checker.feed(html)
     checker.close()
+    # R10-1: html.parser treats <script>/<style>/<textarea> as CDATA while html5lib (SVG
+    # foreign content) does not. Second, context-free pass over the raw markup — the
+    # stricter of both verdicts wins.
+    raw = _DepthChecker()
+    for m in _RAW_TAG_RE.finditer(html):
+        tag = m.group(2).lower()
+        if m.group(1):
+            raw.handle_endtag(tag)
+        else:
+            gt = html.find(">", m.end(), m.end() + 4096)
+            if gt > 0 and html[gt - 1] == "/":
+                raw.handle_startendtag(tag, ())
+            else:
+                raw.handle_starttag(tag, ())
 
 
 def _printable(text: str) -> str:

@@ -1342,6 +1342,12 @@ class CoreApi:
                 data = edited
             if not data:
                 return {"ok": False, "error": "keine Daten zum Speichern"}
+            target = owner.document.find(node_id)
+            if target is not None and data == (target.current_data or target.original_data):
+                # PT-4 (audit x4): an unedited save must not replace the node's source (that
+                # would reset the compression decision and make the compressed bytes the
+                # "source"). Nothing changed → nothing to write.
+                return {"ok": True, "owner": owner_session, "node": node_id, "unchanged": True}
             owner.dispatch(SetNodeBytes(node_id, data))  # bypasses the dispatch lock guard (legit holder)
         self._after_mutate(owner_session, {"ok": True})  # token revive / cache prune / prefetch kick
         return {"ok": True, "owner": owner_session, "node": node_id}
@@ -1431,6 +1437,12 @@ class CoreApi:
             if pt is not None:
                 self._pdftool_bindings.pop(pt, None)
         return {"ok": True}
+
+    def pdftool_owner(self, pdftool_session: str):
+        """Organizer session a node-bound PDF-Tool session belongs to (None if unbound)."""
+        with self._lock:
+            binding = self._pdftool_bindings.get(pdftool_session)
+        return binding[0] if binding else None
 
     def close_pdftool(self, pdftool_session: str) -> dict:
         """Close a PDF-Tool session: release its node lock and free the session."""

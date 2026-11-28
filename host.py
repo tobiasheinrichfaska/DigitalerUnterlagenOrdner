@@ -201,6 +201,42 @@ def _entry_for_kind(kind):
     return f"{DEV_URL}/pdf-tool.html" if os.environ.get("BELEG_DEV") else PROD_PDFTOOL
 
 
+# uid -> HostApi of every bound window, so an organizer window can find (and close) the
+# node-bound PDF-Tool windows that belong to its session (audit x4 PT-5).
+_WINDOW_APIS = {}
+
+
+def _tool_apis_for(core, session):
+    """HostApis of the open PDF-Tool windows bound to a node of organizer ``session``."""
+    if not session:
+        return []
+    out = []
+    for a in list(_WINDOW_APIS.values()):
+        try:
+            if a._pdftool_session and core.pdftool_owner(a._pdftool_session) == session:
+                out.append(a)
+        except Exception:
+            logger.exception("tool window lookup failed")
+    return out
+
+
+def _close_tool_window(core, tool_api):
+    """Release a tool window's node binding and destroy the window (organizer is closing)."""
+    try:
+        if tool_api._pdftool_session:
+            core.close_pdftool(tool_api._pdftool_session)
+    except Exception:
+        logger.exception("close tool window: close_pdftool failed")
+    tool_api._pdftool_session = None
+    tool_api._dirty = False  # discarded on purpose: its own close guard must not ask again
+    try:
+        for w in list(webview.windows):
+            if w.uid == tool_api._uid:
+                w.destroy()
+    except Exception:
+        logger.exception("close tool window: destroy failed")
+
+
 def _bind_close(win, api):
     """Per-window close guard: confirm before discarding unsaved changes. Uses the
     Python-side dirty flag the React app pushes via set_dirty — NOT evaluate_js,
@@ -218,11 +254,27 @@ def _bind_close(win, api):
             logger.exception("Close-Bestätigung fehlgeschlagen — Fenster bleibt offen")
             if api._dirty:
                 return False
+        # PT-5: closing an organizer window closes (after asking if they hold unsaved edits)
+        # its open node-bound PDF-Tool windows — otherwise their later Save would fail and
+        # the edits be lost silently.
+        tools = _tool_apis_for(api._core, api._session)
+        if tools:
+            try:
+                if any(t._dirty for t in tools) and not win.create_confirmation_dialog(
+                        "Ungespeicherte Änderungen",
+                        "Ein geöffnetes PDF-Tool-Fenster hat ungespeicherte Änderungen. "
+                        "Alle Fenster schließen und die Änderungen verwerfen?"):
+                    return False
+            except Exception:
+                logger.exception("Close-Bestätigung (PDF-Tool) fehlgeschlagen — Fenster bleibt offen")
+                return False
+            for t in tools:
+                _close_tool_window(api._core, t)
+        _WINDOW_APIS.pop(getattr(win, "uid", None), None)
         try:
             if api._pdftool_session:
                 # node-bound PDF-Tool window: release the node lock + free the bound
-                # session. (Save-back-on-close prompt is a deferred GUI item — see
-                # docs/pdf-tool.md; closing currently discards unsaved pdf-tool edits.)
+                # session. Unsaved edits were confirmed above (the tool pushes set_dirty).
                 api._core.close_pdftool(api._pdftool_session)
         except Exception:
             logger.exception("window close: close_pdftool failed")
@@ -240,6 +292,9 @@ def _bind_close(win, api):
             # close_session silently leaks the whole session otherwise.
             logger.exception("window close: close_session failed (session leaked)")
         return True
+    if api._uid is None:
+        api._uid = getattr(win, "uid", None)
+    _WINDOW_APIS[getattr(win, "uid", None)] = api
     win.events.closing += _on_closing
 
 

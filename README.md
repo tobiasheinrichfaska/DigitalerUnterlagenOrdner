@@ -4,7 +4,7 @@
 
 **Digitaler Unterlagen-Ordner** (internally *BelegTool*) is a Windows desktop app for anyone who keeps a lot of documents and receipts and wants them in one place instead of scattered across folders. Import PDFs, scans, photos, Office files, emails, and archives into a single structured tree, preview and compress them, and export the whole thing as one PDF with a clickable table of contents and sidebar bookmarks.
 
-The interface is available in **German** and **English**.
+The interface is available in 22 languages (German and English fully native; see [BETA_TESTING.md](BETA_TESTING.md)).
 
 > **Status: active beta.** It's solid enough for real use, but see [Known limitations](#known-limitations) and [BETA_TESTING.md](BETA_TESTING.md) before you rely on it. Bug reports and feedback are very welcome — see [Feedback & contributing](#feedback--contributing).
 
@@ -12,7 +12,7 @@ The interface is available in **German** and **English**.
 
 **Bring in anything**
 - PDF and `.belegtool` files load directly as document trees.
-- Images (JPG, PNG, WebP, HEIC) are converted to PDF automatically.
+- Images (JPG, PNG, BMP, TIFF, WebP, HEIC) are converted to PDF automatically, one A4 page each; text and HTML files too.
 - Microsoft Office files (Word, Excel, PowerPoint), converted via the installed Office apps.
 - Email — `.eml` and Outlook `.msg` — with attachments extracted into a subtree.
 - Archives — ZIP and TAR/TGZ — with their folder structure preserved (and a zip-bomb guard).
@@ -30,7 +30,7 @@ The interface is available in **German** and **English**.
 - Multiple compression methods computed in parallel — grayscale/colour JPG, PNG, and structural — with the smallest result picked automatically and original sizes shown for comparison.
 
 **Export & save**
-- Export your selection or the whole tree to a single PDF with a printed, clickable table of contents and sidebar bookmarks.
+- Export your selection or the whole tree to one PDF (or several, split by page count) with a printed, clickable table of contents and sidebar bookmarks.
 - Save as `.belegtool`: a real PDF that any viewer can open, with your tree structure stored inside so it re-imports losslessly.
 - Open multiple documents at once, each in its own window.
 
@@ -62,7 +62,7 @@ BelegTool.exe yourfile.belegtool
 
 ### Option B — From source
 
-Requires Python 3.12 and Node.js.
+Requires Python 3.12 or newer and Node.js.
 
 ```bash
 pip install -r requirements.txt
@@ -74,7 +74,7 @@ Open a file on launch with `python host.py yourfile.belegtool`.
 
 ## Known limitations
 
-- **Large exports produce a single PDF.** Automatically splitting very large exports into multiple files isn't available yet.
+- **Split export has its own table of contents.** When an export is split into several files, each file gets its own TOC with cross-references; the tag-index/bookmark options apply to single-file export only.
 - **Compression is irreversible once saved.** When you commit compression on a document and save, the original bytes are dropped to keep the file small — that node can't be reset afterward.
 - See [BETA_TESTING.md](BETA_TESTING.md) for the full current list and what to expect while testing.
 
@@ -82,7 +82,7 @@ Open a file on launch with `python host.py yourfile.belegtool`.
 
 This project is in active testing, and feedback is the most useful thing you can give. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report bugs, request features, and share first impressions.
 
-Translations are welcome too: the UI strings are externalized (German source + English map under `webui/src/i18n/`), so adding a language is just a translation file. Open an issue if you'd like to help.
+Translations are welcome too: the UI strings are externalized (German source + one map per language under `webui/src/i18n/`), so adding a language is just a translation file. Open an issue if you'd like to help.
 
 ## License
 

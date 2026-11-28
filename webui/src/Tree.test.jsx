@@ -179,4 +179,18 @@ describe('Tree', () => {
     fireEvent.drop(row, { dataTransfer })
     expect(onMove).not.toHaveBeenCalled()
   })
+
+  it('R10-2: exactly one Tab stop even when the primary node is hidden in a collapsed folder', () => {
+    renderTree({ node: collapsedTree, selectedIds: ['L1'], primaryId: 'L1' })
+    const stops = screen.getAllByRole('treeitem').filter((el) => el.tabIndex === 0)
+    expect(stops).toHaveLength(1)
+    expect(stops[0].textContent).toMatch(/Ordner/) // nearest visible ancestor
+  })
+
+  it('R10-2: a visible primary stays the single Tab stop', () => {
+    renderTree({ selectedIds: ['L1'], primaryId: 'L1' })
+    const stops = screen.getAllByRole('treeitem').filter((el) => el.tabIndex === 0)
+    expect(stops).toHaveLength(1)
+    expect(stops[0].textContent).toMatch(/doc1/)
+  })
 })

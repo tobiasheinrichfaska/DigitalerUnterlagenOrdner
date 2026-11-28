@@ -256,6 +256,23 @@ function TreeNode({ node, parentId, index, depth, isLast, selectedIds, primaryId
   )
 }
 
+// Deepest ROW on the path to `id` that is actually rendered (a collapsed folder hides its
+// subtree), else the first row — so the tree always has exactly one Tab stop.
+function visibleTabStop(root, id, forceExpand) {
+  const first = root.children?.[0]?.id
+  if (!id) return first
+  const path = (n) => { // ancestors-first list of nodes from n down to id, or null
+    if (n.id === id) return [n]
+    for (const c of n.children || []) { const r = path(c); if (r) return [n, ...r] }
+    return null
+  }
+  const p = path(root)
+  if (!p) return first
+  // outermost collapsed folder above the target hides it; that row is the visible stop
+  const hider = !forceExpand && p.slice(1, -1).find((n) => n.collapsed)
+  return hider ? hider.id : id
+}
+
 export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reorderDisabled = false, onToggleCollapse, onSelect, onContext, onMove, onMoveMany, levelsFor, onRename, onDropFiles, pending = [] }) {
   // `node` is the implicit root container — don't render it; show its children.
   const { t } = useT()
@@ -273,7 +290,7 @@ export function Tree({ node, selectedIds, primaryId, grabbedId, forceExpand, reo
   // (immutable) tree object changes — not per row, not per unrelated re-render.
   const statusMap = useMemo(() => aggregateStatus(node), [node])
   // AX-12: roving tabindex — the primary row (else the first row) is the tree's single Tab stop.
-  const tabStopId = (primaryId && findNode(node, primaryId)) ? primaryId : node.children?.[0]?.id
+  const tabStopId = visibleTabStop(node, primaryId, forceExpand)
   const dragLabel = many ? t('{n} Elemente', { n: selectedIds.length }) : (dragNode?.name ?? '')
   const dragIcon = many ? '🗂' : (dragNode?.is_folder ? '📁' : '📄')
 

@@ -6,6 +6,7 @@
 import { useId, useMemo, useState } from 'react'
 import { useT } from './i18n/LanguageProvider'
 import { useModal } from './hooks/useModal'
+import { localizeMessage } from './lib/messages'
 import { filterClients, registersFor, MONTHS, yearChoices, validateFiling, buildFileOpts, soleClientGuid } from './lib/datevFiling'
 
 export function DatevFileDialog({ clients, placements = [], loading, error, currentYear,
@@ -43,7 +44,7 @@ export function DatevFileDialog({ clients, placements = [], loading, error, curr
         <h2 id={titleId}>{t('Nach DATEV ablegen')}</h2>
 
         {loading && <p className="status">{t('Mandanten werden geladen…')}</p>}
-        {error && <p className="error" role="alert">{t('Mandantenliste nicht verfügbar')}: {error}</p>}
+        {error && <p className="error" role="alert">{t('Mandantenliste nicht verfügbar')}: {localizeMessage(t, error)}</p>}
         {noClients && <p className="error" role="alert">{t('Keine Mandanten gefunden — DATEV-Ablage nicht möglich.')}</p>}
 
         {!loading && !error && !noClients && (

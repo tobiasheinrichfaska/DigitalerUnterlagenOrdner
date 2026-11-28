@@ -12,7 +12,6 @@ export const qya = {
   'Speichern': 'Hepa',          // hep- = to keep, retain
   'Gespeichert': 'Hépina',      // kept
   'Abbrechen': 'Pusta',         // pusta- = to stop, halt
-  'Auswahl': 'Cilmë',           // cilmë = choice, selection
 
   'Neuer Name': 'Essë vinya',   // essë = name
   'Splitten': 'Hyara',          // hyar- = to cleave

@@ -29,6 +29,7 @@ export const MESSAGE_TEMPLATES = [
   { tpl: '{name}: Office-Programm zum Konvertieren nicht verfügbar (Word/Excel/PowerPoint erforderlich)' },
   { tpl: '{name}: Dateityp {ext} wird nicht unterstützt' },
   { tpl: '{name}: Datei ist passwortgeschützt' },
+  { tpl: '{name}: Datei enthält keine lesbaren Seiten' },
   { tpl: '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})' },
   { tpl: '{name}: beschädigte oder ungültige Datei' },
   { tpl: '{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert' },

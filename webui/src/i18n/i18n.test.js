@@ -61,9 +61,9 @@ describe('translate (source-string keys)', () => {
     // write-back verdict "checked-out file could not be saved (locked)" (organizer #2 fix) = 206,
     // PLUS the 12 load/export integrity warnings (QS 2026-11-04: degraded .belegtool open/import,
     // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
-    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226.
+    // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226, PLUS the 2 load-validation warnings (u4 BP-3/BP-7) = 228, PLUS the IM-1 unreadable-PDF refusal = 229.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(226)
+    expect(Object.keys(en).length).toBe(229)
   })
 })
 
@@ -78,6 +78,7 @@ describe('full-coverage languages', () => {
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
   const PENDING_TRANSLATIONS = new Set([
+    '{name}: Datei enthält keine lesbaren Seiten', // IM-1
     'Im PDF-Tool öffnen',
     'ungültiges PDF', // T-4 save payload refusal
     // PDF-Tool open/lock errors (W-9, audit v4) — de + en only, batch-translated later
@@ -128,6 +129,8 @@ describe('full-coverage languages', () => {
     'Seitenbaum repariert – bitte als neue Datei speichern',
     '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet',
     'Seite konnte nicht geladen werden',
+    'Ungültige Felder in der Dokumentstruktur – korrigiert',
+    'Ungültige DATEV-Verknüpfung ignoriert',
   ])
 
   it.each(FULL)('"%s" has the en key set (minus pending-translation keys)', (code) => {

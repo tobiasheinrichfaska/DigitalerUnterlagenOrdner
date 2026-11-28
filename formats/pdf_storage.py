@@ -6,6 +6,7 @@ import datetime
 from typing import Optional, List, Union
 from pypdf import PdfReader, PdfWriter
 from formats.pdf_node import PDFNode
+from core.model import STATUSES
 import os
 # NOTE: universal_importer is imported lazily inside the archive/e-mail branches
 # below — it pulls in win32com/COM, pi-heif, the .msg reader (~2.6 s) which a plain
@@ -246,6 +247,17 @@ class PDFStorage:
             # when the file already reads cleanly, so .belegtool/structured PDFs
             # (handled above) never reach this and valid plain PDFs are untouched.
             data = sanitize_pdf(data)
+            # IM-1: a plain PDF must yield >=1 readable page, else it would become an
+            # unrenderable 0-page ghost leaf (truncated / bit-flipped / cyclic tree).
+            try:
+                with pikepdf.open(io.BytesIO(data), suppress_warnings=True) as _pk:
+                    _pages = len(_pk.pages)
+            except pikepdf.PasswordError:
+                raise ValueError("Datei ist passwortgeschützt")
+            except Exception:
+                _pages = 0
+            if _pages < 1:
+                raise ValueError("Datei enthält keine lesbaren Seiten")
             self.root = PDFNode(name="root", is_folder=True)
             name = os.path.splitext(os.path.basename(self.filename))[0] if self.filename else "importiert"
             node = PDFNode(name=name)
@@ -259,6 +271,8 @@ class PDFStorage:
             self.root.add_child(node)
 
         except Exception as e:
+            if "passwortgeschützt" in str(e) or "keine lesbaren Seiten" in str(e):
+                raise ValueError(str(e))
             raise ValueError(f"Fehler beim Laden des PDFs: {e}")
 
 
@@ -268,12 +282,20 @@ class PDFStorage:
 
     def _parse_json_structure(self, structure, data):
         self.root = PDFNode(name="root", is_folder=True)
-        if structure.get("uid"):
+        self._seen_uids = set()
+        self._coerced = False
+        if isinstance(structure.get("uid"), str) and structure["uid"]:
             self.root.uid = structure["uid"]  # restore the root's id too (not just children)
+            self._seen_uids.add(structure["uid"])
+        elif structure.get("uid"):
+            self._coerced = True
         if structure.get("collapsed"):
-            self.root.collapsed = bool(structure["collapsed"])
+            self.root.collapsed = self._bool(structure["collapsed"])
         if structure.get("datev"):
-            self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
+            if isinstance(structure["datev"], dict):
+                self.root.datev = structure["datev"]  # restore DATEV provenance (root only)
+            else:  # u4 BP-7: a non-dict provenance would crash every DATEV consumer
+                self.load_warnings.append("Ungültige DATEV-Verknüpfung ignoriert")
         current_start = [0]  # mutable Seitenzähler
 
         reader = None
@@ -342,6 +364,8 @@ class PDFStorage:
             extra = total_pages - current_start[0]
             self.load_warnings.append(
                 f"{extra} Seiten mehr als die Struktur beschreibt – nicht zugeordnet")
+        if self._coerced:  # u4 BP-3: invalid field values were replaced by safe defaults
+            self.load_warnings.append("Ungültige Felder in der Dokumentstruktur – korrigiert")
 
     def _append_pages_with_outline(
         self,
@@ -503,6 +527,44 @@ class PDFStorage:
             return False
         return walk(structure.get("children", []) or [])
 
+    def _bool(self, value):
+        """Real bool from persisted JSON; anything else is coerced + flagged (u4 BP-3)."""
+        if isinstance(value, bool):
+            return value
+        self._coerced = True
+        return bool(value) if isinstance(value, (int, float)) else False
+
+    def _dpi(self, value):
+        if value is None or (isinstance(value, int) and not isinstance(value, bool)):
+            return value
+        self._coerced = True
+        return None
+
+    def _common_fields(self, node, node_data):
+        """Validated uid/status/tags shared by folders and leaves. Anything invalid is
+        replaced by a safe default and flagged once (``_coerced``)."""
+        uid = node_data.get("uid")
+        if isinstance(uid, str) and uid and uid not in self._seen_uids:
+            node.uid = uid  # restore persisted id
+        elif uid not in (None, "", False, 0):  # truthy garbage / duplicate -> fresh uuid
+            self._coerced = True
+        self._seen_uids.add(node.uid)
+        status = node_data.get("status", "")
+        if isinstance(status, str) and status in STATUSES:
+            node.status = status
+        else:
+            node.status = ""
+            if status is not None:
+                self._coerced = True
+        tags = node_data.get("tags")
+        if tags is None:
+            tags = []
+        if isinstance(tags, list) and all(isinstance(t, str) for t in tags):
+            node.tags = list(tags)
+        else:
+            self._coerced = True
+            node.tags = [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else []
+
     @staticmethod
     def _vz(value):
         """Veranlagungszeitraum field from persisted JSON: int or None. Hand-edited/
@@ -535,17 +597,17 @@ class PDFStorage:
         if depth > _MAX_TREE_DEPTH:
             raise StructureTooDeep(f"Baumtiefe überschreitet das Limit von {_MAX_TREE_DEPTH} Ebenen.")
         name = node_data.get("name", "unnamed")
-        is_folder = node_data.get("is_folder", False)
+        if not isinstance(name, str):
+            self._coerced = True
+            name = "unnamed" if name is None or isinstance(name, (list, dict)) else str(name)
+        is_folder = self._bool(node_data.get("is_folder", False))
 
         if is_folder:
             node = PDFNode(name=name, is_folder=True)
-            if node_data.get("uid"):
-                node.uid = node_data["uid"]  # restore persisted id
-            node.status = node_data.get("status", "")  # default: no status
+            self._common_fields(node, node_data)
             node.vz_start = self._vz(node_data.get("vz_start"))
             node.vz_end = self._vz(node_data.get("vz_end"))
-            node.collapsed = bool(node_data.get("collapsed", False))
-            node.tags = list(node_data.get("tags") or [])
+            node.collapsed = self._bool(node_data.get("collapsed", False))
             for child_data in node_data.get("children", []):
                 child_node = self._parse_node(child_data, reader, current_start, total_pages, depth + 1)
                 if child_node:
@@ -580,21 +642,20 @@ class PDFStorage:
 
 
         node = PDFNode(name=name)
-        if node_data.get("uid"):
-            node.uid = node_data["uid"]  # restore persisted id
-        node.status = node_data.get("status", "")  # default: no status
+        self._common_fields(node, node_data)
         node.vz_start = self._vz(node_data.get("vz_start"))  # Veranlagungszeitraum (was dropped on reload)
         node.vz_end = self._vz(node_data.get("vz_end"))
-        node.tags = list(node_data.get("tags") or [])
-        node.compression_no_gain = bool(node_data.get("compression_no_gain", False))
-        is_compressed = bool(node_data.get("is_compressed", False))
+        node.compression_no_gain = self._bool(node_data.get("compression_no_gain", False))
+        is_compressed = self._bool(node_data.get("is_compressed", False))
+        dpi_o = self._dpi(node_data.get("dpi_original"))
+        dpi_c = self._dpi(node_data.get("dpi_current"))
 
         node.set_original_and_current_data(
             original_data=pages,
             current_data=None,
-            dpi_original=node_data.get("dpi_original"),
-            dpi_current=node_data.get("dpi_current"),
-            no_compression=node_data.get("no_compression", False),
+            dpi_original=dpi_o,
+            dpi_current=dpi_c,
+            no_compression=self._bool(node_data.get("no_compression", False)),
         )
         # Restore the persisted is_compressed flag instead of unconditionally resetting it.
         # set_original_and_current_data only sets is_compressed=True when current_data is
@@ -602,8 +663,8 @@ class PDFStorage:
         # flag back from the serialised structure explicitly.
         node.is_compressed = is_compressed
         node.compression_method = node_data.get("compression_method")
-        node.dpi_current = node_data.get("dpi_current")    # was lost when current_data=None
-        node.dpi_original = node_data.get("dpi_original")
+        node.dpi_current = dpi_c    # was lost when current_data=None
+        node.dpi_original = dpi_o
 
         # Reload coherence: a committed ("Lesbarkeit geprüft") node's persisted
         # pages ARE the chosen compression — its source was dropped on save.

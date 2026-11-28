@@ -37,6 +37,24 @@ def _with_converter(fn):
     return wrapper
 
 
-extract_zip_to_structure = _with_converter(_impl.extract_zip_to_structure)
-extract_tar_to_structure = _with_converter(_impl.extract_tar_to_structure)
-extract_email_to_structure = _with_converter(_impl.extract_email_to_structure)
+def _clean_names(nodes):
+    """Sanitise node names coming out of the (external) archive package: leaves lose any
+    path/control/bidi chars and are capped; folders keep '/' (depth fold) but lose control chars."""
+    from .converters import sanitize_node_name
+    for n in nodes or []:
+        if isinstance(n, dict):
+            n["name"] = sanitize_node_name(n.get("name"), strip_path="children" not in n)
+            _clean_names(n.get("children"))
+    return nodes
+
+
+def _sanitized(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return _clean_names(fn(*args, **kwargs))
+    return wrapper
+
+
+extract_zip_to_structure = _sanitized(_with_converter(_impl.extract_zip_to_structure))
+extract_tar_to_structure = _sanitized(_with_converter(_impl.extract_tar_to_structure))
+extract_email_to_structure = _sanitized(_with_converter(_impl.extract_email_to_structure))

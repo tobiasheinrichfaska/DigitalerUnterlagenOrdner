@@ -210,6 +210,7 @@ export const en = {
     '{name}: Office program for conversion not available (Word/Excel/PowerPoint required)',
   '{name}: Dateityp {ext} wird nicht unterstützt': '{name}: file type {ext} is not supported',
   '{name}: Datei ist passwortgeschützt': '{name}: file is password-protected',
+  '{name}: Datei enthält keine lesbaren Seiten': '{name}: file contains no readable pages',
   '{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg})':
     '{name}: archive/email could not be read ({msg})',
   '{name}: beschädigte oder ungültige Datei': '{name}: damaged or invalid file',
@@ -238,6 +239,9 @@ export const en = {
   '{n} Seiten mehr als die Struktur beschreibt – nicht zugeordnet':
     '{n} pages beyond what the structure describes – not assigned',
   'Seite konnte nicht geladen werden': 'Page could not be loaded',
+  'Ungültige Felder in der Dokumentstruktur – korrigiert':
+    'Invalid fields in the document structure – corrected',
+  'Ungültige DATEV-Verknüpfung ignoriert': 'Invalid DATEV link ignored',
 
   // DATEV mode (v3.10.0; DATEV-mode only)
   'DATEV-Modus ein-/ausschalten': 'Toggle DATEV mode',

@@ -140,6 +140,43 @@ def _decode_text(data: bytes, html: bool = False) -> str:
     return data.decode("cp1252", errors="replace")
 
 
+_CTRL_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+_NAME_CTRL_RE = re.compile("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+_TXT_MAX_CHARS = 1_000_000   # layout is O(n) per char in Python: ~3 s per MB
+_HTML_MAX_BYTES = 2 * 1024 * 1024
+_HTML_MAX_DEPTH = 100        # xhtml2pdf is quadratic in nesting depth / element count
+_HTML_MAX_TAGS = 10_000
+_HTML_VOID = frozenset("br hr img input meta link area base col embed param source track wbr".split())
+_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9]*)[^>]*?(/?)>")
+
+
+def sanitize_node_name(name, strip_path: bool = True, max_len: int = 200) -> str:
+    """A safe display name: basename (both separators), no control/bidi chars, <=200 chars."""
+    n = str(name or "")
+    if strip_path:
+        n = n.replace("\\", "/").rsplit("/", 1)[-1]
+    n = _NAME_CTRL_RE.sub("", n).strip()
+    if n in ("", ".", ".."):
+        return "Datei"
+    return n[:max_len]
+
+
+def _check_html_complexity(html: str) -> None:
+    depth = maxd = tags = 0
+    for m in _TAG_RE.finditer(html):
+        tags += 1
+        if tags > _HTML_MAX_TAGS:
+            raise ValueError("HTML-Datei zu komplex (zu groß)")
+        tag = m.group(2).lower()
+        if m.group(1):
+            depth = max(0, depth - 1)
+        elif not m.group(3) and tag not in _HTML_VOID:
+            depth += 1
+            maxd = max(maxd, depth)
+            if maxd > _HTML_MAX_DEPTH:
+                raise ValueError("HTML-Datei zu tief verschachtelt (zu groß)")
+
+
 def _printable(text: str) -> str:
     """Expand tabs and replace characters the built-in Helvetica (cp1252) cannot
     draw with '?' (they would render as black boxes)."""
@@ -154,6 +191,10 @@ def txt_to_pdf(text: Union[str, bytes], name: str = "text.pdf") -> ConvertedPDF:
         raise ValueError("Textdatei zu groß")
     if isinstance(text, bytes):
         text = _decode_text(bytes(text))
+    text = _CTRL_RE.sub("", text)
+    truncated = len(text) > _TXT_MAX_CHARS
+    if truncated:
+        text = text[:_TXT_MAX_CHARS] + "\n\n[Text gekürzt: Datei zu groß für den Import]"
     text = _printable(text)
 
     buffer = io.BytesIO()
@@ -233,9 +274,13 @@ def block_remote_link(uri: str, rel: str):
 def html_to_pdf(html: Union[str, bytes], name: str = "html.pdf") -> ConvertedPDF:
     if _exceeds_byte_cap(html):  # bound the parse/render like txt_to_pdf (byte-accurate)
         raise ValueError("HTML-Datei zu groß")
+    if (len(html) if isinstance(html, bytes) else len(html.encode("utf-8", "replace"))) > _HTML_MAX_BYTES:
+        raise ValueError("HTML-Datei zu groß")
     if isinstance(html, bytes):
         html = _decode_text(bytes(html), html=True)
 
+    html = _CTRL_RE.sub("", html)
+    _check_html_complexity(html)
     html = _printable(html)
 
     def _render(src: str):

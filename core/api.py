@@ -78,6 +78,8 @@ def _friendly_import_error(path: str, exc: Exception) -> str:
         return f"{name}: Dokument verweist auf eine externe Vorlage/Quelle und wird aus Sicherheitsgründen nicht importiert"
     if "passwort" in low or "password" in low or "encrypted" in low:
         return f"{name}: Datei ist passwortgeschützt"
+    if "keine lesbaren seiten" in low:  # IM-1: plain PDF without a readable page
+        return f"{name}: Datei enthält keine lesbaren Seiten"
     if name.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz", ".eml", ".msg")):
         return f"{name}: Archiv/E-Mail konnte nicht gelesen werden ({msg[:80]})"
     if "beschädigt – nicht importiert" in low:
@@ -394,19 +396,29 @@ class CoreApi:
                     logger.warning("[variants] seed on open failed", exc_info=True)
             else:
                 document = Document.empty(self._next_untitled_name())  # "Dokument N"
-        except Exception:
+        except Exception as e:
             if lock is not None and not reused_lock:
                 lock.release()  # never leak the handle if the load fails
-            raise
+            # u4 BP-2: open never raises — the previous session stays untouched
+            logger.warning("open failed for %s", path, exc_info=True)
+            return {"ok": False, "error": _friendly_import_error(path or "", e)}
         # H-1 (QS 2026-11-04): a DEGRADED load (corrupt structure/pages) must never bind
         # the path — Ctrl+S would overwrite the still-rescuable original with the
         # degraded tree. Unbound, Speichern becomes Speichern-unter (host.save_file).
         degraded = bool(load_warnings)
         replaced = None
-        with self._lock:
+        snap = None
+        try:
+          with self._lock:
             if session and session in self._sessions:
                 sid = session
                 replaced = self._sessions[sid]
+                # u4 BP-1: snapshot everything the swap touches so a failure while
+                # building the response rolls back to the previous session untouched.
+                snap = (replaced, self._paths.get(sid), sid in self._degraded,
+                        self._locks.get(sid), self._datev_baseline.get(sid),
+                        {k: v for k, v in self._node_locks.items() if k[0] == sid},
+                        {p: v for p, v in self._pdftool_bindings.items() if v[0] == sid})
                 self._sessions[sid] = DocumentSession(document, engine=self._engine)
                 # R-2: the old document's PDF-Tool node locks/bindings are meaningless for the
                 # new one and would make undo/redo refuse forever.
@@ -434,7 +446,33 @@ class CoreApi:
                 self._touch_view_dir(view_dir)  # live dir must never look stale to a sweep
             if replaced is not None:
                 self._prune_dead_ids_locked()  # CC-1/3: the replaced document's ids are gone
-            resp = self._doc_response_locked(sid)
+            try:
+                resp = self._doc_response_locked(sid)
+            except Exception:
+                if snap is not None:
+                    (self._sessions[sid], path0, deg0, lock0, base0, nl0, pb0) = snap
+                    for k in [k for k in self._node_locks if k[0] == sid]:
+                        self._node_locks.pop(k, None)
+                    self._node_locks.update(nl0)
+                    self._pdftool_bindings.update(pb0)
+                    for d, v in ((self._paths, path0), (self._locks, lock0),
+                                 (self._datev_baseline, base0)):
+                        if v is None:
+                            d.pop(sid, None)
+                        else:
+                            d[sid] = v
+                    (self._degraded.add if deg0 else self._degraded.discard)(sid)
+                else:
+                    self._sessions.pop(sid, None)
+                    self._paths.pop(sid, None)
+                    self._locks.pop(sid, None)
+                    self._degraded.discard(sid)
+                raise
+        except Exception as e:
+            if lock is not None and not reused_lock:
+                lock.release()
+            logger.warning("open failed for %s", path, exc_info=True)
+            return {"ok": False, "error": _friendly_import_error(path or "", e)}
         if prev_lock is not None and prev_lock is not lock:
             prev_lock.release()
         if replaced is not None:
@@ -1537,7 +1575,8 @@ class CoreApi:
     def _datev_provenance(self, session):
         with self._lock:
             s = self._sessions.get(session)
-            return (s.document.root.datev if s else None)
+            prov = s.document.root.datev if s else None
+            return prov if isinstance(prov, dict) else None  # u4 BP-7: never a non-dict
 
     def _datev_set_provenance(self, session, provenance):
         """Set/clear the root's provenance SILENTLY (origin metadata, not a user edit;
@@ -2027,12 +2066,19 @@ class CoreApi:
             data = base64.b64decode((data_b64 or "").split(",")[-1])
         except Exception as e:
             return {"ok": False, "error": f"ungültige Daten: {e}"}
+        from universal_importer.converters import sanitize_node_name
+        safe = sanitize_node_name(name)
+        if len(safe) > 100:  # keep the temp path under MAX_PATH; keep the extension
+            stem, ext = os.path.splitext(safe)
+            safe = stem[:100 - len(ext[:20])] + ext[:20]
         tmpdir = tempfile.mkdtemp(prefix="beleg_import_")
-        path = os.path.join(tmpdir, os.path.basename(name) or "import.bin")
+        path = os.path.join(tmpdir, safe)
         try:
             with open(path, "wb") as f:
                 f.write(data)
             return self.import_paths(session, [path], parent_id, index)
+        except OSError as e:
+            return {"ok": False, "error": f"Datei nicht importierbar: {e}"}
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 

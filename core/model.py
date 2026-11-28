@@ -34,6 +34,18 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
+def scrub_surrogates(text):
+    """Replace lone UTF-16 surrogates (a JS half-emoji arrives as a JSON \\ud83d escape)
+    with U+FFFD: they cannot be UTF-8/UTF-16 encoded, which broke save/export (u4 BP-4)."""
+    if not isinstance(text, str):
+        return text
+    try:
+        text.encode("utf-8")
+        return text
+    except UnicodeEncodeError:
+        return "".join("\ufffd" if "\ud800" <= ch <= "\udfff" else ch for ch in text)
+
+
 @dataclass(frozen=True)
 class Node:
     """An immutable tree node (folder or leaf document)."""
@@ -66,6 +78,14 @@ class Node:
     original_data: Optional[bytes] = None
     current_data: Optional[bytes] = None
     compression_method: Optional[str] = None  # jpg/png/pikepdf chosen for current_data; None = none/auto
+
+    def __post_init__(self):
+        # model boundary: names/tags must always be encodable (u4 BP-4)
+        clean = scrub_surrogates(self.name)
+        if clean != self.name:
+            object.__setattr__(self, "name", clean)
+        if any(isinstance(t, str) and scrub_surrogates(t) != t for t in self.tags):
+            object.__setattr__(self, "tags", tuple(scrub_surrogates(t) for t in self.tags))
 
     # --- serialisation (structure only — no bytes) ------------------------
     def to_dict(self, position: Optional[int] = None) -> Dict[str, Any]:

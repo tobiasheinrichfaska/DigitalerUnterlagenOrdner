@@ -98,12 +98,12 @@ const en = [
   ] },
   { t: 'Compression', items: [
     'A red dot at the front means: no compression decision has been made for this node yet.',
-    'In the preview, pick a method and apply "Lesbarkeit geprüft" (readability checked) – the red dot disappears.',
+    'In the preview, pick a method and apply “Readability checked” – the red dot disappears.',
     'If nothing smaller is found, that counts as decided (no red dot) and is not recomputed.',
     'Note: after saving a compressed node the original is gone – compression is final.',
   ] },
   { t: 'Tags', items: [
-    '🏷️ turns tags on. Nodes can be freely labelled.',
+    '🏷️ turns tags on. Nodes can be freely labeled.',
     'Filter or group by tag; a tag view can be opened in a new window as its own document.',
     'While a tag search or group view is active, structure edits (move, import, delete, group, merge, split) are disabled.',
   ] },
@@ -111,9 +111,9 @@ const en = [
     '⬇ Export PDF first asks for options: table of contents (with links), tag index, PDF bookmarks and optionally "Split into several files" (max. pages, break at: top folders / every folder boundary / mid-document). With a selection only that is exported, otherwise the whole document.',
     'When splitting, each file gets its own table of contents; the tag index and bookmarks apply to single-file export only.',
   ] },
-  { t: 'Licence & source code', items: [
+  { t: 'License & source code', items: [
     'BelegTool is free software under the AGPL-3.0-or-later. Source code: https://github.com/tobiasheinrichfaska/DigitalerUnterlagenOrdner',
-    'The licences of the bundled third-party components are listed in THIRD_PARTY_NOTICES.md and the licenses/ folder next to the program.',
+    'The licenses of the bundled third-party components are listed in THIRD_PARTY_NOTICES.md and the licenses/ folder next to the program.',
     'This project is not affiliated with DATEV eG; DATEV is a registered trademark of DATEV eG.',
   ] },
 ]

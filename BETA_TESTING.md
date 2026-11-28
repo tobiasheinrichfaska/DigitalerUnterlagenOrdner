@@ -120,7 +120,7 @@ contents and bookmarks), and **save & reload** a `.belegtool` file.
    the option shows *"bereits komprimiert (keine Quelle)"*. This is by design.
 
 > Large exports now offer a split: the export dialog lets you split into multiple
-> PDFs by page count and break level (top node / any folder / mid-document), so a
+> PDFs by page count and break level (top-level folders / any folder boundary / mid-document), so a
 > big tree no longer has to be one giant file.
 
 ---

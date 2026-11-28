@@ -109,9 +109,9 @@ export const en = {
   'Tags ein-/ausschalten': 'Toggle tags on/off',
   '+ Tag': '+ Tag',
   'Tag entfernen': 'Remove tag',
-  'Zu Favoriten': 'Add to favourites',
-  'Aus Favoriten entfernen': 'Remove from favourites',
-  'Favorit hinzufügen': 'Add favourite',
+  'Zu Favoriten': 'Add to favorites',
+  'Aus Favoriten entfernen': 'Remove from favorites',
+  'Favorit hinzufügen': 'Add favorite',
   '{n} markiert': '{n} selected',
   'nur auf einigen markiert': 'on only some of the selection',
 
@@ -299,9 +299,9 @@ export const en = {
   'Bitte eine Bezeichnung eingeben.': 'Please enter a name.',
   'Monat ohne Jahr ist nicht möglich — bitte ein Jahr wählen.':
     'A month without a year is not possible — please choose a year.',
-  'Lizenz & Quelltext': 'Licence & source code',
+  'Lizenz & Quelltext': 'License & source code',
   'Freie Software unter AGPL-3.0-or-later; Lizenzen der Bestandteile: THIRD_PARTY_NOTICES.md':
-    'Free software under AGPL-3.0-or-later; licences of the components: THIRD_PARTY_NOTICES.md',
+    'Free software under AGPL-3.0-or-later; licenses of the components: THIRD_PARTY_NOTICES.md',
   'Dieser Knoten ist bereits im PDF-Tool geöffnet.': 'This node is already open in the PDF tool.',
   'Dieser Knoten wird gerade im PDF-Tool bearbeitet und kann nicht gleichzeitig geändert werden.':
     'This node is currently being edited in the PDF tool and cannot be changed at the same time.',
@@ -359,6 +359,6 @@ export const en = {
   'Dieses PDF ist passwortgeschützt. Bitte Passwort eingeben.': 'This PDF is password-protected. Please enter the password.',
   'Falsches Passwort. Bitte erneut versuchen.': 'Wrong password. Please try again.',
   'Passwort': 'Password',
-  'Passwort-Eingabe abgebrochen – das Dokument wurde nicht geöffnet.': 'Password entry cancelled – the document was not opened.',
+  'Passwort-Eingabe abgebrochen – das Dokument wurde nicht geöffnet.': 'Password entry canceled – the document was not opened.',
   'Keine Änderungen zu speichern.': 'No changes to save.',
 }

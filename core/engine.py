@@ -320,7 +320,11 @@ class RealEngine:
             for page in pdf.pages:
                 # /Rotate may be inherited from the page tree; read the effective value
                 node, cur = page.obj, 0
-                while node is not None:
+                seen = set()  # R13-1: a cyclic /Parent chain must not hang
+                for _ in range(64):
+                    if node is None or id(node) in seen:
+                        break
+                    seen.add(id(node))
                     if "/Rotate" in node:
                         cur = int(node["/Rotate"])
                         break

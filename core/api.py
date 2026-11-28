@@ -1214,10 +1214,10 @@ class CoreApi:
         default is used. Used wherever such a name becomes a real temp/disk path with no native
         dialog to vet it (materialize_subset's view title, datev_export's part files)."""
         import re as _re
-        raw = _re.sub("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]", "",
+        raw = _re.sub("[\x00-\x1f\x7f-\x9f\u200b\u202a-\u202e\u2066-\u2069\ufeff]", "",
                       str(name or default))
         safe = _re.sub(r'[<>:"/\\|?*]', "_", raw)
-        safe = ".".join(p.rstrip(" ") for p in safe.split(".")).strip().rstrip(". ")
+        safe = safe.strip().rstrip(". ")  # ZWJ/ZWNJ/LRM/RLM kept (R13-2)
         limit = cls._MAX_COMPONENT
         if dir_len is not None:
             limit = min(limit, cls._MAX_PATH_BUDGET - int(dir_len) - 1 - int(ext_len))

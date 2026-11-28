@@ -86,11 +86,11 @@ def test_safe_filename_windows_hardening():
     for bad in ("NUL .pdf", "nul.tar.gz", "COM¹", "COM²", "com³.txt", "LPT¹", "LPT³ .x", "COM1 .txt",
                 "CON  ", " NUL"):
         assert f(bad, "Export") == "Export", bad
-    for ch in ("\t", "\n", "\x1f", "\x7f", "\x00", "\u202e", "\u200f"):
+    for ch in ("\t", "\n", "\x1f", "\x7f", "\x00", "\u202e", "\u200b", "\ufeff"):
         out = f(f"a{ch}b", "Export")
         assert out == "ab" or out == "a_b", (ch, out)
         assert ch not in out
-    assert f("a. . b. ", "X") == "a.. b"
+    assert f("a. . b. ", "X") == "a. . b"  # R13-2: inner spaces kept
     assert f("Übergrößenträger ÄÖ", "X") == "Übergrößenträger ÄÖ"
     assert len(f("x" * 500, "X")) <= 120
     assert len(f("x" * 500, "X", dir_len=200, ext_len=10)) <= 240 - 200 - 10 - 1

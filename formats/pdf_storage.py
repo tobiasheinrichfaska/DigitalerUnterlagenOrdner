@@ -88,7 +88,9 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
                 if w.get("/Subtype") != "/Widget":
                     continue
                 top = a
-                while "/Parent" in top.get_object():
+                for _hop in range(64):  # R13-1: bounded against a cyclic /Parent chain
+                    if "/Parent" not in top.get_object():
+                        break
                     top = top.get_object()["/Parent"]
                 key = top.idnum if hasattr(top, "idnum") and top.idnum else id(top)
                 if key not in seen:
@@ -168,6 +170,16 @@ def _recover_interrupted(target: str) -> None:
         _quiet_remove(bak)
 
 
+def _clear_stale_guard(target: str) -> None:
+    """R13-3: the target was just replaced completely, so a marker (+ its ``.bak``) left by
+    an earlier failed in-place write is obsolete and must never be restored over this
+    newer state. A ``.bak`` WITHOUT a marker is not ours and stays."""
+    for bak, wip in ((f"{target}.bak", f"{target}.swapwip"), _guard_alt_paths(target)):
+        if os.path.exists(wip):
+            _quiet_remove(wip)
+            _quiet_remove(bak)
+
+
 def _make_guard(target: str):
     """Create the backup copy + in-flight marker: next to the target, else (read-only
     directory) in the temp dir. Returns (bak, wip); leaves nothing behind on failure."""
@@ -203,6 +215,7 @@ def swap_file_in(tmp: str, target: str) -> None:
     target = os.path.realpath(target)
     try:
         os.replace(tmp, target)  # atomic on the same NTFS volume
+        _clear_stale_guard(target)  # R13-3
         return
     except (KeyboardInterrupt, SystemExit, GeneratorExit):
         _quiet_remove(tmp)

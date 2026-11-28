@@ -269,6 +269,7 @@ export const en = {
     'DATEV: the checked-out file could not be saved (locked?)',
   'DATEV-Rückschreiben fehlgeschlagen.': 'Write-back to DATEV failed.',
   'DATEV-Ablage fehlgeschlagen.': 'Filing to DATEV failed.',
+  'DATEV-Einstellung konnte nicht gespeichert werden.': 'The DATEV setting could not be saved.',
   'Nach DATEV ablegen (gleicher Mandant)': 'File to DATEV (same client)',
   'Keine Verbindung zur DATEV-Schnittstelle — nicht zurückgeschrieben.':
     'No connection to the DATEV interface — not written back.',

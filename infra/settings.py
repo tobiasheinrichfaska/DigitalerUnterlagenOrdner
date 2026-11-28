@@ -79,17 +79,23 @@ def load_settings(path: str = None) -> dict:
 
 def save_settings(values: dict, path: str = None) -> dict:
     """Persist only the known keys (atomically enough for this tiny file). Returns the
-    coerced dict that was written. Best-effort: a write error is logged, not raised."""
+    coerced dict that was written. A write error is logged, the temp file removed and the
+    OSError re-raised (IO-6: callers must not claim a value that was not persisted)."""
     p = path or settings_path()
     coerced = _coerce(values)
+    tmp = f"{p}.tmp-{os.getpid()}"
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        tmp = f"{p}.tmp-{os.getpid()}"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(coerced, f, indent=2)
         os.replace(tmp, p)
     except OSError:
         logger.warning("settings save failed", exc_info=True)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     return coerced
 
 

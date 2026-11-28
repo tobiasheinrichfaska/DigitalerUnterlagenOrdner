@@ -114,6 +114,7 @@ class CoreApi:
         # Lock order (never invert): CoreApi._lock → engine._dcache_lock → engine._mcache_lock.
         self._engine = engine or RealEngine()
         self._sessions = {}
+        self._live_sizes = {}  # session -> (root node object, leaf-source bytes); skip re-walk when unchanged
         self._paths = {}  # session -> on-disk path (so Speichern saves in place, not Save-As)
         self._lock = threading.Lock()
         # Per-session mutation locks (audit v2 A-4): the slow engine work of a command
@@ -397,9 +398,11 @@ class CoreApi:
                     logger.warning("[variants] seed on open failed", exc_info=True)
             else:
                 document = Document.empty(self._next_untitled_name())  # "Dokument N"
-        except Exception as e:
+        except BaseException as e:
             if lock is not None and not reused_lock:
-                lock.release()  # never leak the handle if the load fails
+                lock.release()  # never leak the handle if the load fails (IO-7: KeyboardInterrupt too)
+            if not isinstance(e, Exception):
+                raise
             # u4 BP-2: open never raises — the previous session stays untouched
             logger.warning("open failed for %s", path, exc_info=True)
             return {"ok": False, "error": _friendly_import_error(path or "", e)}
@@ -491,6 +494,7 @@ class CoreApi:
         # uids persist in .belegtool: a node deleted (set token) in another window
         # must be compressible in this fresh session of the same file.
         self._revive_cancel_tokens(sid)
+        self._refresh_live_bytes()
         self._prewarm_cache(sid)  # start warming the cache immediately (no click needed)
         if degraded:
             resp["warning"] = "; ".join(load_warnings)
@@ -618,6 +622,7 @@ class CoreApi:
         nodes' tokens set (their compress_options would return [] until the next
         successful edit)."""
         self._revive_cancel_tokens(session)
+        self._refresh_live_bytes()
         with self._lock:
             # CC-1: free _pcount of removed nodes. Cancel tokens stay (a SET token of a just-
             # removed id is part of the open/import revive contract); close/open free them.
@@ -626,6 +631,35 @@ class CoreApi:
             self._renderer().prune(self._all_live_node_ids())  # free vanished nodes' renders
             self._kick_prewarm(session)  # keep the cache warming around the new state
         return resp
+
+    def _refresh_live_bytes(self):
+        """Tell the engine how many leaf-source bytes all open sessions hold (sizes its
+        digest memo, PF-1). len() only, no hashing; a session whose root object is
+        unchanged is not re-walked. Never raises (a hint)."""
+        try:
+            set_hint = getattr(self._engine, "set_live_bytes", None)
+            if set_hint is None:
+                return
+            with self._lock:
+                total = 0
+                for sid in [k for k in self._live_sizes if k not in self._sessions]:
+                    del self._live_sizes[sid]
+                for sid, s in self._sessions.items():
+                    root = s.document.root
+                    ent = self._live_sizes.get(sid)
+                    if ent is None or ent[0] is not root:
+                        n = 0
+                        for node in root.iter():
+                            a, b = node.original_data, node.current_data
+                            if a is not None:
+                                n += len(a)
+                            if b is not None and b is not a:
+                                n += len(b)
+                        ent = self._live_sizes[sid] = (root, n)
+                    total += ent[1]
+            set_hint(total)
+        except Exception:
+            logger.exception("live-bytes hint failed")
 
     def _prune_dead_ids_locked(self, tokens=True):
         """Caller holds self._lock. Drop _pcount entries and cancel tokens of node ids
@@ -914,6 +948,8 @@ class CoreApi:
         """Save the document to ``path``. When ``store_alternatives`` is False the
         computed compression variants are NOT embedded (smaller file; the options
         recompute on reopen) — the 'Original speichern' choice in the save dialog."""
+        if not isinstance(path, str) or not path.strip():  # IO-8: never write a file named "None"
+            return {"ok": False, "error": "Kein gültiger Speicherpfad."}
         with self._lock:
             s = self._sessions.get(session)
             if s is None:
@@ -1039,6 +1075,7 @@ class CoreApi:
                 live = [n.original_data for other in self._sessions.values()
                         for n in other.document.root.iter() if n.original_data]
             self._engine.prune_persisted(closed, live)
+        self._refresh_live_bytes()
         return {"ok": True}
 
     # ----------------------------------------------------------------------
@@ -1079,6 +1116,8 @@ class CoreApi:
         # Leaves with no pages are silently dropped from the export/TOC; collect
         # their names so the UI can tell the user what was left out.
         skipped = empty_leaf_names(nodes)
+        if count_total_pages(nodes) == 0:  # AC-2: only empty folders / 0-page leaves
+            return {"ok": False, "error": "nichts zu exportieren"}
         # #13: split into several files when a page threshold is set and exceeded.
         opts = options or {}
         split_pages = opts.get("split_pages")
@@ -1166,10 +1205,12 @@ class CoreApi:
         path = os.path.join(tempfile.mkdtemp(prefix="beleg_view_"), f"{safe}.belegtool")
         try:
             save_belegtool(Document(new_root), path)
-        except Exception as e:
-            logger.exception("materialize_subset failed")
+        except BaseException as e:
             import shutil
-            shutil.rmtree(os.path.dirname(path), ignore_errors=True)  # don't orphan the empty temp dir
+            shutil.rmtree(os.path.dirname(path), ignore_errors=True)  # don't orphan the temp dir (IO-7)
+            if not isinstance(e, Exception):
+                raise
+            logger.exception("materialize_subset failed")
             return {"ok": False, "error": str(e)}
         with self._lock:  # remember the temp dir until its new window opens (then per-session)
             self._pending_view_dirs.add(os.path.dirname(path))
@@ -1550,7 +1591,11 @@ class CoreApi:
         service. Returns the refreshed status."""
         from infra.settings import update_settings
         on = bool(on)
-        update_settings(datev_mode=on)
+        try:
+            update_settings(datev_mode=on)
+        except OSError:  # IO-6: don't claim a mode that was not persisted; runtime state unchanged
+            logger.warning("set_datev_mode: settings not persisted", exc_info=True)
+            return {"ok": False, "error": "DATEV-Einstellung konnte nicht gespeichert werden."}
         with self._datev_lock:
             self._datev_mode = on
             self._datev_service = None  # rebuild on next use (or drop when off)
@@ -1749,8 +1794,8 @@ class CoreApi:
                     "local_error": None if save_res.get("ok") else save_res.get("error"),
                     "local_kind": "belegtool"}
         try:
-            with open(local_path, "wb") as f:
-                f.write(edited or b"")
+            from formats.pdf_storage import write_file_atomic
+            write_file_atomic(local_path, edited or b"")  # IO-5: temp + replace, .bak-guarded fallback
             with self._lock:  # the on-disk file now matches the session — keep dirty coherent
                 s = self._sessions.get(session)
                 if s is not None:
@@ -1883,6 +1928,19 @@ class CoreApi:
                 return None, {"ok": False, "error": str(e)}
         return None, None
 
+    @staticmethod
+    def _datev_require_clients(svc):
+        """Backend twin of the filing dialog's rule: without a readable, non-empty client
+        list there is no safe target, so filing is refused (None = ok)."""
+        try:
+            clients = svc.list_clients()
+        except Exception:
+            logger.warning("[datev] list_clients failed", exc_info=True)
+            return {"ok": False, "error": "Mandantenliste nicht verfügbar"}
+        if not clients:
+            return {"ok": False, "error": "Keine Mandanten gefunden — DATEV-Ablage nicht möglich."}
+        return None
+
     def datev_clients(self) -> dict:
         """The DATEV client list for the filing dialog's searchable dropdown. Non-empty list ⇒
         DATEV filing is possible; an error/empty list ⇒ the UI DISABLES filing (no client data,
@@ -1919,6 +1977,9 @@ class CoreApi:
         svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        err = self._datev_require_clients(svc)  # AC-4: no client list => no DATEV write
+        if err:
+            return err
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
         if err:
             return err
@@ -1955,6 +2016,9 @@ class CoreApi:
         svc = self._datev_get_service(block=True)  # user-initiated op → wait for the connect
         if svc is None:
             return {"ok": False, "error": "Keine Verbindung zur DATEV-Schnittstelle."}
+        err = self._datev_require_clients(svc)  # AC-4: no client list => no DATEV write
+        if err:
+            return err
         guid, err = self._datev_resolve_guid(svc, client_guid, mandant_number)
         if err:
             return err
@@ -2074,6 +2138,7 @@ class CoreApi:
         # re-importing a persisted uid that was deleted elsewhere (set token) must
         # leave the node compressible — same revive as dispatch/undo/redo.
         self._revive_cancel_tokens(session)
+        self._refresh_live_bytes()
         self._kick_prewarm(session)  # warm the freshly imported pages without a click
         if errors:
             resp["warning"] = "; ".join(errors)

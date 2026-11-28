@@ -28,7 +28,23 @@ def make_spike_link() -> None:
     doc.close()
 
 
+def make_radio_form() -> None:
+    """Radio group, one selected. PDF.js calls annotationStorage.setValue while rendering radio
+    widgets, which used to flag the untouched document as modified (audit R11-2). (reportlab:
+    PyMuPDF's radio-widget API produced no usable group.)"""
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(OUT / "spike-radio.pdf"))
+    c.drawString(72, 800, "SPIKE-RADIO-PDF")
+    form = c.acroForm
+    form.radio(name="r", value="a", selected=True, x=50, y=600, size=20)
+    form.radio(name="r", value="b", selected=False, x=100, y=600, size=20)
+    c.showPage()
+    c.save()
+
+
 if __name__ == "__main__":
     make_spike_link()
+    make_radio_form()
     print(f"geschrieben: {OUT / 'spike-link.pdf'}")
     sys.exit(0)

@@ -144,3 +144,27 @@ describe('TX-1..4: previously uncovered backend messages localize', () => {
     it(de, () => { expect(localizeMessage(t, de)).toBe(enText) })
   }
 })
+
+// R11-1: every template must be linear on adversarial input (no polynomial backtracking).
+describe('localizeMessage is linear (R11-1)', () => {
+  const tt = (key, vars) => translate('en-US', key, vars)
+  const adversarial = (tpl, n) => {
+    const lits = tpl.split(/\{\w+\}/).filter(Boolean)
+    const unit = lits.map((l) => l.slice(0, -1)).join('')  // near-miss: every literal minus its last char
+    return unit.repeat(Math.ceil(n / Math.max(unit.length, 1))).slice(0, n)
+  }
+  for (const n of [5000, 50000]) {
+    it(`all templates answer ${n}-char adversarial inputs in < 50 ms total`, () => {
+      const t0 = performance.now()
+      for (const { tpl } of MESSAGE_TEMPLATES) {
+        localizeMessage(tt, adversarial(tpl, n))
+        localizeMessage(tt, tpl.replace(/\{\w+\}/g, 'x'.repeat(n / 4)).slice(0, n))
+        localizeMessage(tt, ': \'a\' sieht aus wie '.repeat(n / 20) + ', nicht wie '.repeat(n / 12) + ' – abgelehn')
+      }
+      expect(performance.now() - t0).toBeLessThan(50)
+    })
+  }
+  it('bounded input below the cap still matches the 4-variable template', () => {
+    expect(localizeMessage(tt, "a.pdf: 'x.bin' sieht aus wie EXE, nicht wie PDF – abgelehnt.")).toContain('x.bin')
+  })
+})

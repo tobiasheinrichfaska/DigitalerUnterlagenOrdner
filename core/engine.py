@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
-import sys
 import threading
 from collections import OrderedDict
 from typing import List, Optional, Protocol, runtime_checkable
@@ -124,33 +123,35 @@ class RealEngine:
         # PF-1: identity memo WITHOUT a count/byte cap. The documents' own leaf bytes
         # are alive anyway, so the memo adds no copies; what it must not do is pin
         # bytes nobody else holds (closed sessions). Entries whose only remaining
-        # referrers are the memo itself are swept, amortised (see _sweep_dlive). The
+        # referrers are the memo itself are evicted LRU under a byte budget (no refcount
+        # tricks; see set_live_bytes / _evict_dlive). The
         # small budgeted LRU above stays as the second layer (unchanged semantics).
-        self._dlive: dict = {}
-        self._dlive_sweep_at = 512
+        self._dlive: "OrderedDict[int, tuple]" = OrderedDict()
         # R10-4: pinned BYTES are bounded too — a sweep also runs once the memo pins more
         # than max(64 MiB, 2x the bytes that were still live after the last sweep).
         self._dlive_bytes = 0
-        self._dlive_sweep_bytes = 64 * 1024 * 1024
+        self._dlive_budget = 64 * 1024 * 1024
 
-    def _sweep_dlive(self) -> None:
-        """Drop identity-memo entries whose bytes nothing else references any more.
-        Caller holds _dcache_lock. Baseline refs of an otherwise-unreferenced entry:
-        the _dlive tuple, (the _dcache tuple if present) and getrefcount's argument."""
-        for key, ent in list(self._dlive.items()):
-            b = ent[0]
-            base = 2 + (1 if (key in self._dcache and self._dcache[key][0] is b) else 0)
-            if sys.getrefcount(b) <= base + 1:  # +1: the local ``b``
-                del self._dlive[key]
-        self._dlive_sweep_at = max(512, 2 * len(self._dlive))
-        self._dlive_bytes = sum(len(e[0]) for e in self._dlive.values())
-        self._dlive_sweep_bytes = max(64 * 1024 * 1024, 2 * self._dlive_bytes)
+    def set_live_bytes(self, nbytes: int) -> None:
+        """Hint from the caller: total bytes of the leaf sources of all open documents.
+        The identity memo keeps up to max(64 MiB, 2x this) pinned (LRU by last use), so a
+        large open document is never re-hashed. No refcount semantics involved."""
+        with self._dcache_lock:
+            self._dlive_budget = max(64 * 1024 * 1024, 2 * max(0, int(nbytes)))
+            self._evict_dlive()
+
+    def _evict_dlive(self) -> None:
+        """Caller holds _dcache_lock. LRU eviction (least recently used first)."""
+        while self._dlive and self._dlive_bytes > self._dlive_budget:
+            _k, (old, _d) = self._dlive.popitem(last=False)
+            self._dlive_bytes -= len(old)
 
     def _digest(self, pdf_bytes: bytes) -> bytes:
         key = id(pdf_bytes)
         with self._dcache_lock:
             ent = self._dlive.get(key)
             if ent is not None and ent[0] is pdf_bytes:
+                self._dlive.move_to_end(key)
                 return ent[1]
             ent = self._dcache.get(key)
             if ent is not None and ent[0] is pdf_bytes:
@@ -158,12 +159,12 @@ class RealEngine:
                 return ent[1]
         d = hashlib.sha1(pdf_bytes).digest()
         with self._dcache_lock:
-            if (len(self._dlive) >= self._dlive_sweep_at
-                    or self._dlive_bytes + len(pdf_bytes) > self._dlive_sweep_bytes):
-                self._sweep_dlive()
-            if key not in self._dlive:
-                self._dlive_bytes += len(pdf_bytes)
+            old = self._dlive.pop(key, None)
+            if old is not None:
+                self._dlive_bytes -= len(old[0])
             self._dlive[key] = (pdf_bytes, d)
+            self._dlive_bytes += len(pdf_bytes)
+            self._evict_dlive()
         if len(pdf_bytes) > self._dcache_budget:
             # a single object larger than the whole budget can't stay in the LRU layer —
             # caching it would just drain every other entry, then evict itself.

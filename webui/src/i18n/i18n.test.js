@@ -63,7 +63,7 @@ describe('translate (source-string keys)', () => {
     // skipped/truncated/invalid-length nodes, missing structure, repaired page tree, extra pages,
     // failed export slices, preview render error) = 218, PLUS the 2 AGPL §13 licence/source strings of the Help modal = 220, PLUS the 5 PDF-Tool open/lock error strings (W-9) = 225, PLUS the PDF-Tool payload refusal (T-4) = 226, PLUS the 2 load-validation warnings (u4 BP-3/BP-7) = 228, PLUS the IM-1 unreadable-PDF refusal = 229, PLUS the 3 accessibility names (W4 AX-1/2/5: Dokumentstruktur, Kompressionsmethode, Seitenvorschau) = 232.
     // If a string is added, bump this deliberately — and add it to every full-coverage language (or PENDING).
-    expect(Object.keys(en).length).toBe(276)
+    expect(Object.keys(en).length).toBe(277)
   })
 })
 
@@ -78,6 +78,7 @@ describe('full-coverage languages', () => {
   // full-coverage assertion until translated. It falls back to German meanwhile.
   // Empty = nothing pending. Add new UI keys here; the batch pass empties the set.
   const PENDING_TRANSLATIONS = new Set([
+    'DATEV-Einstellung konnte nicht gespeichert werden.', // IO-6 (set_datev_mode write failure)
     // TX-1..4 (audit x2) — de + en only, batch-translated later
     '{name}: Textdatei zu groß',
     '{name}: HTML-Datei zu groß',

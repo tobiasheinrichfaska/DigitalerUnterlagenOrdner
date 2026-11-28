@@ -91,8 +91,18 @@ textBtn?.addEventListener('click', () => {
 // changed / removed FreeText and every changed form value. The state is pushed to the host
 // (HostApi.set_dirty → the window close guard asks before discarding) and mirrored on
 // window.__belegDirty like the organizer.
+//
+// R11-3 (2026-11-28): dirty is derived from OUR OWN state, never from PDF.js' reset signal
+// (saveDocument() resets the storage itself BEFORE the bridge write, so a failed save used to
+// look clean). dirty = (hash of annotationStorage.serializable) != baseline, where the baseline
+// is the load-time snapshot (re-taken on every layer render until the user first touches a
+// widget/editor → PDF.js' own setValue calls while rendering radio widgets never count) and,
+// after a save, exactly the bytes' snapshot — set only once the bridge reported success.
 let dirty = false
 let saving = false
+let editVersion = 0          // ++ on every onSetModified
+let baseline = null          // storage snapshot considered "saved"; null until first render
+let userTouched = false      // the user edited something (input/change/key/pointer on a widget)
 window.__belegDirty = false
 function setDirty(v) {
   if (dirty === v) return
@@ -101,10 +111,37 @@ function setDirty(v) {
   if (saveBtn) saveBtn.classList.toggle('dirty', v)
   try { Promise.resolve(bridge && bridge.set_dirty && bridge.set_dirty(v)).catch(() => {}) } catch { /* ignore */ }
 }
-function markSaved() {
-  try { pdfDoc && pdfDoc.annotationStorage.resetModified() } catch { /* ignore */ }
-  setDirty(false)
+function storageHash() {
+  try { return pdfDoc.annotationStorage.serializable.hash || '' } catch { return `v${editVersion}` }
 }
+function refreshDirty() { if (baseline !== null) setDirty(storageHash() !== baseline) }
+function onStorageModified() {
+  editVersion += 1
+  if (!userTouched) {
+    // Render artefact (radio widgets call setValue while rendering): not an edit. Re-baseline and
+    // re-arm PDF.js' modified flag so the user's first REAL edit raises the event again.
+    baseline = storageHash()
+    try { pdfDoc.annotationStorage.resetModified() } catch { /* ignore */ }
+    return
+  }
+  refreshDirty()
+}
+// Capture what a bake is about to serialize (call synchronously before saveDocument()).
+const bakeToken = () => ({ v: editVersion, h: storageHash() })
+// Mark saved ONLY after the bridge confirmed; an edit made while the save was in flight stays dirty.
+function markSaved(tok) {
+  baseline = tok.h
+  if (editVersion !== tok.v || storageHash() !== tok.h) setDirty(true)
+  else setDirty(false)
+}
+document.addEventListener('input', () => { userTouched = true }, true)
+document.addEventListener('change', () => { userTouched = true }, true)
+document.addEventListener('keydown', () => { userTouched = true }, true)
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target && e.target.closest ? e.target.closest('.annotationLayer, .annotationEditorLayer') : null
+  if (el || textOn) userTouched = true
+}, true)
+eventBus.on('annotationlayerrendered', () => { if (pdfDoc && !userTouched) baseline = storageHash() })
 
 function hasBinding() {
   return !!(bridge && boundSession && pdfDoc)
@@ -141,9 +178,10 @@ async function saveBack() {
   saveBtn.disabled = true
   setStatus('Speichern…')
   try {
+    const tok = bakeToken()
     const res = await bakeEdits()
     const fail = saveFailure(res)
-    if (fail === null) markSaved()
+    if (fail === null) markSaved(tok)
     setStatus(fail === null ? datevSavedNotice('Gespeichert ✓', res) : `Fehler: ${fail}`)
   } catch (e) {
     setStatus(`Fehler: ${e}`)
@@ -163,6 +201,7 @@ async function datevWriteBack() {
   if (!hasBinding()) { setStatus('Kein gebundenes Dokument'); return }
   setStatus('Speichern…')
   try {
+    const tok = bakeToken()
     const b64 = uint8ToBase64(await pdfDoc.saveDocument())
     const saved = await bridge.update_pdf_bytes(boundSession, b64)  // session only; disk write after the guard
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
@@ -173,7 +212,7 @@ async function datevWriteBack() {
       const msg = res.verdict === 'checked_out_self'
         ? '📥 In die ausgecheckte Datei gespeichert — bitte in DATEV einchecken'
         : 'Nach DATEV zurückgeschrieben ✓'
-      markSaved()
+      if (!res.local_error) markSaved(tok)
       setStatus(datevSavedNotice(msg, res) + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
     } else if (res && res.verdict === 'checked_out_self') {
       // checked out by me, but the local working copy could not be written (locked) → nothing more
@@ -184,6 +223,7 @@ async function datevWriteBack() {
       // "Nein" = only update the local checked-out file (no DATEV push); the bake was session-only
       // so persist the edited .pdf to disk now. The user checks it in via DATEV later.
       const local = await bridge.save_pdf_bytes(boundSession, b64)
+      if (local && local.ok && !local.local_error) markSaved(tok)
       setStatus(local && local.ok && !local.local_error
         ? datevSavedNotice('Nur lokal gespeichert (nicht in DATEV)', local)
         : `Fehler beim lokalen Speichern: ${(local && local.local_error) || 'unbekannt'}`)
@@ -199,6 +239,7 @@ async function datevWriteBack() {
       const who = res && res.checkout_by ? ` (${res.checkout_by})` : ''  // locked → WHO has it
       const head = (guard ? datevVerdictKey(res.verdict) : `DATEV: ${(res && res.error) || 'fehlgeschlagen'}`) + who
       const local = await bridge.save_pdf_bytes(boundSession, b64)
+      if (local && local.ok && !local.local_error) markSaved(tok)
       // save_pdf_bytes returns ok:true once the session bake succeeds, even if the on-disk
       // write inside _datev_local_persist failed (local_error set). Only claim "lokal gesichert"
       // when the disk write actually landed — otherwise surface the local error so the user
@@ -231,6 +272,7 @@ async function datevFileNew() {
   if (!opts) { setStatus(''); return }  // cancelled
   setStatus('Ablegen…')
   try {
+    const tok = bakeToken()
     const saved = await bakeForDatev()  // session only; abort if it fails so we never file unedited bytes
     if (!saved || !saved.ok) { setStatus(`Fehler: ${(saved && saved.error) || 'unbekannt'}`); return }
     const res = await bridge.datev_file(boundSession, opts.clientGuid, null, opts.description ?? null, 1,
@@ -240,7 +282,7 @@ async function datevFileNew() {
     // .pdf wasn't updated → now stale). Surface res.local_error too, never a bare "✓" — mirrors
     // App.jsx fileToDatev and datevWriteBack's ok-path so the user knows to re-save locally.
     if (res && res.ok) {
-      markSaved()
+      if (!res.local_error) markSaved(tok)
       setStatus(datevSavedNotice('In DATEV abgelegt ✓', res)
         + (res.local_error ? ` — lokal: ${res.local_error}` : ''))
     } else setStatus(`DATEV: ${(res && res.error) || 'fehlgeschlagen'}`)
@@ -394,8 +436,9 @@ resolveDocumentArgs()
   .then(loadDocument)
   .then((pdfDocument) => {
     pdfDoc = pdfDocument
-    pdfDocument.annotationStorage.onSetModified = () => setDirty(true)
-    pdfDocument.annotationStorage.onResetModified = () => setDirty(false)
+    pdfDocument.annotationStorage.onSetModified = onStorageModified
+    // onResetModified is deliberately ignored (R11-3): PDF.js resets BEFORE the bridge write.
+    baseline = ''  // empty storage until the first layer render re-baselines
     linkService.setDocument(pdfDocument, null)
     pdfViewer.setDocument(pdfDocument)
     window.__viewerDocReady = true

@@ -10,8 +10,8 @@ test.use({ locale: 'de-DE' })
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ENC_B64 = fs.readFileSync(path.join(HERE, 'fixtures', 'enc-form.pdf')).toString('base64')
 
-function installBridge(page, { enc = false, loadFails = false, saveDelay = 0 } = {}) {
-  return page.addInitScript(({ enc, encB64, loadFails, saveDelay }) => {
+function installBridge(page, { enc = false, loadFails = false, saveDelay = 0, pdf = '/spike-form.pdf', saveResults = null } = {}) {
+  return page.addInitScript(({ enc, encB64, loadFails, saveDelay, pdf, saveResults }) => {
     const calls = []
     window.__calls = calls
     const toB64 = (bytes) => {
@@ -24,7 +24,7 @@ function installBridge(page, { enc = false, loadFails = false, saveDelay = 0 } =
       get_pdf_bytes: async () => {
         if (loadFails) return { ok: false, error: 'kaputt' }
         if (enc) return { ok: true, data_b64: encB64 }
-        const buf = await (await fetch('/spike-form.pdf')).arrayBuffer()
+        const buf = await (await fetch(pdf)).arrayBuffer()
         return { ok: true, data_b64: toB64(new Uint8Array(buf)) }
       },
       open: () => ({ ok: false }),
@@ -32,11 +32,12 @@ function installBridge(page, { enc = false, loadFails = false, saveDelay = 0 } =
       save_node_back: async (s, b64) => {
         calls.push(['save_node_back', s]); window.__lastSaved = b64
         if (saveDelay) await new Promise((r) => setTimeout(r, saveDelay))
+        if (saveResults) return saveResults.shift() || { ok: true }
         return { ok: true }
       },
       datev_status: () => ({ ok: true, datev_mode: false, connected: false }),
     } }
-  }, { enc, encB64: ENC_B64, loadFails, saveDelay })
+  }, { enc, encB64: ENC_B64, loadFails, saveDelay, pdf, saveResults })
 }
 
 const names = (page, n) => page.evaluate((n) => window.__calls.filter((c) => c[0] === n).map((c) => c[1]), n)
@@ -83,6 +84,60 @@ test.describe('PDF-Tool dirty tracking + save', () => {
     await page.evaluate(() => { const b = document.getElementById('btn-save'); b.click(); b.click(); b.click() })
     await expect(page.locator('#pdf-status')).toHaveText(/Gespeichert/, { timeout: 20000 })
     expect(await names(page, 'save_node_back')).toEqual(['pt1'])
+  })
+
+  test('R11-2: a PDF with radio buttons opens clean (no dirty, no set_dirty)', async ({ page }) => {
+    await installBridge(page, { pdf: '/spike-radio.pdf' })
+    await page.goto('/pdf-tool.html')
+    await expect(page.locator('#btn-save')).toBeEnabled({ timeout: 20000 })
+    await expect(page.locator('.annotationLayer input[type=radio]').first()).toBeVisible({ timeout: 20000 })
+    await page.waitForTimeout(800)
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(false)
+    expect(await names(page, 'set_dirty')).toEqual([])
+    await page.locator('#btn-save').click()
+    await expect(page.locator('#pdf-status')).toHaveText(/Keine Änderungen/)
+    // a real radio change afterwards still counts
+    await page.locator('.annotationLayer input[type=radio]').nth(1).check({ force: true })
+    await expect.poll(() => page.evaluate(() => window.__belegDirty)).toBe(true)
+  })
+
+  test('R11-3: a failed save keeps dirty; the second Save retries and succeeds', async ({ page }) => {
+    await installBridge(page, { saveResults: [{ ok: false, error: 'Platte voll' }] })
+    await page.goto('/pdf-tool.html')
+    await expect(page.locator('#btn-save')).toBeEnabled({ timeout: 20000 })
+    await fillField(page)
+    await expect.poll(() => page.evaluate(() => window.__belegDirty)).toBe(true)
+    await page.locator('#btn-save').click()
+    await expect(page.locator('#pdf-status')).toHaveText(/Platte voll/, { timeout: 20000 })
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(true)
+    expect(await names(page, 'set_dirty')).toEqual([true])
+    await page.locator('#btn-save').click()
+    await expect(page.locator('#pdf-status')).toHaveText(/Gespeichert/, { timeout: 20000 })
+    expect(await names(page, 'save_node_back')).toEqual(['pt1', 'pt1'])
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(false)
+  })
+
+  test('R11-3: a local_error result also keeps dirty', async ({ page }) => {
+    await installBridge(page, { saveResults: [{ ok: true, local_error: 'gesperrt' }] })
+    await page.goto('/pdf-tool.html')
+    await expect(page.locator('#btn-save')).toBeEnabled({ timeout: 20000 })
+    await fillField(page)
+    await page.locator('#btn-save').click()
+    await expect(page.locator('#pdf-status')).toHaveText(/gesperrt/, { timeout: 20000 })
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(true)
+  })
+
+  test('R11-3: an edit made while the save is in flight stays dirty', async ({ page }) => {
+    await installBridge(page, { saveDelay: 1200 })
+    await page.goto('/pdf-tool.html')
+    await expect(page.locator('#btn-save')).toBeEnabled({ timeout: 20000 })
+    await fillField(page, 'one')
+    await expect.poll(() => page.evaluate(() => window.__belegDirty)).toBe(true)
+    await page.locator('#btn-save').click()
+    await expect.poll(async () => (await names(page, 'save_node_back')).length).toBe(1)
+    await fillField(page, 'two-during-save')
+    await expect(page.locator('#pdf-status')).toHaveText(/Gespeichert/, { timeout: 20000 })
+    expect(await page.evaluate(() => window.__belegDirty)).toBe(true)
   })
 
   test('after a failed load the Text tool is disabled too', async ({ page }) => {

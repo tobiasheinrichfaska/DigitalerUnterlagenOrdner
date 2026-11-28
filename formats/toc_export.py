@@ -9,6 +9,7 @@ PDF-Export mit gedrucktem Inhaltsverzeichnis und optionaler Aufteilung.
 """
 import io
 import os
+import shutil
 from infra.log_config import logger
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
@@ -513,6 +514,77 @@ DEFAULT_EXPORT_OPTIONS = {
 }
 
 
+def _stage_tmp(path: str, data: bytes) -> str:
+    """Write ``data`` to a sibling temp file (same dir), fsync; return the temp path.
+    Cleans the temp on any failure; the OSError names the target file (IO-3)."""
+    tmp = f"{path}.tmp-{os.getpid()}"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        if isinstance(e, OSError):
+            raise OSError(e.errno, f"{e.strerror or e}: {path}", path) from e
+        raise
+    return tmp
+
+
+def _commit_files(staged: list) -> None:
+    """Atomically replace each ``(tmp, target)``; on a failure roll back every target
+    already replaced in THIS run (restore the previous version or remove a new file) and
+    drop the remaining temps, so the user never sees a mixed set (IO-3)."""
+    done = []  # (target, backup or None)
+    try:
+        for tmp, target in staged:
+            backup = None
+            if os.path.exists(target):
+                backup = f"{target}.bak-{os.getpid()}"
+                shutil.copyfile(target, backup)
+            try:
+                os.replace(tmp, target)
+            except BaseException as e:
+                if backup:
+                    try:
+                        os.remove(backup)
+                    except OSError:
+                        pass
+                if isinstance(e, OSError):
+                    raise OSError(e.errno, f"{e.strerror or e}: {target}", target) from e
+                raise
+            done.append((target, backup))
+    except BaseException:
+        for target, backup in reversed(done):
+            try:
+                if backup:
+                    os.replace(backup, target)
+                else:
+                    os.remove(target)
+            except OSError:
+                pass
+        raise
+    finally:
+        for tmp, _ in staged:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    for _, backup in done:
+        if backup:
+            try:
+                os.remove(backup)
+            except OSError:
+                pass
+
+
+def _write_atomic(path: str, data: bytes) -> None:
+    _commit_files([(_stage_tmp(path, data), path)])
+
+
 def export_pdf(nodes: List[PDFNode], path: str, options: Optional[dict] = None) -> None:
     """Single-file export. ``options`` (see DEFAULT_EXPORT_OPTIONS) toggles the printed
     TOC (+links), the tag index (+links, only when tags exist) and the PDF bookmarks.
@@ -556,8 +628,7 @@ def export_pdf(nodes: List[PDFNode], path: str, options: Optional[dict] = None) 
     content = _export_nodes_to_bytes(top)
     result = _assemble(prepend_pdfs, content, link_records, toc_items,
                        prepend_count, with_bookmarks=bool(opts["bookmarks"]))
-    with open(path, "wb") as f:
-        f.write(result)
+    _write_atomic(path, result)
 
 
 def export_pdf_with_toc(nodes: List[PDFNode], path: str) -> None:
@@ -801,6 +872,21 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
         toc_counts.append(_get_pdf_page_count(draft))
     offsets = {file_names[i]: toc_counts[i] for i in range(len(groups))}
 
+    staged = []
+    try:
+        _render_split_parts(groups, full_lists, paths, toc_counts, offsets, staged)
+        _commit_files(staged)
+    except BaseException:
+        for tmp, _ in staged:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        raise
+    return paths
+
+
+def _render_split_parts(groups, full_lists, paths, toc_counts, offsets, staged):
     for idx, (group, full_items, path) in enumerate(zip(groups, full_lists, paths)):
         subtitle = f"Teil {idx + 1} von {len(groups)}"
         final_toc, link_records = _render_toc_pdf(
@@ -808,7 +894,4 @@ def export_pdf_split_with_toc(nodes: List[PDFNode], base_path: str,
         content = _export_nodes_to_bytes(group)
 
         result = _assemble_pdf(final_toc, content, link_records, full_items, toc_counts[idx])
-        with open(path, "wb") as f:
-            f.write(result)
-
-    return paths
+        staged.append((_stage_tmp(path, result), path))

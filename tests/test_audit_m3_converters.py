@@ -110,7 +110,7 @@ def test_y2_png_stays_lossless(tmp_path):
     import pikepdf
     with pikepdf.open(io.BytesIO(conv.data.getvalue())) as pdf:
         im = pikepdf.PdfImage(next(iter(pdf.pages[0].Resources.XObject.values()))).as_pil_image().convert("RGB")
-    assert list(im.getdata()) == list(src.getdata())
+    assert im.tobytes() == src.convert("RGB").tobytes() and im.size == src.size
 
 
 def test_y2_jpeg_embedded_without_reencoding(tmp_path):

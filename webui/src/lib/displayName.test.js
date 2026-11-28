@@ -26,3 +26,22 @@ describe('displayName (TX-4: archive labels baked into node names)', () => {
     expect(displayName(de, 'a.zip – nicht importierbar (zu groß)')).toBe('a.zip – nicht importierbar (zu groß)')
   })
 })
+
+describe('displayName is linear + memoised (R11-1)', () => {
+  it('adversarial long names return unchanged in < 50 ms', () => {
+    for (const n of [5000, 50000]) {
+      const name = ": 'a' sieht aus wie ".repeat(n / 20) + ', nicht wie '.repeat(n / 12) + ' – nicht importierbar'
+      const t0 = performance.now()
+      expect(displayName(t, name)).toBe(name)
+      expect(performance.now() - t0).toBeLessThan(50)
+    }
+  })
+  it('memoises per (t, name): the translator is not re-run', () => {
+    let calls = 0
+    const counting = (k, v) => { calls += 1; return t(k, v) }
+    const first = displayName(counting, 'b.zip – nicht importierbar')
+    const c1 = calls
+    expect(displayName(counting, 'b.zip – nicht importierbar')).toBe(first)
+    expect(calls).toBe(c1)
+  })
+})

@@ -54,25 +54,49 @@ export const MESSAGE_TEMPLATES = [
   { tpl: '{name} – nicht importierbar', nested: ['name'] },
 ]
 
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
+// Linear matcher (R11-1): a template is split into its fixed literals; the variables are the
+// non-empty gaps between them. Literals are located left-to-right with indexOf (the first
+// after the previous one) and the last literal must be a suffix — the same captures the old
+// lazy `([\s\S]+?)` regex produced, but without any backtracking (no regex at all).
 const COMPILED = MESSAGE_TEMPLATES.map(({ tpl, nested = [], whole = false }) => {
   const names = []
-  const src = tpl.split(/(\{\w+\})/).map((part) => {
+  const lits = ['']
+  for (const part of tpl.split(/(\{\w+\})/)) {
     const m = /^\{(\w+)\}$/.exec(part)
-    if (m) { names.push(m[1]); return '([\\s\\S]+?)' }
-    return esc(part)
-  }).join('')
-  return { tpl, nested, whole, names, re: new RegExp(`^${src}$`) }
+    if (m) { names.push(m[1]); lits.push('') } else lits[lits.length - 1] += part
+  }
+  return { tpl, nested, whole, names, lits }
 })
 
+function matchLiterals(msg, lits) {
+  const k = lits.length - 1
+  if (k === 0) return msg === lits[0] ? [] : null
+  if (!msg.startsWith(lits[0])) return null
+  const end = msg.length - lits[k].length
+  if (end < 0 || !msg.endsWith(lits[k])) return null
+  const out = []
+  let pos = lits[0].length
+  for (let i = 1; i < k; i += 1) {
+    const idx = msg.indexOf(lits[i], pos + 1)
+    if (idx < 0 || idx + lits[i].length > end) return null
+    out.push(msg.slice(pos, idx))
+    pos = idx + lits[i].length
+  }
+  if (end < pos + 1) return null
+  out.push(msg.slice(pos, end))
+  return out
+}
+
+/** Hard input cap: longer strings are returned as-is (never regex/scan-processed). */
+export const MAX_LOCALIZE_LEN = 2000
+
 function matchTemplates(t, msg, wholeOnly) {
-  for (const { tpl, nested, whole, names, re } of COMPILED) {
+  for (const { tpl, nested, whole, names, lits } of COMPILED) {
     if (whole !== wholeOnly) continue
-    const m = re.exec(msg)
+    const m = matchLiterals(msg, lits)
     if (m) {
       const vars = {}
-      names.forEach((n, i) => { vars[n] = nested.includes(n) ? localizeMessage(t, m[i + 1]) : m[i + 1] })
+      names.forEach((n, i) => { vars[n] = nested.includes(n) ? localizeMessage(t, m[i]) : m[i] })
       return t(tpl, vars)
     }
   }
@@ -83,7 +107,7 @@ function matchTemplates(t, msg, wholeOnly) {
  *  '; ') → '; '-joined per-file list (localize each part) → per-part templates
  *  (dynamic filename/ext survive) → plain t() lookup. */
 export function localizeMessage(t, msg) {
-  if (typeof msg !== 'string' || !msg) return msg
+  if (typeof msg !== 'string' || !msg || msg.length > MAX_LOCALIZE_LEN) return msg
   const whole = matchTemplates(t, msg, true)
   if (whole !== null) return whole
   if (msg.includes('; ')) return msg.split('; ').map((p) => localizeMessage(t, p)).join('; ')

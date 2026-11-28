@@ -351,6 +351,8 @@ def _require_engine(engine):
 @_handler(AddFolder)
 def _add_folder(doc: Document, cmd: AddFolder, engine=None) -> Document:
     _require_folder(doc, cmd.parent_id)
+    if not (cmd.name or "").strip():  # AC-1: same rule as Rename (UI pre-fills "Neuer Ordner")
+        raise CommandError("Der Name darf nicht leer sein.")
     folder = Node(name=cmd.name, is_folder=True,
                   **({"id": cmd.new_id} if cmd.new_id else {}))
     return doc.insert_child(cmd.parent_id, folder, cmd.index)

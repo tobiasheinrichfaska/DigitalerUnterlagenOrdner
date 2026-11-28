@@ -120,6 +120,91 @@ def _carry_acroform(writer: PdfWriter, sources) -> None:
 
 
 
+
+def swap_file_in(tmp: str, target: str) -> None:
+    """Make the finished, verified ``tmp`` become ``target`` WITHOUT ever leaving the
+    previous ``target`` truncated (audit y4 IO-1/2/5). ``os.replace`` first; when that is
+    refused (target held open elsewhere) fall back to an in-place write that is guarded
+    by a sibling ``.bak`` of the previous bytes: on ANY failure (BaseException included)
+    the original is restored and the error re-raised. ``tmp`` is removed on success and
+    after a clean restore; if even the restore fails, ``tmp`` AND ``.bak`` are kept (both
+    hold a complete copy) and the raised error names the ``.bak``."""
+    try:
+        os.replace(tmp, target)  # atomic on the same NTFS volume
+        return
+    except (KeyboardInterrupt, SystemExit, GeneratorExit):
+        _quiet_remove(tmp)
+        raise
+    except OSError:
+        logger.warning("[save] atomic replace refused for %s – guarded in-place fallback", target)
+    bak = f"{target}.bak"
+    with open(tmp, "rb") as f:
+        data = f.read()
+    had_original = os.path.exists(target)
+    if had_original:
+        try:
+            with open(target, "rb") as src, open(bak, "wb") as dst:
+                dst.write(src.read())
+                dst.flush()
+                os.fsync(dst.fileno())
+        except BaseException:
+            _quiet_remove(bak)  # nothing was touched yet: the original is intact
+            _quiet_remove(tmp)
+            raise
+    try:
+        with open(target, "r+b" if had_original else "wb") as f:
+            f.write(data)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException as e:
+        restored = not had_original
+        if had_original:
+            try:
+                with open(bak, "rb") as src:
+                    old = src.read()
+                with open(target, "r+b") as f:
+                    f.write(old)
+                    f.truncate()
+                    f.flush()
+                    os.fsync(f.fileno())
+                restored = True
+            except BaseException:
+                logger.error("[save] restore failed; previous version kept in %s, new in %s", bak, tmp)
+        if restored:
+            _quiet_remove(bak)
+            _quiet_remove(tmp)
+            if not had_original:
+                _quiet_remove(target)
+        elif isinstance(e, Exception):
+            raise OSError(getattr(e, "errno", None),
+                          f"{e} (vorherige Fassung: {bak})") from e
+        raise
+    _quiet_remove(bak)
+    _quiet_remove(tmp)
+
+
+def write_file_atomic(target: str, data: bytes) -> None:
+    """Write ``data`` to ``target`` via a fsync'd sibling temp + :func:`swap_file_in`."""
+    tmp = f"{target}.tmp-{os.getpid()}"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException:
+        _quiet_remove(tmp)
+        raise
+    swap_file_in(tmp, target)  # owns tmp from here (kept only if a restore failed)
+
+
+def _quiet_remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 class PDFStorage:
     def __init__(self, source: Optional[Union[str, bytes, io.BytesIO]] = None):
         self.filename: Optional[str] = None
@@ -485,26 +570,7 @@ class PDFStorage:
         target = path or self.filename
         if not target:
             raise ValueError("No path specified and no original filename stored.")
-        tmp = f"{target}.tmp-{os.getpid()}"
-        try:
-            with open(tmp, 'wb') as f:
-                f.write(final_pdf)
-                f.flush()
-                os.fsync(f.fileno())
-            try:
-                os.replace(tmp, target)  # atomic on the same NTFS volume
-            except OSError:
-                # target held open elsewhere → legacy in-place write (non-atomic, but
-                # the save must not start failing where it used to succeed)
-                logger.warning("[save] atomic replace refused for %s – in-place fallback", target)
-                with open(target, 'wb') as f:
-                    f.write(final_pdf)
-        finally:
-            if os.path.exists(tmp):
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    logger.warning("[save] temp file could not be removed: %s", tmp)
+        write_file_atomic(target, final_pdf)
 
         self.clear_dirty()
         if path:

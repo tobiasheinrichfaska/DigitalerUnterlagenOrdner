@@ -118,31 +118,28 @@ def embed_variants(path, doc, engine, budget_bytes: int = DEFAULT_BUDGET) -> int
         with pikepdf.open(path) as pdf:
             _attach_blobs(pdf, blobs)
             pdf.save(tmp)
-        try:
-            os.replace(tmp, path)
-        except OSError as e:
-            # R-10: target held open elsewhere (Windows, no FILE_SHARE_DELETE) — the
-            # save already fell back to in-place; do the same here instead of dropping variants.
-            logger.info("[variants] atomic swap refused (%s); embedding in place", e)
-            # (pikepdf's allow_overwriting_input itself swaps via os.replace, so write
-            # the finished bytes through a plain handle instead.)
-            with open(tmp, "rb") as src:
-                data = src.read()
-            with open(path, "r+b") as dst:
-                dst.write(data)
-                dst.truncate()
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-    except Exception as e:  # never let variant persistence break a save
-        logger.warning("[variants] embed failed: %s", e)
-        try:
-            os.remove(tmp)
-        except OSError:
+        with pikepdf.open(tmp):  # verify the finished temp before it may replace anything
             pass
+    except Exception as e:  # building the temp failed: file untouched, variants just not embedded
+        logger.warning("[variants] embed failed: %s", e)
+        _cleanup(tmp)
         return 0
+    except BaseException:
+        _cleanup(tmp)
+        raise
+    # IO-2: the swap itself (os.replace, else the .bak-guarded in-place write) must NOT be
+    # swallowed — a failure here means the save did not complete, so it propagates (the
+    # original is restored by swap_file_in; save returns ok:false, dirty stays).
+    from formats.pdf_storage import swap_file_in
+    swap_file_in(tmp, path)
     return len(blobs)
+
+
+def _cleanup(tmp: str) -> None:
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
 
 
 def embed_variants_bytes(pdf_bytes: bytes, doc, engine,

@@ -267,15 +267,56 @@ def test_digest_is_not_recomputed_for_documents_beyond_256_leaves(monkeypatch):
     assert len(calls) == 1000  # cyclic walk over >256 distinct objects hashes each ONCE
 
 
-def test_digest_memo_does_not_pin_dead_bytes():
+def test_digest_memo_pinned_bytes_are_bounded_without_refcounts():
     eng = RealEngine()
-    blobs = [bytes([i % 251]) * 2000 + b"%d" % i for i in range(600)]
+    for i in range(40):
+        eng._digest(bytes([i]) * (4 * 1024 * 1024) + b"%d" % i)  # 160 MB of dead bytes
+    assert eng._dlive_bytes <= 64 * 1024 * 1024
+    assert sum(len(e[0]) for e in eng._dlive.values()) == eng._dlive_bytes
+
+
+def test_digest_memo_budget_follows_live_bytes_hint(monkeypatch):
+    import core.engine as engine_mod
+    calls = []
+    orig = engine_mod.hashlib.sha1
+    monkeypatch.setattr(engine_mod.hashlib, "sha1", lambda b: (calls.append(1), orig(b))[1])
+    eng = RealEngine()
+    blobs = [b"%d" % i + bytes(50_000) for i in range(2000)]  # ~100 MB live
+    eng.set_live_bytes(sum(map(len, blobs)))
+    for _ in range(3):
+        for b in blobs:
+            eng._digest(b)
+    assert len(calls) == 2000
+    t = time.perf_counter()
     for b in blobs:
-        eng.variants_for(b)
-    del blobs, b
-    gc.collect()
-    # lookups for fresh objects trigger the amortised sweep of unreferenced entries
-    for i in range(3000):
-        eng.variants_for(b"fresh-%d" % i + bytes(50))
-        del_ = None  # noqa: F841
-    assert len(eng._dlive) < 1500
+        eng._digest(b)
+    assert time.perf_counter() - t < 0.03
+
+
+def test_coreapi_wires_live_bytes_hint_so_big_docs_hash_once(monkeypatch):
+    """PF-1 follow-up: >64 MiB of leaf sources must not be re-hashed on every command."""
+    import core.engine as engine_mod
+    from core.api import CoreApi
+    from core.commands import InsertNodes
+    calls = []
+    orig = engine_mod.hashlib.sha1
+    monkeypatch.setattr(engine_mod.hashlib, "sha1", lambda b: (calls.append(1), orig(b))[1])
+    api = CoreApi()
+    sid = api.open()["session"]
+    leaves = tuple(Node(name="d%d" % i, pdf_length=1, no_compression=True,
+                        original_data=b"%%PDF-%d" % i + bytes(50_000))
+                   for i in range(2000))
+    api._sessions[sid].dispatch(InsertNodes(parent_id=api._sessions[sid].document.root.id,
+                                            nodes=leaves, index=None))
+    target = leaves[0].id
+    for k in range(5):
+        t = time.perf_counter()
+        assert api.dispatch(sid, {"type": "Rename", "node_id": target, "name": "n%d" % k})["ok"]
+        # the deterministic property is the hash count below; the wall-clock bound is only a
+        # coarse sanity limit (a cold re-hash of 100 MB takes several times this under load)
+        assert time.perf_counter() - t < 1.0
+    assert len(calls) <= 2000
+    big = api._engine._dlive_budget
+    assert big >= 2 * 100_000_000
+    api.close_session(sid)
+    assert api._engine._dlive_budget < big

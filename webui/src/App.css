@@ -75,29 +75,30 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   border-bottom: 2px solid var(--line);
   padding-bottom: 10px;
   margin-bottom: 12px;
 }
-header h1 { font-size: 19px; margin: 0; }
+header h1 { font-size: 19px; margin: 0; flex: 1 1 14em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.toolbar { display: flex; gap: 8px; align-items: center; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 
 /* DATEV-mode bar (v3.10.0) */
-.datev-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.datev-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .datev-toggle {
   font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
   padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px;
   background: transparent; color: var(--muted, #667); cursor: pointer;
 }
 .datev-toggle.active { color: #fff; background: #267a38; border-color: #267a38; }
-.datev-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted, #556); }
+.datev-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted, #556); }
 .datev-state.connected { color: #2b6cb0; }
 .datev-state .datev-warn { color: #b54708; font-style: italic; }
 .datev-action {
   font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px;
-  background: transparent; cursor: pointer;
+  background: transparent; cursor: pointer; white-space: nowrap;
 }
 .datev-action:disabled { opacity: 0.5; cursor: progress; }
 button {

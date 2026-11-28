@@ -707,7 +707,7 @@ export default function App() {
   return (
     <div className={`app${busy ? ' busy' : ''}${tagsOn ? '' : ' tags-off'}`}>
       <header>
-        <h1 title={config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
+        <h1 title={state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}>{state?.tree?.name || config?.app_name || 'DigitalerUnterlagenOrdner'}{dirty ? ' •' : ''}</h1>
         <Toolbar
           onOpen={openFile}
           onNewWindow={() => core.newWindow()}

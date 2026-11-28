@@ -323,6 +323,7 @@ async function setupDatevUi() {
   if (linkEl && datevConnected) {
     const co = datevCheckedOut ? ' · ausgecheckt (💾 Speichern → in DATEV einchecken)' : ''
     linkEl.textContent = `🔗 Mit DATEV verknüpft${datevSourceName ? ` · ${datevSourceName}` : ''}${co}`
+    linkEl.title = linkEl.textContent   // full text on hover when ellipsised
     linkEl.hidden = false
   }
   if (datevBtn.hidden) return   // no action button → no connection polling needed

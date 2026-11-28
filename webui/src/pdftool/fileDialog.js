@@ -29,7 +29,7 @@ export function openFileDialog({ clients, placements = [], currentYear, defaultN
     const cancelBtn = el('button', { type: 'button', textContent: 'Abbrechen' })
     const hint = el('div', { style: 'color:#b91c1c;font-size:13px;min-height:1em' })
 
-    const opt = (v, label) => el('option', { value: String(v), textContent: label })
+    const opt = (v, label) => el('option', { value: String(v), textContent: label, title: label })
     const fillClients = () => {
       const matches = filterClients(clients, search.value)
       clientSel.replaceChildren(...matches.map(

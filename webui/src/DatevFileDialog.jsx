@@ -56,7 +56,7 @@ export function DatevFileDialog({ clients, placements = [], loading, error, curr
               <select className="datev-client-list" size={6} value={effectiveClientGuid}
                 onChange={(e) => setClientGuid(e.target.value)} aria-label={t('Mandant')}>
                 {filtered.map((c) => (
-                  <option key={c.guid} value={c.guid}>
+                  <option key={c.guid} value={c.guid} title={`${c.number ? `${c.number} — ` : ''}${c.name}`}>
                     {c.number ? `${c.number} — ` : ''}{c.name}
                   </option>
                 ))}
